@@ -21,7 +21,7 @@ use rquickjs::{
 };
 
 use crate::bytes;
-use crate::prelude::{self, Core};
+use crate::prelude::{self, Bounds, Core};
 
 /// Trees nest at most this deep on their way across.
 const DEPTH: usize = 128;
@@ -238,7 +238,35 @@ fn float_value(f: f64) -> Result<Value, Conversion> {
 
 /// `v` as guatiao's; `undefined` is absent.
 pub(crate) fn to_value<'js>(core: &Core<'js>, v: &Js<'js>) -> Result<Value, Conversion> {
-    to_value_at(core, v, 0, &mut Vec::new())
+    let mut spent = Spent {
+        values: 0,
+        bytes: 0,
+        bounds: core.bounds,
+    };
+    to_value_at(core, v, 0, &mut Vec::new(), &mut spent)
+}
+
+/// What one conversion has made so far. Its own length is not the whole of
+/// it: an object that appears twice is made twice, and the copies are on
+/// the Rust heap, which neither the memory limit nor the interrupt sees.
+struct Spent {
+    values: usize,
+    bytes: usize,
+    bounds: Bounds,
+}
+
+impl Spent {
+    fn take(&mut self, values: usize, bytes: usize) -> Result<(), Conversion> {
+        self.values = self.values.saturating_add(values);
+        self.bytes = self.bytes.saturating_add(bytes);
+        if self.values > self.bounds.items || self.bytes > self.bounds.bytes {
+            return refuse(format!(
+                "a value is more than the {} items or {} bytes this source converts",
+                self.bounds.items, self.bounds.bytes
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn to_value_at<'js>(
@@ -246,10 +274,12 @@ fn to_value_at<'js>(
     v: &Js<'js>,
     depth: usize,
     ancestors: &mut Vec<Object<'js>>,
+    spent: &mut Spent,
 ) -> Result<Value, Conversion> {
     if depth > DEPTH {
         return refuse(format!("a value nested deeper than {DEPTH} levels"));
     }
+    spent.take(1, 0)?;
     match v.type_of() {
         Type::Undefined | Type::Uninitialized => Ok(Value::absent()),
         Type::Null => Ok(Value::null()),
@@ -263,6 +293,7 @@ fn to_value_at<'js>(
                 .ok_or_else(|| Conversion::Refused("a string that is not one".into()))?
                 .to_string()
                 .or_else(|_| refuse("text that is not valid Unicode"))?;
+            spent.take(0, s.len())?;
             Ok(Value::from(s.as_str()))
         }
         Type::Array => {
@@ -281,7 +312,7 @@ fn to_value_at<'js>(
             let mut list = List::new();
             for i in 0..length as usize {
                 let item: Js<'js> = array.get(i)?;
-                list.push(to_value_at(core, &item, depth + 1, ancestors)?);
+                list.push(to_value_at(core, &item, depth + 1, ancestors, spent)?);
             }
             ancestors.pop();
             Ok(Value::from(list))
@@ -292,6 +323,7 @@ fn to_value_at<'js>(
                 return number_value(&text_of(v)?);
             }
             if let Some(held) = bytes_in(core, object) {
+                spent.take(0, held.len())?;
                 return Ok(Value::from(Buffer::from(&held[..])));
             }
             let plain = match object.get_prototype() {
@@ -314,7 +346,8 @@ fn to_value_at<'js>(
                     .ok_or_else(|| Conversion::Refused("a key that is not text".into()))?
                     .to_string()
                     .or_else(|_| refuse("a key that is not valid Unicode"))?;
-                map.set(&key, to_value_at(core, &item, depth + 1, ancestors)?);
+                spent.take(0, key.len())?;
+                map.set(&key, to_value_at(core, &item, depth + 1, ancestors, spent)?);
             }
             ancestors.pop();
             Ok(Value::from(map))
@@ -410,14 +443,18 @@ pub(crate) fn overwrite<'js>(
 /// check.
 pub struct JsValues<'js> {
     ctx: Ctx<'js>,
+    bounds: prelude::Bounds,
 }
 
 impl<'js> JsValues<'js> {
     /// Conversions in `ctx`, which is given what a library is (the
     /// `guatiao` script) if it has not got it yet.
     pub fn new(ctx: &Ctx<'js>) -> rquickjs::Result<JsValues<'js>> {
-        prelude::install(ctx, prelude::Bounds::of(None))?;
-        Ok(JsValues { ctx: ctx.clone() })
+        prelude::install(ctx)?;
+        Ok(JsValues {
+            ctx: ctx.clone(),
+            bounds: prelude::Bounds::of(None),
+        })
     }
 }
 
@@ -429,12 +466,12 @@ impl<'js> Convert for JsValues<'js> {
     type Error = Conversion;
 
     fn to_native<'a>(&'a self, value: &Value) -> Result<Js<'js>, Conversion> {
-        let core = prelude::core(&self.ctx)?;
+        let core = prelude::core(&self.ctx, self.bounds)?;
         to_js(&core, &self.ctx, value)
     }
 
     fn to_value<'a>(&'a self, native: Js<'js>) -> Result<Value, Conversion> {
-        let core = prelude::core(&self.ctx)?;
+        let core = prelude::core(&self.ctx, self.bounds)?;
         to_value(&core, &native)
     }
 }

@@ -7,10 +7,12 @@
 //! depth.
 
 use alloc::rc::Rc;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 
 use guatiao_bridge::{BridgeError, Budget, Limits};
 use rquickjs::Runtime;
+
+use crate::frame::RawRuntime;
 
 /// How many operations one interrupt poll stands for: QuickJS polls once
 /// per this many calls and loop iterations, and the poll is its only
@@ -25,29 +27,81 @@ const STACK_PER_LEVEL: u64 = 740;
 const STACK_LEAST: u64 = 16 * 1024;
 const STACK_MOST: u64 = 1024 * 1024;
 
+/// The memory kept back from the limit so that the error which stops a
+/// call can always be made: with none, QuickJS throws `null` for want of
+/// memory, which a script's `catch` catches and so keeps running.
+const RESERVE: u64 = 128 * 1024;
+
 #[derive(Default)]
 struct State {
     /// The calls running, innermost last: each spends from its own budget.
     calls: RefCell<Vec<Budget>>,
     /// Why QuickJS was told to stop the call, until that call ends.
     stop: RefCell<Option<BridgeError>>,
+    /// Whether a stop is pending: what a host call asks before it goes.
+    stopped: Rc<Cell<bool>>,
 }
 
 /// The limits a runtime runs under, and the calls spending against them.
 pub(crate) struct Meter {
     limits: Limits,
     state: Rc<State>,
+    raw: RawRuntime,
+    /// What QuickJS is told while a call runs: the limit less the reserve.
+    normal: usize,
+}
+
+/// A runtime that is made to find no memory for anything, so that what a
+/// stopped call left queued cannot queue more. Puts the usual limit back
+/// when it goes, however it goes.
+pub(crate) struct Starved<'a>(&'a Meter);
+
+impl Starved<'_> {
+    /// Again no memory: the interrupt that ended a job raised the limit.
+    pub(crate) fn again(&self) {
+        self.0.raw.set_memory_limit(1);
+    }
+}
+
+impl Drop for Starved<'_> {
+    fn drop(&mut self) {
+        self.0.raw.set_memory_limit(self.0.normal);
+    }
+}
+
+/// Ends a call's accounting, however the call ends.
+struct Ending<'a> {
+    meter: &'a Meter,
+    /// The stop of the call this one is inside, if it had stopped.
+    outer: Option<BridgeError>,
+}
+
+impl Drop for Ending<'_> {
+    fn drop(&mut self) {
+        let state = &self.meter.state;
+        state.calls.borrow_mut().pop();
+        state.stop.borrow_mut().take();
+        let outer = self.outer.take();
+        state.stopped.set(outer.is_some());
+        *state.stop.borrow_mut() = outer;
+        self.meter.raw.set_memory_limit(self.meter.normal);
+    }
 }
 
 impl Meter {
     /// Puts `limits` on `runtime`: memory and stack at once, operations
     /// and time through an interrupt handler that counts only while a call
     /// runs ([`Meter::run`]).
-    pub(crate) fn install(runtime: &Runtime, limits: Limits) -> Meter {
+    pub(crate) fn install(runtime: &Runtime, limits: Limits) -> Result<Meter, rquickjs::Error> {
         let state = Rc::new(State::default());
-        if let Some(bytes) = limits.memory {
-            runtime.set_memory_limit(usize::try_from(bytes).unwrap_or(usize::MAX));
-        }
+        let raw = RawRuntime::of(runtime)?;
+        let full = limits
+            .memory
+            .map_or(0, |m| usize::try_from(m).unwrap_or(usize::MAX));
+        let normal = limits.memory.map_or(0, |m| {
+            usize::try_from(m - RESERVE.min(m / 4)).unwrap_or(usize::MAX)
+        });
+        raw.set_memory_limit(normal);
         let stack = limits.depth.map_or(STACK_MOST, |depth| {
             depth
                 .saturating_mul(STACK_PER_LEVEL)
@@ -65,36 +119,53 @@ impl Meter {
                     Ok(()) => false,
                     Err(stop) => {
                         watching.stop.borrow_mut().get_or_insert(stop);
+                        watching.stopped.set(true);
+                        // The reserve is what the error QuickJS now makes
+                        // is made of.
+                        raw.set_memory_limit(full);
                         true
                     }
                 }
             })));
         }
-        Meter { limits, state }
-    }
-
-    /// The memory limit, in bytes, 0 for none: what QuickJS is told.
-    pub(crate) fn memory(&self) -> usize {
-        self.limits
-            .memory
-            .map_or(0, |m| usize::try_from(m).unwrap_or(usize::MAX))
+        Ok(Meter {
+            limits,
+            state,
+            raw,
+            normal,
+        })
     }
 
     /// Whether the call running was told to stop.
     pub(crate) fn stopped(&self) -> bool {
-        self.state.stop.borrow().is_some()
+        self.state.stopped.get()
+    }
+
+    /// The same, for those that cannot reach the meter.
+    pub(crate) fn stopped_flag(&self) -> Rc<Cell<bool>> {
+        Rc::clone(&self.state.stopped)
+    }
+
+    /// Makes the runtime find no memory, until the guard goes.
+    pub(crate) fn starve(&self) -> Starved<'_> {
+        let starved = Starved(self);
+        starved.again();
+        starved
     }
 
     /// Runs `f` as one call, counted from nothing against every limit. A
     /// call the interrupt handler stopped answers the limit, whatever `f`
-    /// came to: not QuickJS's "interrupted", and not success.
+    /// came to: not QuickJS's "interrupted", and not success. A call made
+    /// inside a stopped one leaves its stop as it found it.
     pub(crate) fn run<R, E: From<BridgeError>>(
         &self,
         f: impl FnOnce() -> Result<R, E>,
     ) -> Result<R, E> {
+        let outer = self.state.stop.borrow_mut().take();
+        self.state.stopped.set(false);
         self.state.calls.borrow_mut().push(self.limits.budget());
+        let _ending = Ending { meter: self, outer };
         let answer = f();
-        self.state.calls.borrow_mut().pop();
         let stop = self.state.stop.borrow_mut().take();
         match stop {
             Some(stop) => Err(stop.into()),
