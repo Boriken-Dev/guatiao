@@ -342,6 +342,39 @@ void the_cpp_library_leaves_when_nothing_holds_it(guatiao::registry& reg) {
                            (unloaded.ok() ? std::string() : std::string(unloaded.error().what())));
 }
 
+/// Each of the next two unloads a library of its own: no other registry
+/// keeps it mapped.
+void an_answer_built_in_the_librarys_allocator_outlives_the_unload() {
+  guatiao::registry own("cpp-careless", "0.1");
+  own.scan_dir(C_CARELESS_GREETER_DIR, guatiao::rules({"kind=greeter"}));
+  auto bound = gk::greeter::try_bind(own, "c_greeter");
+  check(bound.ok(), "the careless greeter binds");
+  if (!bound.ok()) return;
+  guatiao::remote<gk::greeter> g = *bound;
+  auto answer = g.try_greet("hal");
+  check(answer.ok(), "and greets");
+  if (!answer.ok()) return;
+  // The C greeter has no `unload` function: nothing it handed out is alive,
+  // which the caller states.
+  check(own.try_unload_unchecked("c_greeter_library").ok(), "its library is unmapped");
+  check(own.libraries().size() == 0, "none is left loaded");
+  check(json_of(*answer) == "{\"greeting\":\"hello from C, hal\"}", "the answer outlives the unload");
+}
+
+void what_a_slot_grew_a_lent_map_with_outlives_the_unload() {
+  guatiao::registry own("cpp-lent", "0.1");
+  own.scan_dir(C_LENT_GREETER_DIR, guatiao::rules({"kind=greeter"}));
+  auto bound = gk::greeter::try_bind(own, "c_greeter");
+  check(bound.ok(), "the greeter binds");
+  if (!bound.ok()) return;
+  guatiao::remote<gk::greeter> g = *bound;
+  guatiao::map config = guatiao::map{{"name", "ivy"}};
+  auto usable = g.try_check(config.ref());
+  check(usable.ok() && *usable, "check grows the lent map");
+  check(own.try_unload_unchecked("c_greeter_library").ok(), "its library is unmapped");
+  check(json_of(config) == "{\"name\":\"ivy\",\"checked_by\":\"C\"}", "the lent map outlives the unload");
+}
+
 }  // namespace
 
 int main() {
@@ -364,6 +397,8 @@ int main() {
     native_threads_call_the_cpp_greeter(reg);
     the_cpp_library_leaves_when_nothing_holds_it(reg);
   }
+  an_answer_built_in_the_librarys_allocator_outlives_the_unload();
+  what_a_slot_grew_a_lent_map_with_outlives_the_unload();
   std::printf("greeters: %d passed, %d failed, %d skipped\n", passed, failed, skipped);
   return failed ? 1 : 0;
 }
