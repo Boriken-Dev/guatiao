@@ -278,7 +278,9 @@ contains
     character(:), allocatable :: dir, first, second
     integer :: cut
     logical :: exists
-    cut = max(index(core, '/', back=.true.), index(core, '\', back=.true.))
+    ! achar(92) is the backslash: flang's preprocessing pass (CMake runs
+    ! one on every source) doubles one written as a literal.
+    cut = max(index(core, '/', back=.true.), index(core, achar(92), back=.true.))
     if (cut > 0) then
       dir = core(1:cut)
     else
