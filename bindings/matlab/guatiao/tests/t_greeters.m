@@ -15,6 +15,8 @@ function cases = t_greeters()
     'a host calls the Python greeter', @() exercise('python')
     'a host calls the Go greeter', @() exercise('go')
     'a host calls the M greeter', @() exercise('m')
+    'an answer built in the library''s allocator outlives the unload', @careless_answer
+    'what a slot grew a lent map with outlives the unload', @lent_grown
     'the Rust proxy calls every greeter', @rust_proxy
     'a table that is not the kind''s is refused before it runs', @floor_refused
     'nothing an M greeter served is left once its holders are done', @nothing_left
@@ -162,6 +164,45 @@ function exercise(which)
   else
     expect_equal(which, 'c', 'only the C greeter starts no conversation');
   end
+end
+
+% Each of these unloads a library of its own: no other registry keeps it mapped.
+function careless_answer()
+  gt_env('examples');
+  dir = gt_env('c_greeter_own', 'GREETER_IGNORES_CARRIER');
+  if isempty(dir)
+    skip_case('the C greeter: no C compiler built it (set GUATIAO_CC)');
+  end
+  own = guatiao.Registry('m-careless', '0.1');
+  scan = own.scan_dir(dir, 'kind=greeter');
+  expect_equal(numel(scan.failed), 0, 'the careless greeter loads');
+  g = own.bind('c_greeter', 'greeterkind.Greeter');
+  answer = g.greet('hal');
+  % The C greeter has no `unload` function: nothing it handed out is
+  % alive, which the caller states.
+  own.unload('c_greeter_library', true);
+  expect_equal(numel(own.libraries()), 0, 'unmapped');
+  expect_equal(answer.data(), struct('greeting', 'hello from C, hal'), 'the answer outlives it');
+  answer.close();
+  own.close();
+end
+
+function lent_grown()
+  gt_env('examples');
+  dir = gt_env('c_greeter_own');
+  if isempty(dir)
+    skip_case('the C greeter: no C compiler built it (set GUATIAO_CC)');
+  end
+  own = guatiao.Registry('m-lent', '0.1');
+  scan = own.scan_dir(dir, 'kind=greeter');
+  expect_equal(numel(scan.failed), 0, 'the greeter loads');
+  g = own.bind('c_greeter', 'greeterkind.Greeter');
+  config = guatiao.Value(struct('name', 'ivy'));
+  expect_equal(g.check(config), true, 'check');
+  own.unload('c_greeter_library', true);
+  expect_equal(config.data(), struct('name', 'ivy', 'checked_by', 'C'), 'the lent map outlives it');
+  config.close();
+  own.close();
 end
 
 function rust_proxy()

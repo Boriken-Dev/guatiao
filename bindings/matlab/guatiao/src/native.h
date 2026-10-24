@@ -38,6 +38,8 @@
   X(guatiao_status, guatiao_value_free, (guatiao_value *v), (v), "")                           \
   X(guatiao_status, guatiao_value_clone,                                                       \
     (const guatiao_alloc *alloc, const guatiao_value *src, guatiao_value *out), (alloc, src, out), "") \
+  X(guatiao_status, guatiao_value_make_local,                                                  \
+    (guatiao_value *v, const guatiao_alloc *alloc), (v, alloc), "make-local")                   \
   X(guatiao_status, guatiao_value_null, (guatiao_value *out), (out), "")                       \
   X(guatiao_status, guatiao_value_absent, (guatiao_value *out), (out), "")                     \
   X(guatiao_status, guatiao_value_bool, (bool b, guatiao_value *out), (b, out), "")            \

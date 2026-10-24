@@ -381,9 +381,9 @@ shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
 | `guatiao.lent('bytes')` | `guatiao_bytes_mut` | a `guatiao.Buffer(n)`, written in place | a `guatiao.Buffer` (`Data`), copied back when the method returns |
 | `'bool'`, `'int8'`..`'uint64'`, `'float'`, `'double'`, `'size'`, `'intptr'` | the C scalar | a number or logical that fits (`int64`/`uint64` exactly) | a double, or `int64`/`uint64` past 2^53; logical for `bool` |
 | `'value'`, `'map'`, `'list'` | `const guatiao_value *` / `map *` / `list *` | a value, a view or MATLAB data | a read-only `guatiao.Value`, valid for the call |
-| `guatiao.lent('value'/'map'/'list')` | the same without `const`, lent | a value or view, changed in place | a writable `guatiao.Value`, valid for the call; what is added is built in the allocator the tree records |
+| `guatiao.lent('value'/'map'/'list')` | the same without `const`, lent | a value or view, changed in place | a writable `guatiao.Value`, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere is moved there when the call returns |
 | `guatiao.taken('value'/'map'/'list')` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or MATLAB data | a `guatiao.Value` the method owns |
-| answer `'value'`, `'map'`, `'list'` | `guatiao_value/map/list *out` | a `guatiao.Value` | MATLAB data or a value, built in the allocator the carrier names (`[]`, `{}` and `struct()` the empty container) |
+| answer `'value'`, `'map'`, `'list'` | `guatiao_value/map/list *out` | a `guatiao.Value`, moved into this binding's allocator on arrival when the slot built it in its own | MATLAB data or a value, built in the allocator the carrier names (`[]`, `{}` and `struct()` the empty container) |
 | answer `'string'` | `guatiao_string *out` | `char` | `char` |
 | answer scalar | `T *out` | a number or logical | a number or logical |
 | no answer | | `[]` | ignored |
