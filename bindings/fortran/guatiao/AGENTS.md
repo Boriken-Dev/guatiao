@@ -273,8 +273,9 @@ and `libraries_keyed_by(template)` (`%id` by default, `%version`,
 table), `provider_ctx(key)`, `provider_config(key)` (a read-only handle on
 the schema, absent for none), `provider_meta(key, answer [, stat, errmsg])`
 (what the provider declared beyond its schema, its notices or its form
-under `GT_INTAKE_PROVIDER_FORM_KEY`: a copy outliving the library, absent
-when it declares nothing, `GUATIAO_ERR_NOT_FOUND` for an unknown key),
+under `GUATIAO_INTAKE_PROVIDER_FORM_KEY`: a copy outliving the library,
+absent when it declares nothing, `GUATIAO_ERR_NOT_FOUND` for an unknown
+key),
 `host()` (the `guatiao_host_info *`).
 
 `create(key, config, instance)` checks the configuration against the
@@ -534,7 +535,7 @@ field = guatiao_intake_resolve(schema, 'auth.password')       ! read-only handle
 call guatiao_intake_flat_keys(schema, 'auth', keys)          ! guatiao_text array
 call guatiao_intake_flatten(schema, 'auth', value, store)    ! a map of text to text
 call guatiao_intake_unflatten(schema, 'auth', store, value)  ! absent when nothing is stored
-form = meta%key(GT_INTAKE_PROVIDER_FORM_KEY)                  ! 'form', in reg%provider_meta(key, meta)
+form = meta%key(GUATIAO_INTAKE_PROVIDER_FORM_KEY)             ! 'form', in reg%provider_meta(key, meta)
 ```
 
 A handle `guatiao_intake_at` or `guatiao_intake_resolve` answers is on

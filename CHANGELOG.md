@@ -88,9 +88,10 @@ write now.
   Octave) and `reg%provider_meta` (Fortran) answer a copy of what a
   provider declared beyond its schema, or that binding's "none"; the form
   key is `intake.ProviderFormKey`, `GuatiaoIntake.PROVIDER_FORM_KEY`,
-  `intake_provider_form_key`, `guatiao.intake.provider_form_key()` and
-  `GT_INTAKE_PROVIDER_FORM_KEY`. Each suite reads
-  `derived_greeter_shouter`'s form and checks it against its schema.
+  `intake_provider_form_key`, `guatiao.intake.provider_form_key()` and,
+  in Fortran, the header's `GUATIAO_INTAKE_PROVIDER_FORM_KEY`. Each suite
+  reads `derived_greeter_shouter`'s form and checks it against its
+  schema.
 
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not

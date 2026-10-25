@@ -50,7 +50,7 @@ contains
     reg = guatiao_open_registry('fortran-intake', '0.1')
     call reg%scan_dir(library_dir(), rules=['kind=greeter'])
     call reg%provider_meta('derived_greeter_shouter', meta)
-    form = meta%key(GT_INTAKE_PROVIDER_FORM_KEY)
+    form = meta%key(GUATIAO_INTAKE_PROVIDER_FORM_KEY)
     schema = reg%provider_config('derived_greeter_shouter')
     call guatiao_intake_check(schema, form, why, st)
     call check_status(st, GUATIAO_OK, 'the provider''s form fits its schema')

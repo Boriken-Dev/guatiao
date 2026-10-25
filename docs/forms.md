@@ -268,7 +268,7 @@ meta.close();
 
 ```fortran
 call reg%provider_meta('derived_greeter_shouter', meta)   ! absent: no meta
-form = meta%key(GT_INTAKE_PROVIDER_FORM_KEY)
+form = meta%key(GUATIAO_INTAKE_PROVIDER_FORM_KEY)
 schema = reg%provider_config('derived_greeter_shouter')
 call guatiao_intake_check(schema, form, why, st)          ! GUATIAO_OK: it fits
 call guatiao_intake_is_visible(schema, form, 'marks', values, shown)
