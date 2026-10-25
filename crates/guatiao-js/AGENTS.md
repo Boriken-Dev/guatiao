@@ -112,6 +112,10 @@ are listed below. Statics, all optional but `kinds`:
   destroyed when collected; a lent one answers `Gone` after the call.
   A handle can be passed on to a slot of its kind, or handed back as an
   answer; a script's own object cannot be passed to a host as an object.
+  A handle passed to a slot is out of the script's hands from the moment
+  its argument is read: while the later arguments of the same call are
+  read (a getter, a `toString`), its methods answer `Gone`; it is back
+  once the call fails, or after it if it was only lent.
 
 ## What a library imports
 
@@ -223,7 +227,13 @@ ending them costs the same whatever they would have run.
 | any other thrown value | `GUATIAO_ERR_INTERNAL`, its first line |
 | a value that cannot cross as the slot's answer | `GUATIAO_ERR_BAD_VALUE`, or `GUATIAO_ERR_WRONG_KIND` for a wrong kind of answer |
 | QuickJS's out of memory | `GUATIAO_ERR_ALLOC` |
+| QuickJS's out of memory with no memory left even for its error | `GUATIAO_ERR_INTERNAL`, `thrown: null` |
 | a limit | as above |
+
+QuickJS throws `null` when the memory limit leaves no room to make its
+`out of memory` error, which happens when the limit is reached by many
+small allocations rather than one large one; that `null` cannot be told
+from a script's own `throw null`.
 
 ## The C surface
 

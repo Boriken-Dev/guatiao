@@ -110,7 +110,7 @@ included, and a stop is an error the host reads while the runtime goes on:
 | --- | --- |
 | `operations`, `time_ms` | QuickJS's interrupt handler, polled once per 10 000 calls and loop iterations; `try`, `catch` and `finally` cannot hold it back |
 | `depth` | the native stack QuickJS may use below the call's entry, about 740 bytes a level (more on some targets and in debug builds) and a fixed allowance for opening a library |
-| `memory` | QuickJS's allocator, for the whole runtime |
+| `memory` | QuickJS's allocator, for the whole runtime; reached in many small steps, QuickJS may have no memory left for its error and throw `null`, which is `GUATIAO_ERR_INTERNAL` (`thrown: null`) rather than `GUATIAO_ERR_ALLOC` |
 
 ## From Node, what differs
 
@@ -127,7 +127,9 @@ The shapes are the Node binding's, with these exceptions:
 - **A library's meta** (the package's `description`, licence and authors)
   is not carried.
 - **A script's own object is never passed to a host as an object**, only
-  answered; a handle the host gave it can be passed on.
+  answered; a handle the host gave it can be passed on. It is out of the
+  script's hands once its argument is read: a getter run while a later
+  argument of the same call is read finds it `Gone`.
 
 ## What JavaScript cannot do here
 
