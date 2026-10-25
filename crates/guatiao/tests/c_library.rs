@@ -70,15 +70,16 @@ fn find_compiler() -> Option<PathBuf> {
     None
 }
 
-/// Builds the C greeter into a shared library beside the test artefacts,
-/// or says why it could not.
-fn build_c_greeter(cc: &Path) -> PathBuf {
+/// Builds the C greeter into a shared library named `name` beside the
+/// test artefacts, with `defines` passed to the compiler, or says why it
+/// could not.
+fn build_c_greeter(cc: &Path, name: &str, defines: &[&str]) -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source = manifest.join("tests/c_consumer/greeter_in_c.c");
     let guatiao_include = manifest.join("include");
     let kind_include = manifest.join("../../examples/greeter_kind/include");
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "{}c_greeter{}",
+        "{}{name}{}",
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
@@ -93,6 +94,7 @@ fn build_c_greeter(cc: &Path) -> PathBuf {
         } else {
             &["-fPIC"][..]
         })
+        .args(defines)
         .arg("-I")
         .arg(&guatiao_include)
         .arg("-I")
@@ -122,7 +124,7 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
         );
         return;
     };
-    let library = build_c_greeter(&cc);
+    let library = build_c_greeter(&cc, "c_greeter", &[]);
 
     let mut registry = Registry::new("c-library-tests", env!("CARGO_PKG_VERSION"));
     let loaded = registry
@@ -373,6 +375,50 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // nothing that is alive.
     unsafe { registry.unload_unchecked("c_greeter_library") }.expect("the host insisted");
     assert!(registry.loaded().is_empty());
+}
+
+/// Built to ignore the carrier, the C greeter's `check` rebuilds the lent
+/// map in its own allocator, which the map then records. The proxy moves
+/// the map back into the allocator it recorded before the call, so the
+/// map outlives the library.
+#[test]
+fn a_lent_map_a_careless_slot_rebuilt_in_its_own_allocator_outlives_the_unload() {
+    let Some(cc) = find_compiler() else {
+        println!(
+            "skipped: no C compiler found (tried clang, the default LLVM install path, cc and gcc)"
+        );
+        return;
+    };
+    let library = build_c_greeter(&cc, "c_greeter_careless", &["-DGREETER_IGNORES_CARRIER"]);
+    let mut registry = Registry::new("c-library-careless", env!("CARGO_PKG_VERSION"));
+    registry
+        .load_file(&library)
+        .expect("a shared library the compiler just wrote")
+        .loaded()
+        .expect("the C entry accepted this host");
+    let offer = registry
+        .offer::<dyn Greeter>("c_greeter")
+        .expect("filed under its id")
+        .expect("a table the header described validates");
+    let greeter = offer.default_instance().expect("its ctx is its instance");
+    let mut config = Map::new();
+    config.set("name", "ivy");
+    assert!(greeter.check(&mut config).expect("the C greeter answers"));
+    assert!(
+        config.is_local(),
+        "settled into the allocator it recorded before the call"
+    );
+    drop(offer);
+    // SAFETY: nothing taken from the library is held, and it handed out
+    // nothing that is alive.
+    unsafe { registry.unload_unchecked("c_greeter_library") }.expect("the host insisted");
+    assert_eq!(config.keys().collect::<Vec<_>>(), ["name", "checked_by"]);
+    assert_eq!(
+        config
+            .get("checked_by")
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("C")
+    );
 }
 
 /// A listener nobody will hear from: what `start`'s default body drops.
