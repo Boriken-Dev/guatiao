@@ -233,8 +233,8 @@ pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_bytes(*const guatiao::value::alloc::Allocator, guatiao::value::types::buffer::Bytes<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_clone(*const guatiao::value::alloc::Allocator, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_free(*mut guatiao::value::value::Value) -> guatiao::value::status::Status
-#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_make_local(*mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_list(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_make_local(*mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_map(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_null(*mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_number(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
