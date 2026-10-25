@@ -76,16 +76,26 @@ over a `Registry` does the same.
 
 | transport | reach | a call (local, provisional) |
 | --- | --- | --- |
-| `shm://name` | the same machine: two rings in a file both processes map, a local socket beside them for wake-ups | 3–5 µs |
-| `local://name` | the same machine: a Unix socket, or a named pipe on Windows | 17–40 µs |
+| `shm://name` | the same machine: two rings in a file both processes map, a local socket beside them for wake-ups | 1–5 µs |
+| `local://name` | the same machine: a Unix socket, or a named pipe on Windows | 16–40 µs |
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
-| `tcp://host:port` | another machine, at the trusted level | 21–36 µs on loopback |
+| `tcp://host:port` | another machine, at the trusted level | 22–36 µs on loopback; 114–123 µs from a host to a VM on it |
 
 A call is a greeter's `count` through the host's table, there and back,
-measured on Windows ARM64, WSL and an x86-64 Linux server: local
-numbers, provisional. A thread waiting for an answer polls for
-50 µs before it sleeps (`LinkOptions::spin`), which keeps a busy link from
-paying a wake-up on every hand-off; an idle link's first call pays one.
+measured on Windows ARM64, WSL and an x86-64 Linux server, and from that
+server to a virtual machine on it (virtio, jumbo frames on and off):
+local numbers, provisional. `benchmarks/remote` measures each transport,
+with calls a second, throughput, bytes and CPU per call
+(`benchmarks/README.md`).
+
+A thread waiting for an answer polls for 50 µs before it sleeps
+(`LinkOptions::spin`), which keeps a busy link from paying a wake-up on
+every hand-off; an idle link's first call pays one. Across a network the
+answer often takes longer than that, and the thread polls *and* pays the
+wake-up. Set `spin` just past the round trip to drop the wake-up: from
+the host to its VM, 200 µs brought a call from 114 µs to 74 µs for the
+same CPU per call. Set it to zero to spend the least CPU: 180 µs a call,
+about 40 % less CPU.
 
 ## Trust
 

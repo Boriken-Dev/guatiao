@@ -1,0 +1,30 @@
+[package]
+name = "guatiao-remote-bench"
+description = "guatiao-remote measured across a link: a server and a client of every transport, five metrics per run"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "guatiao-remote-bench"
+path = "src/main.rs"
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
+guatiao-remote = { path = "../../crates/guatiao-remote", features = ["tcp", "local", "shm"] }
+greeter_kind = { path = "../../examples/greeter_kind" }
+# A listener and a connection with a capped segment size: jumbo frames off.
+socket2 = { version = "0.5", features = ["all"] }
+
+# Process CPU time, for the cost of a call on each end.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+[lints]
+workspace = true
