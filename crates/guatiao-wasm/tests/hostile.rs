@@ -574,6 +574,40 @@ fn without_a_memory_limit_tables_are_still_bounded() {
 }
 
 #[test]
+fn growing_past_a_module_maximum_fails_in_the_guest_and_counts_nothing() {
+    let dir = scratch("grow-max");
+    put_wat(
+        &dir,
+        "capped",
+        &guest()
+            .replace(
+                "(memory (export \"memory\") 8)",
+                "(table $t 1 10 funcref)\n(memory (export \"memory\") 8 16)",
+            )
+            .replace(
+                "(local.set $t (i32.wrap_i64 (local.get $target)))",
+                "(local.set $t (i32.wrap_i64 (local.get $target)))
+                 (loop $again
+                   (if (i32.ne (table.grow $t (ref.null func) (i32.const 100000)) (i32.const -1))
+                     (then (unreachable)))
+                   (if (i32.ne (memory.grow (i32.const 100)) (i32.const -1))
+                     (then (unreachable)))
+                   (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                   (br_if $again (i32.lt_u (local.get $i) (i32.const 100))))
+                 (local.set $i (i32.const 0))",
+            ),
+    );
+    let mut registry = serving(&config(&[&dir], Some(limits(&[("memory", 2 << 20)]))));
+    assert!(registry.refresh().refused.is_empty());
+    // Each grow is past the module's maximum: -1 to the guest, and nothing
+    // the limit counts, however many times it asks.
+    for _ in 0..3 {
+        assert_eq!(greet(&registry, "capped_ok").as_deref(), Ok("ok"));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_module_past_the_size_bound_is_refused_unread() {
     let dir = scratch("huge");
     std::fs::write(

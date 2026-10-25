@@ -204,13 +204,23 @@ impl State {
     }
 }
 
+/// Whether growing to `desired` passes the module's own `maximum`: wasmtime
+/// asks the limiter before it checks that, then fails the grow (-1 to the
+/// guest), so such a grow is refused here and counts nothing.
+fn past(desired: usize, maximum: Option<usize>) -> bool {
+    maximum.is_some_and(|m| desired > m)
+}
+
 impl ResourceLimiter for State {
     fn memory_growing(
         &mut self,
         _current: usize,
         desired: usize,
-        _maximum: Option<usize>,
+        maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
+        if past(desired, maximum) {
+            return Ok(false);
+        }
         if !self.fits(desired, self.table_entries) {
             return Err(wasmtime::Error::msg("the memory limit"));
         }
@@ -222,8 +232,11 @@ impl ResourceLimiter for State {
         &mut self,
         current: usize,
         desired: usize,
-        _maximum: Option<usize>,
+        maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
+        if past(desired, maximum) {
+            return Ok(false);
+        }
         let entries = self
             .table_entries
             .saturating_add(desired.saturating_sub(current));
