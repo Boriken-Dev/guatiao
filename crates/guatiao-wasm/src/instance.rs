@@ -22,7 +22,8 @@ use guatiao::{Buffer, List, Map, Status, Value};
 use guatiao_bridge::{BridgeError, Kinds, Limit, Limits};
 use guatiao_libffi::Libffi;
 use wasmtime::{
-    Caller, Engine, Instance, Linker, Memory, Module, ResourceLimiter, Store, Trap, TypedFunc,
+    Caller, Engine, Instance, Linker, Memory, Module, ResourceLimiter, Store, StoreContextMut,
+    Trap, TypedFunc, UpdateDeadline,
 };
 
 use crate::abi::{self, export, import};
@@ -705,14 +706,29 @@ impl From<wasmtime::Error> for Stopped {
     }
 }
 
+/// At each epoch tick: stops the guest once its call's deadline has passed
+/// by the clock, else looks again at the next tick. A tick is when to
+/// look, not a measure of time: the ticker's sleep runs long where the
+/// system timer is coarse (15.6 ms on Windows by default), and a call
+/// starting elsewhere wakes it early.
+fn time_check(mut store: StoreContextMut<'_, State>) -> wasmtime::Result<UpdateDeadline> {
+    let state = store.data_mut();
+    if state.deadline.is_some_and(|d| Instant::now() > d) {
+        state.timed_out = true;
+        return Err(Trap::Interrupt.into());
+    }
+    Ok(UpdateDeadline::Continue(1))
+}
+
 /// Sets the limits for one entry into a guest: fuel and a deadline, each
 /// only when the engine counts it.
 pub(crate) fn arm(store: &mut Store<State>, limits: &Limits) -> wasmtime::Result<()> {
     if let Some(operations) = limits.operations {
         store.set_fuel(operations)?;
     }
-    if let Some(time) = limits.time {
-        store.set_epoch_deadline(u64::try_from(time.as_millis()).unwrap_or(u64::MAX).max(1));
+    if limits.time.is_some() {
+        // `time_check` at the next tick, and at every one after.
+        store.set_epoch_deadline(1);
     }
     let state = store.data_mut();
     state.deadline = state.time.map(|t| Instant::now() + t);
@@ -731,6 +747,9 @@ impl Live {
     ) -> Result<Live, (Stopped, Store<State>)> {
         let mut store = Store::new(engine, State::new(limits, shared));
         store.limiter(|state| state);
+        if limits.time.is_some() {
+            store.epoch_deadline_callback(time_check);
+        }
         let made = Live::start(&mut store, linker, module, limits)
             .and_then(|(instance, memory)| Funcs::of(&mut store, &instance, memory));
         match made {

@@ -6,7 +6,8 @@
 //! on a thread with little stack, answers that would swell when decoded,
 //! tables that add up, maps that cost the square of their keys, host work
 //! a loop of imports asks for, two libraries calling each other from two
-//! threads, and a ticker that should sleep while nothing runs. What could
+//! threads, a ticker that should sleep while nothing runs, and a time
+//! limit that is the clock's, not the ticker's. What could
 //! take the process down runs in a child process; what could hang runs
 //! under a timeout.
 
@@ -15,6 +16,7 @@ mod common;
 extern crate alloc;
 
 use alloc::sync::Arc;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::path::Path;
 use std::sync::{Barrier, Mutex, mpsc};
@@ -806,4 +808,49 @@ fn the_epoch_ticker_sleeps_while_no_call_runs() {
             "the ticker woke {switches} times in 300 ms idle"
         );
     }
+}
+
+#[test]
+fn a_time_limit_is_the_milliseconds_of_the_call_alone() {
+    let dir = pushy("clock");
+    put_wat(&dir, "other", &guest());
+    let mut registry = serving(&config(&[&dir], Some(limits(&[("time_ms", 300)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let stopped = Err((
+        Status::GUATIAO_ERR_INTERNAL,
+        "stopped at its time_ms limit (300)".to_string(),
+    ));
+    let spin = |registry: &Registry| {
+        let started = Instant::now();
+        let outcome = greet(registry, "pushy_spin");
+        (started.elapsed(), outcome)
+    };
+    // Alone: no later than the clock says, however long the ticker's
+    // sleeps run (Windows' default timer wakes every 15.6 ms).
+    let (took, outcome) = spin(&registry);
+    assert_eq!(outcome, stopped);
+    assert!(took < Duration::from_millis(900), "alone: {took:?}");
+    // With calls starting in another library meanwhile: no sooner either.
+    let other = greeter(&registry, "other_ok");
+    let stop = Arc::new(AtomicBool::new(false));
+    let calls = {
+        let stop = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            let mut n = 0u64;
+            while !stop.load(Ordering::Relaxed) {
+                other.greet("ana").expect("answers");
+                n += 1;
+            }
+            n
+        })
+    };
+    let (took, outcome) = spin(&registry);
+    stop.store(true, Ordering::Relaxed);
+    let n = calls.join().expect("joined");
+    assert_eq!(outcome, stopped);
+    assert!(
+        took >= Duration::from_millis(290),
+        "with {n} calls meanwhile: {took:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

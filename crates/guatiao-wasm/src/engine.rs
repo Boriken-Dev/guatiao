@@ -41,8 +41,9 @@ struct Ticks {
     stop: bool,
 }
 
-/// Increments the engine's epoch every millisecond while a call runs, and
-/// sleeps while none does; stops when dropped.
+/// Increments the engine's epoch about every millisecond while a call
+/// runs, and sleeps while none does; stops when dropped. Each tick has a
+/// running call look at the clock (`instance::time_check`).
 struct Ticker {
     ticks: Arc<(Mutex<Ticks>, Condvar)>,
     thread: Option<JoinHandle<()>>,
@@ -80,11 +81,15 @@ impl Ticker {
         })
     }
 
-    /// Counts a call running until the answer drops.
+    /// Counts a call running until the answer drops; the first wakes the
+    /// ticker from its idle wait.
     fn running(&self) -> Running<'_> {
         let (lock, wake) = &*self.ticks;
-        lock.lock().unwrap_or_else(PoisonError::into_inner).running += 1;
-        wake.notify_one();
+        let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        state.running += 1;
+        if state.running == 1 {
+            wake.notify_one();
+        }
         Running(self)
     }
 }
