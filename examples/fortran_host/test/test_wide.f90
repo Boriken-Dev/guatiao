@@ -126,11 +126,18 @@ contains
   function read_file(path) result(text)
     character(*), intent(in) :: path
     character(:), allocatable :: text
-    integer :: unit, size
+    character :: one
+    integer :: unit, size, ios
     open (newunit=unit, file=path, access='stream', form='unformatted', status='old', action='read')
-    inquire (unit=unit, size=size)
+    ! Counted a byte at a time: flang on Windows answers -1 to inquire(size=).
+    size = 0
+    do
+      read (unit, pos=size + 1, iostat=ios) one
+      if (ios /= 0) exit
+      size = size + 1
+    end do
     allocate(character(size) :: text)
-    read (unit) text
+    if (size > 0) read (unit, pos=1) text
     close (unit)
   end function
 
