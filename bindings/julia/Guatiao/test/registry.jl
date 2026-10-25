@@ -54,10 +54,13 @@ end
 @testset "a provider's meta is a copy carrying its form" begin
     reg = scanned()
     meta = Guatiao.provider_meta(reg, "derived_greeter_shouter")
+    close(reg)
     @test [s["id"] for s in meta["form"]["sections"][]] == ["words", "volume"]
     close(meta)
+    reg = scanned()
     @test Guatiao.provider_meta(reg, "derived_greeter_hello") === nothing
-    @test_throws GuatiaoError Guatiao.provider_meta(reg, "nobody")
+    e = try Guatiao.provider_meta(reg, "nobody") catch e; e end
+    @test e isa GuatiaoError && e.status == Guatiao.NotFound
     close(reg)
 end
 

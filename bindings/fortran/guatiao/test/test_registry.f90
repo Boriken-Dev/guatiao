@@ -114,18 +114,20 @@ contains
   end function
 
   subroutine a_providers_meta_is_a_copy_carrying_its_form()
-    type(guatiao_registry) :: reg
+    type(guatiao_registry) :: reg, again
     type(guatiao_value) :: meta, id
     integer :: st
     reg = scanned()
     call reg%provider_meta('derived_greeter_shouter', meta)
+    call reg%close()
     id = meta%at('form', 'sections', 1, 'id')
     call check_text(id%string_or(''), 'words', 'the form''s first section')
     id = meta%at('form', 'sections', 2, 'id')
     call check_text(id%string_or(''), 'volume', 'and its second')
-    call reg%provider_meta('derived_greeter_hello', meta)
+    again = scanned()
+    call again%provider_meta('derived_greeter_hello', meta)
     call check(meta%is_absent(), 'a provider declaring nothing answers absent')
-    call reg%provider_meta('nobody', meta, st)
+    call again%provider_meta('nobody', meta, st)
     call check_status(st, GUATIAO_ERR_NOT_FOUND, 'an unknown key')
   end subroutine
 
