@@ -260,7 +260,7 @@ when the glue is not what it would write.
 | `guatiao_bytes_mut` | `[]byte` over the caller's memory, written in place, valid for the call: never keep it |
 | `bool`, `int8_t`..`uint64_t`, `size_t`, `intptr_t`, `uintptr_t`, `float`, `double` | `bool`, `int8`..`uint64`, `uint`, `int`, `uintptr`, `float32`, `float64` |
 | `const guatiao_value *`, `const guatiao_map *`, `const guatiao_list *` | `guatiao.Ref`, `MapRef`, `ListRef`, read-only and valid for the call (a null value is the zero `Ref`), or any Go type it decodes into |
-| the same without `const`, the slot's comment calling it lent | `Ref`, `MapRef`, `ListRef`, writable, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere is moved there when the call returns |
+| the same without `const`, the slot's comment calling it lent | `Ref`, `MapRef`, `ListRef`, writable, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent |
 | the same without `const`, handed over | `*guatiao.Value` the method owns (and closes), or any Go type it decodes into (the tree is freed) |
 | `guatiao_value/map/list *out` | the answer: a `*guatiao.Value` or any Go type, built in the allocator the carrier names; a `*Value` answered is handed over, moved into this binding's allocator on arrival when the slot built it in its own |
 | `guatiao_string *out` | `string` |

@@ -306,8 +306,10 @@ WRONG_KIND; a slot past the table's size, or empty, answers UNSUPPORTED
 status's `error` with the provider's words. What a call hands over is
 moved in (`std::move`); when the call never happens (no slot) it is freed
 here. An answer arrives in the remote's allocator (the registry's), moved
-there if built elsewhere; a lent tree is settled into the allocator it
-records once the call returns. Passing an argument the slot does not
+there if built elsewhere; a lent tree is settled once the call returns,
+answered or refused, into the allocator it recorded when it was lent,
+whatever the callee grew it with or wrote over it. Passing an argument
+the slot does not
 take is a compile error.
 
 A `remote` is shared: its methods are `const` and may be called from any
