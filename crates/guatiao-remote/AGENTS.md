@@ -59,7 +59,7 @@ Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME 
 LinkOptions::new(Trust::{Local, Trusted, Secure})
     .key(&[u8]) .token(&str) .max_frame(bytes) .max_calls(n)
     .timeout(Option<Duration>) .handshake_timeout(Duration)
-    .spin(Duration)    // how long a waiting thread polls before it sleeps
+    .spin(Duration)    // how long a waiting thread polls before it sleeps; past the round trip on a network
 // defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake, 50 µs spin
 link.alive() link.why() link.peer() link.trust() link.list() link.open(id, stamp)
 link.close(id, stamp) link.kinds() link.ping() link.end()
@@ -92,6 +92,7 @@ child::stdio() -> Connection                       // a server started as a chil
 stream::{StreamReader, StreamWriter}               // u32 LE length + body over any Read/Write
 tcp::{TcpConnect::new("host:port").timeout(d), TcpListen::bind(addr, &[Range])?, Range::parse("10.0.0.0/8")?}   // tcp
 tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr)}>
+tcp::{TcpListen::from_listener(TcpListener, &[Range])?, from_stream(TcpStream)?}   // sockets the caller set up
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
 ```

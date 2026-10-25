@@ -121,6 +121,13 @@ fn connection(stream: TcpStream, peer: String) -> io::Result<Connection> {
     })
 }
 
+/// A connection over a stream the caller connected itself, with socket
+/// options of its own.
+pub fn from_stream(stream: TcpStream) -> io::Result<Connection> {
+    let peer = format!("tcp {}", stream.peer_addr()?);
+    connection(stream, peer)
+}
+
 /// Connects to a TCP address (`host:port`).
 #[derive(Debug, Clone)]
 pub struct TcpConnect {
@@ -201,6 +208,22 @@ impl TcpListen {
         })
     }
 
+    /// A listener the caller bound itself (with socket options of its
+    /// own, or handed over by a service manager), accepting peers inside
+    /// `ranges` as [`bind`](TcpListen::bind) does.
+    pub fn from_listener(listener: TcpListener, ranges: &[Range]) -> io::Result<TcpListen> {
+        if ranges.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "no address range: every peer would be turned away",
+            ));
+        }
+        Ok(TcpListen {
+            listener,
+            ranges: ranges.to_vec(),
+        })
+    }
+
     /// Where it listens.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.listener.local_addr()
@@ -261,6 +284,28 @@ mod tests {
             TcpListen::bind("127.0.0.1:0", &[]).unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn sockets_the_caller_set_up_carry_frames_under_the_same_gate() {
+        let local = [Range::parse("127.0.0.0/8").unwrap()];
+        assert_eq!(
+            TcpListen::from_listener(TcpListener::bind("127.0.0.1:0").unwrap(), &[])
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        let l =
+            TcpListen::from_listener(TcpListener::bind("127.0.0.1:0").unwrap(), &local).unwrap();
+        let mut client = from_stream(TcpStream::connect(l.local_addr().unwrap()).unwrap()).unwrap();
+        assert!(client.peer.starts_with("tcp 127.0.0.1:"));
+        let Accepted::Connection(mut server) = l.accept().unwrap() else {
+            panic!("a peer inside the range is accepted");
+        };
+        client.writer.write_frame(&[3, 0, 0, 0, 1, 2, 3]).unwrap();
+        let mut frame = Vec::new();
+        assert!(server.reader.read_frame(&mut frame, 1 << 10).unwrap());
+        assert_eq!(frame, [1, 2, 3]);
     }
 
     #[test]
