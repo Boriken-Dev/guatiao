@@ -755,7 +755,7 @@ let sizes = #{ kinds: ["greeter"], greet: |name| {
     put(&dir, "rhai_sizes", "", code);
     let mut registry = serving(&config(
         &dir,
-        Some(limits(&[("memory", 64 * 1024), ("operations", 5_000_000)])),
+        Some(limits(&[("memory", 64 * 1024), ("operations", 1_000_000)])),
     ));
     assert!(registry.refresh().refused.is_empty());
     let sizes = greeter(&registry, "rhai_sizes_sizes");

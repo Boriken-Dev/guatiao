@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Rhai recurses on the native stack, for calls and for the values it
-//! nests. These scripts would overflow the engine thread's 2 MiB and abort
+//! nests. These scripts would overflow a thread's default 2 MiB and abort
 //! the process; each must instead end in an answer or a stop that names
 //! its limit. They run in release builds too, where frames are smaller and
 //! the bounds are tighter.
@@ -121,8 +121,17 @@ let p = #{{ kinds: ["greeter"], greet: |name| {{
     )
 }
 
+/// Operations enough for the deepest of these scripts. The engine thread
+/// reserves stack for each (3 KiB in a debug build), and Linux refuses a
+/// reservation larger than the machine's memory and swap.
+const OPS: u64 = if cfg!(debug_assertions) {
+    2_000_000
+} else {
+    4_000_000
+};
+
 const LIMITS: [(&str, u64); 3] = [
-    ("operations", 10_000_000),
+    ("operations", OPS),
     ("memory", 64 << 20),
     ("time_ms", 60_000),
 ];
@@ -142,7 +151,7 @@ fn nested_in_one_call(id: &str, build: &str, n: usize) {
 
 // Arrays and maps copy all they hold at each level, so a script gets less
 // deep with them in the time a test has; closures that capture the last
-// one share it. Each count is past what the engine thread's 2 MiB holds.
+// one share it. Each count is past what a thread's default 2 MiB holds.
 
 #[test]
 fn arrays_nested_deeper_than_the_stack_are_built_and_dropped_inside_a_call() {
@@ -186,13 +195,13 @@ fn nesting_without_end_is_stopped_by_the_operations_limit_and_dropped() {
         "rhai_forever",
         &nesting("let f = || 1; loop { let g = f; f = || g.call(); }"),
     );
-    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 3_000_000)]))));
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 2_000_000)]))));
     assert!(registry.refresh().refused.is_empty());
     let p = greeter(&registry, "rhai_forever_p");
     let stopped = p.greet("0").unwrap_err();
     assert_eq!(
         stopped.message(),
-        "stopped at its operations limit (3000000)"
+        "stopped at its operations limit (2000000)"
     );
     // The engine, and what it dropped, are fine.
     assert_eq!(stopped.status, Status::GUATIAO_ERR_INTERNAL);
@@ -240,8 +249,8 @@ let p = #{ kinds: ["greeter"],
 /// each level costs a few operations and no copy.
 const DEEP: &str = "let a = []; for i in 0..n { a = [take(a)]; }";
 
-/// Levels past what dropping or copying a nested value on the engine
-/// thread's 2 MiB holds (96 and 273 bytes a level in a release build, 321
+/// Levels past what dropping or copying a nested value on a thread's
+/// default 2 MiB holds (96 and 273 bytes a level in a release build, 321
 /// and 1 351 in a debug one).
 fn past_the_thread() -> usize {
     if cfg!(debug_assertions) {
@@ -284,13 +293,13 @@ let p = #{{ kinds: ["greeter"], greet: |name| {{
 }
 
 #[test]
-fn a_deep_answer_or_thrown_value_is_dropped_on_the_calls_stack() {
+fn a_deep_answer_is_refused_and_a_deep_thrown_value_dropped() {
     let n = past_the_thread().to_string();
     let refused = greets(
         "rhai_deep_answer",
         &library(DEEP, "#{ greeting: a }"),
         &n,
-        10_000_000,
+        OPS,
     )
     .unwrap_err();
     assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
@@ -299,18 +308,12 @@ fn a_deep_answer_or_thrown_value_is_dropped_on_the_calls_stack() {
         "{}",
         refused.message()
     );
-    let thrown = greets(
-        "rhai_deep_throw",
-        &library(DEEP, "throw a;"),
-        &n,
-        10_000_000,
-    )
-    .unwrap_err();
+    let thrown = greets("rhai_deep_throw", &library(DEEP, "throw a;"), &n, OPS).unwrap_err();
     assert_eq!(thrown.message(), "a script threw a array");
 }
 
 #[test]
-fn what_a_script_ends_with_and_does_not_keep_is_dropped_on_the_calls_stack() {
+fn what_a_script_ends_with_and_does_not_keep_is_dropped() {
     let dir = scratch("stack-open-leftover");
     let code = format!(
         r#"
@@ -323,18 +326,34 @@ let p = #{{ kinds: ["greeter"], greet: |name| #{{ greeting: name }} }};
         past_the_thread()
     );
     put(&dir, "rhai_leftover", &code);
-    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 10_000_000)]))));
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", OPS)]))));
     let changed = registry.refresh();
     assert!(changed.refused.is_empty(), "{changed:?}");
     assert!(greeter(&registry, "rhai_leftover_p").greet("x").is_ok());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Whether `answer` is an answer, or a stop at the depth or operations
+/// limit. A thread can be given more stack than it asked for (glibc hands
+/// a new thread a larger stack a finished one left), and then a recursion
+/// the check would have stopped finishes, or runs out of operations.
+fn answered_or_stopped(label: &str, answer: Result<(), guatiao::library::ProviderError>) {
+    if let Err(e) = answer {
+        assert!(
+            e.message() == "stopped at its depth limit (32)"
+                || e.message().starts_with("stopped at its operations limit"),
+            "{label}: {}",
+            e.message()
+        );
+    }
+}
+
 #[test]
 fn operations_that_recurse_over_nested_values_stop_at_the_depth_limit() {
     // Comparing and writing a nested value recurse through Rhai's own
-    // calls, about 2 KiB of native stack a level in a release build, far
-    // more than the nesting budget gives each level.
+    // calls, about 2 KiB of native stack a level in a release build, more
+    // than the stack holds for each operation: the check between
+    // operations stops them.
     let n: u64 = if cfg!(debug_assertions) {
         60_000
     } else {
@@ -347,19 +366,103 @@ fn operations_that_recurse_over_nested_values_stop_at_the_depth_limit() {
         ("interpolation", "let s = `${a}`;"),
     ] {
         let code = library(&format!("{DEEP} {op}"), "#{ greeting: \"done\" }");
-        let stopped = greets(
+        let answer = greets(
             &format!("rhai_recurse_{label}"),
             &code,
             &n.to_string(),
             8 * n + 2_000,
-        )
-        .unwrap_err();
-        assert_eq!(
-            stopped.message(),
-            "stopped at its depth limit (32)",
-            "{label}"
         );
+        answered_or_stopped(label, answer);
     }
+}
+
+#[test]
+fn comparing_a_value_nested_nearly_as_deep_as_the_operations_allow_stops() {
+    // Twelve literals a statement build a level for 17/12 operations, and
+    // comparing takes one a level: with just enough operations for both,
+    // the stack holds about 1.5 KiB a level, less than comparing takes
+    // through Rhai's calls in a release build. Without the check between
+    // operations this overflows the engine thread's stack there; a debug
+    // build's 7.3 KiB a level holds the comparison.
+    let steps: u64 = if cfg!(debug_assertions) {
+        25_000
+    } else {
+        100_000
+    };
+    let ops = 30 * steps + 5_000;
+    let build = format!(
+        "let a = (); for i in 0..n {{ a = {}take(a){}; }}",
+        "[".repeat(12),
+        "]".repeat(12)
+    );
+    for (label, op) in [
+        ("eq", "let same = a == a;"),
+        ("contains", "let has = [a].contains(a);"),
+    ] {
+        let id = format!("rhai_near_limit_{label}");
+        let code = library(&format!("{build} {op}"), "#{ greeting: \"done\" }");
+        // Built and compared, or stopped short of the stack's end; never
+        // out of operations, which would mean nothing deep was compared.
+        if let Err(e) = greets(&id, &code, &steps.to_string(), ops) {
+            assert_eq!(e.message(), "stopped at its depth limit (32)", "{id}");
+        }
+    }
+}
+
+#[test]
+fn literals_nested_a_dozen_a_statement_are_copied_written_and_compared() {
+    // Twelve literals a statement nest a level for about 1.4 operations.
+    // Copying and dropping the result recurse within one operation, which
+    // the check between operations cannot see: the stack must hold them.
+    // Writing and comparing it recurse through Rhai's calls, which the
+    // check stops (or, on a thread given more stack, finish).
+    for (shape, open, close, steps, ops) in [
+        ("arrays", "[", "]", 100_000, 2_000_000),
+        ("maps", "#{ x: ", " }", 10_000, 200_000),
+    ] {
+        let build = format!(
+            "let a = (); for i in 0..n {{ a = {}take(a){}; }}",
+            open.repeat(12),
+            close.repeat(12)
+        );
+        for (label, op, answers) in [
+            ("dropped", "", true),
+            ("copied", "let b = a;", true),
+            ("written", "let s = a.to_debug();", false),
+            ("compared", "let same = a == a;", false),
+        ] {
+            let id = format!("rhai_literals_{shape}_{label}");
+            let code = library(&format!("{build} {op}"), "#{ greeting: \"done\" }");
+            let answer = greets(&id, &code, &steps.to_string(), ops);
+            if answers {
+                answer.unwrap_or_else(|e| panic!("{id}: {}", e.message()));
+            } else {
+                answered_or_stopped(&id, answer);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_limit_past_its_cap_is_refused_before_any_stack_is_reserved() {
+    // At the cap the stack would be gigabytes, which a small Linux machine
+    // refuses as the thread starts: the limit's own words come first.
+    let dir = scratch("stack-caps");
+    for (key, past, words) in [
+        ("operations", 16_777_217, "`operations` is at most 16777216"),
+        ("depth", 8193, "`depth` is at most 8192"),
+    ] {
+        let refused = guatiao_bridge::BridgeSource::<guatiao_rhai::RhaiEngine>::pinned(
+            &config(&dir, Some(limits(&[(key, past)]))),
+            "rhai-caps",
+        )
+        .err()
+        .unwrap_or_else(|| panic!("{key} {past} is refused"));
+        assert!(refused.to_string().contains(words), "{refused}");
+        let status: guatiao::library::ProviderError = refused.into();
+        assert_eq!(status.status, Status::GUATIAO_ERR_BAD_VALUE, "{key}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
