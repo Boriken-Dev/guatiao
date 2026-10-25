@@ -13,7 +13,7 @@ use alloc::sync::Arc;
 use core::cell::Cell;
 use core::time::Duration;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError, mpsc};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::{self, JoinHandle};
 
 use guatiao::library::ProviderError;
@@ -34,38 +34,77 @@ use crate::{meter, section, wasi};
 /// The largest module a source reads and compiles.
 pub(crate) const MOST_MODULE_BYTES: u64 = 128 << 20;
 
-/// Increments the engine's epoch every millisecond while a time limit is
-/// set; stops when dropped.
+/// How many guest calls run, and whether the ticker should stop.
+#[derive(Default)]
+struct Ticks {
+    running: usize,
+    stop: bool,
+}
+
+/// Increments the engine's epoch every millisecond while a call runs, and
+/// sleeps while none does; stops when dropped.
 struct Ticker {
-    stop: Option<mpsc::Sender<()>>,
+    ticks: Arc<(Mutex<Ticks>, Condvar)>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Ticker {
     fn start(engine: wasmtime::Engine) -> Result<Ticker, BridgeError> {
-        let (stop, stopped) = mpsc::channel::<()>();
+        let ticks = Arc::new((Mutex::new(Ticks::default()), Condvar::new()));
+        let shared = Arc::clone(&ticks);
         let thread = thread::Builder::new()
             .name("guatiao-wasm-epoch".to_string())
             .spawn(move || {
-                while let Err(mpsc::RecvTimeoutError::Timeout) =
-                    stopped.recv_timeout(Duration::from_millis(1))
-                {
-                    engine.increment_epoch();
+                let (lock, wake) = &*shared;
+                let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                while !state.stop {
+                    if state.running == 0 {
+                        state = wake.wait(state).unwrap_or_else(PoisonError::into_inner);
+                        continue;
+                    }
+                    state = wake
+                        .wait_timeout(state, Duration::from_millis(1))
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .0;
+                    if state.running > 0 {
+                        engine.increment_epoch();
+                    }
                 }
             })
             .map_err(|e| {
                 BridgeError::Unavailable(format!("the epoch thread did not start: {e}"))
             })?;
         Ok(Ticker {
-            stop: Some(stop),
+            ticks,
             thread: Some(thread),
         })
+    }
+
+    /// Counts a call running until the answer drops.
+    fn running(&self) -> Running<'_> {
+        let (lock, wake) = &*self.ticks;
+        lock.lock().unwrap_or_else(PoisonError::into_inner).running += 1;
+        wake.notify_one();
+        Running(self)
+    }
+}
+
+/// A call the ticker counts.
+struct Running<'a>(&'a Ticker);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        let (lock, _) = &*self.0.ticks;
+        let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        state.running = state.running.saturating_sub(1);
     }
 }
 
 impl Drop for Ticker {
     fn drop(&mut self) {
-        drop(self.stop.take());
+        let (lock, wake) = &*self.ticks;
+        lock.lock().unwrap_or_else(PoisonError::into_inner).stop = true;
+        wake.notify_one();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -85,7 +124,7 @@ pub struct WasmEngine {
     linker: Linker<State>,
     limits: Limits,
     shared: Arc<Shared>,
-    _ticker: Option<Ticker>,
+    ticker: Option<Ticker>,
 }
 
 /// One opened library: its compiled module, its providers in the order it
@@ -306,6 +345,11 @@ impl WasmEngine {
         instance::stopped(&lib.id, error, state, &self.limits)
     }
 
+    /// Counts a call for the ticker, when there is one.
+    fn running(&self) -> Option<Running<'_>> {
+        self.ticker.as_ref().map(Ticker::running)
+    }
+
     /// The library's instance, made afresh after a stop.
     fn live<'s>(
         &self,
@@ -433,7 +477,7 @@ impl Engine for WasmEngine {
             linker,
             limits,
             shared: Arc::new(Shared::new(kinds)),
-            _ticker: ticker,
+            ticker,
         })
     }
 
@@ -457,16 +501,19 @@ impl Engine for WasmEngine {
         manifest: &Manifest,
         version: &str,
     ) -> Result<Opened<Arc<WasmLibrary>>, BridgeError> {
+        let _running = self.running();
         with_stack(|| self.open_here(manifest, version))
     }
 
     fn call(&self, lib: &Arc<WasmLibrary>, call: &mut Call) -> Result<Reply, ProviderError> {
+        let _running = self.running();
         with_stack(|| self.call_here(lib, call))
     }
 
     /// Tells the guest its object was destroyed; deferred to the next
     /// call when the library is busy and this thread is inside a call.
     fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
+        let _running = self.running();
         with_stack(|| match lib.enter() {
             Some(mut entered) => self.release_in(&mut entered.slot, object),
             None => lib

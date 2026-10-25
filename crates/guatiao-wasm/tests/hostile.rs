@@ -5,9 +5,10 @@
 //! Guests that push on the host rather than on themselves: a stack overflow
 //! on a thread with little stack, answers that would swell when decoded,
 //! tables that add up, maps that cost the square of their keys, host work
-//! a loop of imports asks for and two libraries calling each other from
-//! two threads. What could take the process down runs in a child process;
-//! what could hang runs under a timeout.
+//! a loop of imports asks for, two libraries calling each other from two
+//! threads, and a ticker that should sleep while nothing runs. What could
+//! take the process down runs in a child process; what could hang runs
+//! under a timeout.
 
 mod common;
 
@@ -752,4 +753,57 @@ fn libraries_calling_each_other_from_two_threads_answer_busy_not_deadlock() {
     }
     let heard = heard.lock().unwrap();
     assert_eq!(*heard, ["GUATIAO_ERR_BUSY", "GUATIAO_ERR_BUSY"]);
+}
+
+// --- the ticker ---------------------------------------------------------------------
+
+/// How often the epoch thread was switched to, where Linux says.
+fn ticker_switches() -> Option<u64> {
+    for task in std::fs::read_dir("/proc/self/task").ok()?.flatten() {
+        let comm = std::fs::read_to_string(task.path().join("comm")).unwrap_or_default();
+        if comm.trim() == "guatiao-wasm-ep" {
+            let status = std::fs::read_to_string(task.path().join("status")).ok()?;
+            let line = status
+                .lines()
+                .find(|l| l.starts_with("voluntary_ctxt_switches"))?;
+            return line.split_whitespace().nth(1)?.parse().ok();
+        }
+    }
+    None
+}
+
+#[test]
+fn the_epoch_ticker_sleeps_while_no_call_runs() {
+    const NAME: &str = "the_epoch_ticker_sleeps_while_no_call_runs";
+    if child_role().is_some() {
+        let dir = pushy("ticker");
+        let mut registry = serving(&config(&[&dir], Some(limits(&[("time_ms", 50)]))));
+        assert!(registry.refresh().refused.is_empty());
+        assert_eq!(greet(&registry, "pushy_ok").as_deref(), Ok("ok"));
+        std::thread::sleep(Duration::from_millis(20));
+        let before = ticker_switches();
+        std::thread::sleep(Duration::from_millis(300));
+        let after = ticker_switches();
+        if let (Some(before), Some(after)) = (before, after) {
+            println!("IDLE SWITCHES: {}", after - before);
+        }
+        let started = Instant::now();
+        let (_, words) = greet(&registry, "pushy_spin").unwrap_err();
+        println!("SPIN: {words} in {:?}", started.elapsed());
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    let (ok, out) = in_child(NAME, "ticker");
+    assert!(ok, "{out}");
+    assert!(
+        out.contains("SPIN: stopped at its time_ms limit (50)"),
+        "{out}"
+    );
+    if std::path::Path::new("/proc/self/task").is_dir() {
+        let switches: u64 = after(&out, "IDLE SWITCHES: ").parse().expect("a number");
+        assert!(
+            switches < 5,
+            "the ticker woke {switches} times in 300 ms idle"
+        );
+    }
 }
