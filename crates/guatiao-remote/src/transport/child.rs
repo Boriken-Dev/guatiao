@@ -6,6 +6,8 @@
 //! crashing or conflicting provider out of the host's process. The child's
 //! stderr is the host's.
 
+#![forbid(unsafe_code)]
+
 use core::time::Duration;
 use std::ffi::OsString;
 use std::io;

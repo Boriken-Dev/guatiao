@@ -5,6 +5,8 @@
 //! TCP: Nagle off, a bounded connect, and for the trusted level the
 //! address ranges a listener may bind and accept from.
 
+#![forbid(unsafe_code)]
+
 use alloc::sync::Arc;
 use core::net::{IpAddr, SocketAddr};
 use core::time::Duration;

@@ -34,6 +34,14 @@ default = []
 # pre-shared key proved both ways in the handshake (HMAC-SHA256).
 tcp = ["dep:hmac", "dep:sha2", "dep:getrandom"]
 
+# The same machine by name, at the local level: a Unix socket (std) on
+# Unix, a named pipe on Windows.
+local = ["dep:interprocess"]
+
+# The same machine through shared memory: two rings in a mapped file, a
+# local connection beside them for wake-ups.
+shm = ["local", "dep:memmap2"]
+
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["dynamic-kinds", "load"] }
 # Kind descriptions read from their JSON documents.
@@ -44,6 +52,13 @@ hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 # The handshake's nonces.
 getrandom = { version = "0.3", optional = true }
+# The shared rings' file, mapped.
+memmap2 = { version = "0.9", optional = true }
+
+# Named pipes on Windows: overlapped I/O, so one thread reads while
+# another writes, with no `unsafe` here.
+[target.'cfg(windows)'.dependencies]
+interprocess = { version = "2", optional = true, default-features = false }
 
 [dev-dependencies]
 guatiao = { path = "../guatiao", features = ["provider", "load", "dynamic-kinds"] }

@@ -60,6 +60,7 @@ pub fn guatiao_remote::link::LinkOptions::key(self, &[u8]) -> guatiao_remote::li
 pub fn guatiao_remote::link::LinkOptions::max_calls(self, usize) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::max_frame(self, usize) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::new(guatiao_remote::protocol::Trust) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::spin(self, core::time::Duration) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::timeout(self, core::option::Option<core::time::Duration>) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::token(self, &str) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::trust(&self) -> guatiao_remote::protocol::Trust
@@ -69,6 +70,7 @@ impl core::fmt::Debug for guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const guatiao_remote::link::DEFAULT_MAX_CALLS: usize
 pub const guatiao_remote::link::DEFAULT_MAX_FRAME: usize
+pub const guatiao_remote::link::DEFAULT_SPIN: core::time::Duration
 pub const guatiao_remote::link::DEFAULT_TIMEOUT: core::time::Duration
 pub mod guatiao_remote::protocol
 pub mod guatiao_remote::protocol::args
@@ -381,8 +383,43 @@ impl guatiao_remote::transport::Connect for guatiao_remote::transport::child::Ch
 pub fn guatiao_remote::transport::child::ChildCommand::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub fn guatiao_remote::transport::child::ChildCommand::describe(&self) -> alloc::string::String
 pub fn guatiao_remote::transport::child::stdio() -> guatiao_remote::transport::Connection
+pub mod guatiao_remote::transport::local
+pub struct guatiao_remote::transport::local::LocalConnect
+impl guatiao_remote::transport::local::LocalConnect
+pub fn guatiao_remote::transport::local::LocalConnect::new(&str) -> guatiao_remote::transport::local::LocalConnect
+impl core::clone::Clone for guatiao_remote::transport::local::LocalConnect
+pub fn guatiao_remote::transport::local::LocalConnect::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::transport::local::LocalConnect
+pub fn guatiao_remote::transport::local::LocalConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::local::LocalConnect
+pub fn guatiao_remote::transport::local::LocalConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::local::LocalConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_remote::transport::local::LocalListen
+impl guatiao_remote::transport::local::LocalListen
+pub fn guatiao_remote::transport::local::LocalListen::accept(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::local::LocalListen::bind(&str) -> core::io::error::Result<guatiao_remote::transport::local::LocalListen>
+impl core::fmt::Debug for guatiao_remote::transport::local::LocalListen
+pub fn guatiao_remote::transport::local::LocalListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao_remote::transport::memory
 pub fn guatiao_remote::transport::memory::pair() -> (guatiao_remote::transport::Connection, guatiao_remote::transport::Connection)
+pub mod guatiao_remote::transport::shm
+pub struct guatiao_remote::transport::shm::ShmConnect
+impl guatiao_remote::transport::shm::ShmConnect
+pub fn guatiao_remote::transport::shm::ShmConnect::new(&str) -> guatiao_remote::transport::shm::ShmConnect
+impl core::clone::Clone for guatiao_remote::transport::shm::ShmConnect
+pub fn guatiao_remote::transport::shm::ShmConnect::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::transport::shm::ShmConnect
+pub fn guatiao_remote::transport::shm::ShmConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::shm::ShmConnect
+pub fn guatiao_remote::transport::shm::ShmConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::shm::ShmConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_remote::transport::shm::ShmListen
+impl guatiao_remote::transport::shm::ShmListen
+pub fn guatiao_remote::transport::shm::ShmListen::accept(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::shm::ShmListen::bind(&str) -> core::io::error::Result<guatiao_remote::transport::shm::ShmListen>
+impl core::fmt::Debug for guatiao_remote::transport::shm::ShmListen
+pub fn guatiao_remote::transport::shm::ShmListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao_remote::transport::shm::RING: u64
 pub mod guatiao_remote::transport::stream
 pub struct guatiao_remote::transport::stream::StreamReader<R: alloc::io::read::Read>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_remote::transport::stream::StreamReader<R>
@@ -452,6 +489,12 @@ pub fn guatiao_remote::transport::Connect::describe(&self) -> alloc::string::Str
 impl guatiao_remote::transport::Connect for guatiao_remote::transport::child::ChildCommand
 pub fn guatiao_remote::transport::child::ChildCommand::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub fn guatiao_remote::transport::child::ChildCommand::describe(&self) -> alloc::string::String
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::local::LocalConnect
+pub fn guatiao_remote::transport::local::LocalConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::local::LocalConnect::describe(&self) -> alloc::string::String
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::shm::ShmConnect
+pub fn guatiao_remote::transport::shm::ShmConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::shm::ShmConnect::describe(&self) -> alloc::string::String
 impl guatiao_remote::transport::Connect for guatiao_remote::transport::tcp::TcpConnect
 pub fn guatiao_remote::transport::tcp::TcpConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub fn guatiao_remote::transport::tcp::TcpConnect::describe(&self) -> alloc::string::String
@@ -540,6 +583,7 @@ pub fn guatiao_remote::link::LinkOptions::key(self, &[u8]) -> guatiao_remote::li
 pub fn guatiao_remote::link::LinkOptions::max_calls(self, usize) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::max_frame(self, usize) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::new(guatiao_remote::protocol::Trust) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::spin(self, core::time::Duration) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::timeout(self, core::option::Option<core::time::Duration>) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::token(self, &str) -> guatiao_remote::link::LinkOptions
 pub fn guatiao_remote::link::LinkOptions::trust(&self) -> guatiao_remote::protocol::Trust

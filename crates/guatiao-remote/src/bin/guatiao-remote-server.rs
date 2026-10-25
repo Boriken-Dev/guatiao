@@ -21,7 +21,8 @@ const USAGE: &str = "\
 guatiao-remote-server (--stdio | --listen tcp://ADDRESS:PORT) [options]
 
   --stdio               serve one link on stdin and stdout (a host's child)
-  --listen URL          serve every link to URL (tcp:// is the trusted level)
+  --listen URL          serve every link to URL (tcp:// is the trusted level,
+                        local://name the local one: a socket path or a pipe name)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
   --range CIDR          an address range the listener binds and accepts in
                         (trusted; repeatable; required)
@@ -196,6 +197,10 @@ fn run() -> Result<(), String> {
     match scheme {
         #[cfg(feature = "tcp")]
         "tcp" => serve_tcp(&server, address, &a.ranges),
+        #[cfg(feature = "local")]
+        "local" => serve_local(&server, address),
+        #[cfg(feature = "shm")]
+        "shm" => serve_shm(&server, address),
         other => Err(format!("`{other}://` is not a transport this build has")),
     }
 }
@@ -235,6 +240,52 @@ fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), St
                 eprintln!("guatiao-remote: {peer} is outside the configured ranges");
             }
             Ok(_) => {}
+            Err(e) => eprintln!("guatiao-remote: accept: {e}"),
+        }
+    }
+}
+
+#[cfg(feature = "local")]
+fn serve_local(server: &Server, name: &str) -> Result<(), String> {
+    use guatiao_remote::transport::local::LocalListen;
+    if server.options().trust() != Trust::Local {
+        return Err("local:// serves the local level".to_string());
+    }
+    let listener = LocalListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
+    eprintln!("guatiao-remote: serving local://{name}");
+    loop {
+        match listener.accept() {
+            Ok(conn) => {
+                let server = server.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = server.serve(conn) {
+                        eprintln!("guatiao-remote: a link was refused: {e}");
+                    }
+                });
+            }
+            Err(e) => eprintln!("guatiao-remote: accept: {e}"),
+        }
+    }
+}
+
+#[cfg(feature = "shm")]
+fn serve_shm(server: &Server, name: &str) -> Result<(), String> {
+    use guatiao_remote::transport::shm::ShmListen;
+    if server.options().trust() != Trust::Local {
+        return Err("shm:// serves the local level".to_string());
+    }
+    let listener = ShmListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
+    eprintln!("guatiao-remote: serving shm://{name}");
+    loop {
+        match listener.accept() {
+            Ok(conn) => {
+                let server = server.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = server.serve(conn) {
+                        eprintln!("guatiao-remote: a link was refused: {e}");
+                    }
+                });
+            }
             Err(e) => eprintln!("guatiao-remote: accept: {e}"),
         }
     }

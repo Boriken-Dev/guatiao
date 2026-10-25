@@ -9,10 +9,15 @@
 //! builds it; a message transport (a WebSocket, a QUIC datagram) carries
 //! the body alone, one frame per message.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 pub mod child;
+#[cfg(feature = "local")]
+pub mod local;
 pub mod memory;
+#[cfg(feature = "shm")]
+#[allow(unsafe_code)]
+pub mod shm;
 pub mod stream;
 #[cfg(feature = "tcp")]
 pub mod tcp;

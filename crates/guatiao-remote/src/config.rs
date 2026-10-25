@@ -7,7 +7,7 @@
 //!
 //! | key | holds |
 //! | --- | --- |
-//! | `connect` | `tcp://host:port`, or for a child `child` instead |
+//! | `connect` | `tcp://host:port`, `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), or for a child `child` instead |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `trust` | `local`, `trusted` or `secure`; `local` for a child |
 //! | `key`, `key_file` | the trusted level's pre-shared key, as text or a file's bytes |
@@ -128,6 +128,26 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
             }
             Ok((
                 Box::new(crate::transport::tcp::TcpConnect::new(rest)),
+                options_of(map, trust)?,
+            ))
+        }
+        #[cfg(feature = "local")]
+        "local" => {
+            if trust != Trust::Local {
+                return Err(refused("`local://` runs the local level"));
+            }
+            Ok((
+                Box::new(crate::transport::local::LocalConnect::new(rest)),
+                options_of(map, trust)?,
+            ))
+        }
+        #[cfg(feature = "shm")]
+        "shm" => {
+            if trust != Trust::Local {
+                return Err(refused("`shm://` runs the local level"));
+            }
+            Ok((
+                Box::new(crate::transport::shm::ShmConnect::new(rest)),
                 options_of(map, trust)?,
             ))
         }
