@@ -3,12 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! What the host takes from a guest, bounded: the bytes it copies out of
-//! the guest's memory, the tree it decodes them into, and the work
-//! decoding maps costs. A guest's own limits cannot bound what the host
-//! spends on its behalf, so this does.
+//! the guest's memory and the tree it decodes them into. A guest's own
+//! limits cannot bound what the host spends on its behalf, so this does.
 
-use guatiao::Value;
 use guatiao::value::wire;
+use guatiao::{Status, Value};
 use guatiao_bridge::Limits;
 
 /// The bytes the host takes from one guest at once with no memory limit.
@@ -17,37 +16,29 @@ pub const UNLIMITED: u64 = 64 << 20;
 /// What one decoded node costs the host, at most, beyond its bytes.
 const NODE_COST: u64 = 96;
 
-/// The most work decoding maps may cost: core's decoder looks a key up
-/// among the keys before it, so a map of `n` keys costs `n * n`.
-pub const MAP_WORK: u64 = 1 << 24;
-
 /// The bytes the host takes from one guest at once: its memory limit, or
 /// [`UNLIMITED`].
 pub(crate) fn of(limits: &Limits) -> u64 {
     limits.memory.unwrap_or(UNLIMITED)
 }
 
-/// Why the host does not decode what a guest handed it.
+/// Why the host does not decode what a guest handed it: the tree would
+/// take more than `budget` bytes on the host.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Refused {
-    /// The tree would take more than `budget` bytes on the host.
-    TooLarge { budget: u64 },
-    /// A map, or maps together, hold more keys than decoding can afford:
-    /// the largest has `keys`.
-    Maps { keys: u64 },
+pub(crate) struct Refused {
+    pub(crate) budget: u64,
 }
 
 impl Refused {
+    /// The status a refusal crosses as.
+    pub(crate) const STATUS: Status = Status::GUATIAO_ERR_ALLOC;
+
     /// Its words, for `what` was handed over.
     pub(crate) fn words(&self, what: &str) -> String {
-        match self {
-            Refused::TooLarge { budget } => format!(
-                "{what} would take more than {budget} bytes on the host (the memory limit, or {UNLIMITED} without one)"
-            ),
-            Refused::Maps { keys } => format!(
-                "{what} holds maps too large to decode (one of {keys} keys; their keys squared may add up to {MAP_WORK})"
-            ),
-        }
+        format!(
+            "{what} would take more than {} bytes on the host (the memory limit, or {UNLIMITED} without one)",
+            self.budget
+        )
     }
 }
 
@@ -64,22 +55,17 @@ fn leb(bytes: &[u8], mut at: usize) -> Option<(u64, usize)> {
     None
 }
 
-/// Map keys compared while decoding per unit of fuel charged.
-const COMPARISONS_PER_FUEL: u64 = 4;
-
 /// Walks `bytes` as the wire grammar lays them out, without building
 /// anything, and refuses what would cost more than `budget`. What is not
 /// a value is left to the decoder to refuse, with its offset. Answers what
-/// decoding costs in fuel: a unit per node, and per
-/// [`COMPARISONS_PER_FUEL`] map keys compared.
+/// decoding costs in fuel: a unit per node, a map's as a list's, since
+/// core decodes either in time linear in its bytes.
 pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
-    let fuel = |nodes: u64, work: u64| nodes.saturating_add(work / COMPARISONS_PER_FUEL);
     let len = bytes.len() as u64;
     if len > budget {
-        return Err(Refused::TooLarge { budget });
+        return Err(Refused { budget });
     }
     let mut nodes: u64 = 0;
-    let mut work: u64 = 0;
     let mut at = 0usize;
     // Values left to read in each open container, and whether it is a map.
     let mut open: Vec<(u64, bool)> = vec![(1, false)];
@@ -92,48 +78,42 @@ pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
         let in_map = top.1;
         if in_map {
             let Some((n, after)) = leb(bytes, at) else {
-                return Ok(fuel(nodes, work));
+                return Ok(nodes);
             };
             at = after.saturating_add(usize::try_from(n).unwrap_or(usize::MAX));
         }
         let Some(&tag) = bytes.get(at) else {
-            return Ok(fuel(nodes, work));
+            return Ok(nodes);
         };
         at += 1;
         nodes += 1;
         if nodes.saturating_mul(NODE_COST).saturating_add(len) > budget {
-            return Err(Refused::TooLarge { budget });
+            return Err(Refused { budget });
         }
         match tag {
             0 | 1 => {}
             2 => at += 1,
             3..=5 => {
                 let Some((n, after)) = leb(bytes, at) else {
-                    return Ok(fuel(nodes, work));
+                    return Ok(nodes);
                 };
                 at = after.saturating_add(usize::try_from(n).unwrap_or(usize::MAX));
             }
             6 | 7 => {
                 let Some((n, after)) = leb(bytes, at) else {
-                    return Ok(fuel(nodes, work));
+                    return Ok(nodes);
                 };
                 at = after;
                 // Every element is at least a byte: the decoder builds no
                 // more elements than bytes remain before it refuses a
                 // larger count, and those are walked and counted.
                 let n = n.min(bytes.len().saturating_sub(at) as u64);
-                if tag == 7 {
-                    work = work.saturating_add(n.saturating_mul(n));
-                    if work > MAP_WORK {
-                        return Err(Refused::Maps { keys: n });
-                    }
-                }
                 open.push((n, tag == 7));
             }
-            _ => return Ok(fuel(nodes, work)),
+            _ => return Ok(nodes),
         }
     }
-    Ok(fuel(nodes, work))
+    Ok(nodes)
 }
 
 /// Why bytes a guest handed over were not taken.
@@ -180,10 +160,7 @@ mod tests {
         }
         let encoded = bytes(Value::from(list));
         assert!(encoded.len() < 1 << 20);
-        assert_eq!(
-            check(&encoded, 1 << 20),
-            Err(Refused::TooLarge { budget: 1 << 20 })
-        );
+        assert_eq!(check(&encoded, 1 << 20), Err(Refused { budget: 1 << 20 }));
         assert!(check(&encoded, 64 << 20).is_ok());
     }
 
@@ -199,10 +176,7 @@ mod tests {
         }
         encoded.push(n as u8);
         encoded.extend(core::iter::repeat_n(1u8, 100_000));
-        assert_eq!(
-            check(&encoded, 1 << 20),
-            Err(Refused::TooLarge { budget: 1 << 20 })
-        );
+        assert_eq!(check(&encoded, 1 << 20), Err(Refused { budget: 1 << 20 }));
         assert!(matches!(
             decode(&encoded, 64 << 20),
             Err(Undecoded::Malformed(_))
@@ -210,20 +184,19 @@ mod tests {
     }
 
     #[test]
-    fn maps_are_refused_by_the_square_of_their_keys() {
-        let mut map = Map::new();
-        for i in 0..5000 {
-            map.set(&format!("k{i}"), Value::null());
+    fn a_wide_map_costs_a_unit_per_node_and_decodes() {
+        // Encoded by hand: building a wide `Map` key by key is slow.
+        let keys: u32 = 50_000;
+        let mut encoded = vec![7u8, 0xd0, 0x86, 0x03];
+        for i in 0..keys {
+            let key = format!("k{i:06}");
+            encoded.push(key.len() as u8);
+            encoded.extend_from_slice(key.as_bytes());
+            encoded.push(1);
         }
-        assert_eq!(
-            check(&bytes(Value::from(map)), 64 << 20),
-            Err(Refused::Maps { keys: 5000 })
-        );
-        let mut small = Map::new();
-        for i in 0..4000 {
-            small.set(&format!("k{i}"), Value::null());
-        }
-        assert!(check(&bytes(Value::from(small)), 64 << 20).is_ok());
+        assert_eq!(check(&encoded, 64 << 20), Ok(u64::from(keys) + 1));
+        let map = Map::try_from(decode(&encoded, 64 << 20).expect("decoded")).expect("a map");
+        assert_eq!(map.len(), keys as usize);
     }
 
     #[test]
