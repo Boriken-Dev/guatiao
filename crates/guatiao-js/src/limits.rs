@@ -36,6 +36,7 @@ const STACK_ENTRY: u64 = if cfg!(debug_assertions) {
 } else {
     64 * 1024
 };
+const _: () = assert!(STACK_LEAST <= STACK_MOST - STACK_ENTRY);
 
 /// The memory kept back from the limit so that the error which stops a
 /// call can always be made: with none, QuickJS throws `null` for want of
