@@ -192,7 +192,9 @@ string interpolation), about 2 KiB a level in a release build. Every
 operation checks the stack left (`stacker::remaining_stack`), and below
 what the call's nesting needs plus 256 KiB (1 MiB in debug) the call stops
 at its depth limit, as if it had recursed that deep. `to_json` writes a
-map nested at most 512 levels; a deeper one is `GUATIAO_ERR_BAD_VALUE`.
+map nested at most 512 levels and holding at most 1 000 000 values (a
+value two closures share counted in each); a larger one is
+`GUATIAO_ERR_BAD_VALUE`.
 On Windows a mapped stack is committed memory, not only address space:
 `operations` near its cap commits about 1.8 GB for a call.
 

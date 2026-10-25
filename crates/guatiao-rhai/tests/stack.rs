@@ -372,8 +372,18 @@ fn json_of_a_map_nested_too_deep_is_refused() {
     assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(
         refused.message(),
-        "a map nested deeper than 512 levels is not written as JSON"
+        "a map nested deeper than 512 levels, or holding more than 1000000 values, is not written as JSON"
     );
+    // Closures sharing what they capture: forty levels are 2^40 values as
+    // JSON writes them, refused rather than walked.
+    let shared = library(
+        "let a = #{}; for i in 0..40 { let b = a; let f = || b; a = #{ x: f, y: f }; } let m = #{ a: a };",
+        "#{ greeting: m.to_json() }",
+    );
+    let started = std::time::Instant::now();
+    let refused = greets("rhai_json_shared", &shared, "0", 1_000_000).unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(started.elapsed() < core::time::Duration::from_secs(20));
     let fine = library("let m = #{ a: [[1]] };", "#{ greeting: m.to_json() }");
     assert!(greets("rhai_json_fine", &fine, "0", 1_000_000).is_ok());
 }

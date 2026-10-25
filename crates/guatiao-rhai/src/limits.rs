@@ -67,6 +67,8 @@ pub(crate) const DEPTH_TOKEN: &str = "depth";
 /// The deepest map `to_json` writes, and the stack a level of it takes
 /// (851 bytes in a release build, 4 599 in a debug one, measured).
 const JSON_DEPTH: usize = 512;
+/// The most values `to_json` writes.
+const JSON_VALUES: usize = 1_000_000;
 const PER_JSON_LEVEL: usize = if cfg!(debug_assertions) {
     8 * 1024
 } else {
@@ -102,34 +104,49 @@ pub(crate) struct Meter {
     exhausted: Rc<Cell<bool>>,
 }
 
-/// Whether `d` nests containers more than `left` levels deep, looking no
-/// deeper than that.
-fn nests_deeper(d: &Dynamic, left: usize) -> bool {
-    fn deeper<'a>(mut children: impl Iterator<Item = &'a Dynamic>, left: usize) -> bool {
-        left == 0 || children.any(|c| nests_deeper(c, left - 1))
+/// Whether `d` nests containers more than `left` levels deep, or holds
+/// more than `nodes` values, a value shared by two containers counted in
+/// each as JSON writes it twice; looking no further than that.
+fn nests_beyond(d: &Dynamic, left: usize, nodes: &mut usize) -> bool {
+    fn deeper<'a>(
+        mut children: impl Iterator<Item = &'a Dynamic>,
+        left: usize,
+        nodes: &mut usize,
+    ) -> bool {
+        left == 0 || children.any(|c| nests_beyond(c, left - 1, nodes))
     }
+    let Some(rest) = nodes.checked_sub(1) else {
+        return true;
+    };
+    *nodes = rest;
     if let Some(map) = d.read_lock::<Map>() {
-        return deeper(map.values(), left);
+        return deeper(map.values(), left, nodes);
     }
     if let Some(array) = d.read_lock::<rhai::Array>() {
-        return deeper(array.iter(), left);
+        return deeper(array.iter(), left, nodes);
     }
     if let Some(f) = d.read_lock::<FnPtr>()
         && f.is_curried()
     {
-        return deeper(f.iter_curry(), left);
+        return deeper(f.iter_curry(), left, nodes);
     }
     false
 }
 
-/// `map.to_json()`, refusing a map nested deeper than [`JSON_DEPTH`]: Rhai
-/// writes JSON by recursion within one operation.
+/// `map.to_json()`, refusing a map nested deeper than [`JSON_DEPTH`] or
+/// holding more than [`JSON_VALUES`]: Rhai writes JSON by recursion within
+/// one operation, and closures sharing what they capture make the text
+/// grow twice as long a level.
 fn to_json(map: &mut Map) -> Result<String, Box<EvalAltResult>> {
     let need = JSON_DEPTH * PER_JSON_LEVEL;
     stacker::maybe_grow(need, need, || {
-        if map.values().any(|v| nests_deeper(v, JSON_DEPTH)) {
+        let mut nodes = JSON_VALUES;
+        if map
+            .values()
+            .any(|v| nests_beyond(v, JSON_DEPTH, &mut nodes))
+        {
             return Err(format!(
-                "a map nested deeper than {JSON_DEPTH} levels is not written as JSON"
+                "a map nested deeper than {JSON_DEPTH} levels, or holding more than {JSON_VALUES} values, is not written as JSON"
             )
             .into());
         }
