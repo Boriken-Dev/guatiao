@@ -255,8 +255,7 @@ pub enum Frame<'a> {
         trust: Trust,
         /// Its half of the handshake's nonce.
         nonce: [u8; 16],
-        /// What it offers and asks (`max_frame`, `max_calls`, `compress`,
-        /// `token`).
+        /// What it offers and asks (`max_frame`, `max_calls`, `token`).
         options: Value,
     },
     /// The server's answer.
