@@ -4,8 +4,8 @@
 
 //! Guests that push on the host rather than on themselves: a stack overflow
 //! on a thread with little stack, answers that would swell when decoded,
-//! tables that add up, maps that cost the square of their keys, host work
-//! a loop of imports asks for, two libraries calling each other from two
+//! tables that add up, a wide map taken whole, host work a loop of imports
+//! asks for, two libraries calling each other from two
 //! threads, a ticker that should sleep while nothing runs, and a time
 //! limit that is the clock's, not the ticker's. What could
 //! take the process down runs in a child process; what could hang runs
@@ -52,13 +52,20 @@ fn header(tag: u8, n: u64) -> Vec<u8> {
     out
 }
 
-/// A map of `n` keys, each to null.
+/// Keys in the wide map.
+const WIDE: usize = 50_000;
+
+/// A map of `n` keys, each to null, encoded by hand: building a wide
+/// `Map` key by key is slow.
 fn wide_map(n: usize) -> Vec<u8> {
-    let mut map = Map::new();
+    let mut out = header(7, n as u64);
     for i in 0..n {
-        map.set(&format!("k{i:06}"), Value::null());
+        let key = format!("k{i:06}");
+        out.extend(leb(key.len() as u64));
+        out.extend_from_slice(key.as_bytes());
+        out.push(1);
     }
-    wire::to_bytes(&Value::from(map)).expect("encoded")
+    out
 }
 
 /// Stores `bytes` at `at`, one instruction a byte.
@@ -70,19 +77,16 @@ fn store(at: u32, bytes: &[u8]) -> String {
         .collect()
 }
 
-/// Where the 40 000-key map sits in the guest's memory.
+/// Where the wide map sits in the guest's memory.
 const BIG_MAP_AT: u32 = 65536;
-/// Where the 4000-key map sits, after it.
-const MAP4K_AT: u32 = 7 << 16;
 /// Where a large answer's header ends and its body starts.
 const BODY_AT: u32 = 4400;
 
 /// A guest whose providers do what their names say, each serving
 /// `greeter` (`greet` and `check`).
 fn guest() -> String {
-    assert!(BIG_MAP_AT as usize + wide_map(40_000).len() <= MAP4K_AT as usize);
-    assert!(MAP4K_AT as usize + wide_map(4000).len() <= 8 << 16);
-    let providers: [(&str, String); 13] = [
+    assert!(BIG_MAP_AT as usize + wide_map(WIDE).len() <= 8 << 16);
+    let providers: [(&str, String); 12] = [
         (
             "ok",
             "(call $answer (i32.const 4096) (global.get $ok_len)) (return (i32.const 0))".into(),
@@ -121,7 +125,7 @@ fn guest() -> String {
             format!(
                 "(call $answer (i32.const {BIG_MAP_AT}) (i32.const {}))
                  (return (i32.const 0))",
-                wide_map(40_000).len()
+                wide_map(WIDE).len()
             )
         }),
         ("bigback", {
@@ -130,7 +134,7 @@ fn guest() -> String {
                  (if (local.get $i) (then (call $answer (i32.const 4200) (i32.const 3)) (return (local.get $i))))
                  (call $answer (i32.const 4300) (i32.const 2))
                  (return (i32.const 0))",
-                wide_map(40_000).len()
+                wide_map(WIDE).len()
             )
         }),
         ("sixteen", {
@@ -183,13 +187,6 @@ fn guest() -> String {
              (return (i32.const 0))"
                 .into(),
         ),
-        ("map4k", {
-            format!(
-                "(call $answer (i32.const {MAP4K_AT}) (i32.const {}))
-                 (return (i32.const 0))",
-                wide_map(4000).len()
-            )
-        }),
     ];
     let mut list = List::new();
     for (id, _) in &providers {
@@ -229,7 +226,6 @@ fn guest() -> String {
   (data (i32.const 4200) "why")
   (data (i32.const 4300) "\02\01")
   (data (i32.const {BIG_MAP_AT}) "{big}")
-  (data (i32.const {MAP4K_AT}) "{map4k}")
   (func (export "guatiao_guest_abi") (result i32) (i32.const 1))
   (func (export "guatiao_guest_alloc") (param i32) (result i32) (i32.const 8192))
   (func (export "guatiao_guest_declare") (result i32)
@@ -247,8 +243,7 @@ fn guest() -> String {
         decl_len = declared.len(),
         ok = escaped(&ok),
         ok_len = ok.len(),
-        big = escaped(&wide_map(40_000)),
-        map4k = escaped(&wide_map(4000)),
+        big = escaped(&wide_map(WIDE)),
     )
 }
 
@@ -442,26 +437,19 @@ fn without_a_memory_limit_the_host_still_takes_a_bounded_answer() {
 }
 
 #[test]
-fn a_map_of_forty_thousand_keys_is_refused_at_once_in_an_answer_and_a_write_back() {
+fn a_wide_map_is_taken_in_an_answer_and_a_write_back_charged_by_its_nodes() {
     let dir = pushy("bigmap");
-    let mut registry = serving(&config(
-        &[&dir],
-        // Enough for the copy (a unit per 8 bytes), not for the decoding.
-        Some(limits(&[("operations", 100_000), ("time_ms", 100)])),
-    ));
+    // Copying the map costs about 56 000 units (one per 8 bytes) and
+    // decoding it 50 001 (one a node), each way.
+    let mut registry = serving(&config(&[&dir], Some(limits(&[("operations", 300_000)]))));
     assert!(registry.refresh().refused.is_empty());
-    let started = Instant::now();
-    let (status, words) = greet(&registry, "pushy_bigmap").unwrap_err();
-    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{words}");
-    assert!(words.contains("40000 keys"), "{words}");
+    assert_eq!(greet(&registry, "pushy_bigmap").as_deref(), Ok(""));
     let mut config = Map::new();
-    let refused = greeter(&registry, "pushy_bigback")
+    let checked = greeter(&registry, "pushy_bigback")
         .check(&mut config)
-        .unwrap_err();
-    assert_ne!(refused.status, Status::GUATIAO_OK);
-    assert!(config.is_empty(), "nothing written back");
-    let took = started.elapsed();
-    assert!(took < Duration::from_secs(2), "took {took:?}");
+        .map_err(|e| (e.status, e.message().to_string()));
+    assert_eq!(checked, Ok(true));
+    assert_eq!(config.len(), WIDE);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -695,25 +683,6 @@ fn randomness_counts_against_the_operations_limit_by_its_length() {
             "stopped at its operations limit (1000000)".to_string()
         ))
     );
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn decoding_a_map_counts_its_key_comparisons_against_the_operations_limit() {
-    let dir = pushy("map-work");
-    // The copy and the nodes cost under 10 000 units; comparing 4000 keys
-    // with the keys before them, millions.
-    let mut tight = serving(&config(&[&dir], Some(limits(&[("operations", 200_000)]))));
-    assert!(tight.refresh().refused.is_empty());
-    let (status, words) = greet(&tight, "pushy_map4k").unwrap_err();
-    assert_eq!(status, Status::GUATIAO_ERR_INTERNAL, "{words}");
-    assert_eq!(words, "stopped at its operations limit (200000)");
-    let mut loose = serving(&config(
-        &[&dir],
-        Some(limits(&[("operations", 50_000_000)])),
-    ));
-    assert!(loose.refresh().refused.is_empty());
-    assert_eq!(greet(&loose, "pushy_map4k").as_deref(), Ok(""));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

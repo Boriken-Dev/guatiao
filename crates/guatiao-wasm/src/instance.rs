@@ -332,14 +332,6 @@ fn decoded(
     Ok(value)
 }
 
-/// The status a refusal to decode crosses as.
-pub(crate) fn refusal_status(refused: &Refused) -> Status {
-    match refused {
-        Refused::TooLarge { .. } => Status::GUATIAO_ERR_ALLOC,
-        Refused::Maps { .. } => Status::GUATIAO_ERR_BAD_VALUE,
-    }
-}
-
 fn code(status: Status) -> i32 {
     u32::from(status) as i32
 }
@@ -359,7 +351,7 @@ fn write_back(
     };
     let value = match decoded(caller, &bytes)? {
         Ok(value) => value,
-        Err(Undecoded::Refused(refused)) => return Ok(code(refusal_status(&refused))),
+        Err(Undecoded::Refused(_)) => return Ok(code(Refused::STATUS)),
         Err(Undecoded::Malformed(_)) => return Ok(code(Status::GUATIAO_ERR_BAD_VALUE)),
     };
     let state = caller.data_mut();
@@ -554,7 +546,7 @@ fn call_object(
     let outcome = (|| {
         let request = request.map_err(|undecoded| match undecoded {
             Undecoded::Refused(refused) => {
-                ProviderError::new(refusal_status(&refused), &refused.words("the request"))
+                ProviderError::new(Refused::STATUS, &refused.words("the request"))
             }
             Undecoded::Malformed(e) => bad(format!("the request is not a value: {e}")),
         })?;

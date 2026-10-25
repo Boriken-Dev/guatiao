@@ -135,7 +135,7 @@ the whole budget):
 
 | limit | kept by |
 | --- | --- |
-| `operations` | wasmtime fuel (on only when set), and the host's work for the guest: a unit per 8 bytes it copies in or out, fills with randomness, or a bulk instruction (`memory.fill`, `memory.copy`, `memory.init`, `table.*`) touches, a module being rewritten to charge them; a unit per node it decodes and per 4 map keys compared |
+| `operations` | wasmtime fuel (on only when set), and the host's work for the guest: a unit per 8 bytes it copies in or out, fills with randomness, or a bulk instruction (`memory.fill`, `memory.copy`, `memory.init`, `table.*`) touches, a module being rewritten to charge them; a unit per node it decodes |
 | `time_ms` | the clock, looked at on each tick of a 1 ms epoch ticker thread per source that sleeps while no call runs (on only when set), so a call stops within a tick past its limit however coarse the system timer; checked again after the host's work |
 | `memory` | a limiter refusing linear memory and tables (8 bytes an entry) past the limit together, in bytes; and the most the host takes from the guest at once (below) |
 | `depth` | refused at start (`GUATIAO_ERR_BAD_VALUE`): a guest's stack overflowing traps on its own |
@@ -148,8 +148,7 @@ for memory ("stopped at its memory limit (16777216)").
 request to a host object) is at most the `memory` limit, or 64 MiB
 (`budget::UNLIMITED`) without one, counting its bytes and 96 a node it
 decodes to; past that it is `GUATIAO_ERR_ALLOC` and nothing is decoded.
-Maps whose keys squared add up past 2^24 (`budget::MAP_WORK`) are
-`GUATIAO_ERR_BAD_VALUE`. Without a limit, tables still stop at 64 MiB.
+Without a limit, tables still stop at 64 MiB.
 A module has at most 4 tables and 128 MiB of bytes. WASI's `random_get`
 fills at most 1 MiB a call, `fd_write` takes at most 1024 buffers and
 `poll_oneoff` 1024 subscriptions: more is `EINVAL` to the guest.

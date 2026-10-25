@@ -42,8 +42,7 @@
 //!
 //! **What the host takes** from a guest at once (an answer, a write-back,
 //! a request) is at most [`crate::budget::UNLIMITED`] bytes, or the memory
-//! limit when one is set, and decodes to no more than that; maps whose
-//! keys squared add up past [`crate::budget::MAP_WORK`] are refused.
+//! limit when one is set, and decodes to no more than that.
 //!
 //! **A call.** `object` is 0 for a provider, `target` its position in the
 //! declaration; 1 for an object the guest answered, `target` its id. The

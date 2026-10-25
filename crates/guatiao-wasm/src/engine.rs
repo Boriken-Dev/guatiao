@@ -27,7 +27,7 @@ use guatiao_bridge::{
 use wasmtime::{ExternType, FuncType, Linker, Module};
 
 use crate::abi::{self, export};
-use crate::budget::{self, Undecoded};
+use crate::budget::{self, Refused, Undecoded};
 use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
 use crate::{meter, section, wasi};
 
@@ -734,7 +734,7 @@ impl WasmEngine {
             })?;
             budget::decode(bytes, budget::of(&self.limits)).map_err(|e| match e {
                 Undecoded::Refused(refused) => ProviderError::new(
-                    instance::refusal_status(&refused),
+                    Refused::STATUS,
                     &refused.words(&format!("`{method}`'s answer")),
                 ),
                 Undecoded::Malformed(e) => ProviderError::new(
