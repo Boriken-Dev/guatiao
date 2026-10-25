@@ -34,7 +34,8 @@ guatiao_wasm_guest::export!(library, version = env!("CARGO_PKG_VERSION"));
 `export!` writes `guatiao_guest_abi`, `_alloc`, `_declare`, `_call` and
 `_release` (`#[unsafe(no_mangle)]`, so the crate cannot
 `forbid(unsafe_code)`) and, with `version`, a `guatiao.version` custom
-section. The library is made on the first call, once per instance: a
+section. `_call` takes back only what `_alloc` handed out, for the length
+asked, once; any other address is refused (`bad_value`). The library is made on the first call, once per instance: a
 trapped module is made afresh, its state with it.
 
 ## A provider (`Handler`)

@@ -34,6 +34,9 @@ struct Registry {
 
 std::thread_local! {
     static REGISTRY: RefCell<Option<Registry>> = const { RefCell::new(None) };
+    /// What [`alloc`] handed out and no call has taken back: address to
+    /// length.
+    static HANDED_OUT: RefCell<BTreeMap<usize, usize>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 fn with<R>(make: fn() -> Library, f: impl FnOnce(&mut Registry) -> R) -> R {
@@ -80,20 +83,30 @@ fn hook_panics() {
 /// `guatiao_guest_alloc`: `len` zeroed bytes, the guest's.
 pub fn alloc(len: usize) -> usize {
     let bytes: Box<[u8]> = alloc::vec![0u8; len].into_boxed_slice();
-    Box::into_raw(bytes).cast::<u8>() as usize
+    let address = Box::into_raw(bytes).cast::<u8>() as usize;
+    HANDED_OUT.with(|out| out.borrow_mut().insert(address, len));
+    address
 }
 
-/// Takes back what [`alloc`] handed out.
-///
-/// # Safety
-///
-/// `address` and `len` are an address [`alloc`] answered for `len` and
-/// that length, not taken back before.
-unsafe fn reclaim(address: usize, len: usize) -> Box<[u8]> {
+/// Takes back what [`alloc`] handed out for `len`, once; anything else is
+/// refused, so no address a caller makes up is freed.
+fn reclaim(address: usize, len: usize) -> Option<Box<[u8]>> {
+    let taken = HANDED_OUT.with(|out| {
+        let mut out = out.borrow_mut();
+        let ours = out.get(&address) == Some(&len);
+        if ours {
+            out.remove(&address);
+        }
+        ours
+    });
+    if !taken {
+        return None;
+    }
     let slice = core::ptr::slice_from_raw_parts_mut(address as *mut u8, len);
-    // SAFETY: by the contract, a boxed slice of exactly `len` bytes that
-    // `alloc` gave up with `Box::into_raw`.
-    unsafe { Box::from_raw(slice) }
+    // SAFETY: `alloc` gave up a boxed slice of exactly `len` bytes at
+    // `address` with `Box::into_raw`, and it was in `HANDED_OUT` until just
+    // now, so nothing has taken it back.
+    Some(unsafe { Box::from_raw(slice) })
 }
 
 fn refuse(refusal: &Refusal) -> u32 {
@@ -156,21 +169,15 @@ fn dispatch(
     Ok(answer)
 }
 
-/// `guatiao_guest_call`.
-///
-/// # Safety
-///
-/// `request` and `len` are an address [`alloc`] answered for `len`, which
-/// the host filled and hands back here, once.
-pub unsafe fn call(
-    make: fn() -> Library,
-    object: i32,
-    target: i64,
-    request: usize,
-    len: usize,
-) -> u32 {
-    // SAFETY: the caller's contract is `reclaim`'s.
-    let request = unsafe { reclaim(request, len) };
+/// `guatiao_guest_call`: `request` and `len` are what [`alloc`] answered
+/// and the length asked for, the host having written the request there;
+/// any other address is refused.
+pub fn call(make: fn() -> Library, object: i32, target: i64, request: usize, len: usize) -> u32 {
+    let Some(request) = reclaim(request, len) else {
+        return refuse(&Refusal::bad_value(alloc::format!(
+            "the request at {request} ({len} bytes) is not one guatiao_guest_alloc handed out"
+        )));
+    };
     with(make, |registry| {
         let outcome = read(&request).and_then(|call| dispatch(registry, object != 0, target, call));
         match outcome {
