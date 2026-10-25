@@ -18,13 +18,13 @@ using Guatiao.FFI: FFI, @cdef, Node, GValue, GAlloc, GStr, TAG_MAP, TAG_STRING, 
     binding_alloc, new_root, free_root, adopt, node_ptr, require_node, plain, map_keys, map_find, with_nodes
 
 const PV = Ptr{GValue}
+const PA = Ptr{GAlloc}
 
 """
 The key of a provider's meta holding its form document: read it with
 `Guatiao.provider_meta`, then `check` it against `Guatiao.provider_config`.
 """
 const PROVIDER_FORM_KEY = "form"
-const PA = Ptr{GAlloc}
 
 @cdef "guatiao_intake" "" :plain guatiao_intake_check(schema::PV, form::PV, a::PA, out::PV)::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_layout(schema::PV, form::PV, a::PA, out::PV)::UInt32
