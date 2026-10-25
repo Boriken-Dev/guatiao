@@ -25,6 +25,7 @@ use wasmtime::{
 };
 
 use crate::abi::{self, export, import};
+use crate::budget::{self, Refused, Undecoded};
 use crate::wasi::WasiState;
 
 /// The deepest a guest's own frames go: wasmtime's `max_wasm_stack`.
@@ -101,10 +102,19 @@ pub(crate) enum Writable {
 }
 
 /// A store's data: the limiter's count, what the guest answered and wrote
-/// back during the current call, and the host's objects it holds.
+/// back during the current call, the host's objects it holds, and what
+/// it handed over past what the host takes.
 pub(crate) struct State {
     memory_limit: Option<usize>,
+    memory_bytes: usize,
+    table_entries: usize,
     pub(crate) memory_hit: bool,
+    /// Tables grew past what the host holds for them with no memory limit.
+    tables_past: bool,
+    /// The bytes the host takes from the guest at once, and decodes.
+    pub(crate) budget: u64,
+    /// Bytes past the budget the guest tried to hand over.
+    pub(crate) too_large: Option<u64>,
     pub(crate) answer: Option<Vec<u8>>,
     result: Vec<u8>,
     pub(crate) writable: Vec<Writable>,
@@ -121,7 +131,12 @@ impl State {
             memory_limit: limits
                 .memory
                 .map(|m| usize::try_from(m).unwrap_or(usize::MAX)),
+            memory_bytes: 0,
+            table_entries: 0,
             memory_hit: false,
+            tables_past: false,
+            budget: budget::of(limits),
+            too_large: None,
             answer: None,
             result: Vec::new(),
             writable: Vec::new(),
@@ -133,6 +148,11 @@ impl State {
         }
     }
 
+    /// The handle the last object held was given.
+    pub(crate) fn next_handle(&self) -> u64 {
+        self.next_handle
+    }
+
     /// Holds an object for the guest, answering its handle.
     pub(crate) fn hold(&mut self, held: Held, caller: Arc<KindCaller>) -> u64 {
         self.next_handle += 1;
@@ -142,8 +162,31 @@ impl State {
     }
 }
 
-/// How many table entries a guest may hold under a memory limit.
-const MOST_TABLE_ENTRIES: usize = 1 << 20;
+/// What the host keeps per table entry, counted against the memory limit.
+const TABLE_ENTRY: usize = 8;
+/// The most tables a guest may have: compilers emit one.
+pub(crate) const MOST_TABLES: usize = 4;
+
+impl State {
+    /// Whether memory and tables of these sizes fit: within the memory
+    /// limit together, and without one the tables within
+    /// [`budget::UNLIMITED`], since wasmtime keeps a table's entries on
+    /// the host's heap.
+    fn fits(&mut self, memory: usize, entries: usize) -> bool {
+        let tables = entries.saturating_mul(TABLE_ENTRY);
+        match self.memory_limit {
+            Some(limit) if memory.saturating_add(tables) > limit => {
+                self.memory_hit = true;
+                false
+            }
+            None if tables as u64 > budget::UNLIMITED => {
+                self.tables_past = true;
+                false
+            }
+            _ => true,
+        }
+    }
+}
 
 impl ResourceLimiter for State {
     fn memory_growing(
@@ -152,22 +195,39 @@ impl ResourceLimiter for State {
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        if let Some(limit) = self.memory_limit
-            && desired > limit
-        {
-            self.memory_hit = true;
+        if !self.fits(desired, self.table_entries) {
             return Err(wasmtime::Error::msg("the memory limit"));
         }
+        self.memory_bytes = desired;
         Ok(true)
     }
 
     fn table_growing(
         &mut self,
-        _current: usize,
+        current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        Ok(self.memory_limit.is_none() || desired <= MOST_TABLE_ENTRIES)
+        let entries = self
+            .table_entries
+            .saturating_add(desired.saturating_sub(current));
+        if !self.fits(self.memory_bytes, entries) {
+            return Err(wasmtime::Error::msg("the memory limit"));
+        }
+        self.table_entries = entries;
+        Ok(true)
+    }
+
+    fn instances(&self) -> usize {
+        1
+    }
+
+    fn tables(&self) -> usize {
+        MOST_TABLES
+    }
+
+    fn memories(&self) -> usize {
+        1
     }
 }
 
@@ -180,9 +240,14 @@ fn memory_of(caller: &mut Caller<'_, State>) -> wasmtime::Result<Memory> {
         .ok_or_else(|| wasmtime::Error::msg("the guest exports no memory"))
 }
 
-/// `len` bytes of the guest's memory at `ptr`; a range outside it stops
-/// the guest.
+/// `len` bytes of the guest's memory at `ptr`, copied; a range outside
+/// it, or past the budget, stops the guest.
 fn bytes_at(caller: &mut Caller<'_, State>, ptr: i32, len: i32) -> wasmtime::Result<Vec<u8>> {
+    let n = u64::from(len as u32);
+    if n > caller.data().budget {
+        caller.data_mut().too_large = Some(n);
+        return Err(wasmtime::Error::msg("more bytes than the host takes"));
+    }
     let memory = memory_of(caller)?;
     let start = ptr as u32 as usize;
     start
@@ -190,6 +255,22 @@ fn bytes_at(caller: &mut Caller<'_, State>, ptr: i32, len: i32) -> wasmtime::Res
         .and_then(|end| memory.data(&*caller).get(start..end))
         .map(<[u8]>::to_vec)
         .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))
+}
+
+/// Bytes a guest handed over, decoded within the budget.
+fn decoded(
+    caller: &mut Caller<'_, State>,
+    bytes: &[u8],
+) -> wasmtime::Result<Result<Value, Undecoded>> {
+    Ok(budget::decode(bytes, caller.data().budget))
+}
+
+/// The status a refusal to decode crosses as.
+pub(crate) fn refusal_status(refused: &Refused) -> Status {
+    match refused {
+        Refused::TooLarge { .. } => Status::GUATIAO_ERR_ALLOC,
+        Refused::Maps { .. } => Status::GUATIAO_ERR_BAD_VALUE,
+    }
 }
 
 fn code(status: Status) -> i32 {
@@ -203,16 +284,18 @@ fn write_back(
     len: i32,
 ) -> wasmtime::Result<i32> {
     let bytes = bytes_at(caller, ptr, len)?;
-    let state = caller.data_mut();
     let Some(kind) = usize::try_from(index)
         .ok()
-        .and_then(|i| state.writable.get(i).copied())
+        .and_then(|i| caller.data().writable.get(i).copied())
     else {
         return Ok(code(Status::GUATIAO_ERR_NOT_FOUND));
     };
-    let Ok(value) = wire::decode(&bytes) else {
-        return Ok(code(Status::GUATIAO_ERR_BAD_VALUE));
+    let value = match decoded(caller, &bytes)? {
+        Ok(value) => value,
+        Err(Undecoded::Refused(refused)) => return Ok(code(refusal_status(&refused))),
+        Err(Undecoded::Malformed(_)) => return Ok(code(Status::GUATIAO_ERR_BAD_VALUE)),
     };
+    let state = caller.data_mut();
     let fits = match kind {
         Writable::No => false,
         Writable::Tree => true,
@@ -389,8 +472,12 @@ fn answered(
     wire::to_bytes(&value).map_err(|e| bad(e.to_string()))
 }
 
-/// Calls a slot of a host object the guest holds.
-fn call_object(state: &mut State, handle: u64, request: &[u8]) -> Result<Vec<u8>, ProviderError> {
+/// Calls a slot of a host object the guest holds, with the request it sent.
+fn call_object(
+    state: &mut State,
+    handle: u64,
+    request: Result<Value, Undecoded>,
+) -> Result<Vec<u8>, ProviderError> {
     let Some(mut object) = state.handles.remove(&handle) else {
         return Err(ProviderError::new(
             Status::GUATIAO_ERR_GONE,
@@ -398,6 +485,12 @@ fn call_object(state: &mut State, handle: u64, request: &[u8]) -> Result<Vec<u8>
         ));
     };
     let outcome = (|| {
+        let request = request.map_err(|undecoded| match undecoded {
+            Undecoded::Refused(refused) => {
+                ProviderError::new(refusal_status(&refused), &refused.words("the request"))
+            }
+            Undecoded::Malformed(e) => bad(format!("the request is not a value: {e}")),
+        })?;
         let (method, args) = abi::read_request(request).map_err(bad)?;
         let HostObject { held, caller } = &mut object;
         let kind = caller.kind();
@@ -453,9 +546,11 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         module,
         import::OBJECT_CALL,
         |mut caller: Caller<'_, State>, handle: i64, ptr: i32, len: i32| -> wasmtime::Result<i32> {
-            let request = bytes_at(&mut caller, ptr, len)?;
+            let bytes = bytes_at(&mut caller, ptr, len)?;
+            let request = decoded(&mut caller, &bytes)?;
             let state = caller.data_mut();
-            Ok(match call_object(state, handle as u64, &request) {
+            let outcome = call_object(state, handle as u64, request);
+            Ok(match outcome {
                 Ok(bytes) => {
                     state.result = bytes;
                     0
@@ -680,6 +775,25 @@ pub(crate) fn stopped(
     };
     if state.memory_hit {
         return limit(Limit::Memory, limits.memory);
+    }
+    if state.tables_past {
+        return ProviderError::new(
+            Status::GUATIAO_ERR_ALLOC,
+            &format!(
+                "{id}'s tables would take more than {} bytes on the host, the most without a memory limit",
+                budget::UNLIMITED
+            ),
+        );
+    }
+    if let Some(n) = state.too_large {
+        return ProviderError::new(
+            Status::GUATIAO_ERR_ALLOC,
+            &format!(
+                "{id} handed the host {n} bytes at once, more than it takes ({}: the memory limit, or {} without one)",
+                state.budget,
+                budget::UNLIMITED
+            ),
+        );
     }
     let words = last_words(state)
         .map(|w| format!(": {w}"))

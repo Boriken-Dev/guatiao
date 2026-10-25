@@ -18,7 +18,6 @@ use std::thread::{self, JoinHandle, ThreadId};
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{AnswerType, ArgType};
 use guatiao::value::convert::{FromValue, TryAsRef};
-use guatiao::value::wire;
 use guatiao::{Status, Value};
 use guatiao_bridge::{
     BridgeError, Call, CallArg, Config, Engine, Kinds, Limits, Manifest, ManifestFormat, Opened,
@@ -27,8 +26,12 @@ use guatiao_bridge::{
 use wasmtime::{ExternType, FuncType, Linker, Module};
 
 use crate::abi::{self, export};
+use crate::budget::{self, Undecoded};
 use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
 use crate::{section, wasi};
+
+/// The largest module a source reads and compiles.
+pub(crate) const MOST_MODULE_BYTES: u64 = 128 << 20;
 
 /// Increments the engine's epoch every millisecond while a time limit is
 /// set; stops when dropped.
@@ -189,8 +192,17 @@ fn module_file(manifest: &Manifest) -> Result<PathBuf, BridgeError> {
         })
 }
 
+/// A module's bytes, refused unread past [`MOST_MODULE_BYTES`].
 fn read(file: &PathBuf) -> Result<Vec<u8>, BridgeError> {
-    std::fs::read(file).map_err(|e| BridgeError::engine(format!("{}: {e}", file.display())))
+    let failed = |e: std::io::Error| BridgeError::engine(format!("{}: {e}", file.display()));
+    let size = std::fs::metadata(file).map_err(failed)?.len();
+    if size > MOST_MODULE_BYTES {
+        return Err(BridgeError::engine(format!(
+            "{} is {size} bytes, larger than a module may be ({MOST_MODULE_BYTES})",
+            file.display()
+        )));
+    }
+    std::fs::read(file).map_err(failed)
 }
 
 /// The version a module states in its custom section, if it states one.
@@ -513,7 +525,7 @@ impl WasmEngine {
         if status != 0 {
             return Err(engine_error(instance::refused(id, status, Some(answer))));
         }
-        let declared = abi::read_declaration(&answer)
+        let declared = abi::read_declaration(&answer, budget::of(&self.limits))
             .map_err(|why| BridgeError::engine(format!("{id}: {why}")))?;
         let (providers, ids) = self.provided(manifest, declared)?;
         Ok(Opened::Described {
@@ -568,44 +580,31 @@ impl WasmEngine {
         let method = call.method().to_string();
         let slot_description = call.slot_description().clone();
 
-        // Objects first: each moves into the store's handles, and crosses
-        // as its handle.
+        // Everything that can fail comes first: an object crosses as the
+        // handle it will be held under, and moves into the store's handles
+        // only once the request is made, so no refusal leaves one behind.
         let state = live.store.data_mut();
-        state.writable.clear();
-        state.written.clear();
-        let mut handles = BTreeMap::new();
-        let mut lent = Vec::new();
-        for (i, (arg, d)) in call
-            .args
-            .iter_mut()
-            .zip(slot_description.args())
-            .enumerate()
-        {
-            let ArgType::Object { kind, .. } = d.ty() else {
-                continue;
-            };
-            let held = match arg {
-                CallArg::Object(_) => {
-                    let CallArg::Object(object) =
-                        core::mem::replace(arg, CallArg::Value(Value::null()))
-                    else {
-                        unreachable!("matched just above")
-                    };
-                    Held::Owned(object)
-                }
-                CallArg::LentObject(h) => Held::Lent(h.clone()),
-                _ => continue,
-            };
-            let handle = state.hold(held, self.shared.caller(kind)?);
-            if matches!(arg, CallArg::LentObject(_)) {
-                lent.push(handle);
+        let mut callers = BTreeMap::new();
+        for (i, (arg, d)) in call.args.iter().zip(slot_description.args()).enumerate() {
+            if let (ArgType::Object { kind, .. }, CallArg::Object(_) | CallArg::LentObject(_)) =
+                (d.ty(), arg)
+            {
+                callers.insert(i, self.shared.caller(kind)?);
             }
-            handles.insert(i, Value::from(handle));
         }
+        // The handles `hold` gives below, in argument order.
+        let handles: BTreeMap<usize, u64> = callers
+            .keys()
+            .zip(state.next_handle() + 1..)
+            .map(|(i, h)| (*i, h))
+            .collect();
         let mut values: Vec<Cow<'_, Value>> = Vec::with_capacity(call.args.len());
+        let mut writable = Vec::with_capacity(call.args.len());
         for (i, arg) in call.args.iter().enumerate() {
-            let (value, writable) = match arg {
-                _ if handles.contains_key(&i) => (Cow::Owned(handles[&i].clone()), Writable::No),
+            let (value, w) = match arg {
+                _ if handles.contains_key(&i) => {
+                    (Cow::Owned(Value::from(handles[&i])), Writable::No)
+                }
                 CallArg::Value(v) => (Cow::Borrowed(v), Writable::No),
                 CallArg::Lent(v) => (Cow::Borrowed(v), Writable::Tree),
                 CallArg::Buffer(b) => (Cow::Owned(instance::buffer_value(b)), Writable::Buffer),
@@ -617,11 +616,33 @@ impl WasmEngine {
                 }
             };
             values.push(value);
-            state.writable.push(writable);
+            writable.push(w);
         }
         let request = abi::request(described.name(), &method, values.iter().map(|v| v.as_ref()))
             .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why))?;
         drop(values);
+        state.writable = writable;
+        state.written.clear();
+        let mut lent = Vec::new();
+        for (i, caller) in callers {
+            let held = match &mut call.args[i] {
+                CallArg::LentObject(h) => Held::Lent(h.clone()),
+                arg => {
+                    let CallArg::Object(object) =
+                        core::mem::replace(arg, CallArg::Value(Value::null()))
+                    else {
+                        unreachable!("only objects have callers")
+                    };
+                    Held::Owned(object)
+                }
+            };
+            let lend = matches!(held, Held::Lent(_));
+            let handle = state.hold(held, caller);
+            debug_assert_eq!(handle, handles[&i]);
+            if lend {
+                lent.push(handle);
+            }
+        }
 
         let outcome = live.call(&self.limits, object, target, &request);
         let state = live.store.data_mut();
@@ -656,11 +677,15 @@ impl WasmEngine {
                     &format!("`{method}` answered nothing, and answers {what}"),
                 )
             })?;
-            wire::decode(bytes).map_err(|e| {
-                ProviderError::new(
+            budget::decode(bytes, budget::of(&self.limits)).map_err(|e| match e {
+                Undecoded::Refused(refused) => ProviderError::new(
+                    instance::refusal_status(&refused),
+                    &refused.words(&format!("`{method}`'s answer")),
+                ),
+                Undecoded::Malformed(e) => ProviderError::new(
                     Status::GUATIAO_ERR_BAD_VALUE,
                     &format!("`{method}` answered bytes that are not a value: {e}"),
-                )
+                ),
             })
         };
         Ok(match slot_description.answer() {

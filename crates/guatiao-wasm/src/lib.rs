@@ -23,6 +23,7 @@
 extern crate alloc;
 
 pub mod abi;
+pub mod budget;
 mod convert;
 mod engine;
 // The `extern "C"` surface: `guatiao_source`. The one module with `unsafe`.
