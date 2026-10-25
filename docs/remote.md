@@ -50,6 +50,11 @@ guatiao_registry_add_source_file(reg, guatiao_cstr("libguatiao_remote.so"), &con
 guatiao_registry_refresh(reg, &alloc, &answer);
 ```
 
+`examples/remote_pool` fans one call out to several devices at once and
+gathers the answers. It keeps a registry per device: identical devices
+serve the same library, and a registry files one build of a library under
+its id, so a second device's would be skipped.
+
 A call that gets no answer within its timeout is cancelled and answers
 `GUATIAO_ERR_GONE`, as does every call open when the link is lost; the
 host carries on. The next `refresh()` connects again (a child is started
