@@ -79,7 +79,8 @@ write now.
   peers from, others closed unread, and a pre-shared key both sides
   prove. The protocol is
   stated for every language in `docs/remote.md`, with shared vectors and a
-  C codec, client and server.
+  C codec, client and server. `benchmarks/remote` measures each transport:
+  a call's latency, calls a second, throughput, bytes and CPU per call.
 - **`DescribedRemote::implements` and `DescribedRemote::kind`**: whether
   a provider's table fills a slot, read under the table's own size, so a
   caller that lists a table's slots leaves the unfilled ones to its own

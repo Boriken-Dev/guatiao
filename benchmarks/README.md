@@ -390,3 +390,69 @@ still wins wherever a document has structure. One large string is the
 exception in Dart: the tape copies it into the wire bytes and again into
 native memory, where a callback hands it over once, and the cost is
 UTF-8 conversion either way.
+
+## guatiao-remote across a link (`remote-*.jsonl`)
+
+`guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
+made for measuring and a client that prints one JSON line of five
+metrics: a small call's p50 and p99 (20 000 `count` calls, one at a
+time); calls a second with 32 threads calling at once; MB/s for a 4 MiB
+argument answered back (8 MiB a round trip); protocol bytes per small
+call, counted at the link, and for TCP on Linux bytes on the wire from
+the kernel's counters (payload, plus 52 bytes of IPv4 and TCP headers per
+segment); process CPU per small call on each end.
+
+```bash
+cargo build -p guatiao-remote-bench --release
+target/release/guatiao-remote-bench serve tcp://192.0.2.21:47300 --key K &   # on the server
+target/release/guatiao-remote-bench run tcp://192.0.2.21:47300 --key K --label NAME --out FILE
+```
+
+`--mss N` caps TCP's segment size (Unix), as on a path without jumbo
+frames; `--spin MICROSECONDS` is `LinkOptions::spin` on both ends;
+`local://` and `shm://` take a socket path or a pipe name. `run` ends the
+server when it is done.
+
+Local and provisional: three runs each, medians. The host is an x86-64
+Linux server, the VM a guest on it (virtio, MTU 9000); Windows is the
+ARM64 workstation.
+
+| run | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | protocol B/call | wire B/call | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| host to VM, TCP, MTU 9000 | 116.2 | 192.2 | 17 958 | 387 | 21.3 | 125.3 | 81.1 / 88.3 |
+| host to VM, TCP, MSS 1448 | 123.4 | 202.3 | 17 967 | 396 | 21.3 | 125.3 | 77.9 / 94.1 |
+| host to VM, TCP, MTU 9000, spin 0 | 182.2 | 261.4 | 16 829 | 384 | 21.3 | 125.3 | 48.8 / 64.6 |
+| host to VM, TCP, MSS 1448, spin 0 | 177.8 | 252.3 | 17 406 | 405 | 21.3 | 125.3 | 52.8 / 61.8 |
+| host, TCP loopback | 21.8 | 43.6 | 19 713 | 475 | 21.3 | 125.3 | 29.9 / 29.7 |
+| host, Unix socket | 15.7 | 27.5 | 101 631 | 500 | 21.3 | - | 23.2 / 22.9 |
+| host, shared memory | 4.4 | 9.2 | 183 127 | 474 | 21.3 | - | 9.2 / 9.2 |
+| Windows, TCP loopback | 28.8 | 73.2 | 52 377 | 792 | 21.3 | - | 32.0 / 30.5 |
+| Windows, named pipe | 16.2 | 42.9 | 138 732 | 1 571 | 21.3 | - | 19.5 / 18.8 |
+| Windows, shared memory | 1.3 | 5.4 | 331 859 | 1 289 | 21.3 | - | 4.7 / 4.7 |
+
+How long a waiting thread polls (`remote-host-to-vm-spin.jsonl`, host to
+VM, MTU 9000):
+
+| spin | p50 µs | p99 µs | CPU µs/call, client / server |
+| --- | --- | --- | --- |
+| 50 µs (the default) | 113.6 | 186.9 | 76.3 / 86.2 |
+| 100 µs | 78.1 | 177.0 | 95.7 / 96.6 |
+| 200 µs | 74.2 | 120.2 | 89.7 / 86.8 |
+| 400 µs | 69.9 | 125.5 | 85.3 / 82.1 |
+
+- **A small call is 21 bytes of frames and 125 on the wire**: two
+  segments, one each way, so the headers outweigh the call.
+- **Jumbo frames change nothing here**: a small call fits one segment
+  either way, and a 4 MiB round trip moves about 400 MB/s, a tenth of
+  what raw TCP moves on the same path (3.2-3.9 GB/s), so the bound is
+  the link's own copies and hand-offs, not the wire.
+- **Polling pays only past the round trip.** At 50 µs a waiting thread
+  polls, then sleeps and pays the wake-up as well; polling past the
+  answer's arrival drops the wake-up for about the same CPU, and not
+  polling at all saves about 40 % of the CPU for about 55 % more latency. On the
+  same machine every answer arrives inside 50 µs, so the default stands
+  for local links.
+- **TCP from 32 threads on Linux reaches 17 000-20 000 calls a second**,
+  on loopback and to the VM alike, where the Unix socket and shared
+  memory reach 100 000-180 000 through the same link. Why is not yet
+  measured.
