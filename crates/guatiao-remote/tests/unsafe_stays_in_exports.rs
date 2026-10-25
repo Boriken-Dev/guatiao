@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 const ALLOWED: &[&str] = &[
     // `guatiao::source!` expands to the exported `guatiao_source`.
     "exports.rs",
+    // The shared rings: a mapping, atomics on it, copies in and out.
+    "transport/shm.rs",
 ];
 
 fn sources(dir: &Path, into: &mut Vec<PathBuf>) {

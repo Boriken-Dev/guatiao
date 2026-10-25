@@ -5,6 +5,8 @@
 //! Two ends of a link in one process, for tests: frames move through
 //! bounded queues, so a slow reader slows its writer.
 
+#![forbid(unsafe_code)]
+
 use core::time::Duration;
 use std::io;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};

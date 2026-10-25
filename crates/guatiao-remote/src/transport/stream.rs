@@ -4,6 +4,8 @@
 
 //! Frames over any byte stream: a `u32` length, then the body.
 
+#![forbid(unsafe_code)]
+
 use std::io::{self, BufReader, Read, Write};
 
 use super::{FrameRead, FrameWrite};

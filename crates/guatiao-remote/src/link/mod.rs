@@ -78,6 +78,7 @@ pub struct LinkOptions {
     max_calls: usize,
     timeout: Option<Duration>,
     handshake_timeout: Duration,
+    spin: Duration,
 }
 
 impl core::fmt::Debug for LinkOptions {
@@ -89,6 +90,7 @@ impl core::fmt::Debug for LinkOptions {
             .field("max_frame", &self.max_frame)
             .field("max_calls", &self.max_calls)
             .field("timeout", &self.timeout)
+            .field("spin", &self.spin)
             .finish()
     }
 }
@@ -99,6 +101,8 @@ pub const DEFAULT_MAX_FRAME: usize = 64 << 20;
 pub const DEFAULT_MAX_CALLS: usize = 64;
 /// How long a call waits for its answer unless told otherwise.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a waiting thread polls before it sleeps unless told otherwise.
+pub const DEFAULT_SPIN: Duration = Duration::from_micros(50);
 
 impl LinkOptions {
     /// A link at `trust`, with the defaults: frames up to 64 MiB, 64 calls
@@ -112,6 +116,7 @@ impl LinkOptions {
             max_calls: DEFAULT_MAX_CALLS,
             timeout: Some(DEFAULT_TIMEOUT),
             handshake_timeout: Duration::from_secs(10),
+            spin: DEFAULT_SPIN,
         }
     }
 
@@ -156,6 +161,15 @@ impl LinkOptions {
     /// How long the handshake may take.
     pub fn handshake_timeout(mut self, timeout: Duration) -> LinkOptions {
         self.handshake_timeout = timeout;
+        self
+    }
+
+    /// How long a thread waiting for an answer, or an idle pool thread,
+    /// keeps polling before it sleeps. Polling spends a core for that long
+    /// and saves the wake-up a sleeping thread costs on every hand-off;
+    /// zero never polls.
+    pub fn spin(mut self, spin: Duration) -> LinkOptions {
+        self.spin = spin;
         self
     }
 }
@@ -353,6 +367,7 @@ pub(crate) struct Inner {
     /// What the peer reads.
     send_max: usize,
     timeout: Option<Duration>,
+    spin: Duration,
     permits: Permits,
     pool: Arc<Pool>,
     handler: Arc<dyn Handler>,
@@ -413,7 +428,7 @@ impl core::fmt::Debug for Link {
 
 impl Drop for Link {
     fn drop(&mut self) {
-        self.inner.end("this side closed the link");
+        self.inner.close_from_here();
     }
 }
 
@@ -683,7 +698,8 @@ impl Link {
             send_max: theirs.max_frame,
             timeout: options.timeout,
             permits: Permits::new(theirs.max_calls),
-            pool: Arc::new(Pool::new(options.max_calls, &setup.name)),
+            pool: Arc::new(Pool::new(options.max_calls, &setup.name, options.spin)),
+            spin: options.spin,
             handler: setup.handler,
             kinds: RwLock::new(setup.kinds),
             callers: Mutex::new(BTreeMap::new()),
@@ -788,9 +804,9 @@ impl Link {
     }
 
     /// Ends the link: calls waiting answer `GONE`, objects held for the
-    /// peer are dropped.
+    /// peer are dropped, and the peer is told.
     pub fn end(&self) {
-        self.inner.end("this side closed the link");
+        self.inner.close_from_here();
     }
 
     /// One round trip with nothing in it: how long the link takes.
@@ -852,6 +868,27 @@ impl Inner {
         } else {
             Err(gone(&state.why))
         }
+    }
+
+    /// Ends the link from this side: GOODBYE first, when the writer is
+    /// free, since on a transport whose halves share one handle (a named
+    /// pipe) only the peer closing its end ends a read blocked here.
+    pub(crate) fn close_from_here(self: &Arc<Self>) {
+        let why = "this side closed the link";
+        if lock(&self.state).alive {
+            let mut out = Vec::new();
+            if (Frame::Goodbye {
+                status: 0,
+                message: why,
+            })
+            .encode(&mut out, usize::MAX)
+            .is_ok()
+                && let Ok(mut writer) = self.writer.try_lock()
+            {
+                let _ = writer.write_frame(&out);
+            }
+        }
+        self.end(why);
     }
 
     /// Ends the link once, whoever notices first.
@@ -1043,9 +1080,12 @@ impl Inner {
         slot: Option<&SlotDescription>,
     ) -> Result<Vec<u8>, ProviderError> {
         let outcome = loop {
-            let next = match deadline {
-                None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
-                Some(d) => rx.recv_timeout(d.saturating_duration_since(Instant::now())),
+            let next = match pool::spin_recv(rx, self.spin) {
+                Some(v) => Ok(v),
+                None => match deadline {
+                    None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
+                    Some(d) => rx.recv_timeout(d.saturating_duration_since(Instant::now())),
+                },
             };
             match next {
                 Ok(Inbound::Reply(frame)) => break Ok(frame),

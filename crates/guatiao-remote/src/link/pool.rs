@@ -5,7 +5,7 @@
 //! The threads a link's calls run on, and the bound on calls in flight.
 
 use core::time::Duration;
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::Instant;
@@ -20,11 +20,35 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// What arrives on `rx` within `spin`, polled rather than slept on: a
+/// sender that finds its receiver awake wakes nobody, which on a busy
+/// link is most of a hand-off's cost. `None` when nothing came (or the
+/// sender is gone: the blocking receive that follows says which).
+pub(crate) fn spin_recv<T>(rx: &Receiver<T>, spin: Duration) -> Option<T> {
+    if spin.is_zero() {
+        return None;
+    }
+    let until = Instant::now() + spin;
+    loop {
+        match rx.try_recv() {
+            Ok(v) => return Some(v),
+            Err(TryRecvError::Disconnected) => return None,
+            Err(TryRecvError::Empty) => {
+                if Instant::now() >= until {
+                    return None;
+                }
+                core::hint::spin_loop();
+            }
+        }
+    }
+}
+
 /// At most `max` threads, started as calls arrive and kept while busy.
 pub(crate) struct Pool {
     state: Mutex<PoolState>,
     max: usize,
     name: String,
+    spin: Duration,
 }
 
 struct PoolState {
@@ -35,7 +59,7 @@ struct PoolState {
 }
 
 impl Pool {
-    pub(crate) fn new(max: usize, name: &str) -> Pool {
+    pub(crate) fn new(max: usize, name: &str, spin: Duration) -> Pool {
         Pool {
             state: Mutex::new(PoolState {
                 idle: Vec::new(),
@@ -44,6 +68,7 @@ impl Pool {
             }),
             max: max.max(1),
             name: name.to_string(),
+            spin,
         }
     }
 
@@ -93,6 +118,10 @@ impl Pool {
                 j();
             }
             lock(&self.state).idle.push((me, tx.clone()));
+            if let Some(j) = spin_recv(&rx, self.spin) {
+                job = Some(j);
+                continue;
+            }
             match rx.recv_timeout(IDLE) {
                 Ok(j) => job = Some(j),
                 Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
