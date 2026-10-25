@@ -317,8 +317,13 @@ function pass_lent(x, scope::Scope, kind::Symbol)
     writable_alloc(owner_of(x))
     keep!(scope, owner_of(x))
     node = require_node(x)
-    # What the callee grew it with may be in its library's allocator.
-    makes_local() && after!(() -> guatiao_value_make_local(node, recorded_alloc(node)), scope)
+    # What the callee grew it with may be in its library's allocator: moved
+    # into the one the tree records now, which a callee writing a fresh
+    # tree over it would change.
+    if makes_local()
+        home = recorded_alloc(node)
+        after!(() -> guatiao_value_make_local(node, home), scope)
+    end
     return arm_ptr(node, kind, "a lent argument")
 end
 

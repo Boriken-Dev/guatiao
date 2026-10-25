@@ -119,14 +119,14 @@ func (c *Call) Lend(x any, class TreeClass) (unsafe.Pointer, error) {
 	if err != nil {
 		return nil, err
 	}
-	// What the callee grew it with may be in its library's allocator.
-	c.after = append(c.after, func() {
-		home := native.Recorded(node)
-		if home == nil {
-			home = alloc
-		}
-		native.ValueMakeLocal(node, home)
-	})
+	// What the callee grew it with may be in its library's allocator:
+	// moved into the one the tree records now, which a callee writing a
+	// fresh tree over it would change.
+	home := native.Recorded(node)
+	if home == nil {
+		home = alloc
+	}
+	c.after = append(c.after, func() { native.ValueMakeLocal(node, home) })
 	return arm(node, class)
 }
 

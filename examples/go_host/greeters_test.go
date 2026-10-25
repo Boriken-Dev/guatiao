@@ -344,9 +344,9 @@ func TestAnAnswerBuiltInTheLibrarysAllocatorOutlivesTheUnload(t *testing.T) {
 }
 
 func TestWhatASlotGrewALentMapWithOutlivesTheUnload(t *testing.T) {
-	// `check` grows the lent map through its own allocator; the map is
-	// settled into the one it records once the call returns.
-	own, g := ownGreeter(t)
+	// This greeter's `check` rebuilds the lent map in its own allocator;
+	// the map is settled into the one it recorded before the call.
+	own, g := ownGreeter(t, "GREETER_IGNORES_CARRIER")
 	config, err := guatiao.NewValue(map[string]any{"name": "ivy"})
 	if err != nil {
 		t.Fatal(err)

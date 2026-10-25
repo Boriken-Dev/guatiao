@@ -191,7 +191,8 @@ end
 
 function lent_grown()
   gt_env('examples');
-  dir = gt_env('c_greeter_own');
+  % This greeter's check rebuilds the lent map in its own allocator.
+  dir = gt_env('c_greeter_own', 'GREETER_IGNORES_CARRIER');
   if isempty(dir)
     skip_case('the C greeter: no C compiler built it (set GUATIAO_CC)');
   end

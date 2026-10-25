@@ -176,8 +176,8 @@ end
             close(own)
         end
     end
-    @testset "what a slot grew a lent map with" begin
-        dir = build_c_greeter()
+    @testset "what a slot grew a lent map with, rebuilding it in its own allocator" begin
+        dir = build_c_greeter(; ignores_carrier = true)
         if dir === nothing
             absent_greeter(:c, "no C compiler: the greeter written in C is not built")
         else

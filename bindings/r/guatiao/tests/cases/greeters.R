@@ -161,7 +161,8 @@ case("an answer built in the library's allocator outlives the unload", with_exam
 }))
 
 case("what a slot grew a lent map with outlives the unload", with_examples({
-  dir <- build_c_greeter()
+  # This greeter's `check` rebuilds the lent map in its own allocator.
+  dir <- build_c_greeter("GREETER_IGNORES_CARRIER")
   if (is.null(dir)) {
     absent_greeter("c", "no C compiler: the greeter written in C is not built")
   } else {

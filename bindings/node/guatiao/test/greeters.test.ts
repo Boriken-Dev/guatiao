@@ -172,7 +172,7 @@ describe('a tree built in the library\'s allocator outlives the unload', () => {
     answer.close();
   });
 
-  it('grown into a lent map by a slot', (ctx) => {
+  it('grown into a lent map by a slot that rebuilt it in its own allocator', (ctx) => {
     const dir = cLibraries()?.lentGreeterDir;
     if (dir === undefined) return ctx.skip('no C compiler: the greeter written in C is not built');
     using own = new Registry('node-lent', '0.1');

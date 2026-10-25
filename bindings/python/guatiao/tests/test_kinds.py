@@ -278,9 +278,9 @@ def test_an_answer_built_in_the_librarys_allocator_outlives_the_unload(tmp_path)
 
 
 def test_what_a_slot_grew_a_lent_tree_with_outlives_the_unload(tmp_path):
-    # `check` grows the lent map through its own allocator; the map is
-    # settled into the one it records once the call returns.
-    built = native.build_c_greeter(tmp_path)
+    # This greeter's `check` rebuilds the lent map in its own allocator;
+    # the map is settled into the one it recorded before the call.
+    built = native.build_c_greeter(tmp_path, ignores_carrier=True)
     if built is None:
         pytest.skip("no C compiler: the greeter written in C is not built")
     with Registry("py-kinds", "0.1") as registry:

@@ -57,7 +57,7 @@ export interface CLibraries {
   greeterDir: string;
   /** The same greeter built to ignore the carrier (its answers are built in its own allocator), in a directory of its own. */
   carelessGreeterDir: string;
-  /** The stock greeter again, in a directory of its own: a test unloads it, so nothing else may keep it mapped. */
+  /** The careless greeter again, in a directory of its own: a test unloads it, so nothing else may keep it mapped. Its `check` rebuilds a lent map in its own allocator. */
   lentGreeterDir: string;
   /** Two builds of the source written in C (a shelf of counters), one per test that changes its state. */
   shelfA: string;
@@ -77,7 +77,7 @@ export function buildCLibraries(): CLibraries | null {
   const carelessGreeterDir = path.join(root, 'careless');
   buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), carelessGreeterDir, 'c_greeter', ['GREETER_IGNORES_CARRIER']);
   const lentGreeterDir = path.join(root, 'lent');
-  buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), lentGreeterDir, 'c_greeter');
+  buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), lentGreeterDir, 'c_greeter', ['GREETER_IGNORES_CARRIER']);
   return {
     greeterDir,
     carelessGreeterDir,
