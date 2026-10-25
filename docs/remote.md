@@ -35,7 +35,8 @@ configuration map:
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`; `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that) |
+| `connect` | `tcp://host:port`; `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
+| `rdma_device` | the RDMA device `rdma://` goes through (default: the first listed) |
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `trust` | `local`, `trusted` or `secure`; `local` for a child |
 | `key`, `key_file` | the trusted level's pre-shared key: text, or a file's bytes |
@@ -85,6 +86,7 @@ over a `Registry` does the same.
 | `local://name` | the same machine: a Unix socket, or a named pipe on Windows | 16–40 µs |
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
 | `tcp://host:port` | another machine, at the trusted level | 22–36 µs on loopback; 114–123 µs from a host to a VM on it |
+| `rdma://host:port` | another machine with an RDMA device, at the trusted level; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
 measured on Windows ARM64, WSL and an x86-64 Linux server, and from that
@@ -101,6 +103,84 @@ wake-up. Set `spin` just past the round trip to drop the wake-up: from
 the host to its VM, 200 µs brought a call from 114 µs to 74 µs for the
 same CPU per call. Set it to zero to spend the least CPU: 180 µs a call,
 about 40 % less CPU.
+
+### RDMA (experimental, Linux)
+
+Built with the `rdma` feature (off by default) on Linux, a link can run
+over RDMA: InfiniBand, RoCE, or Soft-RoCE (`rdma_rxe`) on any Ethernet
+interface. Elsewhere the transport is compiled in and every call answers
+`Unsupported`.
+
+```toml
+guatiao-remote = { version = "…", features = ["rdma"] }
+```
+
+```rust
+use guatiao_remote::transport::rdma::{RdmaConnect, RdmaListen, RdmaPort};
+
+// The device: the first one listed and its first IPv4 address, or one named.
+let listener = RdmaListen::bind("0.0.0.0:7001", &ranges)?.port(RdmaPort::named("mlx5_0"));
+let source = RemoteSource::new(
+    Box::new(RdmaConnect::new("192.0.2.21:7001")),
+    LinkOptions::new(Trust::Trusted).key(&key),
+);
+```
+
+`guatiao-remote-server --listen rdma://0.0.0.0:7001 --trust trusted
+--range 192.0.2.0/24 --rdma-device mlx5_0` serves it, and a source file's
+configuration names `connect: rdma://host:port`.
+
+- **Setting up.** A link starts as a TCP connection, admitted by address
+  range as a `tcp://` one is. Each side sends a 64-byte record over it:
+  its queue pair's number and first packet number, its address (GID) and
+  MTU, and the address and key of the ring it receives into. Each then
+  sends one byte once its queue pair can receive. The handshake and
+  every frame after it cross by RDMA; the TCP connection stays open, and
+  its end is the link's.
+- **Frames.** Each side registers a 4 MiB ring to receive into and a
+  4 MiB staging area to write from. A writer copies a frame into staging
+  and posts an RDMA write with immediate data into the peer's ring: the
+  immediate is the byte count, and it completes a receive on the peer,
+  which is how the reader learns bytes arrived and how it sleeps while
+  none do. Every quarter ring, the reader writes how far it has read into
+  a counter beside the writer's own ring. A frame larger than the ring
+  streams through it.
+- **What it needs.** libibverbs (rdma-core) at run time; building needs
+  none of it. A device: `rdma::devices()` lists them, and with none a
+  connect fails saying so. 8 MiB of locked memory per link:
+  `RLIMIT_MEMLOCK` must allow it, or the process needs `CAP_IPC_LOCK`.
+- **Tested** on Soft-RoCE (one rxe device, both ends on one machine):
+  every slot shape, the key and the ranges, frames ten rings long and
+  eight at once, a link ended from either side
+  (`crates/guatiao-remote/rdma-tests`, which fails without a device).
+
+**Measured on Soft-RoCE only.** Soft-RoCE is RDMA done in software by the
+kernel's network stack, so these numbers say nothing about an RDMA NIC.
+One x86-64 Linux VM, both ends on it, three runs each, medians, local and
+provisional (`benchmarks/results/remote-vm-rdma.jsonl`):
+
+| link, same VM | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB round trip | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- |
+| RDMA, Soft-RoCE loopback | 11.2 | 18.6 | 17 536 | 388 | 22.9 / 22.9 |
+| Unix socket | 19.4 | 44.5 | 108 172 | 540 | 28.9 / 27.9 |
+| trusted TCP, loopback | 41.2 | 132.4 | 9 539 | 561 | 48.2 / 46.6 |
+
+perftest on the same device moves 4 MiB RDMA writes at about 1.8 GB/s,
+and a 64-byte write takes about 3 µs one way. So:
+
+- **A small call is the quickest of the three** (11 µs, about 6 µs of it
+  Soft-RoCE's round trip); the rest is the link's own work per call.
+- **A large one is not faster.** A 4 MiB round trip moves 388 MB/s,
+  where Soft-RoCE alone moves 1.8 GB/s: most of the time is the link's
+  own copies (encoding the argument into a frame, decoding it, building
+  and encoding the answer), which RDMA does not remove. It adds a copy
+  into staging, as a socket adds one into the kernel.
+- **Calls from 32 threads reach 17 500 a second**, near TCP's ceiling and
+  far below the Unix socket's; the cause is not measured.
+- CPU per call counts the two processes alone: Soft-RoCE's work done in
+  the kernel's own threads is not in it.
+
+Not measured: RDMA hardware, and two machines with a link between them.
 
 ## Trust
 
