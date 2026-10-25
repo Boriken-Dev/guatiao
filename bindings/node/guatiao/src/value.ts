@@ -301,6 +301,8 @@ const inspect = Symbol.for('nodejs.util.inspect.custom');
 /**
  * A node inside a tree: its owner plus a path of keys and indices. Every
  * access walks the path again; nothing here keeps an address.
+ *
+ * @guatiaoType tree_value
  */
 export class Ref {
   /** @internal */
@@ -442,7 +444,11 @@ export class Ref {
   }
 }
 
-/** A `Ref` whose node is a map, read and written through the map protocol. */
+/**
+ * A `Ref` whose node is a map, read and written through the map protocol.
+ *
+ * @guatiaoType tree_map
+ */
 export class MapRef extends Ref {
   #node(): bigint | null {
     const node = this.node();
@@ -523,6 +529,8 @@ export class MapRef extends Ref {
  * A `Ref` whose node is a list. The C surface appends, discards by index
  * and clears; `set` and `insert` are built from those (every element
  * cloned, the list cleared, the new order pushed back) and are O(n).
+ *
+ * @guatiaoType tree_list
  */
 export class ListRef extends Ref {
   get length(): number {

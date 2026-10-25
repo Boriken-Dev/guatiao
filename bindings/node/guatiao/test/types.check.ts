@@ -6,8 +6,9 @@
 // error, or the type check fails. Compiled by `npm run typecheck`, never
 // run.
 
-import type { Value } from '../src/index.js';
-import { type Implementation, Kind, type Remote, slot, t } from '../src/kinds.js';
+import type { ListRef, MapRef, Value } from '../src/index.js';
+import { type Implementation, Kind, type Lent, type Remote, type Taken, type i32, type i64, type u32, type u64, slot, t } from '../src/kinds.js';
+import type { Tally as TallyInterface, Watcher as WatcherInterface } from '../../../../examples/tally_kind/tally_kind.ts';
 import { Provider } from '../src/provide.js';
 import { Conversation, Counter, Greeter, Listener } from '../../../../examples/greeter_kind/node/greeter_kind.js';
 
@@ -132,3 +133,56 @@ export function callsEcho(echo: Remote<typeof Echo>): string {
 
 // @ts-expect-error -- `t.lent` takes an object kind, and Echo is a provider kind
 export const lentProvider = t.lent(Echo);
+
+// ---- a kind written as an interface ----------------------------------------------------
+
+declare const aNumber: number;
+declare const aBigint: bigint;
+
+// A scalar type is its plain type with a mark: a plain value fits, another scalar does not.
+export const fitsU32: u32 = aNumber;
+export const fitsI64: i64 = aBigint;
+export const readsBack: number = fitsU32;
+// @ts-expect-error -- an i64 is a bigint, not a number
+export const numberIsNotI64: i64 = aNumber;
+// @ts-expect-error -- a u32 is not an i32
+export const u32IsNotI32: i32 = fitsU32;
+// @ts-expect-error -- an i64 is not a u64
+export const i64IsNotU64: u64 = fitsI64;
+
+// A taken tree is the `Value` that owns it, a lent one the view the caller keeps.
+declare const taken: Taken<MapRef>;
+export const ownedValue: Value = taken;
+// @ts-expect-error -- a handed-over list is not a handed-over map
+export const wrongTree: Taken<ListRef> = taken;
+export const lentView: MapRef = {} as Lent<MapRef>;
+
+// A class implementing the interface a kind is written as is checked against it.
+export class Counts implements TallyInterface {
+  add(_name: string, by: number): bigint {
+    return BigInt(by);
+  }
+  total(_name: string): bigint {
+    return 0n;
+  }
+  report(watcher: WatcherInterface): void {
+    watcher.changed('a', 1n);
+  }
+}
+
+// @ts-expect-error -- `total` is required
+export class NoTotal implements TallyInterface {
+  add(_name: string, by: number): bigint {
+    return BigInt(by);
+  }
+}
+
+export class WrongTotal implements TallyInterface {
+  add(_name: string, by: number): bigint {
+    return BigInt(by);
+  }
+  // @ts-expect-error -- `total` answers an i64, not text
+  total(name: string): string {
+    return name;
+  }
+}

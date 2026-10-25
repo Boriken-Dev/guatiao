@@ -1,0 +1,141 @@
+{
+  "format": 1,
+  "kinds": [
+    {
+      "name": "watcher",
+      "floor_hash": 297588550,
+      "object": true,
+      "doc": "What a tally tells whoever is watching it. Implemented by the host.",
+      "slots": [
+        {
+          "name": "changed",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "total",
+              "type": "i64"
+            }
+          ],
+          "doc": "`name` now stands at `total`."
+        }
+      ]
+    },
+    {
+      "name": "tally",
+      "floor_hash": 1286177969,
+      "object": false,
+      "doc": "Counts by name.",
+      "slots": [
+        {
+          "name": "add",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "by",
+              "type": "u32"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "Adds `by` to the count under `name`: the new count, or why not."
+        },
+        {
+          "name": "total",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "The count under `name`: 0 when there is none."
+        },
+        {
+          "name": "all",
+          "required": false,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "map"
+          },
+          "doc": "Appended: every count, as `{name: count}`."
+        },
+        {
+          "name": "known",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "bool"
+          },
+          "doc": "Appended: whether `name` has a count."
+        },
+        {
+          "name": "checksum",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "answer": {
+            "type": "u32"
+          },
+          "doc": "Appended: the sum of the bytes, modulo 2^32."
+        },
+        {
+          "name": "report",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "watcher",
+              "type": "object",
+              "kind": "watcher",
+              "pass": "lent"
+            }
+          ],
+          "doc": "Appended: tells `watcher` each count, for this call alone."
+        },
+        {
+          "name": "load",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "counts",
+              "type": "map",
+              "pass": "taken"
+            }
+          ],
+          "answer": {
+            "type": "u32"
+          },
+          "doc": "Appended: adds the counts of `counts` (`{name: count}`), which the\ntally owns from the call on; answers how many names it held."
+        }
+      ]
+    }
+  ]
+}

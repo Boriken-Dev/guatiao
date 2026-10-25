@@ -17,8 +17,11 @@
     "greeter_kind/node/greeter_kind.d.ts",
     "node_provider/node_greeter/greeters.ts",
     "node_host/host.ts",
+    "node_js/describe.js",
     "node_js/echo_kind.js",
     "node_js/greeters.js",
-    "node_js/main.js"
+    "node_js/main.js",
+    "tally_kind/tally_kind.ts",
+    "tally_kind/node/tally_kind.d.ts"
   ]
 }

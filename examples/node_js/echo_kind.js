@@ -6,7 +6,9 @@
 // Two kinds defined here, in JavaScript, with no Rust trait or C header
 // behind them: each is a class whose static fields describe it. A kind
 // that exists elsewhere is never declared again like this; it is loaded
-// from its description (see greeters.js).
+// from its description (see greeters.js). `describe.js` writes these two
+// as a description, `echo_kind.kinds.json`, which the other languages'
+// generators read.
 
 import { Kind, slot, t } from 'guatiao/kinds';
 
@@ -15,9 +17,10 @@ export class Page extends Kind {
   static kind = 'page';
   static floorHash = 0x70616765;
   static object = true;
+  static doc = 'A page that is written on.';
   static slots = {
-    write: slot(t.str).required(),
-    lines: slot().returns(t.u32).required(),
+    write: slot(t.str).named('line').doc('Adds a line.').required(),
+    lines: slot().returns(t.u32).doc('How many lines it holds.').required(),
   };
 }
 
@@ -25,8 +28,9 @@ export class Page extends Kind {
 export class Echo extends Kind {
   static kind = 'echo';
   static floorHash = 0x6563686f;
+  static doc = 'Repeats what it is told.';
   static slots = {
-    echo: slot(t.str).returns(t.text).required().fallible(),
-    copyOnto: slot(t.str, t.lent(Page)).fallible(),
+    echo: slot(t.str).named('text').returns(t.text).doc('`text`, twice, or why not.').required().fallible(),
+    copyOnto: slot(t.str, t.lent(Page)).named('text', 'page').doc('Writes `text` on `page`, then the echo of it.').fallible(),
   };
 }

@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "kinds": [
+    {
+      "name": "echo",
+      "floor_hash": 1701013615,
+      "object": false,
+      "doc": "Repeats what it is told.",
+      "slots": [
+        {
+          "name": "echo",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "text",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "`text`, twice, or why not."
+        },
+        {
+          "name": "copy_onto",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "text",
+              "type": "str"
+            },
+            {
+              "name": "page",
+              "type": "object",
+              "kind": "page",
+              "pass": "lent"
+            }
+          ],
+          "doc": "Writes `text` on `page`, then the echo of it."
+        }
+      ]
+    },
+    {
+      "name": "page",
+      "floor_hash": 1885431653,
+      "object": true,
+      "doc": "A page that is written on.",
+      "slots": [
+        {
+          "name": "write",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "line",
+              "type": "str"
+            }
+          ],
+          "doc": "Adds a line."
+        },
+        {
+          "name": "lines",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "u32"
+          },
+          "doc": "How many lines it holds."
+        }
+      ]
+    }
+  ]
+}

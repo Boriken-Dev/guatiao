@@ -34,6 +34,8 @@
     "test",
     "vitest.config.ts",
     "../../../examples/greeter_kind/node/greeter_kind.d.ts",
+    "../../../examples/tally_kind/tally_kind.ts",
+    "../../../examples/tally_kind/node/tally_kind.d.ts",
     "../../../examples/node_host",
     "../../../examples/node_provider"
   ]

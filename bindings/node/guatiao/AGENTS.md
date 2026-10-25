@@ -15,8 +15,9 @@ ships no native code of its own.
 | import | what |
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
-| `guatiao/kinds` | `kindsOf`, `kindOf`, `Kind`, `slot`, `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `DescribedKind`, `liveObjects` |
-| `guatiao-kind` (bin) | writes `<base>.js` and `<base>.d.ts` from a kinds description |
+| `guatiao/kinds` | `kindsOf`, `kindOf`, `describeKinds`, `Kind`, `slot`, `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `DescribedKind`, `liveObjects`; the types a kind written as an interface is spelled with: `u8`..`u32`, `i8`..`i64`, `u64`, `usize`, `isize`, `f32`, `f64`, `BytesMut`, `Borrowed`, `Taken`, `Lent`, `ObjectKind`, `MapAnswer`, `ListAnswer`, `ValueAnswer` |
+| `guatiao/describe` | `describeInterfaces`, `floorHashOf`, `DescribeError`: a kind written as TypeScript interfaces, read into its description (needs `typescript` 7.0 or newer) |
+| `guatiao-kind` (bin) | writes `<base>.js` and `<base>.d.ts` from a kinds description, or from TypeScript interfaces |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
 | `guatiao/wire` | `announce`, `send`, `close`, `Receiver`, `Frame`, `Event`, the refusals |
@@ -179,6 +180,13 @@ the docs site's encodings page). Two ways to load it:
   (default `guatiao`); `--check` writes nothing and exits 1 when the files
   are not what it would write. A slot naming an object kind outside the
   document is refused.
+- **`guatiao-kind FILE.ts... --out BASE [--document FILE] [--project
+  TSCONFIG] [--from MODULE] [--check]`** reads the kinds from TypeScript
+  interfaces (below) instead, writes the document (`BASE.kinds.json`, or
+  `--document`) and then the same two files from it. `--out` is required
+  (the files cannot go beside the `.ts`); the files are read through the
+  `tsconfig.json` above them, or `--project`. `--check` compares all
+  three files.
 - **`kindsOf(document, { known? })`** (the object, or its JSON text)
   answers each kind by its name; **`kindOf(description, { known? })`** one
   kind. An object kind a slot names is found in the document, else among
@@ -196,9 +204,12 @@ export class Hello extends Provider implements Greeter {
 
 **A kind defined here**, with no header behind it, is a class extending
 `Kind` whose static fields describe it: `kind` (its name; default the
-class name in snake_case), `floorHash`, `object` (an object kind), and
-`slots`, a `slot(...args)` per slot in table order, refined by
-`.returns(answer)`, `.required()` and `.fallible()`. The class itself is
+class name in snake_case), `floorHash`, `object` (an object kind), `doc`,
+and `slots`, a `slot(...args)` per slot in table order, refined by
+`.returns(answer)`, `.required()`, `.fallible()`, `.doc(text)` and
+`.named(...argNames)` (the arguments' names in the description, one per
+argument or a `TypeError` when the kind is described; default `arg0`,
+`arg1`). The class itself is
 the kind wherever one is asked for; it is described on first use, which
 must be at module level like `kind()`. `Implementation<typeof Echo>` and
 `Remote<typeof Echo>` read its statics.
@@ -215,7 +226,62 @@ export class Echo extends Kind {
 }
 ```
 
-**Underneath both, `kind()`**: a method per slot in the header's order
+**`describeKinds(kinds)`** answers the document of `kinds` (anything a
+provider lists: a class extending `Kind`, a value `kind()` or `kindsOf()`
+made) and the object kinds their slots reach, each once, in the format
+`kindsOf` loads and the Dart generator reads. A method's slot name is its
+snake_case (`greetInto` is `greet_into`); a method that would not come
+back the same (`parseHTTP`) throws `TypeError`, as do two different kinds
+of one name. A borrowed `t.value` is described as not null.
+`describeKinds(Object.values(kindsOf(document)))` equals `document`.
+
+**A kind written as TypeScript interfaces** (`guatiao/describe`),
+`await describeInterfaces(files, { project? })`: the document of every
+exported interface of the file or files, then the object kinds their slots
+reach, whichever file they are in. Needs the `typescript` package, 7.0 or
+newer (its compiler API, marked unstable there; an optional peer
+dependency): `DescribeError` says so when it is missing, and names file,
+line and column for an interface that is not a kind. The files are read
+through `project` (a `tsconfig.json`, which says where `guatiao/kinds`
+is), else the nearest one above each file.
+
+- An interface is a kind named after it in snake_case (`@kind name` says
+  otherwise); `extends ObjectKind` makes it an object kind, and extending
+  anything else is refused. A doc comment is the kind's `doc`.
+- A method is a slot, in order: `name?(...)` an appended one, a plain one
+  required, and required slots come first. `@throws` marks it fallible;
+  its doc comment is the slot's. A name must come back from its snake_case
+  (`methodName(slotName(m)) === m`). No type parameters, optional or rest
+  arguments; an answer is always written (`: void` for none).
+- The types, found by the `@guatiaoType` tag on their declaration, so an
+  alias (`type Id = u64`) or a renamed import reads the same:
+
+| TypeScript | as an argument | as an answer |
+| --- | --- | --- |
+| `u8` `u16` `u32` `i8` `i16` `i32` `f32` `f64` `u64` `i64` `usize` `isize` | the scalar | the scalar |
+| `boolean` | `bool` | `bool` |
+| `string` | `str` | `text` |
+| `Uint8Array`, `BytesMut` | `bytes`, `bytes_mut` | -- |
+| `Ref`, `MapRef` (or `Borrowed<...>`); `Ref \| null` | `value`, `map` borrowed; a value that may be null | -- |
+| `Taken<Ref>`, `Taken<MapRef>`, `Taken<ListRef>` | the tree handed over | -- |
+| `Lent<Ref>`, `Lent<MapRef>`, `Lent<ListRef>` | the tree lent | -- |
+| `Taken<K>`, `Lent<K>`; `K`, an object kind | `object` taken, lent | `object` of `K` |
+| `ValueAnswer`, `MapAnswer`, `ListAnswer` | -- | `value`, `map`, `list` |
+
+  A bare `number` or `bigint`, a union (but `Ref | null`), a bare object
+  kind as an argument, a bare list, or anything else is refused. The
+  scalar types mark a plain `number` or `bigint` without changing it: a
+  plain value fits a `u32`, and a `u32` is not an `i32`. `Taken<K>` and
+  `Lent<K>` of an object kind are `K` (with `close()` and `Disposable`
+  for `Taken`): close to what a provider is handed, not the `Remote`.
+- The floor hash is `@floorHash N` when written, else the FNV-1a (32-bit)
+  of `provider` or `object` and the required slots as `name(args)->answer`
+  spelled as Rust spells them (`&str`, `&mutMap`,
+  `Result<Map,ProviderError>`, `()`): a trait's required slots hash the
+  same, except where one passes or answers an object, which Rust spells
+  with the trait's own name (`floorHashOf(object, slots)`).
+
+**Underneath all of these, `kind()`**: a method per slot in the header's order
 (the `methods` object's order), the shapes from `t`, and the header's
 `<table>_FLOOR_HASH`. TypeScript infers what a provider implements and
 what a caller holds.
