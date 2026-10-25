@@ -9,7 +9,9 @@
 //! guatiao-remote-bench run URL [options]     five metrics against it, one JSON line
 //! ```
 //!
-//! URL is `tcp://`, `local://` or `shm://`. Options: `--key TEXT` (tcp),
+//! URL is `tcp://`, `local://`, `shm://` or, built with the `rdma`
+//! feature, `rdma://` (the address of its TCP set-up). Options:
+//! `--key TEXT` (tcp, rdma),
 //! `--mss N` (tcp, Unix: caps the segment size, as on a path without
 //! jumbo frames), `--spin MICROSECONDS` (how long a waiting thread polls before it
 //! sleeps), `--label TEXT`, `--seconds N`, `--out FILE` (appends the line).
@@ -156,7 +158,7 @@ fn split(url: &str) -> Result<(&str, &str), String> {
 
 fn options(scheme: &str, a: &Args) -> LinkOptions {
     let trust = match scheme {
-        "tcp" => Trust::Trusted,
+        "tcp" | "rdma" => Trust::Trusted,
         _ => Trust::Local,
     };
     let mut o = LinkOptions::new(trust);
@@ -236,6 +238,22 @@ fn serve(a: &Args) -> Result<(), String> {
             // network its owner isolates.
             let any = Range::parse(if ip.is_ipv4() { "0.0.0.0/0" } else { "::/0" })?;
             let listen = TcpListen::from_listener(listener, &[any]).map_err(|e| e.to_string())?;
+            loop {
+                match listen.accept() {
+                    Ok(Accepted::Connection(c)) => serve_one(Ok(c)),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("accept: {e}"),
+                }
+            }
+        }
+        #[cfg(feature = "rdma")]
+        "rdma" => {
+            use guatiao_remote::transport::tcp::{Accepted, Range};
+            let listener = tcp_listener(address, None).map_err(|e| e.to_string())?;
+            let ip = listener.local_addr().map_err(|e| e.to_string())?.ip();
+            let any = Range::parse(if ip.is_ipv4() { "0.0.0.0/0" } else { "::/0" })?;
+            let listen = transport::rdma::RdmaListen::from_listener(listener, &[any])
+                .map_err(|e| e.to_string())?;
             loop {
                 match listen.accept() {
                     Ok(Accepted::Connection(c)) => serve_one(Ok(c)),
@@ -347,6 +365,8 @@ fn connector(scheme: &str, address: &str, a: &Args) -> Result<Box<dyn Connect>, 
         }),
         "local" => Box::new(transport::local::LocalConnect::new(address)),
         "shm" => Box::new(transport::shm::ShmConnect::new(address)),
+        #[cfg(feature = "rdma")]
+        "rdma" => Box::new(transport::rdma::RdmaConnect::new(address)),
         other => return Err(format!("`{other}://` is not a transport here")),
     })
 }
