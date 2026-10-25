@@ -15,6 +15,8 @@ pub mod child;
 #[cfg(feature = "local")]
 pub mod local;
 pub mod memory;
+#[cfg(feature = "rdma")]
+pub mod rdma;
 #[cfg(feature = "shm")]
 #[allow(unsafe_code)]
 pub mod shm;

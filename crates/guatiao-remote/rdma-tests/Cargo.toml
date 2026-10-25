@@ -1,0 +1,30 @@
+[package]
+name = "guatiao-remote-rdma-tests"
+description = "guatiao-remote's RDMA transport, tested where an RDMA device is present (Soft-RoCE will do)"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MPL-2.0"
+publish = false
+
+# A workspace of its own: these tests need an RDMA device, which
+# `cargo test --workspace` cannot assume, and fail without one. The
+# transport's tests that need no device run with the crate's own.
+[workspace]
+
+[lib]
+path = "lib.rs"
+
+[[test]]
+name = "rdma_link"
+path = "rdma_link.rs"
+
+[dev-dependencies]
+guatiao = { path = "../../guatiao", features = ["provider", "load"] }
+guatiao-remote = { path = "..", features = ["rdma"] }
+greeter_kind = { path = "../../../examples/greeter_kind" }
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"

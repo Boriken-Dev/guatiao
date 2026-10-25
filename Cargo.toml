@@ -26,7 +26,8 @@ members = [
 # the Lua crates choose one Lua each, by exclusive features, the
 # JavaScript source compiles QuickJS, and the WebAssembly source, its Rust
 # guest crate and example build wasmtime or for wasm32, which nothing else
-# here needs.
+# here needs; the RDMA transport's device tests need an RDMA device and
+# fail without one.
 exclude = [
     "examples/wire_over_webtransport/client",
     "crates/guatiao-py",
@@ -35,6 +36,7 @@ exclude = [
     "crates/guatiao-wasm",
     "crates/guatiao-wasm/guest",
     "examples/wasm_greeter_rust",
+    "crates/guatiao-remote/rdma-tests",
     "bindings/lua/guatiao",
 ]
 

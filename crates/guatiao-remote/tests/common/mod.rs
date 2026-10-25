@@ -164,15 +164,16 @@ impl Conversation for Chat {
 
 guatiao::local_providers!(id = "shapes", version = "1.0.0", providers = [Hello]);
 
-/// The kinds `greeter_kind` describes.
+/// The kinds `greeter_kind` describes, found above whichever package
+/// includes this file.
 pub fn described() -> Described {
+    let kinds = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .map(|dir| dir.join("examples/greeter_kind/include/greeter_kind.kinds.json"))
+        .find(|path| path.is_file())
+        .expect("greeter_kind's descriptions, in the checkout");
     let mut described = Described::new();
-    described
-        .load(
-            &Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../examples/greeter_kind/include/greeter_kind.kinds.json"),
-        )
-        .expect("greeter_kind's descriptions");
+    described.load(&kinds).expect("greeter_kind's descriptions");
     described
 }
 

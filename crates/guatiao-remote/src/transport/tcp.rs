@@ -231,15 +231,23 @@ impl TcpListen {
 
     /// The next connection, or a peer from outside the ranges turned away.
     pub fn accept(&self) -> io::Result<Accepted> {
+        Ok(match self.accept_stream()? {
+            Ok((stream, peer)) => Accepted::Connection(connection(stream, format!("tcp {peer}"))?),
+            Err(refused) => Accepted::Refused(refused),
+        })
+    }
+
+    /// The next stream from inside the ranges, or the address of a peer
+    /// from outside them, closed unread: what a transport set up over TCP
+    /// (RDMA) accepts through.
+    #[cfg_attr(not(feature = "rdma"), allow(dead_code))]
+    pub(crate) fn accept_stream(&self) -> io::Result<Result<(TcpStream, SocketAddr), SocketAddr>> {
         let (stream, peer) = self.listener.accept()?;
         if !self.ranges.iter().any(|r| r.contains(peer.ip())) {
             let _ = stream.shutdown(Shutdown::Both);
-            return Ok(Accepted::Refused(peer));
+            return Ok(Err(peer));
         }
-        Ok(Accepted::Connection(connection(
-            stream,
-            format!("tcp {peer}"),
-        )?))
+        Ok(Ok((stream, peer)))
     }
 }
 

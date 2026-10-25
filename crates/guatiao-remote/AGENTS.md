@@ -3,7 +3,9 @@
 guatiao providers called across a process, a machine or a network: a
 `Source` a host adds, a `Server` exposing a registry, and one framed
 protocol over every transport. `#![deny(unsafe_code)]`; `unsafe` only in
-`src/exports.rs` (the `guatiao::source!` expansion). Depends on `guatiao`
+`src/exports.rs` (the `guatiao::source!` expansion), `src/transport/shm.rs`
+(the mapped rings) and `src/transport/rdma/verbs.rs` (libibverbs),
+listed by `tests/unsafe_stays_in_exports.rs`. Depends on `guatiao`
 (`load`), `guatiao-libffi` (the kind tables' mechanism: libffi built from
 C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`).
 
@@ -12,6 +14,7 @@ C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`).
 | `tcp` | trusted TCP: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
+| `rdma` | `tcp` and `transport::rdma`: RDMA, experimental, Linux only; libibverbs opened at run time (`libloading`, `libc`, Linux only), so building needs no rdma-core |
 
 ## A host
 
@@ -48,8 +51,8 @@ server.end_links(); server.links(); server.links_holding(); server.objects_out()
 Serves every provider of a kind `described` describes; others are left
 out of the catalog. The catalog's `kinds` lists each description once.
 
-Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME | shm://NAME`,
-`--trust`, `--range CIDR`..., `--key-file`, `--kinds PATH`..., `--load`,
+Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
+`--trust`, `--range CIDR`..., `--key-file`, `--rdma-device NAME`, `--kinds PATH`..., `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`).
 
@@ -95,6 +98,9 @@ tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr
 tcp::{TcpListen::from_listener(TcpListener, &[Range])?, from_stream(TcpStream)?}   // sockets the caller set up
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
+rdma::{RdmaConnect::new("host:port").port(RdmaPort).timeout(d), RdmaListen::bind(addr, &[Range])?.port(RdmaPort)}   // rdma
+rdma::{RdmaListen::from_listener(TcpListener, &[Range])?, RdmaListen::accept() -> io::Result<tcp::Accepted>}
+rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices() -> io::Result<Vec<String>>, RING, SETUP_TIMEOUT}
 ```
 
 - `TcpListen::bind` binds any address, a wildcard included, and refuses
@@ -116,6 +122,22 @@ shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: th
   sleeps on the local connection until rung; the peer's end there ends
   the link. Ring counters are checked on every read: a ring claiming more
   than 4 MiB ends the link.
+- **RDMA** (experimental, Linux; elsewhere every call answers
+  `Unsupported`): a TCP connection admitted by range as `TcpListen`
+  admits one carries a 64-byte record each way (queue pair number, PSN,
+  GID, MTU, the inbox's address and key), then a ready byte; after that
+  every frame crosses as RDMA writes with immediate data (the byte
+  count) into the peer's 4 MiB inbox, from a 4 MiB staging area, both
+  registered per link (8 MiB locked: `RLIMIT_MEMLOCK` or `CAP_IPC_LOCK`).
+  The reader writes how far it has read into a counter after the writer's
+  inbox every quarter ring; the TCP connection stays open as the peer's
+  liveness and its end is the link's. Device: the first listed, port 1,
+  the first IPv4 GID (RoCE v2), else GID 0; `RdmaPort` picks another.
+  No device: `devices()` and connect fail saying so. The tests needing a
+  device are the package `rdma-tests/` (a workspace of its own, not run by
+  `cargo test --workspace`): `cargo test --manifest-path
+  crates/guatiao-remote/rdma-tests/Cargo.toml` where a device exists
+  (`GUATIAO_RDMA_DEVICE` names one); without one every test fails.
 - **Windows:** one TCP socket is shared by `Arc` between reader, writer
   and closer, never `try_clone`d: a duplicated handle's `shutdown` and
   read timeout do not reliably reach a read blocked on another.
@@ -124,7 +146,8 @@ shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: th
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`, `local://name`, `shm://name` |
+| `connect` | `tcp://host:port`, `local://name`, `shm://name`, `rdma://host:port` |
+| `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 | `child` | list: the server program and its arguments |
 | `trust` | `local`, `trusted`, `secure` (`local` for a child; required for `connect`) |
 | `key`, `key_file` | the trusted level's key |
