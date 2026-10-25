@@ -6,8 +6,8 @@
 # values. A lookup into a value or view answers a view of it; into R data,
 # a copy.
 
-#' The key of a provider's meta holding its form: read it with a registry's
-#' `provider_meta()`, then `intake_check()` it against `provider_config()`.
+# The key of a provider's meta holding its form: read it with a registry's
+# provider_meta(), then intake_check() it against provider_config().
 intake_provider_form_key <- "form"
 
 intake_check <- function(schema, form) .Call(C_intake_check, schema, form)

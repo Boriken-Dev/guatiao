@@ -100,7 +100,7 @@
       if (is.null(r)) NULL else .gt_root(r)
     },
     provider_meta = function(key) {
-      "What the provider declared beyond its schema (its notices, or its form under guatiao.intake's PROVIDER_FORM_KEY): a copy, outliving the library, or NULL when it declares nothing."
+      "What the provider declared beyond its schema (its notices, or its form under guatiao.intake's intake_provider_form_key): a copy, outliving the library, or NULL when it declares nothing."
       r <- .Call(C_registry_provider_meta, .gt_reg(.self), key)
       if (is.null(r)) NULL else .gt_root(r)
     },
