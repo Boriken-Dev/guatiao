@@ -97,11 +97,12 @@ network by default.
   alone (`0600`), a named pipe takes Windows' default access, and a
   child's stdio is the host's own.
 - **`trusted`**: a network the owner isolates between known devices. No
-  encryption. The listener names its address ranges and **refuses to
-  bind outside them**, and to bind every interface (`0.0.0.0`, `::`); a
-  peer connecting from outside them is closed unread. Both sides prove a
-  pre-shared key in the handshake, so a wrong peer does not link by
-  accident. **This is not a defence against anyone on that network**: it
+  encryption. The listener binds whatever address it is given, a
+  wildcard (`0.0.0.0`, `::`) or one peers route to included: where to
+  listen is the deployment's choice. It names the address ranges it
+  accepts peers from, and **a peer from outside them is closed unread**.
+  Both sides prove a pre-shared key in the handshake, so a wrong peer
+  does not link by accident. **This is not a defence against anyone on that network**: it
   reads and changes traffic freely. Use it only where the network itself
   is the boundary.
 - **`secure`**: any network: TLS 1.3 or QUIC, with a token or client

@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! TCP: Nagle off, a bounded connect, and for the trusted level the
-//! address ranges a listener may bind and accept from.
+//! address ranges a listener accepts peers from.
 
 #![forbid(unsafe_code)]
 
@@ -161,8 +161,8 @@ impl Connect for TcpConnect {
     }
 }
 
-/// A TCP listener that binds only inside its ranges and accepts only
-/// peers inside them: the trusted level's gate.
+/// A TCP listener that accepts only peers inside its ranges: the trusted
+/// level's gate. Where it listens is the caller's choice.
 #[derive(Debug)]
 pub struct TcpListen {
     listener: TcpListener,
@@ -180,27 +180,21 @@ pub enum Accepted {
 }
 
 impl TcpListen {
-    /// Binds `address`, which must lie inside one of `ranges`; with no
-    /// ranges, nothing may be bound. A wildcard address (`0.0.0.0`, `::`)
-    /// reaches every interface, so it is refused.
+    /// Binds `address`, any address a wildcard (`0.0.0.0`, `::`)
+    /// included, accepting peers inside `ranges`. An empty list is
+    /// refused: it would turn every peer away.
     pub fn bind(address: &str, ranges: &[Range]) -> io::Result<TcpListen> {
+        if ranges.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "no address range: every peer would be turned away",
+            ));
+        }
         let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
         let addr = addrs
             .first()
             .copied()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))?;
-        if addr.ip().is_unspecified() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("{addr} reaches every interface: name the one to listen on"),
-            ));
-        }
-        if !ranges.iter().any(|r| r.contains(addr.ip())) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("{} lies outside every configured range", addr.ip()),
-            ));
-        }
         Ok(TcpListen {
             listener: TcpListener::bind(addr)?,
             ranges: ranges.to_vec(),
@@ -249,38 +243,36 @@ mod tests {
     }
 
     #[test]
-    fn a_listener_outside_its_ranges_or_on_every_interface_is_refused() {
+    fn a_listener_binds_where_it_is_told_and_admits_by_its_ranges() {
         let local = [Range::parse("127.0.0.0/8").unwrap()];
-        assert_eq!(
-            TcpListen::bind("0.0.0.0:0", &local).unwrap_err().kind(),
-            io::ErrorKind::PermissionDenied
-        );
+        // Every interface: the peer at 127.0.0.1 is inside the range.
+        let any = TcpListen::bind("0.0.0.0:0", &local).expect("a wildcard binds");
+        let port = any.local_addr().unwrap().port();
+        let _c = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        assert!(matches!(any.accept().unwrap(), Accepted::Connection(_)));
+
+        // Its own address outside the ranges, as when peers route to it.
         let elsewhere = [Range::parse("10.0.0.0/8").unwrap()];
-        assert_eq!(
-            TcpListen::bind("127.0.0.1:0", &elsewhere)
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::PermissionDenied
-        );
+        let routed = TcpListen::bind("127.0.0.1:0", &elsewhere).expect("any address binds");
+        let _c = TcpStream::connect(routed.local_addr().unwrap()).unwrap();
+        assert!(matches!(routed.accept().unwrap(), Accepted::Refused(_)));
+
         assert_eq!(
             TcpListen::bind("127.0.0.1:0", &[]).unwrap_err().kind(),
-            io::ErrorKind::PermissionDenied
+            io::ErrorKind::InvalidInput
         );
-        let l = TcpListen::bind("127.0.0.1:0", &local).expect("inside its range");
-        let addr = l.local_addr().unwrap();
-        let _c = TcpStream::connect(addr).unwrap();
-        assert!(matches!(l.accept().unwrap(), Accepted::Connection(_)));
     }
 
     #[test]
     fn a_peer_outside_the_ranges_is_turned_away_unread() {
-        // Bound inside 127.0.0.1, accepting only 127.0.0.2: the loopback
-        // client at 127.0.0.1 is outside.
-        let l = TcpListen {
-            listener: TcpListener::bind("127.0.0.1:0").unwrap(),
-            ranges: vec![Range::parse("127.0.0.2").unwrap()],
-        };
-        let _c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        use std::io::Read as _;
+        // Accepting only 127.0.0.2: the loopback client at 127.0.0.1 is
+        // outside, and finds the connection closed before anything is read.
+        let l = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.2").unwrap()]).unwrap();
+        let mut c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
         assert!(matches!(l.accept().unwrap(), Accepted::Refused(_)));
+        c.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let mut byte = [0u8; 1];
+        assert!(matches!(c.read(&mut byte), Ok(0) | Err(_)));
     }
 }

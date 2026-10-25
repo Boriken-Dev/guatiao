@@ -75,8 +75,9 @@ write now.
   the child, and the next refresh starts it again. Transports: that child
   process; a Unix socket or a named pipe (feature `local`); shared memory
   beside one (feature `shm`), a few microseconds a call; and TCP at the
-  trusted level (feature `tcp`): an address range the listener binds and
-  accepts in, and a pre-shared key both sides prove. The protocol is
+  trusted level (feature `tcp`): the address ranges a listener accepts
+  peers from, others closed unread, and a pre-shared key both sides
+  prove. The protocol is
   stated for every language in `docs/remote.md`, with shared vectors and a
   C codec, client and server.
 - **`DescribedRemote::implements` and `DescribedRemote::kind`**: whether

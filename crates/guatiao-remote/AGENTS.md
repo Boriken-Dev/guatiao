@@ -96,9 +96,9 @@ local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: 
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
 ```
 
-- `TcpListen::bind` refuses an address outside every range, an empty
-  range list, and `0.0.0.0`/`::`; `accept` closes a peer outside the
-  ranges unread.
+- `TcpListen::bind` binds any address, a wildcard included, and refuses
+  only an empty range list; `accept` closes a peer outside the ranges
+  unread (`Accepted::Refused`).
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it.
 - **A Unix socket** is created `0600`; `LocalListen::bind` replaces a
