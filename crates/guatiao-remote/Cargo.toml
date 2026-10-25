@@ -1,0 +1,56 @@
+[package]
+name = "guatiao-remote"
+description = "guatiao providers called across a process, a machine or a network: a source any host adds, a server exposing a registry, and one framed protocol over every transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+exclude = [".*", "*.local.*", "public-api.txt"]
+
+# docs.rs documents every feature.
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+name = "guatiao_remote"
+path = "src/lib.rs"
+# The rlib is what a Rust host or server links; the cdylib is the source
+# file any host adds (`add_source_file`), in any language.
+crate-type = ["rlib", "cdylib"]
+
+# The server a device runs. Not `guatiao-remote`: on Windows its debug
+# files would collide with the library's.
+[[bin]]
+name = "guatiao-remote-server"
+path = "src/bin/guatiao-remote-server.rs"
+
+[features]
+default = []
+
+# Trusted TCP: no encryption, a configured address range, and a
+# pre-shared key proved both ways in the handshake (HMAC-SHA256).
+tcp = ["dep:hmac", "dep:sha2", "dep:getrandom"]
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["dynamic-kinds", "load"] }
+# Kind descriptions read from their JSON documents.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json"] }
+# The trusted level's handshake proof. RustCrypto, pure Rust.
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+# The handshake's nonces.
+getrandom = { version = "0.3", optional = true }
+
+[dev-dependencies]
+guatiao = { path = "../guatiao", features = ["provider", "load", "dynamic-kinds"] }
+# The example kinds the tests serve and call.
+greeter_kind = { path = "../../examples/greeter_kind" }
+# Reads the shared vectors.
+serde_json = "1"
+
+[lints]
+workspace = true

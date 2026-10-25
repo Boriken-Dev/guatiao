@@ -1,0 +1,564 @@
+{
+ "about": "Shared vectors for the remote protocol (docs/remote.md). Every implementation reads this file. The bytes were written from the grammar by an encoder of their own, not by the code under test. 'frames' are whole frames, the u32 little-endian length first, with their fields; a tree is written as wire.json writes it ([tag] or [tag, x]); a frame's 'args' and 'body' are hex. 'args' and 'answers' are a CALL's arguments and a REPLY's answer then write-backs, typed by the named slot of greeter_kind's kinds: ['str', text], ['int', n], ['uint', n], ['buffer', length], ['map', tree], ['object', 'senders' | 'receivers', id], ['text', text], ['bool', b], ['nothing']. 'malformed' are bodies (no length) refused with the error named and, where given, the offset into the body. 'proofs' are the trusted level's HMAC-SHA256 over the label, the client's nonce and the server's.",
+ "frames": [
+  {
+   "name": "hello, trusted",
+   "frame": {
+    "type": "hello",
+    "trust": "trusted",
+    "nonce": "000102030405060708090a0b0c0d0e0f",
+    "options": [
+     "map",
+     [
+      [
+       "max_frame",
+       [
+        "number",
+        "65536"
+       ]
+      ],
+      [
+       "max_calls",
+       [
+        "number",
+        "8"
+       ]
+      ]
+     ]
+    ]
+   },
+   "hex": "38000000014754524d0101000102030405060708090a0b0c0d0e0f200702096d61785f6672616d6503053635353336096d61785f63616c6c73030138"
+  },
+  {
+   "name": "welcome",
+   "frame": {
+    "type": "welcome",
+    "nonce": "101112131415161718191a1b1c1d1e1f",
+    "proof": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "options": [
+     "map",
+     [
+      [
+       "max_frame",
+       [
+        "number",
+        "67108864"
+       ]
+      ],
+      [
+       "max_calls",
+       [
+        "number",
+        "64"
+       ]
+      ]
+     ]
+    ]
+   },
+   "hex": "5c000000024754524d01101112131415161718191a1b1c1d1e1f20aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa240702096d61785f6672616d6503083637313038383634096d61785f63616c6c7303023634"
+  },
+  {
+   "name": "welcome at the local level: no proof",
+   "frame": {
+    "type": "welcome",
+    "nonce": "00000000000000000000000000000000",
+    "proof": "",
+    "options": [
+     "map",
+     []
+    ]
+   },
+   "hex": "1a000000024754524d010000000000000000000000000000000000020700"
+  },
+  {
+   "name": "proof",
+   "frame": {
+    "type": "proof",
+    "proof": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+   },
+   "hex": "220000000320bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+   "name": "list",
+   "frame": {
+    "type": "list",
+    "call": 1
+   },
+   "hex": "020000000401"
+  },
+  {
+   "name": "open",
+   "frame": {
+    "type": "open",
+    "call": 2,
+    "library": "shapes",
+    "stamp": "shapes#1.0.0#0"
+   },
+   "hex": "180000000502067368617065730e73686170657323312e302e302330"
+  },
+  {
+   "name": "close",
+   "frame": {
+    "type": "close",
+    "library": "shapes",
+    "stamp": "shapes#1.0.0#0"
+   },
+   "hex": "1700000006067368617065730e73686170657323312e302e302330"
+  },
+  {
+   "name": "greet(\"world\") on table 1",
+   "frame": {
+    "type": "call",
+    "call": 3,
+    "parent": 0,
+    "target": [
+     "table",
+     1
+    ],
+    "slot": 0,
+    "args": "05776f726c64"
+   },
+   "hex": "0b000000100300020005776f726c64"
+  },
+  {
+   "name": "a call made during call 3, on object 2",
+   "frame": {
+    "type": "call",
+    "call": 4,
+    "parent": 3,
+    "target": [
+     "object",
+     2
+    ],
+    "slot": 0,
+    "args": "026869"
+   },
+   "hex": "080000001004030500026869"
+  },
+  {
+   "name": "a call id past one byte",
+   "frame": {
+    "type": "call",
+    "call": 300,
+    "parent": 0,
+    "target": [
+     "table",
+     64
+    ],
+    "slot": 5,
+    "args": ""
+   },
+   "hex": "0700000010ac0200800105"
+  },
+  {
+   "name": "a map answered",
+   "frame": {
+    "type": "reply",
+    "call": 3,
+    "status": 0,
+    "body": "190701086772656574696e67040c68656c6c6f2c20776f726c64"
+   },
+   "hex": "1d000000110300190701086772656574696e67040c68656c6c6f2c20776f726c64"
+  },
+  {
+   "name": "a refusal",
+   "frame": {
+    "type": "reply",
+    "call": 3,
+    "status": 7,
+    "body": "0f6e6f626f647920746f206772656574"
+   },
+   "hex": "130000001103070f6e6f626f647920746f206772656574"
+  },
+  {
+   "name": "cancel",
+   "frame": {
+    "type": "cancel",
+    "call": 3
+   },
+   "hex": "020000001203"
+  },
+  {
+   "name": "release",
+   "frame": {
+    "type": "release",
+    "object": 2
+   },
+   "hex": "020000001302"
+  },
+  {
+   "name": "ping",
+   "frame": {
+    "type": "ping",
+    "n": 5
+   },
+   "hex": "020000001405"
+  },
+  {
+   "name": "pong",
+   "frame": {
+    "type": "pong",
+    "n": 5
+   },
+   "hex": "020000001505"
+  },
+  {
+   "name": "goodbye",
+   "frame": {
+    "type": "goodbye",
+    "status": 7,
+    "message": "the client does not hold this link's key"
+   },
+   "hex": "2b00000016072874686520636c69656e7420646f6573206e6f7420686f6c642074686973206c696e6b2773206b6579"
+  }
+ ],
+ "args": [
+  {
+   "name": "borrowed text",
+   "kind": "greeter",
+   "slot": "greet",
+   "args": [
+    [
+     "str",
+     "world"
+    ]
+   ],
+   "hex": "05776f726c64"
+  },
+  {
+   "name": "text and a lent object of the sender's",
+   "kind": "greeter",
+   "slot": "greet_into",
+   "args": [
+    [
+     "str",
+     "cy"
+    ],
+    [
+     "object",
+     "senders",
+     1
+    ]
+   ],
+   "hex": "02637902"
+  },
+  {
+   "name": "a handed object of the sender's",
+   "kind": "greeter",
+   "slot": "start",
+   "args": [
+    [
+     "object",
+     "senders",
+     3
+    ]
+   ],
+   "hex": "06"
+  },
+  {
+   "name": "an object of the receiver's, handed back",
+   "kind": "greeter",
+   "slot": "start",
+   "args": [
+    [
+     "object",
+     "receivers",
+     3
+    ]
+   ],
+   "hex": "07"
+  },
+  {
+   "name": "a map handed over",
+   "kind": "greeter",
+   "slot": "greet_from",
+   "args": [
+    [
+     "map",
+     [
+      "map",
+      [
+       [
+        "name",
+        [
+         "string",
+         "bo"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "hex": "0b0701046e616d650402626f"
+  },
+  {
+   "name": "a lent map",
+   "kind": "greeter",
+   "slot": "check",
+   "args": [
+    [
+     "map",
+     [
+      "map",
+      [
+       [
+        "name",
+        [
+         "string",
+         "cy"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "hex": "0b0701046e616d6504026379"
+  },
+  {
+   "name": "a buffer to write into",
+   "kind": "conversation",
+   "slot": "read",
+   "args": [
+    [
+     "buffer",
+     16
+    ]
+   ],
+   "hex": "10"
+  },
+  {
+   "name": "a negative i64",
+   "kind": "wide",
+   "slot": "echo_i64",
+   "args": [
+    [
+     "int",
+     -5
+    ]
+   ],
+   "hex": "09"
+  },
+  {
+   "name": "i64::MIN",
+   "kind": "wide",
+   "slot": "echo_i64",
+   "args": [
+    [
+     "int",
+     -9223372036854775808
+    ]
+   ],
+   "hex": "ffffffffffffffffff01"
+  },
+  {
+   "name": "u64::MAX",
+   "kind": "wide",
+   "slot": "echo_u64",
+   "args": [
+    [
+     "uint",
+     18446744073709551615
+    ]
+   ],
+   "hex": "ffffffffffffffffff01"
+  },
+  {
+   "name": "no arguments",
+   "kind": "conversation",
+   "slot": "turns",
+   "args": [],
+   "hex": ""
+  }
+ ],
+ "answers": [
+  {
+   "name": "a map",
+   "kind": "greeter",
+   "slot": "greet",
+   "answer": [
+    "map",
+    [
+     "map",
+     [
+      [
+       "greeting",
+       [
+        "string",
+        "hello, world"
+       ]
+      ]
+     ]
+    ]
+   ],
+   "writebacks": [],
+   "hex": "190701086772656574696e67040c68656c6c6f2c20776f726c64"
+  },
+  {
+   "name": "text",
+   "kind": "greeter",
+   "slot": "shout",
+   "answer": [
+    "text",
+    "HELLO, ANA"
+   ],
+   "writebacks": [],
+   "hex": "0a48454c4c4f2c20414e41"
+  },
+  {
+   "name": "a bool, then the lent map written back",
+   "kind": "greeter",
+   "slot": "check",
+   "answer": [
+    "bool",
+    true
+   ],
+   "writebacks": [
+    [
+     "map",
+     [
+      "map",
+      [
+       [
+        "name",
+        [
+         "string",
+         "cy"
+        ]
+       ],
+       [
+        "greeting",
+        [
+         "string",
+         "hello, cy"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "hex": "011f0702046e616d6504026379086772656574696e67040968656c6c6f2c206379"
+  },
+  {
+   "name": "an i64, then the buffer written back",
+   "kind": "conversation",
+   "slot": "read",
+   "answer": [
+    "int",
+    7
+   ],
+   "writebacks": [
+    [
+     "buffer",
+     "68697468657265"
+    ]
+   ],
+   "hex": "0e0768697468657265"
+  },
+  {
+   "name": "an object of the sender's",
+   "kind": "greeter",
+   "slot": "start",
+   "answer": [
+    "object",
+    "senders",
+    4
+   ],
+   "writebacks": [],
+   "hex": "08"
+  },
+  {
+   "name": "nothing",
+   "kind": "conversation",
+   "slot": "say",
+   "answer": [
+    "nothing"
+   ],
+   "writebacks": [],
+   "hex": ""
+  },
+  {
+   "name": "u64::MAX",
+   "kind": "wide",
+   "slot": "echo_u64",
+   "answer": [
+    "uint",
+    18446744073709551615
+   ],
+   "writebacks": [],
+   "hex": "ffffffffffffffffff01"
+  }
+ ],
+ "malformed": [
+  {
+   "name": "an unknown frame type",
+   "body": "7f",
+   "error": "unknown_frame"
+  },
+  {
+   "name": "a stranger's handshake",
+   "body": "0148545450010100000000000000000000000000000000020700",
+   "error": "not_this_protocol"
+  },
+  {
+   "name": "a later version",
+   "body": "014754524d020100000000000000000000000000000000020700",
+   "error": "version"
+  },
+  {
+   "name": "an overlong call id",
+   "body": "048000",
+   "error": "overlong",
+   "at": 1
+  },
+  {
+   "name": "a call id cut short",
+   "body": "0480",
+   "error": "truncated",
+   "at": 2
+  },
+  {
+   "name": "bytes after the last field",
+   "body": "040100",
+   "error": "trailing",
+   "at": 2
+  },
+  {
+   "name": "text that is not UTF-8",
+   "body": "0602fffe00",
+   "error": "not_utf8",
+   "at": 1
+  },
+  {
+   "name": "a trust level that does not exist",
+   "body": "014754524d010900000000000000000000000000000000020700",
+   "error": "field",
+   "at": 6
+  }
+ ],
+ "proofs": [
+  {
+   "name": "server's proof",
+   "key": "746573742d6b6579",
+   "label": "guatiao-remote server",
+   "client": "000102030405060708090a0b0c0d0e0f",
+   "server": "101112131415161718191a1b1c1d1e1f",
+   "hex": "60f3aa2be8eccb2a75c9353981f9a5fe15421d41cf27536389bf8611fd420ca5"
+  },
+  {
+   "name": "client's proof",
+   "key": "746573742d6b6579",
+   "label": "guatiao-remote client",
+   "client": "000102030405060708090a0b0c0d0e0f",
+   "server": "101112131415161718191a1b1c1d1e1f",
+   "hex": "fa4d27bd37bec61e5e789f7aecdd9bba610a6cd7186a02fa3b9ee76b55ff0edf"
+  },
+  {
+   "name": "a key longer than a block",
+   "key": "6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b",
+   "label": "guatiao-remote server",
+   "client": "000102030405060708090a0b0c0d0e0f",
+   "server": "101112131415161718191a1b1c1d1e1f",
+   "hex": "098061720f5d5b37d91704034111a484d429b5a94c23d70b74aeda1e985343f8"
+  }
+ ]
+}
