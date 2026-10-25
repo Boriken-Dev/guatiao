@@ -8,6 +8,10 @@ Node runs these files as they are: no TypeScript, no build step.
   kind `page`, each a class extending `Kind` whose static fields say its
   name, floor hash and slots. That is only for a kind with nothing behind
   it.
+- `describe.js` writes those two kinds as data, `echo_kind.kinds.json`:
+  the description a Rust kind crate commits beside its header, which
+  `kindsOf()` loads and Dart's `dart run guatiao:kind` writes classes
+  from. `node describe.js --check` fails when the file is stale.
 - The greeter kinds exist already, in Rust: they are loaded from the
   module `guatiao-kind` wrote from their description
   ([`../greeter_kind/node/greeter_kind.js`](../greeter_kind/node/greeter_kind.js)),

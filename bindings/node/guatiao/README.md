@@ -161,8 +161,30 @@ import { Kind, slot, t } from 'guatiao/kinds';
 
 export class Echo extends Kind {
   static floorHash = 0x6563686f;
-  static slots = { echo: slot(t.str).returns(t.text).required() };
+  static slots = { echo: slot(t.str).named('text').returns(t.text).required() };
 }
+```
+
+`describeKinds([Echo])` answers its description, the document a kind
+crate commits beside its header, which Dart and the other languages write
+code from. In TypeScript the same kind can be written as an interface,
+the way a Rust trait declares one, and `guatiao-kind` reads it into the
+description (the compiler reads it: `typescript` 7.0 or newer):
+
+```ts
+import type { MapAnswer, i64, u32 } from 'guatiao/kinds';
+
+/** Counts by name. */
+export interface Tally {
+  /** Adds `by` to the count under `name`. @throws */
+  add(name: string, by: u32): i64;
+  /** Every count: an appended slot. */
+  all?(): MapAnswer;
+}
+```
+
+```bash
+npx guatiao-kind tally_kind.ts --out tally_kind --document tally_kind.kinds.json
 ```
 
 ### Dates and spans
@@ -206,8 +228,9 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 | Module | Purpose |
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `redact`, `useLibrary`, the errors |
-| `guatiao/kinds` | `kindsOf`, `kindOf`: kinds loaded from their description; `Kind`, `slot`: a kind defined as a class; `kind`, `t`: the descriptor underneath; `Remote`, `ObjectHandle`; serving a table over an object |
-| `guatiao-kind` (a command) | writes a module and its `.d.ts` from a kinds description |
+| `guatiao/kinds` | `kindsOf`, `kindOf`: kinds loaded from their description; `Kind`, `slot`: a kind defined as a class; `describeKinds`: a kind's description; `kind`, `t`: the descriptor underneath; `Remote`, `ObjectHandle`; serving a table over an object; `u32`, `i64`, `Taken`, `Lent`, `ObjectKind` and the other types a kind written as an interface is spelled with |
+| `guatiao/describe` | `describeInterfaces`: kinds written as TypeScript interfaces, read into their description |
+| `guatiao-kind` (a command) | writes a module and its `.d.ts` from a kinds description, or from TypeScript interfaces |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `s`: providers written in TypeScript, a module as a library |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
 | `guatiao/wire` | channel frames (`announce`, `send`, `close`) and a `Receiver` checking each value against its channel's schema |

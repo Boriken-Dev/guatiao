@@ -86,6 +86,105 @@ export class Echo extends Kind {
 }
 ```
 
+A class's description is data too: `describeKinds([Echo])` answers the
+document `kindsOf` loads and the other bindings' generators write code
+from, with the object kinds the slots reach. `slot(...).named('text')`
+names the arguments (one name each), `.doc('...')` and `static doc` say
+what a slot and the kind do; both are in the description and nowhere
+else. Plain JavaScript writes the file with no build step:
+
+```js
+import { writeFileSync } from 'node:fs';
+import { describeKinds } from 'guatiao/kinds';
+import { Echo } from './echo_kind.js';
+
+writeFileSync('echo_kind.kinds.json', `${JSON.stringify(describeKinds([Echo]), null, 2)}\n`);
+```
+
+and Dart's `dart run guatiao:kind echo_kind.kinds.json` writes the same
+kinds as Dart classes.
+
+### A kind defined in TypeScript
+
+A kind that exists only here can be written as interfaces instead, the way
+a Rust trait declares one, and `guatiao-kind` reads them into the same
+description. The types are `guatiao/kinds`': a scalar says its width
+(`u32`, `i64`, `f64`; a bare `number` is refused), a tree says how it
+crosses (`MapRef` is read for the call, `Taken<MapRef>` is handed over,
+`Lent<MapRef>` is changed where it stands), an object kind extends
+`ObjectKind`.
+
+```ts
+// tally_kind.ts
+import type { MapRef } from 'guatiao';
+import type { Lent, MapAnswer, ObjectKind, Taken, i64, u32 } from 'guatiao/kinds';
+
+/** What a tally tells whoever is watching it. Implemented by the host. */
+export interface Watcher extends ObjectKind {
+  /** `name` now stands at `total`. */
+  changed(name: string, total: i64): void;
+}
+
+/** Counts by name. */
+export interface Tally {
+  /**
+   * Adds `by` to the count under `name`: the new count, or why not.
+   *
+   * @throws
+   */
+  add(name: string, by: u32): i64;
+  /** The count under `name`: 0 when there is none. */
+  total(name: string): i64;
+  /** Appended: every count, as `{name: count}`. */
+  all?(): MapAnswer;
+  /**
+   * Appended: tells `watcher` each count, for this call alone.
+   *
+   * @throws
+   */
+  report?(watcher: Lent<Watcher>): void;
+  /**
+   * Appended: adds the counts of `counts`, which the tally owns from the
+   * call on; answers how many names it held.
+   *
+   * @throws
+   */
+  load?(counts: Taken<MapRef>): u32;
+}
+```
+
+```bash
+npx guatiao-kind tally_kind.ts --out node/tally_kind --document include/tally_kind.kinds.json
+```
+
+writes the description (`tally_kind.kinds.json`, the file Dart's `dart
+run guatiao:kind` and every other generator reads) and the module, as for
+any kind: `Tally` is then a value and an interface, and a provider
+`implements` it. `describeInterfaces(files)` from `guatiao/describe` does
+the first step from code and answers the document.
+
+- **An exported interface is a kind**, named in snake_case (`@kind name`
+  says otherwise); one that `extends ObjectKind` is an object kind. An
+  object kind a slot reaches is described too, whichever file it is in.
+- **A method is a slot**, in the interface's order; a method with `?` is
+  an appended slot, and the required ones come first, as in a trait. A
+  slot's name is the method's in snake_case, so a method that would not
+  come back the same (`parseHTTP`) is refused. `@throws` marks a slot
+  that can refuse.
+- **Doc comments** are the descriptions' `doc`.
+- **The floor hash** is the FNV-1a of the shape and the required slots,
+  spelled as Rust spells them, so an interface repeating a trait's
+  required slots hashes as the trait does; `@floorHash 123` says it where
+  a kind must keep a hash it already has.
+- **Reading is done by the compiler**, the `typescript` package, version
+  7.0 or newer, which the project already has if it checks its types: the
+  files are read through the nearest `tsconfig.json`, or `--project`. A
+  type that is not one of these is refused with its file, line and column.
+
+The compiler API in TypeScript 7.0 is marked unstable, so reading
+interfaces is the one part of this package that follows TypeScript's
+releases; a kind defined as a class needs no compiler.
+
 ### Underneath: `kind()`
 
 Both are built on one primitive, which TypeScript can type by inference:
@@ -284,3 +383,6 @@ from Node's thread that waits for such a thread never returns.
   kind of its own defined as a class.
 - `examples/greeter_kind/node/` is what `guatiao-kind` wrote from
   `examples/greeter_kind/include/greeter_kind.kinds.json`.
+- `examples/tally_kind/` is a kind written as TypeScript interfaces,
+  `tally_kind.ts`, with the description and the Node and Dart modules
+  written from it.
