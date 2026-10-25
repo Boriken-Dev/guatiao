@@ -10,6 +10,8 @@ descriptions) and `guatiao-serde` (`json`).
 | feature | adds |
 | --- | --- |
 | `tcp` | trusted TCP: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`) |
+| `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
+| `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
 
 ## A host
 
@@ -46,7 +48,7 @@ server.end_links(); server.links(); server.links_holding(); server.objects_out()
 Serves every provider of a kind `described` describes; others are left
 out of the catalog. The catalog's `kinds` lists each description once.
 
-Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR`,
+Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME | shm://NAME`,
 `--trust`, `--range CIDR`..., `--key-file`, `--kinds PATH`..., `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`).
@@ -57,7 +59,8 @@ Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR`,
 LinkOptions::new(Trust::{Local, Trusted, Secure})
     .key(&[u8]) .token(&str) .max_frame(bytes) .max_calls(n)
     .timeout(Option<Duration>) .handshake_timeout(Duration)
-// defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake
+    .spin(Duration)    // how long a waiting thread polls before it sleeps
+// defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake, 50 µs spin
 link.alive() link.why() link.peer() link.trust() link.list() link.open(id, stamp)
 link.close(id, stamp) link.kinds() link.ping() link.end()
 LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
@@ -89,6 +92,8 @@ child::stdio() -> Connection                       // a server started as a chil
 stream::{StreamReader, StreamWriter}               // u32 LE length + body over any Read/Write
 tcp::{TcpConnect::new("host:port").timeout(d), TcpListen::bind(addr, &[Range])?, Range::parse("10.0.0.0/8")?}   // tcp
 tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr)}>
+local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
+shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
 ```
 
 - `TcpListen::bind` refuses an address outside every range, an empty
@@ -96,6 +101,20 @@ tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr
   ranges unread.
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it.
+- **A Unix socket** is created `0600`; `LocalListen::bind` replaces a
+  socket left by a listener that is gone and refuses anything else at the
+  path. **A named pipe** has Windows' default access, and nothing can end
+  a read blocked on it: ending a link sends GOODBYE, and the peer closing
+  its end ends that read. A pipe takes no read timeout, so its handshake
+  is unbounded.
+- **Shared memory**: the client creates the file (`/dev/shm`, else the
+  temporary directory; `0600`; removed once mapped on Unix, deleted with
+  its last handle on Windows), sends its path once over the local
+  connection, and the server maps it. Each direction is a 4 MiB byte
+  ring; frames of any size stream through it. A reader polls 50 µs, then
+  sleeps on the local connection until rung; the peer's end there ends
+  the link. Ring counters are checked on every read: a ring claiming more
+  than 4 MiB ends the link.
 - **Windows:** one TCP socket is shared by `Arc` between reader, writer
   and closer, never `try_clone`d: a duplicated handle's `shutdown` and
   read timeout do not reliably reach a read blocked on another.
@@ -104,7 +123,7 @@ tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port` |
+| `connect` | `tcp://host:port`, `local://name`, `shm://name` |
 | `child` | list: the server program and its arguments |
 | `trust` | `local`, `trusted`, `secure` (`local` for a child; required for `connect`) |
 | `key`, `key_file` | the trusted level's key |
