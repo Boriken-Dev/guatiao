@@ -1603,6 +1603,41 @@ impl DescribedRemote {
         })
     }
 
+    /// The kind this remote calls.
+    pub fn kind(&self) -> &Arc<KindDescription> {
+        self.caller.kind()
+    }
+
+    /// Whether the table fills slot `slot`: within its size and not null.
+    /// A slot it leaves out answers `GUATIAO_ERR_UNSUPPORTED` when called,
+    /// so a caller that has a default for it runs that instead.
+    pub fn implements(&self, slot: usize) -> bool {
+        let kind = self.caller.kind();
+        if slot >= kind.slots().len() {
+            return false;
+        }
+        // SAFETY: a table the registry read under its checks, at least a
+        // header long (`new`).
+        let header = unsafe { self.table.cast::<KindHeader>().read_unaligned() };
+        let declared = match header.struct_size as usize {
+            0 => self.size,
+            own => own.min(self.size),
+        };
+        let word = kind.word_of(slot);
+        if declared < size_of::<KindHeader>() + (word + 1) * size_of::<usize>() {
+            return false;
+        }
+        // SAFETY: within the declared size, a pointer-sized slot.
+        let f = unsafe {
+            self.table
+                .cast::<u8>()
+                .add(size_of::<KindHeader>() + word * size_of::<usize>())
+                .cast::<Option<unsafe extern "C" fn()>>()
+                .read_unaligned()
+        };
+        f.is_some()
+    }
+
     /// Calls slot `slot` (an index into the kind's slots).
     pub fn call(&self, slot: usize, args: Vec<Arg<'_>>) -> Result<Answer, ProviderError> {
         // SAFETY: the table and `ctx` a registry offered, held loaded.

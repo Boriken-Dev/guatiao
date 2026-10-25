@@ -429,6 +429,24 @@ fn an_owned_object_is_lent_and_stays_its_owners() {
 }
 
 #[test]
+fn a_described_remote_says_which_slots_its_table_fills() {
+    // `shout` left out of the table: a caller runs its own default.
+    let (registry, _engine) = serving(false);
+    let provider = registry.provider("engine_greeter").expect("registered");
+    let k = kinds();
+    let caller = Arc::new(Caller::new(Arc::clone(&k.greeter)).expect("interfaces"));
+    let remote = DescribedRemote::new(provider.view(), caller).expect("its table fits");
+    let (greet, _) = k.greeter.slot("greet").unwrap();
+    let (shout, _) = k.greeter.slot("shout").unwrap();
+    assert_eq!(remote.kind().name(), "greeter");
+    assert!(remote.implements(greet));
+    assert!(!remote.implements(shout));
+    assert!(!remote.implements(k.greeter.slots().len()));
+    let refused = remote.call(shout, vec![Arg::Str("x")]).unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_UNSUPPORTED);
+}
+
+#[test]
 fn a_compiled_provider_is_called_from_its_description() {
     #[derive(Default)]
     struct Hello;
