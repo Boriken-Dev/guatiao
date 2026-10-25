@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BadValue, Registry } from '../src/index.js';
 import { generate } from '../src/generate.js';
-import { Kind, type KindsDocument, type Remote, kind, kindOf, kindsOf, slot, t } from '../src/kinds.js';
+import { Kind, type KindsDocument, type Remote, describeKinds, kind, kindOf, kindsOf, slot, t } from '../src/kinds.js';
 import { Provider, library } from '../src/provide.js';
 import * as committed from '../../../../examples/greeter_kind/node/greeter_kind.js';
 import { GREETER_KIND_H, REPO, readText } from './helpers.js';
@@ -232,5 +232,105 @@ describe('a kind defined as a class', () => {
     const echo = reg.bind('parrots_parrot', same);
     expect(echo.echo('ho')).toBe('ho, ho');
     expect(echo.kind.tableSize).toBe(reg.bind('parrots_parrot', Echo).kind.tableSize);
+  });
+});
+
+// ---- a kind described again ---------------------------------------------------------------------------
+
+class Memo extends Kind {
+  static readonly kind = 'memo';
+  static readonly floorHash = 77;
+  static readonly object = true;
+  static readonly doc = 'Takes lines.';
+  static readonly slots = {
+    add: slot(t.str).named('line').doc('One more line.').required(),
+    count: slot().returns(t.u32).required(),
+  };
+}
+
+class Relay extends Kind {
+  static readonly floorHash = 1234;
+  static readonly slots = {
+    echo: slot(t.str).returns(t.text).required().fallible(),
+    tellAll: slot(t.str, t.lent(Memo), t.taken(t.map), t.bytes).fallible(),
+    open: slot().returns(Memo),
+  };
+}
+
+describe('a kind described again', () => {
+  const expected: KindsDocument = {
+    format: 1,
+    kinds: [
+      {
+        name: 'relay',
+        floor_hash: 1234,
+        object: false,
+        slots: [
+          {
+            name: 'echo',
+            required: true,
+            fallible: true,
+            args: [{ name: 'arg0', type: 'str' }],
+            answer: { type: 'text' },
+          },
+          {
+            name: 'tell_all',
+            required: false,
+            fallible: true,
+            args: [
+              { name: 'arg0', type: 'str' },
+              { name: 'arg1', type: 'object', kind: 'memo', pass: 'lent' },
+              { name: 'arg2', type: 'map', pass: 'taken' },
+              { name: 'arg3', type: 'bytes' },
+            ],
+          },
+          { name: 'open', required: false, fallible: false, args: [], answer: { type: 'object', kind: 'memo' } },
+        ],
+      },
+      {
+        name: 'memo',
+        floor_hash: 77,
+        object: true,
+        doc: 'Takes lines.',
+        slots: [
+          {
+            name: 'add',
+            required: true,
+            fallible: false,
+            args: [{ name: 'line', type: 'str' }],
+            doc: 'One more line.',
+          },
+          { name: 'count', required: true, fallible: false, args: [], answer: { type: 'u32' } },
+        ],
+      },
+    ],
+  };
+
+  it('is the document it was loaded from, the greeter kinds included', () => {
+    expect(describeKinds(Object.values(kindsOf(document())))).toEqual(document());
+  });
+
+  it('is described, a class too, with the object kinds its slots reach', () => {
+    expect(describeKinds([Relay])).toEqual(expected);
+    expect(describeKinds([Memo, Relay]).kinds.map((k) => k.name)).toEqual(['memo', 'relay']);
+  });
+
+  it('is the kind its description loads', () => {
+    const loaded = kindsOf(describeKinds([Relay]));
+    expect(loaded.relay?.floorHash).toBe(1234);
+    expect(describeKinds(Object.values(loaded))).toEqual(expected);
+  });
+
+  it('describes a kind() as it was given, and refuses what a description cannot say', () => {
+    const made = kind('plain', { floorHash: 5, methods: { greetInto: { args: [t.str], fallible: true } } });
+    expect(describeKinds([made]).kinds[0]?.slots[0]?.name).toBe('greet_into');
+    const odd = kind('odd', { floorHash: 6, methods: { parseHTTP: {} } });
+    expect(() => describeKinds([odd])).toThrow(/odd.parseHTTP: its slot would be named parse_http/);
+    expect(() => describeKinds([made, kind('plain', { floorHash: 9, methods: {} })])).toThrow(/two different kinds are called plain/);
+    class Short extends Kind {
+      static readonly floorHash = 7;
+      static readonly slots = { f: slot(t.str, t.u32).named('only') };
+    }
+    expect(() => describeKinds([Short])).toThrow(/short\.f: a name for each of its 2 arguments, not \["only"\]/);
   });
 });

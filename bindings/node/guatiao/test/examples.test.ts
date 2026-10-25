@@ -11,7 +11,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { REPO } from './helpers.js';
+import { describeKinds, kindsOf } from '../src/kinds.js';
+import { Echo, Page } from '../../../../examples/node_js/echo_kind.js';
+import { REPO, readText } from './helpers.js';
 import { libraryDir } from './setup.js';
 import { PYTHON_FREES_HERE, bridge, bridgeConfig, cLibraries } from './native.js';
 
@@ -69,6 +71,22 @@ describe('examples/node_js', () => {
     expect(out).toContain('js_greeter_hello: refused, BadValue: nobody to greet');
     expect(out).toContain('echo: hi, hi');
     expect(out).toContain('the lent page: ["ho","ho, ho"]');
+  });
+
+  it('writes the kinds it defines as the description the other languages read', (ctx) => {
+    if (!installed()) return ctx.skip('the examples are not installed: npm run build here, then npm install in examples/');
+    // Plain JavaScript, as the README says; fails when the committed file is stale.
+    execFileSync(process.execPath, [path.join(EXAMPLES, 'node_js', 'describe.js'), '--check'], {
+      cwd: REPO,
+      encoding: 'utf8',
+      env: process.env,
+    });
+    const text = readText(path.join(EXAMPLES, 'node_js', 'echo_kind.kinds.json'));
+    expect(describeKinds([Echo])).toEqual(JSON.parse(text));
+    const loaded = kindsOf(text);
+    expect([loaded.echo?.floorHash, loaded.page?.floorHash]).toEqual([Echo.floorHash, Page.floorHash]);
+    expect(Object.keys(loaded.echo?.methods ?? {})).toEqual(['echo', 'copyOnto']);
+    expect(describeKinds(Object.values(loaded))).toEqual(JSON.parse(text));
   });
 
   it('refuses a plain JavaScript provider missing a required method, naming it', (ctx) => {

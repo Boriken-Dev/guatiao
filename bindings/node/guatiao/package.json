@@ -28,6 +28,10 @@
       "types": "./dist/kinds.d.ts",
       "import": "./dist/kinds.js"
     },
+    "./describe": {
+      "types": "./dist/describe.d.ts",
+      "import": "./dist/describe.js"
+    },
     "./provide": {
       "types": "./dist/provide.d.ts",
       "import": "./dist/provide.js"
@@ -61,6 +65,14 @@
   },
   "dependencies": {
     "koffi": "^3.3.3"
+  },
+  "peerDependencies": {
+    "typescript": ">=7.0.2"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "22.20.5",
