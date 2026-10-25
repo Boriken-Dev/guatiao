@@ -4,7 +4,7 @@
 
 // Greeters written in Go and compiled to WebAssembly: the same kinds the
 // Rust, C, Python and Lua greeters serve, offered to any host through the
-// guatiao-wasm source, sandboxed.
+// guatiao-source-wasm source, sandboxed.
 //
 //	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o wasm_greeter_go.wasm .
 //
@@ -15,7 +15,7 @@ package main
 import (
 	"strings"
 
-	"github.com/Boriken-Dev/guatiao/crates/guatiao-wasm/guest-go"
+	"github.com/Boriken-Dev/guatiao/crates/guatiao-source-wasm/guest-go"
 )
 
 // The word a greeting starts with; the tests build the module again with

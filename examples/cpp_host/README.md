@@ -15,7 +15,7 @@ cmake --build build/cpp_host
 build/cpp_host/cpp_host target/debug build/cpp_host/greeters/cpp
 ```
 
-With `--python-source BRIDGE --python-dir DIR` the guatiao-py bridge
+With `--python-source BRIDGE --python-dir DIR` the guatiao-source-py bridge
 serves the Python greeters described under DIR too.
 
 ## Tests

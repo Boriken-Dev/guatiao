@@ -2,11 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""A Python host adding guatiao-remote as a source: a server in a child
+"""A Python host adding guatiao-source-remote as a source: a server in a child
 process serving a greeter written in Rust and one written in C, called as
 any provider is.
 
-guatiao-remote is a workspace member: its library and its server are
+guatiao-source-remote is a workspace member: its library and its server are
 looked for beside the other libraries (`GUATIAO_LIBRARY`), and these skip,
 saying so, when the workspace was not built."""
 
@@ -34,7 +34,7 @@ from greeter_kind import Greeter  # noqa: E402
 from guatiao import BadValue, Registry  # noqa: E402
 
 _DIR = Path(native.library_dir())
-_REMOTE = _DIR / native.library_name("guatiao_remote")
+_REMOTE = _DIR / native.library_name("guatiao_source_remote")
 _SERVER = _DIR / ("guatiao-remote-server.exe" if platform.system() == "Windows" else "guatiao-remote-server")
 _DERIVED = _DIR / native.library_name("derived_greeter")
 _KINDS = native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.kinds.json"

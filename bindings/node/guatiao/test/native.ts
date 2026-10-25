@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Finds the builds the suite drives: the C libraries built for this run,
-// the Rust caller and the guatiao-py bridge.
+// the Rust caller and the guatiao-source-py bridge.
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,15 +38,15 @@ export function workspaceLibrary(base: string): string {
   return path.join(libraryDir(), libraryFilename(base));
 }
 
-/** The guatiao-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build, else `null`. */
+/** The guatiao-source-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build, else `null`. */
 export function bridge(): string | null {
   const named =
-    process.env.GUATIAO_PY_BRIDGE ?? path.join(REPO, 'crates', 'guatiao-py', 'target', 'debug', libraryFilename('guatiao_py'));
+    process.env.GUATIAO_PY_BRIDGE ?? path.join(REPO, 'crates', 'guatiao-source-py', 'target', 'debug', libraryFilename('guatiao_source_py'));
   return existsSync(named) ? named : null;
 }
 
 /**
- * Whether CPython, embedded through the guatiao-py bridge in this process,
+ * Whether CPython, embedded through the guatiao-source-py bridge in this process,
  * frees what a call from here drops. On macOS with Python 3.14 it does not:
  * koffi runs the call on a stack of its own, CPython judges that stack too
  * deep, and an object dropped during the call is never deallocated (its

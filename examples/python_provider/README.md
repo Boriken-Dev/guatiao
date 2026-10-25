@@ -16,7 +16,7 @@ binding reads one: `__name__` is its id, `__version__` its version, the
 provider classes in `__all__` (or those it defines) its providers.
 
 A Python host imports a module and registers it directly. A host in any
-other language reaches the same modules through the `guatiao-py` bridge,
+other language reaches the same modules through the `guatiao-source-py` bridge,
 a source it adds once: the bridge reads the manifests without importing
 anything, imports a module when the registry asks for it, and drops it
 again once nothing holds it, so a `refresh()` after an edit serves the
@@ -39,11 +39,11 @@ host, then the bridge against the Python you will run it with:
 
 ```bash
 cargo build --workspace --all-features
-PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-py/Cargo.toml
+PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
 ```
 
-The bridge is `crates/guatiao-py/target/debug/libguatiao_py.so`
-(`guatiao_py.dll` on Windows, `libguatiao_py.dylib` on macOS). The
+The bridge is `crates/guatiao-source-py/target/debug/libguatiao_source_py.so`
+(`guatiao_source_py.dll` on Windows, `libguatiao_source_py.dylib` on macOS). The
 Python libraries import `guatiao` and `greeter_kind`, so the source's
 configuration puts both on `sys.path` (an installed `guatiao` package
 needs only the second).
@@ -51,7 +51,7 @@ needs only the second).
 **From the Rust host:**
 
 ```bash
-GREETER_HOST_SOURCE=crates/guatiao-py/target/debug/libguatiao_py.so \
+GREETER_HOST_SOURCE=crates/guatiao-source-py/target/debug/libguatiao_source_py.so \
 GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
   "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
   cargo run -p greeter_host
@@ -68,7 +68,7 @@ interpreter:
 export GUATIAO_LIBRARY=target/debug
 export PYTHONPATH=bindings/python/guatiao/src:examples/greeter_kind/python
 python examples/python_host/host.py target/debug \
-  --python-source crates/guatiao-py/target/debug/libguatiao_py.so \
+  --python-source crates/guatiao-source-py/target/debug/libguatiao_source_py.so \
   --python-dir examples/python_provider
 ```
 

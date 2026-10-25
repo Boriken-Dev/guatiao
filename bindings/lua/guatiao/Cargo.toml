@@ -26,10 +26,10 @@ path = "src/lib.rs"
 [features]
 default = ["lua54"]
 # The Lua that loads it: exactly one.
-lua54 = ["mlua/lua54", "guatiao-lua/lua54"]
-lua55 = ["mlua/lua55", "guatiao-lua/lua55"]
-luajit = ["mlua/luajit", "guatiao-lua/luajit"]
+lua54 = ["mlua/lua54", "guatiao-source-lua/lua54"]
+lua55 = ["mlua/lua55", "guatiao-source-lua/lua55"]
+luajit = ["mlua/luajit", "guatiao-source-lua/luajit"]
 
 [dependencies]
-guatiao-lua = { path = "../../../crates/guatiao-lua", version = "=0.0.0-alpha.1", default-features = false, features = ["module"] }
+guatiao-source-lua = { path = "../../../crates/guatiao-source-lua", version = "=0.0.0-alpha.1", default-features = false, features = ["module"] }
 mlua = { version = "0.12.2", features = ["module"] }

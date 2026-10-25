@@ -3,7 +3,7 @@
 -- file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 -- Greeters written in Lua: the same kinds the Rust, C and Python greeters
--- serve, offered to any host through the guatiao-lua source.
+-- serve, offered to any host through the guatiao-source-lua source.
 --
 -- The module is the library: its id is its name, its version `_VERSION`,
 -- its providers the tables under `providers`, each a table of methods

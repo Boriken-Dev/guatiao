@@ -391,7 +391,7 @@ exception in Dart: the tape copies it into the wire bytes and again into
 native memory, where a callback hands it over once, and the cost is
 UTF-8 conversion either way.
 
-## guatiao-remote across a link (`remote-*.jsonl`)
+## guatiao-source-remote across a link (`remote-*.jsonl`)
 
 `guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
 made for measuring and a client that prints one JSON line of five

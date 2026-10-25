@@ -138,7 +138,7 @@ language, or a directory the registry keeps in step with disk.
 `refresh()` makes the registry agree with them, whenever you call it:
 
 ```python
-reg.add_source_file("/opt/myapp/guatiao_py.so", {"dirs": ["/opt/myapp/py"]})
+reg.add_source_file("/opt/myapp/guatiao_source_py.so", {"dirs": ["/opt/myapp/py"]})
 reg.watch_dir("/opt/myapp/plugins", rules="kind=greeter")
 changed = reg.refresh()        # what loaded, retired, was skipped or refused
 ```
@@ -227,7 +227,7 @@ class is created. The library's `meta` comes from the installed
 distribution's metadata, then the module's docstring, `__author__`,
 `__license__` and `__copyright__`, then a `_meta_` dict.
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
-holds complete libraries, which the `guatiao-py` bridge also serves to
+holds complete libraries, which the `guatiao-source-py` bridge also serves to
 hosts in any language.
 
 ### Dates, times and secrets

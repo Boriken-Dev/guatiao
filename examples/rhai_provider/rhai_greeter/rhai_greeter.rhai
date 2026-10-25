@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Greeters written in Rhai: the same kinds the Rust, C, Python and Lua
-// greeters serve, offered to any host through the guatiao-rhai source.
+// greeters serve, offered to any host through the guatiao-source-rhai source.
 //
 // The script is the library: its id is its file's name, its version the
 // `VERSION` below, its providers the maps its last expression names. A

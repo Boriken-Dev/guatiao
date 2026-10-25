@@ -2121,7 +2121,7 @@ use guatiao::library::{Candidate, Registry, Refreshed, ScanRules, Source};
 
 reg.add_source("shelf", MySource)?;                          // a Source the host links
 reg.add_source_table("shelf_c", &table)?;                    // a guatiao_source_info the host links
-let name = reg.add_source_file(Path::new("guatiao_py.dll"), &config)?;   // a file exporting guatiao_source
+let name = reg.add_source_file(Path::new("guatiao_source_py.dll"), &config)?;   // a file exporting guatiao_source
 reg.watch_dir(Path::new("plugins"), ScanRules::default())?; // a directory kept in step with disk
 let changed: Refreshed = reg.refresh();                     // when the host chooses: a timer, its own watcher
 changed.loaded / changed.retired                            // Vec<Served { source, id, stamp, key }>

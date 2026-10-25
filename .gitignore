@@ -23,14 +23,14 @@ CLAUDE*
 # Rust
 /target/
 # The Python bridge is a workspace of its own, with its own build output.
-/crates/guatiao-py/target/
-/crates/guatiao-lua/target/
-/crates/guatiao-js/target/
-/crates/guatiao-remote/rdma-tests/target/
-/crates/guatiao-rhai/target/
+/crates/guatiao-source-py/target/
+/crates/guatiao-source-lua/target/
+/crates/guatiao-source-js/target/
+/crates/guatiao-source-remote/rdma-tests/target/
+/crates/guatiao-source-rhai/target/
 /bindings/lua/guatiao/target/
-/crates/guatiao-wasm/target/
-/crates/guatiao-wasm/guest/target/
+/crates/guatiao-source-wasm/target/
+/crates/guatiao-source-wasm/guest/target/
 /examples/wasm_greeter_rust/target/
 **/*.rs.bk
 # A library workspace: consumers resolve their own lockfile. The browser

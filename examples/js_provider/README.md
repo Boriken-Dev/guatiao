@@ -1,6 +1,6 @@
 # Providers written in JavaScript, served without Node
 
-Two libraries for the [guatiao-js](../../crates/guatiao-js/) source, which
+Two libraries for the [guatiao-source-js](../../crates/guatiao-source-js/) source, which
 runs them with QuickJS built into one file:
 
 - `quickjs_greeter/`: `Hello` serves the `greeter` and `counter` kinds
@@ -23,9 +23,9 @@ From the repository root, with the guatiao library built:
 
 ```bash
 cargo build -p guatiao --features load
-cargo build --manifest-path crates/guatiao-js/Cargo.toml        # libguatiao_js.so
+cargo build --manifest-path crates/guatiao-source-js/Cargo.toml        # libguatiao_source_js.so
 export GUATIAO_LIBRARY=$PWD/target/debug
-cargo test --manifest-path crates/guatiao-js/Cargo.toml          # Rust and C hosts, and Node
+cargo test --manifest-path crates/guatiao-source-js/Cargo.toml          # Rust and C hosts, and Node
 ```
 
 The Python host, with `guatiao` installed:

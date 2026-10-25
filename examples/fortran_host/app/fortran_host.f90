@@ -10,7 +10,7 @@
 !> a map back, a map lent and changed in place, a map handed over, an
 !> object lent for one call, an object handed in and one handed back. A
 !> provider building instances is given a configuration its schema
-!> accepts. With `--python-source BRIDGE --python-dir DIR`, the guatiao-py
+!> accepts. With `--python-source BRIDGE --python-dir DIR`, the guatiao-source-py
 !> bridge serves the Python greeters described under DIR too.
 !>
 !>     fortran_host DIR [DIR ...] [--python-source BRIDGE --python-dir DIR]

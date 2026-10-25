@@ -2,10 +2,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""A Python host adding the guatiao-py bridge as a source: Python
+"""A Python host adding the guatiao-source-py bridge as a source: Python
 libraries described by manifests, reloaded when their code changes.
 
-The bridge is its own workspace (`crates/guatiao-py`), built against this
+The bridge is its own workspace (`crates/guatiao-source-py`), built against this
 Python; `GUATIAO_PY_BRIDGE` names the build, else its debug build is
 looked for, else these skip and say so."""
 
@@ -36,10 +36,10 @@ from guatiao import Registry  # noqa: E402
 
 _BRIDGE = Path(
     os.environ.get("GUATIAO_PY_BRIDGE")
-    or native.REPO / "crates" / "guatiao-py" / "target" / "debug" / native.library_name("guatiao_py")
+    or native.REPO / "crates" / "guatiao-source-py" / "target" / "debug" / native.library_name("guatiao_source_py")
 )
 if not _BRIDGE.is_file():
-    pytest.skip(f"no guatiao-py build at {_BRIDGE}", allow_module_level=True)
+    pytest.skip(f"no guatiao-source-py build at {_BRIDGE}", allow_module_level=True)
 
 _EXAMPLES = native.REPO / "examples" / "python_provider"
 

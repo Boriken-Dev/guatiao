@@ -108,9 +108,9 @@ end
 "The workspace build of `base`, beside the guatiao library."
 workspace_library(base) = joinpath(library_dir(), Guatiao.library_filename(base))
 
-"The guatiao-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build when it is there, else `nothing`."
+"The guatiao-source-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build when it is there, else `nothing`."
 function bridge()
-    named = get(ENV, "GUATIAO_PY_BRIDGE", joinpath(REPO, "crates", "guatiao-py", "target", "debug", Guatiao.library_filename("guatiao_py")))
+    named = get(ENV, "GUATIAO_PY_BRIDGE", joinpath(REPO, "crates", "guatiao-source-py", "target", "debug", Guatiao.library_filename("guatiao_source_py")))
     return isfile(named) ? named : nothing
 end
 

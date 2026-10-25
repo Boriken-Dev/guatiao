@@ -137,7 +137,7 @@ unload or a collect that closed it.
 **Sources** -- libraries that come and go while the host runs:
 
 ```python
-reg.add_source_file("/opt/app/guatiao_py.so", {"dirs": ["/opt/app/py"]})  # answers its name, the path
+reg.add_source_file("/opt/app/guatiao_source_py.so", {"dirs": ["/opt/app/py"]})  # answers its name, the path
 reg.watch_dir("/opt/app/plugins", rules="kind=greeter")
 changed = reg.refresh()   # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...]}
 ```

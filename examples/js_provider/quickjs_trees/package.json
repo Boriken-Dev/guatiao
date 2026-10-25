@@ -1,7 +1,7 @@
 {
   "name": "quickjs_trees",
   "version": "1.0.0",
-  "description": "A greeter taking tree arguments, for the guatiao-js source",
+  "description": "A greeter taking tree arguments, for the guatiao-source-js source",
   "license": "MPL-2.0",
   "author": "jose-pr",
   "private": true,

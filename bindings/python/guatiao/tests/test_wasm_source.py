@@ -2,11 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""A Python host adding the guatiao-wasm source: libraries compiled to
+"""A Python host adding the guatiao-source-wasm source: libraries compiled to
 WebAssembly from Rust and from Go, described by manifests, served afresh
 when their module changes, and stopped at their limits.
 
-The source is its own workspace (`crates/guatiao-wasm`); `GUATIAO_WASM_SOURCE`
+The source is its own workspace (`crates/guatiao-source-wasm`); `GUATIAO_WASM_SOURCE`
 names the build, else its debug build is looked for. The example guests
 are built by that crate's tests (or by the commands in their manifests);
 without them these skip and say so."""
@@ -38,10 +38,10 @@ from guatiao import Registry  # noqa: E402
 
 _SOURCE = Path(
     os.environ.get("GUATIAO_WASM_SOURCE")
-    or native.REPO / "crates" / "guatiao-wasm" / "target" / "debug" / native.library_name("guatiao_wasm")
+    or native.REPO / "crates" / "guatiao-source-wasm" / "target" / "debug" / native.library_name("guatiao_source_wasm")
 )
 if not _SOURCE.is_file():
-    pytest.skip(f"no guatiao-wasm build at {_SOURCE}", allow_module_level=True)
+    pytest.skip(f"no guatiao-source-wasm build at {_SOURCE}", allow_module_level=True)
 
 _RUST = native.REPO / "examples" / "wasm_greeter_rust"
 _RUST_MODULE = _RUST / "target" / "wasm32-unknown-unknown" / "release" / "wasm_greeter_rust.wasm"

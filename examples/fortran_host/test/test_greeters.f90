@@ -7,7 +7,7 @@
 !> the kind, every slot, and a Rust caller calls each of them through the
 !> kind's Rust proxy. The greeters written in other languages come
 !> through sources the registry keeps (watched directories, the
-!> guatiao-py bridge), loaded by one refresh; the Fortran one is
+!> guatiao-source-py bridge), loaded by one refresh; the Fortran one is
 !> registered in this process. Calls from threads the host did not start
 !> reach the Fortran greeter too.
 program test_greeters
@@ -74,10 +74,10 @@ contains
       have(4) = .true.
     end if
     bridge = env('GUATIAO_PY_BRIDGE')
-    if (len(bridge) == 0) bridge = library_file('../../crates/guatiao-py/target/debug', 'guatiao_py')
+    if (len(bridge) == 0) bridge = library_file('../../crates/guatiao-source-py/target/debug', 'guatiao_source_py')
     inquire (file=bridge, exist=exists)
     if (.not. exists) then
-      call skip('no guatiao-py build: set GUATIAO_PY_BRIDGE')
+      call skip('no guatiao-source-py build: set GUATIAO_PY_BRIDGE')
     else
       call guatiao_parse('{"dirs": ["../python_provider"], "paths": ["../../bindings/python/guatiao/src", ' // &
                          '"../greeter_kind/python"]}', GUATIAO_FORMAT_JSON, config)

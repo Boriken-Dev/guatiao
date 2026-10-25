@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! guatiao-remote measured across a link.
+//! guatiao-source-remote measured across a link.
 //!
 //! ```text
 //! guatiao-remote-bench serve URL [options]   a server of a provider made for measuring
@@ -36,8 +36,8 @@ use std::time::Instant;
 use greeter_kind::{Counter, Greeter, Wide};
 use guatiao::library::{ProviderError, Registry};
 use guatiao::{Map, Status};
-use guatiao_remote::transport::{self, Connect, Connection, FrameRead, FrameWrite};
-use guatiao_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::transport::{self, Connect, Connection, FrameRead, FrameWrite};
+use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
 
 /// Process CPU time, user and system, in nanoseconds.
 fn cpu_ns() -> u64 {
@@ -231,7 +231,7 @@ fn serve(a: &Args) -> Result<(), String> {
     eprintln!("serving {}", a.url);
     match scheme {
         "tcp" => {
-            use guatiao_remote::transport::tcp::{Accepted, Range, TcpListen};
+            use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpListen};
             let listener = tcp_listener(address, a.mss).map_err(|e| e.to_string())?;
             let ip = listener.local_addr().map_err(|e| e.to_string())?.ip();
             // Every address of the listener's own family: a bench on a
@@ -248,7 +248,7 @@ fn serve(a: &Args) -> Result<(), String> {
         }
         #[cfg(feature = "rdma")]
         "rdma" => {
-            use guatiao_remote::transport::tcp::{Accepted, Range};
+            use guatiao_source_remote::transport::tcp::{Accepted, Range};
             let listener = tcp_listener(address, None).map_err(|e| e.to_string())?;
             let ip = listener.local_addr().map_err(|e| e.to_string())?.ip();
             let any = Range::parse(if ip.is_ipv4() { "0.0.0.0/0" } else { "::/0" })?;

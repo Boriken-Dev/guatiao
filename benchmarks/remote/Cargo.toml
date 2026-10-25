@@ -1,6 +1,6 @@
 [package]
 name = "guatiao-remote-bench"
-description = "guatiao-remote measured across a link: a server and a client of every transport, five metrics per run"
+description = "guatiao-source-remote measured across a link: a server and a client of every transport, five metrics per run"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,12 +13,12 @@ name = "guatiao-remote-bench"
 path = "src/main.rs"
 
 [features]
-# `rdma://`: guatiao-remote's RDMA transport (Linux only).
-rdma = ["guatiao-remote/rdma"]
+# `rdma://`: guatiao-source-remote's RDMA transport (Linux only).
+rdma = ["guatiao-source-remote/rdma"]
 
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
-guatiao-remote = { path = "../../crates/guatiao-remote", features = ["tcp", "local", "shm"] }
+guatiao-source-remote = { path = "../../crates/guatiao-source-remote", features = ["tcp", "local", "shm"] }
 greeter_kind = { path = "../../examples/greeter_kind" }
 # A listener and a connection with a capped segment size: jumbo frames off.
 socket2 = { version = "0.5", features = ["all"] }

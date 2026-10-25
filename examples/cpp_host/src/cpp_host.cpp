@@ -10,7 +10,7 @@
 // over, an object lent for one call, an object handed in and one handed
 // back. A provider building instances is given a configuration its schema
 // accepts, after one it refuses. With `--python-source BRIDGE
-// --python-dir DIR` the guatiao-py bridge serves the Python greeters
+// --python-dir DIR` the guatiao-source-py bridge serves the Python greeters
 // described under DIR too. Every library is unloaded where it agrees, and
 // retired where it does not.
 //

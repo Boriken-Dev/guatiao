@@ -30,7 +30,7 @@
 //!    back; the host drives it with `&mut` calls, reads into its own
 //!    buffer, and drops it. Each side destroys what it holds last.
 //! 5. **A source**, when `GREETER_HOST_SOURCE` names one: a file serving
-//!    libraries that are not files themselves, such as the guatiao-py
+//!    libraries that are not files themselves, such as the guatiao-source-py
 //!    bridge serving greeters written in Python, configured by the JSON
 //!    in `GREETER_HOST_SOURCE_CONFIG`. One refresh loads what it serves,
 //!    and its greeters are offered beside the rest.
@@ -39,7 +39,7 @@
 //! cargo build --workspace            # puts derived_greeter beside this binary
 //! cargo run -p greeter_host          # scans target/debug
 //! cargo run -p greeter_host -- /some/dir /some/lib.so
-//! GREETER_HOST_SOURCE=/path/to/libguatiao_py.so \
+//! GREETER_HOST_SOURCE=/path/to/libguatiao_source_py.so \
 //!   GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
 //!     "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
 //!   cargo run -p greeter_host

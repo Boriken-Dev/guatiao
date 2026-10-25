@@ -67,7 +67,7 @@ function refresh_all()
   reg = guatiao.Registry('m-greeters', '0.1');
   % Every greeter written in another language comes through a source the
   % registry keeps: the workspace's folder and the C and Go greeters' as
-  % watched folders, the Python greeters through the guatiao-py bridge.
+  % watched folders, the Python greeters through the guatiao-source-py bridge.
   reg.watch_dir(gt_env('dir'), 'kind=greeter');
   present = {'rust'};
   missing = {};
@@ -87,7 +87,7 @@ function refresh_all()
   end
   py = gt_env('bridge');
   if isempty(py)
-    missing{end + 1} = 'the Python greeter: no guatiao-py build (set GUATIAO_PY_BRIDGE)';
+    missing{end + 1} = 'the Python greeter: no guatiao-source-py build (set GUATIAO_PY_BRIDGE)';
   else
     reg.add_source_file(py, gt_env('bridge_config'));
     present{end + 1} = 'python';

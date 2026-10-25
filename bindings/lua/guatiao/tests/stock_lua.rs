@@ -10,8 +10,8 @@
 //! - the module: this crate's build (`cargo build` first);
 //! - the Rust greeter: `derived_greeter` in `GUATIAO_LIBRARY`;
 //! - the C greeter: built here;
-//! - the Python greeters: the guatiao-py build `GUATIAO_PY_BRIDGE` names;
-//! - the Lua greeters: the guatiao-lua source `GUATIAO_LUA_SOURCE` names.
+//! - the Python greeters: the guatiao-source-py build `GUATIAO_PY_BRIDGE` names;
+//! - the Lua greeters: the guatiao-source-lua source `GUATIAO_LUA_SOURCE` names.
 //!
 //! Each one missing is a stated skip.
 
@@ -192,7 +192,9 @@ fn a_stock_lua_hosts_greeters_written_in_rust_c_python_and_lua() {
             expect.push("py_greeter_hello held a conversation: one");
         }
         _ => {
-            println!("skipped: GUATIAO_PY_BRIDGE names no guatiao-py build for the Python greeters")
+            println!(
+                "skipped: GUATIAO_PY_BRIDGE names no guatiao-source-py build for the Python greeters"
+            )
         }
     }
     match std::env::var_os("GUATIAO_LUA_SOURCE").map(PathBuf::from) {
@@ -209,7 +211,9 @@ fn a_stock_lua_hosts_greeters_written_in_rust_c_python_and_lua() {
             expect.push("lua_greeter_polite greets: good day, ana");
         }
         _ => {
-            println!("skipped: GUATIAO_LUA_SOURCE names no guatiao-lua build for the Lua greeters")
+            println!(
+                "skipped: GUATIAO_LUA_SOURCE names no guatiao-source-lua build for the Lua greeters"
+            )
         }
     }
     let printed = run(

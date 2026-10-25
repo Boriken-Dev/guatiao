@@ -1,0 +1,32 @@
+[package]
+name = "guatiao-wasm-guest"
+description = "Providers written in Rust, compiled to WebAssembly and served by the guatiao-source-wasm source: guatiao ABI 1 over guatiao's own values"
+version = "0.0.0-alpha.1"
+edition = "2024"
+rust-version = "1.89"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+readme = "README.md"
+# Built by the library author from this repository.
+publish = false
+exclude = [".*", "*.local.*"]
+
+# A workspace of its own: it is built for wasm32, inside each guest.
+[workspace]
+
+[lib]
+name = "guatiao_wasm_guest"
+path = "src/lib.rs"
+
+[dependencies]
+# The values a call carries and their wire encoding: the same code the
+# host reads them with.
+guatiao = { path = "../../guatiao", version = "=0.0.0-alpha.1" }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"

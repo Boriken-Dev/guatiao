@@ -1,4 +1,4 @@
-# What guatiao-rhai reads before running anything: the module, which is
+# What guatiao-source-rhai reads before running anything: the module, which is
 # the library (its id is the module's name, its script `<module>.rhai`),
 # the kinds its providers serve, and where it is. With no `version` here,
 # the script's own `const VERSION = "...";` is read from its parse.

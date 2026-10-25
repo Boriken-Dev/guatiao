@@ -8,7 +8,7 @@ builds instances from a configuration is given one its schema refuses,
 then one it accepts. The greeters written in M
 ([`../matlab_provider`](../matlab_provider/)) are registered beside the
 ones it loads, and the greeters written in Python are served by the
-guatiao-py bridge when one is named. It closes everything it opened and
+guatiao-source-py bridge when one is named. It closes everything it opened and
 prints what it did.
 
 The kinds are declared in
@@ -50,12 +50,12 @@ process's architecture.
 The greeter written in Go is a library file too
 ([`../go_provider/README.md`](../go_provider/README.md) builds it); name
 its folder the same way. To add the greeters written in Python, through
-the `guatiao-py` bridge (built as
+the `guatiao-source-py` bridge (built as
 [`../python_provider/README.md`](../python_provider/README.md) says), name
 the bridge, where its manifests are, and what they import:
 
 ```matlab
-host('target/debug', '--python-source', 'crates/guatiao-py/target/debug/libguatiao_py.so', ...
+host('target/debug', '--python-source', 'crates/guatiao-source-py/target/debug/libguatiao_source_py.so', ...
      '--python-dir', 'examples/python_provider', '--python-path', 'bindings/python/guatiao/src', ...
      '--python-path', 'examples/greeter_kind/python')
 ```

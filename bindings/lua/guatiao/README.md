@@ -49,7 +49,7 @@ calls every slot of every greeter, written in Rust, C, Python or Lua.
 ## What it offers
 
 - **A registry**: `load_file`, `add_source_file` (Python through
-  guatiao-py, Lua through guatiao-lua, any source), `refresh`,
+  guatiao-source-py, Lua through guatiao-source-lua, any source), `refresh`,
   `providers`, `bind`, `retire`, `collect`, `close`.
 - **Kinds from their descriptions**: `guatiao.kinds(file)`; a bound
   provider's methods are its kind's slots.
@@ -61,7 +61,7 @@ calls every slot of every greeter, written in Rust, C, Python or Lua.
 
 - Instances built from a configuration (`create`).
 - Serving providers written in Lua from this module: that is the
-  guatiao-lua source, which a host adds.
+  guatiao-source-lua source, which a host adds.
 - A Lua table handed to a provider as an object is called from this
   interpreter's thread only; a provider calling it from another thread
   is refused.

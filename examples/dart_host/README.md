@@ -25,7 +25,7 @@ On Windows the caller is `greeter_caller.dll`, on macOS
 `libgreeter_caller.dylib`. To add the greeter written in C, build it into
 a directory of its own and name that directory too (as
 [`../node_host/README.md`](../node_host/README.md) shows); to add those
-written in Python, name the guatiao-py bridge with `--python-source`,
+written in Python, name the guatiao-source-py bridge with `--python-source`,
 where its manifests are with `--python-dir`, and what they import with
 `--python-path`.
 

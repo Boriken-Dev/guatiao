@@ -639,7 +639,7 @@ A process whose pointers are not four or eight bytes wide gets
 - A kind whose slots name an object kind outside its own description
   document: `dart run guatiao:kind` refuses it.
 - Serving Dart to a host that is not this Dart process (a bridge, as
-  guatiao-py is for Python).
+  guatiao-source-py is for Python).
 
 ## Isolates
 

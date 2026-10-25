@@ -8,8 +8,8 @@
 
 use mlua::prelude::*;
 
-/// `luaopen_guatiao`: the table `guatiao_lua::module` answers.
+/// `luaopen_guatiao`: the table `guatiao_source_lua::module` answers.
 #[mlua::lua_module(name = "guatiao")]
 fn open(lua: &Lua) -> LuaResult<LuaTable> {
-    guatiao_lua::module(lua)
+    guatiao_source_lua::module(lua)
 }

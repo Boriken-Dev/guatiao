@@ -27,8 +27,8 @@ use greeter_kind::Greeter;
 use guatiao::library::{ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
-use guatiao_remote::transport::tcp::{Accepted, Range, TcpConnect, TcpListen};
-use guatiao_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpConnect, TcpListen};
+use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
 
 /// The pre-shared key every link here proves. A real deployment reads
 /// its own from a file.

@@ -148,7 +148,7 @@ build_c_greeter <- function(defines = character()) {
 
 build_c_source <- function(name) build_c(file.path(C_CONSUMER, "source_in_c.c"), scratch("c-shelf"), name)
 
-# The guatiao-py bridge: GUATIAO_PY_BRIDGE, else NULL.
+# The guatiao-source-py bridge: GUATIAO_PY_BRIDGE, else NULL.
 bridge <- function() {
   named <- Sys.getenv("GUATIAO_PY_BRIDGE")
   if (nzchar(named) && file.exists(named)) named else NULL

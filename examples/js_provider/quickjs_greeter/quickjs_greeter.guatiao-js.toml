@@ -1,4 +1,4 @@
-# What guatiao-js reads before running anything: the library's id (the
+# What guatiao-source-js reads before running anything: the library's id (the
 # package's name, as the Node binding takes it), the kinds its providers
 # serve, and where its code is. The entry module and the version are the
 # package's: `package.json` beside this file. `paths` are relative to this

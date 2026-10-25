@@ -110,12 +110,12 @@ func buildCGreeter(dir string, defines ...string) error {
 	return nil
 }
 
-// bridge is the guatiao-py build: GUATIAO_PY_BRIDGE, else its own debug
+// bridge is the guatiao-source-py build: GUATIAO_PY_BRIDGE, else its own debug
 // build; "" when there is none.
 func bridge() string {
 	named := os.Getenv("GUATIAO_PY_BRIDGE")
 	if named == "" {
-		named = filepath.Join(repo, "crates", "guatiao-py", "target", "debug", libName("guatiao_py"))
+		named = filepath.Join(repo, "crates", "guatiao-source-py", "target", "debug", libName("guatiao_source_py"))
 	}
 	if _, err := os.Stat(named); err != nil {
 		return ""
@@ -173,7 +173,7 @@ func setup() (int, error) {
 		return 1, err
 	}
 	if py := bridge(); py == "" {
-		present["python"] = "no guatiao-py build: set GUATIAO_PY_BRIDGE"
+		present["python"] = "no guatiao-source-py build: set GUATIAO_PY_BRIDGE"
 	} else {
 		if err := reg.AddSourceFile(py, bridgeConfig()); err != nil {
 			if os.Getenv("GUATIAO_PY_BRIDGE") != "" {
@@ -181,7 +181,7 @@ func setup() (int, error) {
 			}
 			// A build found by its default path that cannot be mapped here
 			// (its Python not on the search path) is not the one asked for.
-			present["python"] = "the guatiao-py build found by default does not load: " + err.Error()
+			present["python"] = "the guatiao-source-py build found by default does not load: " + err.Error()
 		}
 	}
 	if present["python"] == "" {

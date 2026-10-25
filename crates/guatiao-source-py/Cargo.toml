@@ -1,0 +1,51 @@
+[package]
+name = "guatiao-source-py"
+description = "A guatiao source of Python libraries: any guatiao host loads providers written in Python"
+version = "0.0.0-alpha.1"
+edition = "2024"
+# Above pyo3's own floor (1.85): the workspace's.
+rust-version = "1.89"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+readme = "README.md"
+# Not published until its first release is decided; the release workflow
+# packages it as a dry run only.
+publish = false
+exclude = [".*", "*.local.*"]
+
+# A workspace of its own, as `examples/wire_over_webtransport/client` is:
+# building it needs a Python whose library can be linked (pyo3), which no
+# other crate here does, so the root workspace's legs never need one.
+[workspace]
+
+[lib]
+name = "guatiao_source_py"
+# Only a cdylib: what a host maps with `add_source_file`. Nothing links it.
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
+# Manifests, stamps, refresh and the source table: CPython is its engine,
+# and builds its own kind tables (ctypes), so it needs no mechanism.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+# The stable ABI from 3.9: one Windows build serves every CPython from
+# 3.9 on (`python3.dll`). Elsewhere the build links the interpreter's
+# own `libpython3.X`, so it serves that minor.
+pyo3 = { version = "0.30", default-features = false, features = ["abi3-py39"] }
+
+# The loader's own calls, to widen libpython's symbol scope; pyo3 already
+# depends on it.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"
