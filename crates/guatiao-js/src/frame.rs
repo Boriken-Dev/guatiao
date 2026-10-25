@@ -69,9 +69,9 @@ impl Drop for Leave<'_> {
     }
 }
 
-/// A QuickJS runtime reached without its lock: for the memory limit,
-/// which the interrupt handler and a frame must change while the lock is
-/// held further up the stack.
+/// A QuickJS runtime reached without its lock: for the memory limit and
+/// the stack, which the interrupt handler and a frame must change while
+/// the lock is held further up the stack.
 #[derive(Clone, Copy)]
 pub(crate) struct RawRuntime(NonNull<JSRuntime>);
 
@@ -94,6 +94,23 @@ impl RawRuntime {
         // engine's meter and the handler the runtime itself owns); the call
         // stores the limit and touches nothing else.
         unsafe { rquickjs::qjs::JS_SetMemoryLimit(self.0.as_ptr(), bytes as _) }
+    }
+
+    /// Measures the stack QuickJS may use from here down. rquickjs does
+    /// this only with its `parallel` feature, so without it QuickJS would
+    /// measure from wherever the runtime was made.
+    pub(crate) fn set_stack_top_here(&self) {
+        // SAFETY: as for `set_memory_limit`; the call reads the stack
+        // pointer and stores it.
+        unsafe { rquickjs::qjs::JS_UpdateStackTop(self.0.as_ptr()) }
+    }
+
+    /// Sets the stack QuickJS may use below the top last measured, 0 for
+    /// no limit.
+    pub(crate) fn set_max_stack_size(&self, bytes: usize) {
+        // SAFETY: as for `set_memory_limit`; the call stores the size and
+        // the limit it makes.
+        unsafe { rquickjs::qjs::JS_SetMaxStackSize(self.0.as_ptr(), bytes as _) }
     }
 }
 

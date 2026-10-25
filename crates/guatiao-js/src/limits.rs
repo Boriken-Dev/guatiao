@@ -49,23 +49,28 @@ pub(crate) struct Meter {
     raw: RawRuntime,
     /// What QuickJS is told while a call runs: the limit less the reserve.
     normal: usize,
+    /// The stack QuickJS is given below a call's entry.
+    stack: usize,
 }
 
-/// A runtime that is made to find no memory for anything, so that what a
-/// stopped call left queued cannot queue more. Puts the usual limit back
-/// when it goes, however it goes.
+/// A runtime that finds no stack and no memory for anything, so that what
+/// a stopped call left queued ends without running: each job fails at its
+/// first call, and cannot queue another. Puts the usual limits back when
+/// it goes, however it goes.
 pub(crate) struct Starved<'a>(&'a Meter);
 
 impl Starved<'_> {
-    /// Again no memory: the interrupt that ended a job raised the limit.
+    /// Again nothing, should anything have raised the limits.
     pub(crate) fn again(&self) {
         self.0.raw.set_memory_limit(1);
+        self.0.raw.set_max_stack_size(1);
     }
 }
 
 impl Drop for Starved<'_> {
     fn drop(&mut self) {
         self.0.raw.set_memory_limit(self.0.normal);
+        self.0.raw.set_max_stack_size(self.0.stack);
     }
 }
 
@@ -107,7 +112,8 @@ impl Meter {
                 .saturating_mul(STACK_PER_LEVEL)
                 .clamp(STACK_LEAST, STACK_MOST)
         });
-        runtime.set_max_stack_size(usize::try_from(stack).unwrap_or(usize::MAX));
+        let stack = usize::try_from(stack).unwrap_or(usize::MAX);
+        runtime.set_max_stack_size(stack);
         if limits.operations.is_some() || limits.time.is_some() {
             let watching = Rc::clone(&state);
             runtime.set_interrupt_handler(Some(Box::new(move || {
@@ -133,7 +139,14 @@ impl Meter {
             state,
             raw,
             normal,
+            stack,
         })
+    }
+
+    /// Measures QuickJS's stack from here: called where a call enters the
+    /// engine, above every frame the call will run QuickJS in.
+    pub(crate) fn set_stack_top_here(&self) {
+        self.raw.set_stack_top_here();
     }
 
     /// Whether the call running was told to stop.
@@ -146,7 +159,9 @@ impl Meter {
         Rc::clone(&self.state.stopped)
     }
 
-    /// Makes the runtime find no memory, until the guard goes.
+    /// Makes the runtime find no stack below the top
+    /// [`Meter::set_stack_top_here`] measured, and no memory, until the
+    /// guard goes.
     pub(crate) fn starve(&self) -> Starved<'_> {
         let starved = Starved(self);
         starved.again();

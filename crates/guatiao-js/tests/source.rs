@@ -514,6 +514,21 @@ export class Spin extends Provider {
     if (name === 'deep') { const down = (n) => 1 + down(n + 1); return { greeting: String(down(1)) }; }
     if (name === 'grow') return { greeting: 'x'.repeat(64 * 1024 * 1024) };
     if (name === 'jobs') { const again = () => { Promise.resolve().then(again); }; again(); return { greeting: 'queued' }; }
+    if (name === 'flood') {
+      // Many reactions that end at once, then a call that never does.
+      for (let i = 0; i < 150000; i++) Promise.resolve().then(() => { ticks++; });
+      for (;;) {}
+    }
+    if (name === 'spinners') {
+      // Many reactions that never end.
+      const p = Promise.resolve();
+      for (let i = 0; i < 150000; i++) p.then(() => { for (;;) {} });
+      for (;;) {}
+    }
+    if (name === 'queue-forever') {
+      const p = Promise.resolve();
+      for (;;) p.then(() => { for (;;) {} });
+    }
     return { greeting: `calm, ${name}` };
   }
 }
@@ -702,6 +717,82 @@ fn reactions_a_stopped_call_queued_die_with_it() {
         ticks(&spin),
         after,
         "no reaction of the stopped call ran in the calls after it"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// What a stopped call left queued is ended however much of it there is,
+/// at a cost that does not grow with what each reaction would run, and
+/// the source and its other libraries carry on.
+#[test]
+fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
+    let dir = scratch("flood");
+    put(
+        &dir,
+        "js_flood",
+        "version = \"1.0.0\"
+",
+        &spin(),
+    );
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 20_000_000)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_flood_spin");
+    for name in ["flood", "spinners"] {
+        let started = std::time::Instant::now();
+        let stopped = within(120, {
+            let spin = Arc::clone(&spin);
+            move || spin.greet(name).unwrap_err()
+        });
+        assert_eq!(
+            stopped.message(),
+            "stopped at its operations limit (20000000)",
+            "{name}"
+        );
+        let took = started.elapsed();
+        assert!(
+            took < core::time::Duration::from_secs(20),
+            "{name} took {took:?}"
+        );
+        assert_eq!(
+            greeting(&spin.greet("after").expect("the source still serves")),
+            "calm, after",
+            "{name}"
+        );
+    }
+    assert_eq!(
+        greeting(&spin.greet("peek").expect("peeked")),
+        "0",
+        "no reaction of the stopped call ran"
+    );
+    std::fs::write(dir.join("js_flood.guatiao-js.toml"), {
+        let text = std::fs::read_to_string(dir.join("js_flood.guatiao-js.toml")).unwrap();
+        text.replace("1.0.0", "1.0.1")
+    })
+    .expect("written");
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let spin = greeter(&registry, "js_flood_spin");
+    assert_eq!(
+        greeting(&spin.greet("again").expect("refreshed")),
+        "calm, again"
+    );
+
+    // Under a time limit alone a call queues as much as it can before it
+    // is stopped, and all of it is ended.
+    let mut registry = serving(&config(&dir, Some(limits(&[("time_ms", 200)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_flood_spin");
+    let started = std::time::Instant::now();
+    let stopped = within(120, {
+        let spin = Arc::clone(&spin);
+        move || spin.greet("queue-forever").unwrap_err()
+    });
+    assert_eq!(stopped.message(), "stopped at its time_ms limit (200)");
+    let took = started.elapsed();
+    assert!(took < core::time::Duration::from_secs(20), "took {took:?}");
+    assert_eq!(
+        greeting(&spin.greet("after").expect("serves")),
+        "calm, after"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

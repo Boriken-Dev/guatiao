@@ -210,10 +210,10 @@ Promise reactions a call leaves queued run when the outermost call
 returns, whatever it came to (never inside a call made from inside
 another), under the same budget. If the budget runs out there, or before,
 the call is the one stopped, whatever its method answered; the reactions
-still queued then run on a runtime with no memory to queue another and
-reach no host, and the interrupt ends any that loops, so none outlives the
-call. A source in which more than 100 000 still run after a stop gives up
-and serves nothing more (a new source is the way back).
+still queued are then ended without running: each is taken off the queue
+on a runtime with no stack and no memory, so it fails at its first call
+and can queue no other. However many a call left, none outlives it, and
+ending them costs the same whatever they would have run.
 
 ## Errors
 

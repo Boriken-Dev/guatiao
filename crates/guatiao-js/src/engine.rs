@@ -45,10 +45,6 @@ struct Library {
 /// one's instance by id.
 type Declared = (Vec<Provided>, BTreeMap<String, Persistent<Object<'static>>>);
 
-/// The most promise reactions that run after a stop before the source is
-/// given up on.
-const MOST_JOBS_AFTER_A_STOP: usize = 100_000;
-
 /// The engine: one QuickJS runtime, on the bridge's thread for the life of
 /// the source. Not `Send`.
 pub struct JsEngine {
@@ -63,9 +59,6 @@ pub struct JsEngine {
     deferred: RefCell<Vec<(u64, u64)>>,
     /// A collection a closed library asked for while a frame was open.
     collect_due: Cell<bool>,
-    /// A job outlived a stopped call and could not be ended: nothing more
-    /// is served, since what runs next would run it.
-    poisoned: Cell<bool>,
     /// Last, so that it outlives everything that holds a value in it.
     runtime: Runtime,
 }
@@ -193,6 +186,9 @@ impl JsEngine {
     /// another script's synchronous code, nor in a later call. Always
     /// inside a [`Meter::run`], so that they are counted.
     fn enter<R>(&self, entry: &Entry, f: impl for<'js> FnOnce(Ctx<'js>) -> R) -> R {
+        if !self.frames.inside() {
+            self.meter.set_stack_top_here();
+        }
         self.frames.enter(entry, |ctx| {
             let answer = f(ctx.clone());
             if self.frames.depth() == 1 {
@@ -272,15 +268,13 @@ impl JsEngine {
 
     /// Runs the promise reactions that are queued until none are. The
     /// queue is the runtime's and QuickJS cannot empty it, so once a limit
-    /// has stopped the call what is left must die with it: the jobs run on
-    /// a runtime with no memory to queue another with, and the interrupt
-    /// (which raises the limit just long enough to make its error, and so
-    /// cannot be caught) ends any that loops. A host is not called by them.
-    /// What no job count can end, because a job outlived them all, poisons
-    /// the source.
+    /// has stopped the call what is left must die with it: the jobs are
+    /// taken off on a runtime with no stack, so each fails at its first
+    /// call without running script, and no memory, so none can queue
+    /// another. The queue then only shrinks, a job at a time, at a cost
+    /// that does not depend on what the jobs would have run.
     fn run_jobs(&self, ctx: &Ctx<'_>) {
         let mut starved = None;
-        let mut after = 0usize;
         loop {
             if starved.is_none() && self.meter.stopped() {
                 starved = Some(self.meter.starve());
@@ -290,11 +284,6 @@ impl JsEngine {
             }
             if let Some(starved) = &starved {
                 starved.again();
-                after += 1;
-                if after > MOST_JOBS_AFTER_A_STOP {
-                    self.poisoned.set(true);
-                    break;
-                }
             }
         }
     }
@@ -632,7 +621,6 @@ impl Engine for JsEngine {
             next: Cell::new(0),
             deferred: RefCell::new(Vec::new()),
             collect_due: Cell::new(false),
-            poisoned: Cell::new(false),
             runtime,
         })
     }
@@ -688,12 +676,6 @@ impl Engine for JsEngine {
 }
 
 impl JsEngine {
-    fn gave_up(&self) -> BridgeError {
-        BridgeError::Unavailable(
-            "a stopped call left work this source could not end: it serves no more".to_string(),
-        )
-    }
-
     fn forget_roots(&self, entry: &Entry) {
         let _ = self.meter.run::<(), BridgeError>(|| {
             self.enter(entry, |ctx| self.roots.forget(&ctx));
@@ -703,9 +685,6 @@ impl JsEngine {
 
     fn open_inside(&self, manifest: &Manifest) -> Result<Opened<u64>, BridgeError> {
         let id = manifest.id();
-        if self.poisoned.get() {
-            return Err(self.gave_up());
-        }
         if self.frames.inside() {
             return Err(BridgeError::Unavailable(
                 "a library is not opened from inside a call into another".to_string(),
@@ -729,6 +708,8 @@ impl JsEngine {
                 entry.display()
             )));
         }
+        // Making a context runs QuickJS's own setup, measured from here.
+        self.meter.set_stack_top_here();
         let context = Context::full(&self.runtime).map_err(escape)?;
         let raw = context.with(|ctx| ctx.as_raw());
         let entry_point = Entry::new(context, raw);
@@ -769,9 +750,6 @@ impl JsEngine {
     }
 
     fn call_inside(&self, handle: u64, call: &mut Call) -> Result<Reply, ProviderError> {
-        if self.poisoned.get() {
-            return Err(self.gave_up().into());
-        }
         let lib = self.library(handle)?;
         let receiver = match call.target() {
             Target::Provider(id) => lib.providers.get(id).cloned(),
