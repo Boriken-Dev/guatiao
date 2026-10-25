@@ -472,10 +472,12 @@ pub struct guatiao_remote::transport::tcp::TcpListen
 impl guatiao_remote::transport::tcp::TcpListen
 pub fn guatiao_remote::transport::tcp::TcpListen::accept(&self) -> core::io::error::Result<guatiao_remote::transport::tcp::Accepted>
 pub fn guatiao_remote::transport::tcp::TcpListen::bind(&str, &[guatiao_remote::transport::tcp::Range]) -> core::io::error::Result<guatiao_remote::transport::tcp::TcpListen>
+pub fn guatiao_remote::transport::tcp::TcpListen::from_listener(std::net::tcp::TcpListener, &[guatiao_remote::transport::tcp::Range]) -> core::io::error::Result<guatiao_remote::transport::tcp::TcpListen>
 pub fn guatiao_remote::transport::tcp::TcpListen::local_addr(&self) -> core::io::error::Result<core::net::socket_addr::SocketAddr>
 impl core::fmt::Debug for guatiao_remote::transport::tcp::TcpListen
 pub fn guatiao_remote::transport::tcp::TcpListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const guatiao_remote::transport::tcp::CONNECT_TIMEOUT: core::time::Duration
+pub fn guatiao_remote::transport::tcp::from_stream(std::net::tcp::TcpStream) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub struct guatiao_remote::transport::Connection
 pub guatiao_remote::transport::Connection::closer: core::option::Option<alloc::boxed::Box<(dyn core::ops::function::Fn() + core::marker::Send + core::marker::Sync)>>
 pub guatiao_remote::transport::Connection::peer: alloc::string::String
