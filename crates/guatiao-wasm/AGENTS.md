@@ -135,12 +135,20 @@ the whole budget):
 | --- | --- |
 | `operations` | wasmtime fuel (on only when set) |
 | `time_ms` | epoch deadlines, a 1 ms ticker thread per source (on only when set) |
-| `memory` | a limiter refusing linear memory past the limit, in bytes (tables to 2^20 entries with it) |
+| `memory` | a limiter refusing linear memory and tables (8 bytes an entry) past the limit together, in bytes; and the most the host takes from the guest at once (below) |
 | `depth` | refused at start (`GUATIAO_ERR_BAD_VALUE`): a guest's stack overflowing traps on its own |
 
 A stop is `GUATIAO_ERR_INTERNAL` ("stopped at its operations limit
 (200000)", "stopped at its time_ms limit (50)"), or `GUATIAO_ERR_ALLOC`
 for memory ("stopped at its memory limit (16777216)").
+
+**What the host takes** from a guest at once (an answer, a write-back, a
+request to a host object) is at most the `memory` limit, or 64 MiB
+(`budget::UNLIMITED`) without one, counting its bytes and 96 a node it
+decodes to; past that it is `GUATIAO_ERR_ALLOC` and nothing is decoded.
+Maps whose keys squared add up past 2^24 (`budget::MAP_WORK`) are
+`GUATIAO_ERR_BAD_VALUE`. Without a limit, tables still stop at 64 MiB.
+A module has at most 4 tables and 128 MiB of bytes.
 
 ## Errors
 
@@ -151,6 +159,7 @@ for memory ("stopped at its memory limit (16777216)").
 | a trap | `GUATIAO_ERR_INTERNAL`: "`<module>` trapped (`<trap>`): `<last words>`", the first line of fd 2 or a Rust guest's panic |
 | `proc_exit` | `GUATIAO_ERR_INTERNAL`: "`<module>` exited with `<code>`" |
 | bytes outside its memory | `GUATIAO_ERR_INTERNAL` |
+| more than the host takes at once | `GUATIAO_ERR_ALLOC` |
 | an answer that is not a value | `GUATIAO_ERR_BAD_VALUE` |
 | a limit | as above |
 
@@ -191,8 +200,8 @@ key that is not a list of text, a misspelled limit or `depth`,
   not compile.
 - **Go's runtime starts in about 430 000 fuel**: an `operations` limit
   below that refuses every Go library at open.
-- **Without a `memory` limit** a guest may grow to 4 GiB, and its answers
-  are copied into the host.
+- **Without a `memory` limit** a guest's memory may grow to 4 GiB; what
+  the host takes from it stays within 64 MiB at once.
 - **`cargo test` builds the example guests** (the `wasm32-unknown-unknown`
   target, Go 1.24 or later); without them the tests say why and skip, and
   `GUATIAO_REQUIRE_ALL=1` makes that a failure. The C host's test needs

@@ -3,20 +3,25 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Guests that push on the host rather than on themselves: a stack overflow
-//! on a thread with little stack. What could take the process down runs in
-//! a child process.
+//! on a thread with little stack, answers that would swell when decoded,
+//! tables that add up and maps that cost the square of their keys. What
+//! could take the process down runs in a child process.
 
 mod common;
 
 extern crate alloc;
 
 use alloc::sync::Arc;
+use core::time::Duration;
+use std::path::Path;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use common::*;
 use greeter_kind::{Greeter, Listener};
+use guatiao::library::Registry;
 use guatiao::value::wire;
-use guatiao::{List, Map, Value};
+use guatiao::{List, Map, Status, Value};
 
 fn escaped(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("\\{b:02x}")).collect()
@@ -255,6 +260,13 @@ fn pushy(name: &str) -> std::path::PathBuf {
     dir
 }
 
+fn greet(registry: &Registry, key: &str) -> Result<String, (Status, String)> {
+    greeter(registry, key)
+        .greet("ana")
+        .map(|m| greeting(&m).to_string())
+        .map_err(|e| (e.status, e.message().to_string()))
+}
+
 /// Runs `f` on a thread of `stack` bytes, answering what it answered.
 fn on_small_thread<T: Send + 'static>(stack: usize, f: impl FnOnce() -> T + Send + 'static) -> T {
     std::thread::Builder::new()
@@ -356,4 +368,220 @@ fn nested_libraries_on_a_small_thread_each_get_their_stack() {
         "{out}"
     );
     assert!(out.contains("hello, bo / ok"), "{out}");
+}
+
+// --- what the host decodes ------------------------------------------------------
+
+/// What follows `label` on its line of a child's output (a test's own name
+/// may come first on that line).
+fn after<'a>(out: &'a str, label: &str) -> &'a str {
+    let at = out
+        .find(label)
+        .unwrap_or_else(|| panic!("no `{label}`: {out}"));
+    out[at + label.len()..].lines().next().unwrap_or("").trim()
+}
+
+/// The process's peak resident memory, in KiB, where Linux says.
+fn peak_kib() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find(|l| l.starts_with("VmHWM:"))?;
+    line.split_whitespace().nth(1)?.parse().ok()
+}
+
+#[test]
+fn an_answer_that_would_swell_on_the_host_is_refused_before_it_is_decoded() {
+    const NAME: &str = "an_answer_that_would_swell_on_the_host_is_refused_before_it_is_decoded";
+    if child_role().is_some() {
+        let dir = pushy("swell");
+        let mut registry = serving(&config(&[&dir], Some(limits(&[("memory", 16 << 20)]))));
+        assert!(registry.refresh().refused.is_empty());
+        let before = peak_kib();
+        let started = Instant::now();
+        let outcome = greet(&registry, "pushy_nulls");
+        println!("OUTCOME: {outcome:?}");
+        println!("TOOK: {:?}", started.elapsed());
+        if let (Some(before), Some(after)) = (before, peak_kib()) {
+            println!("GREW: {} KiB", after.saturating_sub(before));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    let (ok, out) = in_child(NAME, "swell");
+    assert!(ok, "{out}");
+    assert!(
+        out.contains("OUTCOME: Err((GUATIAO_ERR_ALLOC,") && out.contains("more than"),
+        "15 million nulls in 15 MiB: {out}"
+    );
+    if peak_kib().is_some() {
+        let grew: u64 = after(&out, "GREW: ")
+            .trim_end_matches(" KiB")
+            .parse()
+            .expect("a number");
+        assert!(
+            grew < 128 << 10,
+            "the host grew {grew} KiB decoding it: {out}"
+        );
+    }
+}
+
+#[test]
+fn without_a_memory_limit_the_host_still_takes_a_bounded_answer() {
+    let dir = pushy("bounded");
+    let mut registry = serving(&config(&[&dir], None));
+    assert!(registry.refresh().refused.is_empty());
+    let (status, words) = greet(&registry, "pushy_bytes70").unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_ALLOC, "{words}");
+    assert!(words.contains("more than"), "{words}");
+    assert_eq!(greet(&registry, "pushy_ok").as_deref(), Ok("ok"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_map_of_forty_thousand_keys_is_refused_at_once_in_an_answer_and_a_write_back() {
+    let dir = pushy("bigmap");
+    let mut registry = serving(&config(
+        &[&dir],
+        // Enough for the copy (a unit per 8 bytes), not for the decoding.
+        Some(limits(&[("operations", 100_000), ("time_ms", 100)])),
+    ));
+    assert!(registry.refresh().refused.is_empty());
+    let started = Instant::now();
+    let (status, words) = greet(&registry, "pushy_bigmap").unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{words}");
+    assert!(words.contains("40000 keys"), "{words}");
+    let mut config = Map::new();
+    let refused = greeter(&registry, "pushy_bigback")
+        .check(&mut config)
+        .unwrap_err();
+    assert_ne!(refused.status, Status::GUATIAO_OK);
+    assert!(config.is_empty(), "nothing written back");
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(2), "took {took:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// --- what the host's memory holds for a guest ----------------------------------
+
+fn put_wat(dir: &Path, id: &str, text: &str) {
+    std::fs::write(
+        dir.join(format!("{id}.guatiao-wasm.toml")),
+        format!("module = \"{id}\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n"),
+    )
+    .expect("written");
+    std::fs::write(
+        dir.join(format!("{id}.wasm")),
+        wat::parse_str(text).unwrap_or_else(|e| panic!("{id}: {e}")),
+    )
+    .expect("written");
+}
+
+#[test]
+fn tables_count_against_the_memory_limit_and_their_number_is_bounded() {
+    let dir = scratch("tables");
+    let good = guest();
+    let anchor = "(memory (export";
+    put_wat(
+        &dir,
+        "two_big",
+        &good.replace(
+            anchor,
+            &format!("(table 100000 funcref)\n(table 100000 funcref)\n{anchor}"),
+        ),
+    );
+    put_wat(
+        &dir,
+        "many",
+        &good.replace(
+            anchor,
+            &format!("{}{anchor}", "(table 1 funcref)\n".repeat(40)),
+        ),
+    );
+    put_wat(&dir, "plain", &good);
+    let mut limited = serving(&config(&[&dir], Some(limits(&[("memory", 2 << 20)]))));
+    let changed = limited.refresh();
+    let reason = |id: &str| {
+        changed
+            .refused
+            .iter()
+            .find(|r| r.id.as_deref() == Some(id))
+            .map(|r| r.reason.clone())
+            .unwrap_or_else(|| panic!("{id} refused: {changed:?}"))
+    };
+    assert!(
+        reason("two_big").contains("memory limit"),
+        "{}",
+        reason("two_big")
+    );
+    assert!(reason("many").contains("table"), "{}", reason("many"));
+    assert!(
+        changed.loaded.iter().any(|l| l.id == "plain"),
+        "{changed:?}"
+    );
+    let mut free = serving(&config(&[&dir], None));
+    let changed = free.refresh();
+    assert!(
+        changed
+            .refused
+            .iter()
+            .any(|r| r.id.as_deref() == Some("many")),
+        "forty tables without a limit: {changed:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn without_a_memory_limit_tables_are_still_bounded() {
+    let dir = scratch("huge-table");
+    let good = guest();
+    let anchor = "(memory (export";
+    put_wat(
+        &dir,
+        "huge_table",
+        &good.replace(anchor, &format!("(table 20000000 funcref)\n{anchor}")),
+    );
+    put_wat(
+        &dir,
+        "growing",
+        &good
+            .replace(anchor, &format!("(table $t 1 funcref)\n{anchor}"))
+            .replace(
+                "(local.set $t (i32.wrap_i64 (local.get $target)))",
+                "(local.set $t (i32.wrap_i64 (local.get $target)))
+                 (drop (table.grow $t (ref.null func) (i32.const 20000000)))",
+            ),
+    );
+    let mut registry = serving(&config(&[&dir], None));
+    let changed = registry.refresh();
+    let refused = changed
+        .refused
+        .iter()
+        .find(|r| r.id.as_deref() == Some("huge_table"))
+        .unwrap_or_else(|| panic!("a table of 20 million entries: {changed:?}"));
+    assert!(
+        refused.reason.contains("tables would take more than"),
+        "{}",
+        refused.reason
+    );
+    let (status, words) = greet(&registry, "growing_ok").unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_ALLOC, "{words}");
+    assert!(words.contains("tables would take more than"), "{words}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_module_past_the_size_bound_is_refused_unread() {
+    let dir = scratch("huge");
+    std::fs::write(
+        dir.join("huge.guatiao-wasm.toml"),
+        "module = \"huge\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n",
+    )
+    .expect("written");
+    let file = std::fs::File::create(dir.join("huge.wasm")).expect("created");
+    file.set_len(300 << 20).expect("a sparse file");
+    drop(file);
+    let mut registry = serving(&config(&[&dir], None));
+    let changed = registry.refresh();
+    let why = &changed.refused[0].reason;
+    assert!(why.contains("larger than"), "{why}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
