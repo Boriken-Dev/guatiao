@@ -220,7 +220,9 @@ let p = #{ kinds: ["greeter"],
 #{ providers: #{ p: p } }
 "#;
     put(&dir, "rhai_keeps", code);
-    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 10_000_000)]))));
+    // Enough operations for the chain, nine a level: more than the hundred
+    // thousand levels a kept value is dropped for without a limit.
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 2_000_000)]))));
     assert!(registry.refresh().refused.is_empty());
     let p = greeter(&registry, "rhai_keeps_p");
     struct Quiet;
@@ -231,5 +233,169 @@ let p = #{ kinds: ["greeter"],
     drop(kept);
     drop(p);
     drop(registry);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Nesting `n` arrays deep with `take`, which moves rather than copies, so
+/// each level costs a few operations and no copy.
+const DEEP: &str = "let a = []; for i in 0..n { a = [take(a)]; }";
+
+/// Levels past what dropping or copying a nested value on the engine
+/// thread's 2 MiB holds (96 and 273 bytes a level in a release build, 321
+/// and 1 351 in a debug one).
+fn past_the_thread() -> usize {
+    if cfg!(debug_assertions) {
+        20_000
+    } else {
+        60_000
+    }
+}
+
+fn greets(
+    id: &str,
+    code: &str,
+    arg: &str,
+    ops: u64,
+) -> Result<(), guatiao::library::ProviderError> {
+    let dir = scratch(id);
+    put(&dir, id, code);
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", ops)]))));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let answer = greeter(&registry, &format!("{id}_p"))
+        .greet(arg)
+        .map(|_| ());
+    let _ = std::fs::remove_dir_all(&dir);
+    answer
+}
+
+fn library(build: &str, answer: &str) -> String {
+    format!(
+        r#"
+const VERSION = "1.0.0";
+let p = #{{ kinds: ["greeter"], greet: |name| {{
+    let n = parse_int(name);
+    {build}
+    {answer}
+}} }};
+#{{ providers: #{{ p: p }} }}
+"#
+    )
+}
+
+#[test]
+fn a_deep_answer_or_thrown_value_is_dropped_on_the_calls_stack() {
+    let n = past_the_thread().to_string();
+    let refused = greets(
+        "rhai_deep_answer",
+        &library(DEEP, "#{ greeting: a }"),
+        &n,
+        10_000_000,
+    )
+    .unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(
+        refused.message().contains("nested deeper than"),
+        "{}",
+        refused.message()
+    );
+    let thrown = greets(
+        "rhai_deep_throw",
+        &library(DEEP, "throw a;"),
+        &n,
+        10_000_000,
+    )
+    .unwrap_err();
+    assert_eq!(thrown.message(), "a script threw a array");
+}
+
+#[test]
+fn what_a_script_ends_with_and_does_not_keep_is_dropped_on_the_calls_stack() {
+    let dir = scratch("stack-open-leftover");
+    let code = format!(
+        r#"
+const VERSION = "1.0.0";
+let n = {};
+{DEEP}
+let p = #{{ kinds: ["greeter"], greet: |name| #{{ greeting: name }} }};
+#{{ providers: #{{ p: p }}, left: a }}
+"#,
+        past_the_thread()
+    );
+    put(&dir, "rhai_leftover", &code);
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 10_000_000)]))));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    assert!(greeter(&registry, "rhai_leftover_p").greet("x").is_ok());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn operations_that_recurse_over_nested_values_stop_at_the_depth_limit() {
+    // Comparing and writing a nested value recurse through Rhai's own
+    // calls, about 2 KiB of native stack a level in a release build, far
+    // more than the nesting budget gives each level.
+    let n: u64 = if cfg!(debug_assertions) {
+        60_000
+    } else {
+        200_000
+    };
+    for (label, op) in [
+        ("eq", "let same = a == a;"),
+        ("string", "let s = a.to_string();"),
+        ("debug", "let s = a.to_debug();"),
+        ("interpolation", "let s = `${a}`;"),
+    ] {
+        let code = library(&format!("{DEEP} {op}"), "#{ greeting: \"done\" }");
+        let stopped = greets(
+            &format!("rhai_recurse_{label}"),
+            &code,
+            &n.to_string(),
+            8 * n + 2_000,
+        )
+        .unwrap_err();
+        assert_eq!(
+            stopped.message(),
+            "stopped at its depth limit (32)",
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn json_of_a_map_nested_too_deep_is_refused() {
+    let code = library(
+        &format!("{DEEP} let m = #{{ a: a }};"),
+        "#{ greeting: m.to_json() }",
+    );
+    let refused = greets("rhai_json", &code, "2000", 1_000_000).unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(
+        refused.message(),
+        "a map nested deeper than 512 levels is not written as JSON"
+    );
+    let fine = library("let m = #{ a: [[1]] };", "#{ greeting: m.to_json() }");
+    assert!(greets("rhai_json_fine", &fine, "0", 1_000_000).is_ok());
+}
+
+#[test]
+fn recursion_through_eval_stops_at_the_depth_limit() {
+    let dir = scratch("stack-eval");
+    put(
+        &dir,
+        "rhai_eval",
+        r#"
+const VERSION = "1.0.0";
+fn e(n) { if n == 0 { 1 } else { 1 + eval("e(" + (n - 1) + ")") } }
+let p = #{ kinds: ["greeter"], greet: |name| { e(parse_int(name)); #{ greeting: name } } };
+#{ providers: #{ p: p } }
+"#,
+    );
+    let mut registry = serving(&config(&dir, Some(limits(&[("depth", 4000)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let stopped = greeter(&registry, "rhai_eval_p")
+        .greet("20000")
+        .unwrap_err();
+    assert_eq!(stopped.message(), "stopped at its depth limit (4000)");
     let _ = std::fs::remove_dir_all(&dir);
 }
