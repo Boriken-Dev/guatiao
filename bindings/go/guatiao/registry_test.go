@@ -130,6 +130,7 @@ func TestAProvidersMetaIsACopyCarryingItsForm(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("%v %v", ok, err)
 	}
+	reg.Close()
 	var form struct {
 		Sections []struct {
 			ID string `guatiao:"id"`
@@ -142,6 +143,7 @@ func TestAProvidersMetaIsACopyCarryingItsForm(t *testing.T) {
 	if len(form.Sections) != 2 || form.Sections[0].ID != "words" || form.Sections[1].ID != "volume" {
 		t.Fatalf("%+v", form)
 	}
+	reg = scanned(t)
 	if _, ok, err := reg.ProviderMeta("derived_greeter_hello"); ok || err != nil {
 		t.Fatalf("a provider declaring nothing answered meta: %v %v", ok, err)
 	}
