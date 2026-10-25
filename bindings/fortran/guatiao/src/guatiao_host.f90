@@ -621,7 +621,7 @@ contains
   end function
 
   !> What the provider under `key` declared beyond its schema (its legal
-  !> notices, or its form under GT_INTAKE_PROVIDER_FORM_KEY): a copy the
+  !> notices, or its form under GUATIAO_INTAKE_PROVIDER_FORM_KEY): a copy the
   !> caller owns, outliving the library; absent when it declares nothing.
   !> GUATIAO_ERR_NOT_FOUND for an unknown key.
   recursive subroutine reg_provider_meta(self, key, answer, stat, errmsg)
