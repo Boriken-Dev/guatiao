@@ -766,6 +766,8 @@ pub struct guatiao::library::kind::DescribedRemote
 impl guatiao::library::kind::DescribedRemote
 pub fn guatiao::library::kind::DescribedRemote::call(&self, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::kind::DescribedRemote::call_named(&self, &str, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::DescribedRemote::implements(&self, usize) -> bool
+pub fn guatiao::library::kind::DescribedRemote::kind(&self) -> &alloc::sync::Arc<guatiao::library::kind::KindDescription>
 pub fn guatiao::library::kind::DescribedRemote::new(&guatiao::library::raw::ProviderView, alloc::sync::Arc<guatiao::library::kind::Caller>) -> core::result::Result<guatiao::library::kind::DescribedRemote, guatiao::library::kind::KindMismatch>
 impl core::fmt::Debug for guatiao::library::kind::DescribedRemote
 pub fn guatiao::library::kind::DescribedRemote::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
