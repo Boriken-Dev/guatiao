@@ -334,8 +334,10 @@ const CANCELLED: usize = 4096;
 const MAX_QUEUED: usize = 64;
 
 /// How deep calls made during calls may nest on one thread before one is
-/// refused `BUSY` rather than run on a stack that may not hold it.
-const MAX_DEPTH: usize = 64;
+/// refused `BUSY` rather than run on a stack that may not hold it: each
+/// level stacks a wait, a call through a table and a callback, tens of
+/// kilobytes in a debug build, and a Windows main thread has 1 MiB.
+const MAX_DEPTH: usize = 16;
 
 /// Where a call in flight hears its reply and the calls made during it.
 #[derive(Clone)]
