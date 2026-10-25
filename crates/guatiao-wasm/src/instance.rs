@@ -27,6 +27,21 @@ use wasmtime::{
 use crate::abi::{self, export, import};
 use crate::wasi::WasiState;
 
+/// The deepest a guest's own frames go: wasmtime's `max_wasm_stack`.
+pub(crate) const WASM_STACK: usize = 512 << 10;
+/// What the host code a guest's imports run, below its frames, may use.
+const HOST_STACK: usize = 512 << 10;
+/// The stack an entry runs on when its caller's has too little left.
+const SEGMENT: usize = 4 << 20;
+
+/// Runs `f`, which enters a guest, where at least a guest's stack and the
+/// host's below it are left: on the caller's stack, or on a segment of its
+/// own. wasmtime bounds a guest's frames from where it is entered, so a
+/// caller with less left would overflow the native stack, not trap.
+pub(crate) fn with_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(WASM_STACK + HOST_STACK, SEGMENT, f)
+}
+
 /// The kinds a source was given, and a caller per object kind, made once.
 pub(crate) struct Shared {
     pub(crate) kinds: Kinds,
