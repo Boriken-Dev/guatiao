@@ -16,6 +16,7 @@ members = [
     "examples/greeter_caller",
     "examples/app_library",
     "examples/app_host",
+    "examples/remote_pool",
     "examples/wire_over_webtransport/server",
     "benchmarks",
     "benchmarks/remote",
