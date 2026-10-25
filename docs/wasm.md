@@ -196,5 +196,11 @@ runs.
 `GUATIAO_ERR_ALLOC` for memory, "stopped at its operations limit
 (10000000)"); so does a trap, named with what the module last said. Either
 way the host carries on, and the library is made afresh for its next
-call. Calls run on the caller's thread, each library behind a lock of its
-own: calls into different libraries run at once.
+call. What the host does for a module counts too: the bytes it copies,
+randomness, bulk memory instructions and decoding are charged to
+`operations` and checked against `time_ms`, and what it takes from a
+module at once stays within `memory` (64 MiB without it). Calls run on
+the caller's thread, each library behind a lock of its own: calls into
+different libraries run at once, and a call that would wait for a library
+while its thread is inside another call answers `GUATIAO_ERR_BUSY` rather
+than risk a deadlock.
