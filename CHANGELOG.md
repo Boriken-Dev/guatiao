@@ -50,10 +50,20 @@ write now.
   library's allocator; this moves it into the caller's where it stands,
   allocating nothing when it is already there. Call it while the library
   is loaded, on a tree answer or a lent tree; a map or list moves inside
-  a value tagged `GUATIAO_MAP` or `GUATIAO_LIST` holding it. The Python
-  and Dart kind callers call it on every tree answer, and on a lent tree
-  once the call returns (into the allocator the tree records), so neither
-  crashes when freed after the unload.
+  a value tagged `GUATIAO_MAP` or `GUATIAO_LIST` holding it. Every
+  binding's kind caller now moves home what it keeps (Python, Dart, Node,
+  Go, Julia, R, MATLAB and Octave, and Fortran through this export, C++
+  through its own walk): a tree answer on arrival, and a lent tree once
+  the call returns, answered or refused, into the allocator the tree
+  recorded when it was lent, so a slot that wrote a fresh map over it in
+  its own allocator is moved home too. Neither then crashes when freed
+  after the unload. In R and MATLAB an answer whose move is refused now
+  refuses the call, where it was kept as the slot built it. A Fortran
+  kind module's remote calls `guatiao_settle_lent(v, tag, home)` right
+  after a slot it lent a tree to, with the `home` that
+  `guatiao_lend_tree(v, tag, ptr, stat, home)` answers, and reads a
+  refused move of an answer from `guatiao_settle_home(answer, stat)`;
+  the binding's `AGENTS.md` lists every helper a remote uses.
 - **C++: `guatiao_check_kinds` holds a kind's declaration to its
   description.** A CMake function the package defines adds a test that
   reads the `GUATIAO_KIND` and `GUATIAO_OBJECT_KIND` lines of a header
@@ -1049,6 +1059,11 @@ write now.
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
 ### Fixed
+
+- **Go: a tree a kind call borrows or lends stays alive until the call
+  ends.** Glue that did not use its argument again let the collector
+  free a `Value` while the slot was reading or changing it; the call now
+  holds the tree's owner until it ends.
 
 - **Reading a wide map is linear in its keys.** Every reader of wire
   bytes (`decode`, `decode_as`, `Decoder`, walking `Encoded` bytes,
