@@ -529,6 +529,12 @@ export class Spin extends Provider {
       const p = Promise.resolve();
       for (;;) p.then(() => { for (;;) {} });
     }
+    if (name === 'imports') {
+      // Many dynamic imports, each a job that would reach the files.
+      for (let i = 0; i < 300000; i++) import('./dep.js');
+      for (;;) {}
+    }
+    if (name === 'import-forever') for (;;) import('./dep.js');
     return { greeting: `calm, ${name}` };
   }
 }
@@ -727,6 +733,7 @@ fn reactions_a_stopped_call_queued_die_with_it() {
 #[test]
 fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
     let dir = scratch("flood");
+    std::fs::write(dir.join("dep.js"), "export const dep = 1;\n").expect("written");
     put(
         &dir,
         "js_flood",
@@ -737,7 +744,7 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
     let mut registry = serving(&config(&dir, Some(limits(&[("operations", 20_000_000)]))));
     assert!(registry.refresh().refused.is_empty());
     let spin = greeter(&registry, "js_flood_spin");
-    for name in ["flood", "spinners"] {
+    for name in ["flood", "spinners", "imports"] {
         let started = std::time::Instant::now();
         let stopped = within(120, {
             let spin = Arc::clone(&spin);
@@ -750,7 +757,7 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
         );
         let took = started.elapsed();
         assert!(
-            took < core::time::Duration::from_secs(20),
+            took < core::time::Duration::from_secs(8),
             "{name} took {took:?}"
         );
         assert_eq!(
@@ -782,18 +789,28 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
     let mut registry = serving(&config(&dir, Some(limits(&[("time_ms", 200)]))));
     assert!(registry.refresh().refused.is_empty());
     let spin = greeter(&registry, "js_flood_spin");
-    let started = std::time::Instant::now();
-    let stopped = within(120, {
-        let spin = Arc::clone(&spin);
-        move || spin.greet("queue-forever").unwrap_err()
-    });
-    assert_eq!(stopped.message(), "stopped at its time_ms limit (200)");
-    let took = started.elapsed();
-    assert!(took < core::time::Duration::from_secs(20), "took {took:?}");
-    assert_eq!(
-        greeting(&spin.greet("after").expect("serves")),
-        "calm, after"
-    );
+    for name in ["queue-forever", "import-forever"] {
+        let started = std::time::Instant::now();
+        let stopped = within(120, {
+            let spin = Arc::clone(&spin);
+            move || spin.greet(name).unwrap_err()
+        });
+        assert_eq!(
+            stopped.message(),
+            "stopped at its time_ms limit (200)",
+            "{name}"
+        );
+        let took = started.elapsed();
+        assert!(
+            took < core::time::Duration::from_secs(8),
+            "{name} took {took:?}"
+        );
+        assert_eq!(
+            greeting(&spin.greet("after").expect("serves")),
+            "calm, after",
+            "{name}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

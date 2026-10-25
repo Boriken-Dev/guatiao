@@ -214,10 +214,12 @@ Promise reactions a call leaves queued run when the outermost call
 returns, whatever it came to (never inside a call made from inside
 another), under the same budget. If the budget runs out there, or before,
 the call is the one stopped, whatever its method answered; the reactions
-still queued are then ended without running: each is taken off the queue
-on a runtime with no stack and no memory, so it fails at its first call
-and can queue no other. However many a call left, none outlives it, and
-ending them costs the same whatever they would have run.
+still queued are then ended without running script: each is taken off
+the queue on a runtime with no stack and no memory, so it fails at its
+first call into JavaScript and can queue no other; an `import()` reaches
+no file, a host is not called, and only the prelude's own natives (a
+`console` method, a handle's `close`) still run when one is the reaction
+itself. However many a call left, none outlives it.
 
 ## Errors
 
