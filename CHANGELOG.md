@@ -44,7 +44,10 @@ write now.
   A remote object holds its library on the far side until its handle is
   dropped, its call is cancelled or the link is lost; a call past its
   timeout or on a lost link answers `GUATIAO_ERR_GONE` and the host
-  carries on. Transports: a server in a child process, and TCP at the
+  carries on: a crash in a server started as the host's child takes down
+  the child, and the next refresh starts it again. Transports: that child
+  process; a Unix socket or a named pipe (feature `local`); shared memory
+  beside one (feature `shm`), a few microseconds a call; and TCP at the
   trusted level (feature `tcp`): an address range the listener binds and
   accepts in, and a pre-shared key both sides prove. The protocol is
   stated for every language in `docs/remote.md`, with shared vectors and a

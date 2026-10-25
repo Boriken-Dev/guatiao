@@ -28,9 +28,10 @@ library it loaded itself, in any language.
 - **One protocol, stated for every language** — frames, the handshake and
   the trust levels in `docs/remote.md`, shared vectors, and a C client and
   server in the tests.
-- **Transports** — a server in a child process (isolation), and TCP at the
-  trusted level: a configured address range, a pre-shared key proved both
-  ways.
+- **Transports** — a server in a child process (isolation); the same
+  machine through a Unix socket or a named pipe, or through shared memory
+  (a few microseconds a call); TCP at the trusted level: a configured
+  address range, a pre-shared key proved both ways.
 
 ## Installation
 
@@ -42,6 +43,8 @@ guatiao-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `tcp` | `hmac`, `sha2`, `getrandom` | TCP at the trusted level |
+| `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
+| `shm` | `local`, `memmap2` | shared memory beside a local connection |
 
 Kind tables are built at run time with libffi, built from C.
 

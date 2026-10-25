@@ -35,7 +35,7 @@ configuration map:
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port` |
+| `connect` | `tcp://host:port`; `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that) |
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `trust` | `local`, `trusted` or `secure`; `local` for a child |
 | `key`, `key_file` | the trusted level's pre-shared key: text, or a file's bytes |
@@ -72,13 +72,30 @@ description of is not served. `--stdio` serves one link on stdin and
 stdout, for a host that starts it as its child. In Rust, `Server::new`
 over a `Registry` does the same.
 
+## Transports
+
+| transport | reach | a call (local, provisional) |
+| --- | --- | --- |
+| `shm://name` | the same machine: two rings in a file both processes map, a local socket beside them for wake-ups | 3–5 µs |
+| `local://name` | the same machine: a Unix socket, or a named pipe on Windows | 17–40 µs |
+| `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
+| `tcp://host:port` | another machine, at the trusted level | 21–36 µs on loopback |
+
+A call is a greeter's `count` through the host's table, there and back,
+measured on Windows ARM64, WSL and an x86-64 Linux server: local
+numbers, provisional. A thread waiting for an answer polls for
+50 µs before it sleeps (`LinkOptions::spin`), which keeps a busy link from
+paying a wake-up on every hand-off; an idle link's first call pays one.
+
 ## Trust
 
 A link's trust level is chosen in its configuration; nothing listens on a
 network by default.
 
-- **`local`**: the same machine. The operating system's permissions on
-  the pipe or socket are the gate. A child's stdio is `local`.
+- **`local`**: the same machine. The operating system's permissions are
+  the gate: a Unix socket and the shared file are created for their owner
+  alone (`0600`), a named pipe takes Windows' default access, and a
+  child's stdio is the host's own.
 - **`trusted`**: a network the owner isolates between known devices. No
   encryption. The listener names its address ranges and **refuses to
   bind outside them**, and to bind every interface (`0.0.0.0`, `::`); a
