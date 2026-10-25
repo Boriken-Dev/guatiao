@@ -130,6 +130,7 @@ pub(crate) fn provider_error(e: &EvalAltResult, limits: &guatiao_bridge::Limits)
                 .map(|s| s.as_str())
             {
                 Some("time_ms") => stopped(Limit::Time, ms),
+                Some(crate::limits::DEPTH_TOKEN) => stopped(Limit::Depth, limits.depth),
                 _ => ProviderError::new(Status::GUATIAO_ERR_INTERNAL, "the script was stopped"),
             }
         }

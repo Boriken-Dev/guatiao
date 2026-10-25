@@ -262,25 +262,30 @@ impl RhaiEngine {
                 "the provider is already running: a call re-entered it",
             )
         })?;
-        let method = Self::method(&this, slot.name())?;
-        let result = self
-            .meter
-            .run(|| method.call_as_method::<Dynamic>(&self.engine, &lib.ast, &mut this, values));
-        drop(this);
-        let result = result.map_err(|e| provider_error(&e, &self.meter.limits))?;
-        for (arg, b) in call.args.iter_mut().zip(back) {
-            match b {
-                Back::None => {}
-                Back::Tree(shared) => {
-                    *arg = CallArg::Lent(values::to_value(&shared).map_err(refused)?);
-                }
-                Back::Buffer(shared) => {
-                    let blob = shared.flatten_clone().into_blob().unwrap_or_default();
-                    *arg = CallArg::Buffer(blob);
+        // Everything the script made is read and dropped on the call's
+        // stack: Rhai copies and drops nested values by recursion. That
+        // includes the method, whose curried values are copied with it.
+        let outcome = self.meter.run(|| {
+            let method = Self::method(&this, slot.name())?;
+            let result = method
+                .call_as_method::<Dynamic>(&self.engine, &lib.ast, &mut this, values)
+                .map_err(|e| provider_error(&e, &self.meter.limits))?;
+            for (arg, b) in call.args.iter_mut().zip(back) {
+                match b {
+                    Back::None => {}
+                    Back::Tree(shared) => {
+                        *arg = CallArg::Lent(values::to_value(&shared).map_err(refused)?);
+                    }
+                    Back::Buffer(shared) => {
+                        let blob = shared.flatten_clone().into_blob().unwrap_or_default();
+                        *arg = CallArg::Buffer(blob);
+                    }
                 }
             }
-        }
-        Ok(match Self::outcome(&slot, result)? {
+            Self::outcome(&slot, result)
+        });
+        drop(this);
+        Ok(match outcome? {
             Outcome::Nothing => Reply::Nothing,
             Outcome::Value(v) => Reply::Value(v),
             Outcome::Handed(o) => Reply::Handed(o),
@@ -441,11 +446,15 @@ impl Engine for RhaiEngine {
                 "{id} states `const VERSION = \"{stated}\"`, and its manifest {version}"
             )));
         }
-        let result: Dynamic = self
-            .meter
-            .run(|| self.engine.eval_ast_with_scope(&mut Scope::new(), &ast))
-            .map_err(|e| engine_error(id, &e, &self.meter))?;
-        let (offered, providers) = self.declare(manifest, result)?;
+        // What the script ends with is read, and what is not kept dropped,
+        // on the call's stack.
+        let (offered, providers) = self.meter.run(|| {
+            let result: Dynamic = self
+                .engine
+                .eval_ast_with_scope(&mut Scope::new(), &ast)
+                .map_err(|e| engine_error(id, &e, &self.meter))?;
+            self.declare(manifest, result)
+        })?;
         let handle = self.next.get() + 1;
         self.next.set(handle);
         self.libraries.borrow_mut().insert(
