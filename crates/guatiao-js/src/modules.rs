@@ -8,7 +8,7 @@
 
 use alloc::collections::BTreeMap;
 use alloc::rc::Rc;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use std::path::{Component, Path, PathBuf};
 
 use rquickjs::loader::{ImportAttributes, Loader, Resolver};
@@ -84,7 +84,13 @@ pub(crate) fn normalize(path: &Path) -> PathBuf {
 /// built-in's name.
 pub(crate) struct Resolve {
     pub(crate) roots: Roots,
+    /// Whether the call running was stopped: an `import()` it left queued
+    /// then reaches no file.
+    pub(crate) stopped: Rc<Cell<bool>>,
 }
+
+/// What an import made while the call is stopped is refused with.
+const STOPPED: &str = "the call was stopped";
 
 impl Resolver for Resolve {
     fn resolve<'js>(
@@ -94,6 +100,9 @@ impl Resolver for Resolve {
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> Result<String> {
+        if self.stopped.get() {
+            return Err(Error::new_resolving_message(base, name, STOPPED));
+        }
         if BUILTIN.iter().any(|(n, _)| *n == name) {
             return Ok(name.to_string());
         }
@@ -125,7 +134,10 @@ impl Resolver for Resolve {
 }
 
 /// Loads a built-in's source or a module file's.
-pub(crate) struct Load;
+pub(crate) struct Load {
+    /// As [`Resolve::stopped`].
+    pub(crate) stopped: Rc<Cell<bool>>,
+}
 
 impl Loader for Load {
     fn load<'js>(
@@ -134,6 +146,9 @@ impl Loader for Load {
         name: &str,
         attributes: Option<ImportAttributes<'js>>,
     ) -> Result<Module<'js, Declared>> {
+        if self.stopped.get() {
+            return Err(Error::new_loading_message(name, STOPPED));
+        }
         if let Some((_, source)) = BUILTIN.iter().find(|(n, _)| *n == name) {
             return Module::declare(ctx.clone(), name, *source);
         }

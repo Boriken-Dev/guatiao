@@ -604,14 +604,17 @@ impl Engine for JsEngine {
             |e: rquickjs::Error| BridgeError::Unavailable(format!("QuickJS did not start: {e}"));
         let runtime = Runtime::new().map_err(unavailable)?;
         let roots = Roots::default();
+        let limits = *config.limits();
+        let meter = Meter::install(&runtime, limits).map_err(unavailable)?;
         runtime.set_loader(
             Resolve {
                 roots: roots.clone(),
+                stopped: meter.stopped_flag(),
             },
-            Load,
+            Load {
+                stopped: meter.stopped_flag(),
+            },
         );
-        let limits = *config.limits();
-        let meter = Meter::install(&runtime, limits).map_err(unavailable)?;
         let mut kinds = guatiao_bridge::Kinds::default();
         for path in config.kinds() {
             kinds.load(path)?;
