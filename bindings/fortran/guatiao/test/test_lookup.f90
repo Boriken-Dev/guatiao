@@ -114,16 +114,19 @@ contains
 
   !> The platform's temporary directory.
   function temp_dir() result(t)
-    character(:), allocatable :: t
-    character(4096) :: buf
+    character(:), allocatable :: t, name
     integer :: n, st
+    ! Read at its own length: a 4 KiB buffer here is a frame LLVM flang
+    ! cannot compile for Windows ARM64 (its prologue's unwind data).
     if (gt_windows) then
-      call get_environment_variable('TEMP', buf, n, st)
+      name = 'TEMP'
     else
-      call get_environment_variable('TMPDIR', buf, n, st)
+      name = 'TMPDIR'
     end if
+    call get_environment_variable(name, length=n, status=st)
     if (st == 0 .and. n > 0) then
-      t = buf(1:n)
+      allocate (character(n) :: t)
+      call get_environment_variable(name, t)
     else if (gt_windows) then
       t = '.'
     else
@@ -135,12 +138,9 @@ contains
   subroutine copy_file(from, to)
     character(*), intent(in) :: from, to
     character(:), allocatable :: bytes
-    integer :: in, out, size_of
-    open (newunit=in, file=from, access='stream', form='unformatted', status='old', action='read')
-    inquire (unit=in, size=size_of)
-    allocate (character(size_of) :: bytes)
-    read (in) bytes
-    close (in)
+    integer :: out
+    ! Not through `inquire(size=)`: flang on Windows answers -1.
+    call read_file(from, bytes)
     open (newunit=out, file=to, access='stream', form='unformatted', status='replace', action='write')
     write (out) bytes
     close (out)
