@@ -215,6 +215,8 @@ key that is not a list of text, or a misspelled limit,
 - **A limit is checked between instructions**: one long library call runs
   to its end.
 - **Luau on Windows ARM64**: a release build crashes creating the state
-  when Luau's C++ is compiled at `/O2`; build with `CXXFLAGS=/O1`.
+  when Luau's C++ is compiled at `/O2`; build with `CXXFLAGS=/O1`. The
+  variable alone does not rebuild Luau: `cargo clean --release -p
+  mlua-sys` first.
 - **`cargo test` does not build the file**: `cargo build` first, or the
   tests adding it by file state a skip.
