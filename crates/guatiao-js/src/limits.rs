@@ -22,10 +22,20 @@ pub(crate) const POLL: u64 = 10_000;
 /// The stack one level of nested calls takes, in bytes, as measured on
 /// Linux x86-64 (an empty function recurses 354 times in 256 KiB).
 const STACK_PER_LEVEL: u64 = 740;
-/// The least and most stack QuickJS may be given: the engine thread has
-/// 2 MiB, and the conversion code and the host's frames sit on it too.
+/// The least and most stack QuickJS may be given for a depth limit's
+/// levels: the engine thread has 2 MiB, and the conversion code and the
+/// host's frames sit on it too.
 const STACK_LEAST: u64 = 16 * 1024;
 const STACK_MOST: u64 = 1024 * 1024;
+/// What a call needs below its entry before its script recurses at all:
+/// parsing and running a module, the prelude and the module loader. A
+/// small library opens in 16 to 37 KiB in a release build and 111 to 148
+/// KiB in a debug one (measured on Windows ARM64).
+const STACK_ENTRY: u64 = if cfg!(debug_assertions) {
+    256 * 1024
+} else {
+    64 * 1024
+};
 
 /// The memory kept back from the limit so that the error which stops a
 /// call can always be made: with none, QuickJS throws `null` for want of
@@ -111,6 +121,7 @@ impl Meter {
             depth
                 .saturating_mul(STACK_PER_LEVEL)
                 .clamp(STACK_LEAST, STACK_MOST)
+                + STACK_ENTRY
         });
         let stack = usize::try_from(stack).unwrap_or(usize::MAX);
         runtime.set_max_stack_size(stack);
