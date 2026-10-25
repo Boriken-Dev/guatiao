@@ -323,10 +323,10 @@ required slots or carries another floor hash. A slot past the table's
 size or null answers `GUATIAO_ERR_UNSUPPORTED` (a Rust caller would run
 the kind's default body instead); a closed remote `GUATIAO_ERR_GONE`. A
 tree answer is built in the registry's allocator (the carrier the remote
-passes names it) and moved there when the callee built it elsewhere
-(`guatiao_settle_home`, with `guatiao_value_make_local`); a tree lent to a
-slot (`guatiao_lend_tree`) is settled with `guatiao_settle_lent` once the
-call returns, into the allocator it records. A
+passes names it) and moved there when the callee built it elsewhere; a
+tree lent to a slot is moved, once the call returns, into the allocator
+it recorded when it was lent, whatever the callee grew it with or wrote
+over it. The kind module's remote does both (Writing a kind module). A
 remote holding an object another side handed over destroys it once, when
 its last copy goes or on `close()`.
 
@@ -476,7 +476,31 @@ and `guatiao_settle_value`, `guatiao_lent_map` and
 and `guatiao_end_lent_object`, `guatiao_serve_object`,
 `guatiao_lend_impl`, `guatiao_string_out`), calls the method in a
 `select type`, and answers `guatiao_failed(error, err)` or
-`guatiao_warn(error, slot)`. A C `bool` crosses as `integer(c_int8_t)`,
+`guatiao_warn(error, slot)`.
+
+The remote's method per slot answers `GUATIAO_ERR_UNSUPPORTED` when
+`self%r%has(i)` is false (`GUATIAO_ERR_GONE` when `self%r%is_closed()`),
+takes the slot with
+`c_f_procpointer(self%r%slot(i), f)`, and builds its arguments and reads
+its answer with the remote-side helpers:
+
+| helper | for |
+| --- | --- |
+| `guatiao_string_in(text)` | a `guatiao_str` argument, a view of `text` for the call |
+| `guatiao_lend_tree(v, tag, ptr, stat, home)` | a lent tree: `ptr` the arm to pass, `home` the allocator it records now |
+| `guatiao_settle_lent(v, tag, home)` | right after the call, answered or refused: the lent tree moved into `home` |
+| `guatiao_hand_over(v, tag, node, stat)` | a tree handed over: moved out of `v` (or copied), `node`'s arm passed |
+| `guatiao_object_arg(impl, remote, kind, obj, stat)` | an object handed to the other side: a remote this side owns given, any other object served |
+| `guatiao_map_out(answer, out, alloc)` | a tree answer's carrier: an empty map naming `alloc` (the remote's `self%r%alloc`) |
+| `guatiao_settle_home(answer, stat)` | once the call answered: the answer moved into the carrier's allocator; a non-zero `stat` (optional) is an error to report |
+| `guatiao_call_error(status, err, error)` | the slot's status and words as `error`, its string freed |
+
+A remote that lends a tree without `guatiao_settle_lent`, or keeps an
+answer without `guatiao_settle_home`, may leave blocks of the callee's
+library in the caller's tree, which are freed through code that is gone
+once the library unloads.
+
+A C `bool` crosses as `integer(c_int8_t)`,
 written `GUATIAO_C_TRUE` or `GUATIAO_C_FALSE` and read as `/= 0`: ifx
 stores a `logical(c_bool)` .true. as -1. Mark each `recursive`, initialise no local
 in its declaration (that implies `save`), and call no function returning

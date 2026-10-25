@@ -938,6 +938,7 @@ contains
     type(guatiao_value) :: got
     type(c_ptr) :: out
     integer(c_int32_t) :: st
+    integer :: ist
     if (lacks(self%r, 1, error)) return
     call c_f_procpointer(self%r%slot(1), f)
     text = name
@@ -945,7 +946,11 @@ contains
     st = f(self%r%ctx, guatiao_string_in(text), out, c_loc(err))
     call guatiao_call_error(st, err, error)
     if (st /= GUATIAO_OK) return
-    call guatiao_settle_home(got)
+    call guatiao_settle_home(got, ist)
+    if (ist /= GUATIAO_OK) then
+      call guatiao_fail(error, ist, "greet's answer could not be moved into this side's allocator")
+      return
+    end if
     answer = got
   end subroutine
 
@@ -1078,7 +1083,11 @@ contains
     st = f(self%r%ctx, c_loc(handed%payload), out, c_loc(err))
     call guatiao_call_error(st, err, error)
     if (st /= GUATIAO_OK) return
-    call guatiao_settle_home(got)
+    call guatiao_settle_home(got, ist)
+    if (ist /= GUATIAO_OK) then
+      call guatiao_fail(error, ist, "greet_from's answer could not be moved into this side's allocator")
+      return
+    end if
     answer = got
   end subroutine
 
@@ -1090,20 +1099,20 @@ contains
     procedure(map_map_c), pointer :: f
     type(gt_provider_error), target :: err
     integer(c_int8_t), target :: out
-    type(c_ptr) :: lent
+    type(c_ptr) :: lent, home
     integer(c_int32_t) :: st
     integer :: ist
     answer = .false.
     if (lacks(self%r, 6, error)) return
     call c_f_procpointer(self%r%slot(6), f)
-    call guatiao_lend_tree(config, GUATIAO_TAG_MAP, lent, ist)
+    call guatiao_lend_tree(config, GUATIAO_TAG_MAP, lent, ist, home)
     if (ist /= GUATIAO_OK) then
       call guatiao_fail(error, ist, 'check takes a writable map')
       return
     end if
     out = GUATIAO_C_FALSE
     st = f(self%r%ctx, lent, c_loc(out), c_loc(err))
-    call guatiao_settle_lent(config, GUATIAO_TAG_MAP)
+    call guatiao_settle_lent(config, GUATIAO_TAG_MAP, home)
     call guatiao_call_error(st, err, error)
     if (st == GUATIAO_OK) answer = out /= GUATIAO_C_FALSE
   end subroutine
