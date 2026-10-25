@@ -79,6 +79,14 @@ A slot method reports through `error`: unallocated is success, and
 `guatiao_fail(error, status, message)` refuses with a status and words
 that cross to the caller.
 
+The remote's method per slot moves what it keeps home: a tree answer with
+`guatiao_settle_home` once the call answered, and a tree it lent with
+`guatiao_settle_lent` once the call returns, into the allocator the tree
+recorded when `guatiao_lend_tree` lent it. Otherwise a slot that built
+in its own allocator leaves blocks of its library in the caller's tree,
+freed through code that is gone once the library unloads. The binding's
+`AGENTS.md` lists every helper a remote uses.
+
 ## As a host
 
 ```fortran

@@ -706,16 +706,19 @@ contains
   !> library: a slot that ignored the carrier built it in its own, wholly
   !> or in part. A core older than `guatiao_value_make_local` copies an
   !> answer whose top container records another allocator. A refusal
-  !> leaves the answer as it came.
-  recursive subroutine guatiao_settle_home(answer)
+  !> leaves the answer as it came, and is `stat` when given: the caller
+  !> then frees the answer while the library is loaded.
+  recursive subroutine guatiao_settle_home(answer, stat)
     type(guatiao_value), intent(inout) :: answer
+    integer, intent(out), optional :: stat
     type(gt_value), pointer :: root
     type(guatiao_value) :: home
-    integer(c_int32_t) :: moved
     integer :: st
+    if (present(stat)) stat = GUATIAO_OK
     if (.not. c_associated(gt_root(answer))) return
     if (associated(gt_value_make_local)) then
-      moved = gt_value_make_local(gt_root(answer), gt_box_alloc(answer))
+      st = int(gt_value_make_local(gt_root(answer), gt_box_alloc(answer)))
+      if (present(stat)) stat = st
       return
     end if
     call c_f_pointer(gt_root(answer), root)
@@ -724,15 +727,18 @@ contains
     if (root%tag /= GUATIAO_TAG_MAP .and. root%tag /= GUATIAO_TAG_LIST) return
     home = answer%clone(stat=st)
     if (st == GUATIAO_OK) answer = home
+    if (present(stat)) stat = st
   end subroutine
 
   !> A tree lent to a remote slot (see guatiao_lend_tree), once the call
-  !> returned: moved where it stands into the allocator it records, so what
-  !> the callee grew it with outlives the callee's library. A refusal
+  !> returned, answered or refused: moved where it stands into `home`, the
+  !> allocator it recorded before the call, so what the callee grew it
+  !> with, or wrote over it, outlives the callee's library. A refusal
   !> leaves it whole, where it was.
-  recursive subroutine guatiao_settle_lent(v, tag)
+  recursive subroutine guatiao_settle_lent(v, tag, home)
     type(guatiao_value), intent(in) :: v
     integer(c_int32_t), intent(in) :: tag
+    type(c_ptr), intent(in) :: home
     type(c_ptr) :: node, alloc
     integer :: stat
     integer(c_int32_t) :: moved
@@ -740,6 +746,7 @@ contains
     if (.not. associated(gt_value_make_local)) return
     call gt_writable_node(v, tag, node, alloc, stat, msg)
     if (stat /= GUATIAO_OK) return
+    if (c_associated(home)) alloc = home
     moved = gt_value_make_local(node, alloc)
   end subroutine
 
@@ -764,17 +771,22 @@ contains
   end subroutine
 
   !> A tree lent to a remote slot (`guatiao_map *`, lent): the address of
-  !> the map arm of the node `v` names, or a status saying why not.
-  recursive subroutine guatiao_lend_tree(v, tag, ptr, stat)
+  !> the map arm of the node `v` names, or a status saying why not; and in
+  !> `home` the allocator the tree records, which guatiao_settle_lent
+  !> moves it into once the call returns.
+  recursive subroutine guatiao_lend_tree(v, tag, ptr, stat, home)
     type(guatiao_value), intent(in) :: v
     integer(c_int32_t), intent(in) :: tag
     type(c_ptr), intent(out) :: ptr
     integer, intent(out) :: stat
+    type(c_ptr), intent(out), optional :: home
     type(gt_value), pointer :: n
     character(:), allocatable :: msg
     type(c_ptr) :: alloc
+    if (present(home)) home = c_null_ptr
     call gt_writable_node(v, tag, ptr, alloc, stat, msg)
     if (stat /= GUATIAO_OK) return
+    if (present(home)) home = alloc
     call c_f_pointer(ptr, n)
     ptr = c_loc(n%payload)
   end subroutine

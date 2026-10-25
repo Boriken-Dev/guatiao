@@ -233,6 +233,7 @@ contains
     call check(libraries%length() == 0, 'none is left loaded')
     call guatiao_emit(answer, GUATIAO_FORMAT_JSON, text)
     call check_text(text, '{"greeting":"hello from C, hal"}', 'the answer outlives the unload')
+    call answer%close()
     call own%close()
   end subroutine
 
@@ -244,7 +245,9 @@ contains
     character(:), allocatable :: text
     logical :: usable
     integer :: st
-    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-lent', 'c_greeter')) == 0) then
+    ! This greeter's check rebuilds the lent map in its own allocator.
+    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-lent', 'c_greeter', &
+                    'GREETER_IGNORES_CARRIER')) == 0) then
       call skip('no C compiler: the greeter written in C is not built')
       return
     end if
@@ -259,6 +262,7 @@ contains
     call check(st == GUATIAO_OK, 'its library is unmapped')
     call guatiao_emit(config, GUATIAO_FORMAT_JSON, text)
     call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map outlives the unload')
+    call config%close()
     call own%close()
   end subroutine
 
