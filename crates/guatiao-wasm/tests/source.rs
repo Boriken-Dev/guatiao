@@ -301,13 +301,11 @@ fn a_panic_is_contained_and_named() {
     assert_eq!(counter.count(), 2);
     let failed = hello.greet("panic").unwrap_err();
     assert_eq!(failed.status, Status::GUATIAO_ERR_INTERNAL);
+    // The panic's location is a path as the guest was built: `\` on Windows.
+    let words = failed.message().replace('\\', "/");
     assert!(
-        failed.message().contains("trapped")
-            && failed
-                .message()
-                .contains(": a provider bug, on request (src/lib.rs:"),
-        "{}",
-        failed.message()
+        words.contains("trapped") && words.contains(": a provider bug, on request (src/lib.rs:"),
+        "{words}"
     );
     assert_eq!(greeting(&hello.greet("bo").expect("greeted")), "hello, bo");
     assert_eq!(counter.count(), 1, "the instance was made afresh");
