@@ -4,8 +4,9 @@
 
 //! Guests that push on the host rather than on themselves: a stack overflow
 //! on a thread with little stack, answers that would swell when decoded,
-//! tables that add up and maps that cost the square of their keys. What
-//! could take the process down runs in a child process.
+//! tables that add up, maps that cost the square of their keys and host
+//! work a loop of imports asks for. What could take the process down runs
+//! in a child process; what could hang runs under a timeout.
 
 mod common;
 
@@ -14,7 +15,7 @@ extern crate alloc;
 use alloc::sync::Arc;
 use core::time::Duration;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, mpsc};
 use std::time::Instant;
 
 use common::*;
@@ -583,5 +584,112 @@ fn a_module_past_the_size_bound_is_refused_unread() {
     let changed = registry.refresh();
     let why = &changed.refused[0].reason;
     assert!(why.contains("larger than"), "{why}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// --- host work a guest asks for -------------------------------------------------
+
+#[test]
+fn host_work_counts_against_the_operations_limit() {
+    let dir = pushy("host-work");
+    let mut registry = serving(&config(
+        &[&dir],
+        Some(limits(&[("operations", 2000), ("memory", 32 << 20)])),
+    ));
+    assert!(registry.refresh().refused.is_empty());
+    let (status, words) = greet(&registry, "pushy_sixteen").unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_INTERNAL, "{words}");
+    assert_eq!(words, "stopped at its operations limit (2000)");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Calls `key`'s `greet` on a thread of its own, and answers what it
+/// answered, or `None` when it has not answered within `within`: a guest
+/// the host does not stop runs on, and the test fails rather than hangs.
+fn greet_within(
+    registry: &Registry,
+    key: &str,
+    within: Duration,
+) -> Option<Result<String, (Status, String)>> {
+    let greeter = greeter(registry, key);
+    let (told, answer) = mpsc::channel();
+    std::thread::spawn(move || {
+        let outcome = greeter
+            .greet("ana")
+            .map(|m| greeting(&m).to_string())
+            .map_err(|e| (e.status, e.message().to_string()));
+        let _ = told.send(outcome);
+    });
+    answer.recv_timeout(within).ok()
+}
+
+#[test]
+fn bulk_instructions_count_against_the_operations_limit_by_their_length() {
+    let dir = pushy("bulk");
+    let mut registry = serving(&config(&[&dir], Some(limits(&[("operations", 1_000_000)]))));
+    assert!(registry.refresh().refused.is_empty());
+    // Without the charge each 64 MiB fill costs a few units: hours of
+    // filling before a million.
+    let outcome = greet_within(&registry, "pushy_fill", Duration::from_secs(10))
+        .expect("stopped well within 10 s");
+    assert_eq!(
+        outcome,
+        Err((
+            Status::GUATIAO_ERR_INTERNAL,
+            "stopped at its operations limit (1000000)".to_string()
+        ))
+    );
+    assert_eq!(greet(&registry, "pushy_ok").as_deref(), Ok("ok"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn randomness_counts_against_the_operations_limit_by_its_length() {
+    let dir = pushy("randoms");
+    let mut registry = serving(&config(&[&dir], Some(limits(&[("operations", 1_000_000)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let outcome = greet_within(&registry, "pushy_randoms", Duration::from_secs(10))
+        .expect("stopped well within 10 s");
+    assert_eq!(
+        outcome,
+        Err((
+            Status::GUATIAO_ERR_INTERNAL,
+            "stopped at its operations limit (1000000)".to_string()
+        ))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn decoding_a_map_counts_its_key_comparisons_against_the_operations_limit() {
+    let dir = pushy("map-work");
+    // The copy and the nodes cost under 10 000 units; comparing 4000 keys
+    // with the keys before them, millions.
+    let mut tight = serving(&config(&[&dir], Some(limits(&[("operations", 200_000)]))));
+    assert!(tight.refresh().refused.is_empty());
+    let (status, words) = greet(&tight, "pushy_map4k").unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_INTERNAL, "{words}");
+    assert_eq!(words, "stopped at its operations limit (200000)");
+    let mut loose = serving(&config(
+        &[&dir],
+        Some(limits(&[("operations", 50_000_000)])),
+    ));
+    assert!(loose.refresh().refused.is_empty());
+    assert_eq!(greet(&loose, "pushy_map4k").as_deref(), Ok(""));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn large_wasi_requests_are_refused_to_the_guest() {
+    let dir = pushy("wasi-sizes");
+    let mut registry = serving(&config(&[&dir], None));
+    assert!(registry.refresh().refused.is_empty());
+    for key in ["pushy_random", "pushy_iovs"] {
+        let (_, words) = greet(&registry, key).unwrap_err();
+        assert!(
+            words.contains("status 28"),
+            "{key}: EINVAL, not served: {words}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

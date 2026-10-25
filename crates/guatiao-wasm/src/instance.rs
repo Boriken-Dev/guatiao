@@ -9,6 +9,7 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
@@ -26,6 +27,7 @@ use wasmtime::{
 
 use crate::abi::{self, export, import};
 use crate::budget::{self, Refused, Undecoded};
+use crate::meter;
 use crate::wasi::WasiState;
 
 /// The deepest a guest's own frames go: wasmtime's `max_wasm_stack`.
@@ -42,6 +44,9 @@ const SEGMENT: usize = 4 << 20;
 pub(crate) fn with_stack<R>(f: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(WASM_STACK + HOST_STACK, SEGMENT, f)
 }
+
+/// Bytes the host copies for a guest per unit of fuel it charges.
+const BYTES_PER_FUEL: u64 = 8;
 
 /// The kinds a source was given, and a caller per object kind, made once.
 pub(crate) struct Shared {
@@ -103,7 +108,7 @@ pub(crate) enum Writable {
 
 /// A store's data: the limiter's count, what the guest answered and wrote
 /// back during the current call, the host's objects it holds, and what
-/// it handed over past what the host takes.
+/// stopped it.
 pub(crate) struct State {
     memory_limit: Option<usize>,
     memory_bytes: usize,
@@ -115,6 +120,11 @@ pub(crate) struct State {
     pub(crate) budget: u64,
     /// Bytes past the budget the guest tried to hand over.
     pub(crate) too_large: Option<u64>,
+    fuel: bool,
+    pub(crate) out_of_fuel: bool,
+    time: Option<core::time::Duration>,
+    deadline: Option<Instant>,
+    pub(crate) timed_out: bool,
     pub(crate) answer: Option<Vec<u8>>,
     result: Vec<u8>,
     pub(crate) writable: Vec<Writable>,
@@ -137,6 +147,11 @@ impl State {
             tables_past: false,
             budget: budget::of(limits),
             too_large: None,
+            fuel: limits.operations.is_some(),
+            out_of_fuel: false,
+            time: limits.time,
+            deadline: None,
+            timed_out: false,
             answer: None,
             result: Vec::new(),
             writable: Vec::new(),
@@ -231,6 +246,34 @@ impl ResourceLimiter for State {
     }
 }
 
+/// Charges `fuel` for host work a guest asked for, when fuel is counted.
+pub(crate) fn charge(caller: &mut Caller<'_, State>, fuel: u64) -> wasmtime::Result<()> {
+    if !caller.data().fuel || fuel == 0 {
+        return Ok(());
+    }
+    let left = caller.get_fuel()?;
+    match left.checked_sub(fuel) {
+        Some(rest) => caller.set_fuel(rest),
+        None => {
+            caller.set_fuel(0)?;
+            caller.data_mut().out_of_fuel = true;
+            Err(wasmtime::Error::msg("the operations limit"))
+        }
+    }
+}
+
+/// Stops the guest once its call's time is up: host work runs between
+/// the instructions epochs interrupt.
+pub(crate) fn in_time(caller: &mut Caller<'_, State>) -> wasmtime::Result<()> {
+    if let Some(deadline) = caller.data().deadline
+        && Instant::now() > deadline
+    {
+        caller.data_mut().timed_out = true;
+        return Err(wasmtime::Error::msg("the time limit"));
+    }
+    Ok(())
+}
+
 // --- the imports -------------------------------------------------------------
 
 fn memory_of(caller: &mut Caller<'_, State>) -> wasmtime::Result<Memory> {
@@ -240,29 +283,39 @@ fn memory_of(caller: &mut Caller<'_, State>) -> wasmtime::Result<Memory> {
         .ok_or_else(|| wasmtime::Error::msg("the guest exports no memory"))
 }
 
-/// `len` bytes of the guest's memory at `ptr`, copied; a range outside
-/// it, or past the budget, stops the guest.
+/// `len` bytes of the guest's memory at `ptr`, copied and charged for; a
+/// range outside it, or past the budget, stops the guest.
 fn bytes_at(caller: &mut Caller<'_, State>, ptr: i32, len: i32) -> wasmtime::Result<Vec<u8>> {
     let n = u64::from(len as u32);
     if n > caller.data().budget {
         caller.data_mut().too_large = Some(n);
         return Err(wasmtime::Error::msg("more bytes than the host takes"));
     }
+    charge(caller, n / BYTES_PER_FUEL)?;
     let memory = memory_of(caller)?;
     let start = ptr as u32 as usize;
-    start
+    let bytes = start
         .checked_add(len as u32 as usize)
         .and_then(|end| memory.data(&*caller).get(start..end))
         .map(<[u8]>::to_vec)
-        .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))
+        .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))?;
+    in_time(caller)?;
+    Ok(bytes)
 }
 
-/// Bytes a guest handed over, decoded within the budget.
+/// Bytes a guest handed over, decoded within the budget and charged for.
 fn decoded(
     caller: &mut Caller<'_, State>,
     bytes: &[u8],
 ) -> wasmtime::Result<Result<Value, Undecoded>> {
-    Ok(budget::decode(bytes, caller.data().budget))
+    let budget = caller.data().budget;
+    match budget::check(bytes, budget) {
+        Ok(fuel) => charge(caller, fuel)?,
+        Err(refused) => return Ok(Err(Undecoded::Refused(refused))),
+    }
+    let value = wire::decode(bytes).map_err(Undecoded::Malformed);
+    in_time(caller)?;
+    Ok(value)
 }
 
 /// The status a refusal to decode crosses as.
@@ -531,6 +584,12 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         import::ANSWER,
         |mut caller: Caller<'_, State>, ptr: i32, len: i32| -> wasmtime::Result<()> {
             let bytes = bytes_at(&mut caller, ptr, len)?;
+            // Decoded once the call returns: charged now, while the
+            // guest's limits still run.
+            if let Ok(fuel) = budget::check(&bytes, caller.data().budget) {
+                charge(&mut caller, fuel)?;
+                in_time(&mut caller)?;
+            }
             caller.data_mut().answer = Some(bytes);
             Ok(())
         },
@@ -566,9 +625,10 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         module,
         import::RESULT,
         |mut caller: Caller<'_, State>, ptr: i32, cap: i32| -> wasmtime::Result<i32> {
+            let n = caller.data().result.len().min(cap as u32 as usize);
+            charge(&mut caller, n as u64 / BYTES_PER_FUEL)?;
             let memory = memory_of(&mut caller)?;
             let (data, state) = memory.data_and_store_mut(&mut caller);
-            let n = state.result.len().min(cap as u32 as usize);
             let start = ptr as u32 as usize;
             let into = start
                 .checked_add(n)
@@ -576,6 +636,16 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
                 .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))?;
             into.copy_from_slice(&state.result[..n]);
             Ok(i32::try_from(state.result.len()).unwrap_or(i32::MAX))
+        },
+    )?;
+    linker.func_wrap(
+        meter::MODULE,
+        meter::BULK,
+        // Fuel only: compilers emit `memory.copy` for every small copy, and
+        // epochs interrupt between bulk instructions as between any.
+        |mut caller: Caller<'_, State>, len: i32| -> wasmtime::Result<i32> {
+            charge(&mut caller, u64::from(len as u32) / BYTES_PER_FUEL)?;
+            Ok(len)
         },
     )?;
     linker.func_wrap(
@@ -644,6 +714,8 @@ pub(crate) fn arm(store: &mut Store<State>, limits: &Limits) -> wasmtime::Result
     if let Some(time) = limits.time {
         store.set_epoch_deadline(u64::try_from(time.as_millis()).unwrap_or(u64::MAX).max(1));
     }
+    let state = store.data_mut();
+    state.deadline = state.time.map(|t| Instant::now() + t);
     Ok(())
 }
 
@@ -793,6 +865,17 @@ pub(crate) fn stopped(
                 state.budget,
                 budget::UNLIMITED
             ),
+        );
+    }
+    if state.out_of_fuel {
+        return limit(Limit::Operations, limits.operations);
+    }
+    if state.timed_out {
+        return limit(
+            Limit::Time,
+            limits
+                .time
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX)),
         );
     }
     let words = last_words(state)
