@@ -68,7 +68,7 @@ afterAll(() => {
 const each = it.for(Object.keys(GREETERS) as Which[]);
 function greeter(which: Which, skip: (note: string) => void): Remote<typeof Greeter> {
   if (!present.has(which)) {
-    skip(which === 'c' ? 'no C compiler: the greeter written in C is not built' : 'no guatiao-py build: set GUATIAO_PY_BRIDGE');
+    skip(which === 'c' ? 'no C compiler: the greeter written in C is not built' : 'no guatiao-source-py build: set GUATIAO_PY_BRIDGE');
   }
   return reg.bind(GREETERS[which].key, Greeter);
 }

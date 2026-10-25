@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// A greeter that takes trees, written for the guatiao-js source only: a
+// A greeter that takes trees, written for the guatiao-source-js source only: a
 // tree argument is plain data here (an object or an array), and one the
 // caller lends is changed in place and read back. The Node binding hands
 // a `Value` or a `MapRef` for the same slots, so this file does not run

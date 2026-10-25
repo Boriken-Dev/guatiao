@@ -2,11 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""A Python host adding the guatiao-rhai source: libraries written in
+"""A Python host adding the guatiao-source-rhai source: libraries written in
 Rhai, described by manifests, served afresh when their code changes, and
 stopped at their limits.
 
-The source is its own workspace (`crates/guatiao-rhai`); `GUATIAO_RHAI_SOURCE`
+The source is its own workspace (`crates/guatiao-source-rhai`); `GUATIAO_RHAI_SOURCE`
 names the build, else its debug build is looked for, else these skip and
 say so."""
 
@@ -37,10 +37,10 @@ from guatiao import Registry  # noqa: E402
 
 _SOURCE = Path(
     os.environ.get("GUATIAO_RHAI_SOURCE")
-    or native.REPO / "crates" / "guatiao-rhai" / "target" / "debug" / native.library_name("guatiao_rhai")
+    or native.REPO / "crates" / "guatiao-source-rhai" / "target" / "debug" / native.library_name("guatiao_source_rhai")
 )
 if not _SOURCE.is_file():
-    pytest.skip(f"no guatiao-rhai build at {_SOURCE}", allow_module_level=True)
+    pytest.skip(f"no guatiao-source-rhai build at {_SOURCE}", allow_module_level=True)
 
 _EXAMPLES = native.REPO / "examples" / "rhai_provider"
 _KINDS = str(native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.kinds.json")

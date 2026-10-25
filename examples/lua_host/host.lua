@@ -80,7 +80,7 @@ local function offered(answer, err)
 end
 
 -- A greeter that runs on a thread of its own (a Lua library, through the
--- guatiao-lua source) cannot call a Lua table back: the table is called
+-- guatiao-source-lua source) cannot call a Lua table back: the table is called
 -- on this interpreter's thread only, which is waiting for the answer.
 local function elsewhere(answer, err)
   return answer == nil and err ~= nil and err.status == "internal"

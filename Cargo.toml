@@ -7,7 +7,7 @@ members = [
     "crates/guatiao-intake",
     "crates/guatiao-bridge",
     "crates/guatiao-libffi",
-    "crates/guatiao-remote",
+    "crates/guatiao-source-remote",
     "examples/hello_library",
     "examples/greeter_kind",
     "examples/derived_greeter",
@@ -30,14 +30,14 @@ members = [
 # transport's device tests need an RDMA device and fail without one.
 exclude = [
     "examples/wire_over_webtransport/client",
-    "crates/guatiao-py",
-    "crates/guatiao-lua",
-    "crates/guatiao-js",
-    "crates/guatiao-wasm",
-    "crates/guatiao-wasm/guest",
+    "crates/guatiao-source-py",
+    "crates/guatiao-source-lua",
+    "crates/guatiao-source-js",
+    "crates/guatiao-source-wasm",
+    "crates/guatiao-source-wasm/guest",
     "examples/wasm_greeter_rust",
-    "crates/guatiao-remote/rdma-tests",
-    "crates/guatiao-rhai",
+    "crates/guatiao-source-remote/rdma-tests",
+    "crates/guatiao-source-rhai",
     "bindings/lua/guatiao",
 ]
 

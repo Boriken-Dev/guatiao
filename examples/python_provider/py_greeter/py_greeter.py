@@ -8,7 +8,7 @@ serve, offered by a library any host can load.
 The module is the library: its id is its name, its version `__version__`,
 its providers the `provide.Provider` classes in `__all__`. A Python host
 registers it with `Registry.register_library(py_greeter)`; any host loads
-it through the guatiao-py source, which reads `py_greeter.guatiao-py.toml`
+it through the guatiao-source-py source, which reads `py_greeter.guatiao-py.toml`
 beside this file and imports it.
 """
 

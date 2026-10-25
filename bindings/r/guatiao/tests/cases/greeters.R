@@ -48,7 +48,7 @@ case("one refresh loads every greeter its sources serve", with_examples({
   HOST <- registry("r-greeters", "0.1")
   # Every greeter written in another language comes through a source the
   # registry keeps: the workspace's directory and the C and Go greeters'
-  # as watched directories, the Python greeters through the guatiao-py bridge.
+  # as watched directories, the Python greeters through the guatiao-source-py bridge.
   HOST$watch_dir(LIBRARY_DIR, rules = "kind=greeter")
   PRESENT <- c(PRESENT, "rust")
   c_dir <- build_c_greeter()
@@ -67,7 +67,7 @@ case("one refresh loads every greeter its sources serve", with_examples({
   }
   py <- bridge()
   if (is.null(py)) {
-    absent_greeter("python", "no guatiao-py build: set GUATIAO_PY_BRIDGE")
+    absent_greeter("python", "no guatiao-source-py build: set GUATIAO_PY_BRIDGE")
   } else {
     HOST$add_source_file(py, bridge_config())
     PRESENT <- c(PRESENT, "python")

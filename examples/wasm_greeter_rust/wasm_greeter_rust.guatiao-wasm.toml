@@ -1,4 +1,4 @@
-# The library guatiao-wasm serves from this directory, after
+# The library guatiao-source-wasm serves from this directory, after
 #   cargo build --release --target wasm32-unknown-unknown
 # Its version is the crate's, read from the module.
 module = "wasm_greeter_rust"

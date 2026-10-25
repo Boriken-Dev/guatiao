@@ -12,7 +12,7 @@ for one call. A provider that builds instances from a configuration is
 given one its schema accepts, after one it refuses. Everything it opened
 is closed before it exits, and it prints what it did.
 
-With `--python-source BRIDGE`, it also adds the guatiao-py bridge as a
+With `--python-source BRIDGE`, it also adds the guatiao-source-py bridge as a
 source of Python libraries described under each `--python-dir`, and calls
 the Python greeters it serves beside the rest.
 
@@ -97,7 +97,7 @@ def exercise(greeter: Remote, say: Say) -> None:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("dirs", nargs="+", help="directories holding greeter libraries")
-    parser.add_argument("--python-source", help="the guatiao-py bridge, to serve Python libraries")
+    parser.add_argument("--python-source", help="the guatiao-source-py bridge, to serve Python libraries")
     parser.add_argument(
         "--python-dir", action="append", default=[], help="where Python library manifests are"
     )

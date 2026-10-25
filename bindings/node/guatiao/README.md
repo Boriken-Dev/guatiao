@@ -218,7 +218,7 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
   library is making: koffi cannot register a callback there.
 - A kind whose slots refer to itself, directly or through another kind,
   cannot be loaded from a description.
-- On Linux and macOS, CPython served through the guatiao-py bridge inside
+- On Linux and macOS, CPython served through the guatiao-source-py bridge inside
   a Node process does not free what a call from Node drops: a Python object such
   a call releases is never deallocated.
 - 64-bit platforms only, and not in a browser.
@@ -256,7 +256,7 @@ directory; `test/setup.ts` points `GUATIAO_LIBRARY` at the
 repository's build output when the variable is unset, and the repository's
 own `AGENTS.md` says how to produce it. The greeter written in C is built
 with the first C compiler found, the Python greeters are served through
-the guatiao-py bridge (`GUATIAO_PY_BRIDGE`, else its debug build), and the
+the guatiao-source-py bridge (`GUATIAO_PY_BRIDGE`, else its debug build), and the
 example host runs once `examples/` is installed (`npm install` there,
 after `npm run build` here); a test that lacks one skips and says which.
 

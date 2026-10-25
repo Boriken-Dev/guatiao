@@ -1,0 +1,86 @@
+[package]
+name = "guatiao-source-remote"
+description = "guatiao providers called across a process, a machine or a network: a source any host adds, a server exposing a registry, and one framed protocol over every transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+exclude = [".*", "*.local.*", "public-api.txt"]
+
+# docs.rs documents every feature.
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+name = "guatiao_source_remote"
+path = "src/lib.rs"
+# The rlib is what a Rust host or server links; the cdylib is the source
+# file any host adds (`add_source_file`), in any language.
+crate-type = ["rlib", "cdylib"]
+
+# The server a device runs. Not `guatiao-source-remote`: on Windows its debug
+# files would collide with the library's.
+[[bin]]
+name = "guatiao-remote-server"
+path = "src/bin/guatiao-remote-server.rs"
+
+[features]
+default = []
+
+# Trusted TCP: no encryption, a configured address range, and a
+# pre-shared key proved both ways in the handshake (HMAC-SHA256).
+tcp = ["dep:hmac", "dep:sha2", "dep:getrandom"]
+
+# The same machine by name, at the local level: a Unix socket (std) on
+# Unix, a named pipe on Windows.
+local = ["dep:interprocess"]
+
+# The same machine through shared memory: two rings in a mapped file, a
+# local connection beside them for wake-ups.
+shm = ["local", "dep:memmap2"]
+
+# RDMA, experimental and Linux only: frames by one-sided writes into
+# registered rings, set up over a trusted TCP connection. libibverbs
+# (rdma-core) is opened at run time, so building needs nothing of it;
+# elsewhere than Linux the transport answers `Unsupported`.
+rdma = ["tcp", "dep:libloading", "dep:libc"]
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+# The kind tables it serves and calls through: libffi's closures and calls.
+guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
+# Kind descriptions read from their JSON documents.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json"] }
+# The trusted level's handshake proof. RustCrypto, pure Rust.
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+# The handshake's nonces.
+getrandom = { version = "0.3", optional = true }
+# The shared rings' file, mapped.
+memmap2 = { version = "0.9", optional = true }
+
+# Named pipes on Windows: overlapped I/O, so one thread reads while
+# another writes, with no `unsafe` here.
+[target.'cfg(windows)'.dependencies]
+interprocess = { version = "2", optional = true, default-features = false }
+
+# RDMA: libibverbs opened at run time, and `poll` on its completion
+# channel beside the TCP connection. Both are already in the build
+# (`guatiao`'s loader, `getrandom`).
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading = { version = "0.8", optional = true }
+libc = { version = "0.2", optional = true }
+
+[dev-dependencies]
+guatiao = { path = "../guatiao", features = ["provider", "load"] }
+# The example kinds the tests serve and call.
+greeter_kind = { path = "../../examples/greeter_kind" }
+# Reads the shared vectors.
+serde_json = "1"
+
+[lints]
+workspace = true

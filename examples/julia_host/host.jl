@@ -11,7 +11,7 @@
 # call. A provider that builds instances from a configuration is given
 # one its schema refuses, then one it accepts. The greeters written in
 # Julia are registered beside them, and the greeters written in Python
-# are served by the guatiao-py bridge when one is named. Everything it
+# are served by the guatiao-source-py bridge when one is named. Everything it
 # opened is closed before it exits, and it prints what it did.
 #
 #   julia examples/julia_host/host.jl DIR [DIR ...] [--python-source BRIDGE --python-dir DIR ... --python-path DIR ...]

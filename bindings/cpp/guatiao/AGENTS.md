@@ -186,7 +186,7 @@ a disagreement's detail is the map describing it.
 ```cpp
 guatiao::registry reg("my-host", "1.0");                  // registry::try_open(...) without exceptions
 reg.watch_dir("/opt/plugins", guatiao::rules({"kind=greeter"}));
-reg.add_source_file("/opt/bridge/libguatiao_py.so", guatiao::make(guatiao::item::map({{"dirs", ...}})));
+reg.add_source_file("/opt/bridge/libguatiao_source_py.so", guatiao::make(guatiao::item::map({{"dirs", ...}})));
 guatiao::value changed = reg.refresh();                   // {"loaded", "retired", "skipped", "refused"}
 auto g = greeter_kind::greeter::bind(reg, "derived_greeter_hello");
 guatiao::instance inst = reg.create("acme_shouter", guatiao::make(guatiao::item::map({{"prefix", "hey"}})));

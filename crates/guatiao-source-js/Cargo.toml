@@ -1,0 +1,47 @@
+[package]
+name = "guatiao-source-js"
+description = "A guatiao source of JavaScript libraries, run by QuickJS built into the file: ES modules written as the Node binding's providers are"
+version = "0.0.0-alpha.1"
+edition = "2024"
+rust-version = "1.89"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+readme = "README.md"
+# Built by its user from this repository; the release workflow does not
+# package it.
+publish = false
+exclude = [".*", "*.local.*"]
+
+# A workspace of its own, as guatiao-source-lua: no other build needs a C
+# compiler for QuickJS.
+[workspace]
+
+[lib]
+name = "guatiao_source_js"
+# The cdylib is the source a host adds; the rlib is what the tests use.
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+# Manifests, stamps, refresh, the source table, kinds served from their
+# descriptions and the limits: QuickJS is its engine.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+# QuickJS has no FFI: its providers' tables, and its calls through a
+# kind's table, are libffi closures and calls.
+guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
+# `package.json` beside a library, read as JSON.
+guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json"] }
+rquickjs = { version = "0.14.0", default-features = false, features = ["loader", "array-buffer", "properties"] }
+
+[dev-dependencies]
+# The kinds' traits, which a Rust host calls the JavaScript greeters through.
+greeter_kind = { path = "../../examples/greeter_kind" }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"

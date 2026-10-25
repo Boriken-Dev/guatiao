@@ -4,7 +4,7 @@
 
 //! Greeters written in Rust and compiled to WebAssembly: the same kinds the
 //! Rust, C, Python and Lua greeters serve, offered to any host through the
-//! guatiao-wasm source, sandboxed.
+//! guatiao-source-wasm source, sandboxed.
 //!
 //! The module is the library: its id is the manifest's `module`, its
 //! version the crate's (a `guatiao.version` section), its providers those

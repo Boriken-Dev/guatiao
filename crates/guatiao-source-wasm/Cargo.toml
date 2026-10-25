@@ -1,0 +1,72 @@
+[package]
+name = "guatiao-source-wasm"
+description = "A guatiao source of libraries compiled to WebAssembly from any language, run sandboxed by wasmtime"
+version = "0.0.0-alpha.1"
+edition = "2024"
+# wasmtime 36's own floor is 1.86; the repository's is the verified one.
+rust-version = "1.89"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+readme = "README.md"
+# Built by its user from this repository; the release workflow does not
+# package it.
+publish = false
+exclude = [".*", "*.local.*", "guest/", "guest-go/"]
+
+# A workspace of its own: wasmtime is large, and no other build should
+# compile it. The Rust guest crate in `guest/` is a workspace of its own
+# too, built for wasm32 only.
+[workspace]
+
+[lib]
+name = "guatiao_source_wasm"
+# The cdylib is the source a host adds; the rlib is the engine for a Rust
+# host that builds its own `BridgeSource`.
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+# Manifests, stamps, refresh, the source table, kinds served from their
+# descriptions and the limits: wasmtime is its engine.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+# A guest has no FFI: its providers' tables, and its calls into the
+# host's objects, are libffi closures and calls.
+guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
+# The long-term-support line. Cranelift and the runtime only: no
+# component model, no WASI crate, no on-disk cache.
+wasmtime = { version = "36.0.19", default-features = false, features = [
+    "cranelift",
+    "runtime",
+    "std",
+] }
+# Under an operations limit, a module's bulk instructions are rewritten to
+# be charged by their length: the same wasmparser wasmtime reads with.
+wasm-encoder = { version = "0.236.1", default-features = false, features = ["std", "wasmparser"] }
+wasmparser = { version = "0.236.1", default-features = false, features = ["std", "simd"] }
+# WASI's `random_get`, for a guest that imports it.
+getrandom = "0.3.4"
+# A guest runs on its caller's stack: an entry with too little left runs
+# on a segment of its own, as rustc runs its deep recursion.
+stacker = "0.1.25"
+
+[dev-dependencies]
+# The kinds' traits, which a Rust host calls the wasm greeters through.
+greeter_kind = { path = "../../examples/greeter_kind" }
+# Guests written by hand in the text format, for what no compiler emits.
+wat = "1.236.0"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"
+
+# Cranelift compiles a guest at every open: the tests run it optimised,
+# and without the dependencies' debug info, which kept the build at a
+# third of its size.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false

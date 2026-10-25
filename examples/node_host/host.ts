@@ -16,7 +16,7 @@
 //                  [--python-source BRIDGE --python-dir DIR ... --python-path DIR ...]
 //
 // `--node-library` registers an ES module of provider classes (a file of
-// a package) as a library; `--python-source` adds the guatiao-py bridge
+// a package) as a library; `--python-source` adds the guatiao-source-py bridge
 // as a source of the Python libraries under each `--python-dir`.
 
 import path from 'node:path';

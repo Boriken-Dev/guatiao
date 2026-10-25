@@ -44,13 +44,13 @@ go run ./go_host ../target/debug c-greeter
 On Windows the output is `c-greeter/c_greeter.dll`, built with `clang
 -shared` and no `-fPIC`; on macOS, `c-greeter/libc_greeter.dylib`.
 
-To add the greeters written in Python, through the `guatiao-py` bridge
+To add the greeters written in Python, through the `guatiao-source-py` bridge
 (built as [`../python_provider/README.md`](../python_provider/README.md)
 says), name the bridge, where its manifests are, and what they import:
 
 ```bash
 go run ./go_host ../target/debug \
-  -python-source ../crates/guatiao-py/target/debug/libguatiao_py.so \
+  -python-source ../crates/guatiao-source-py/target/debug/libguatiao_source_py.so \
   -python-dir python_provider \
   -python-path ../bindings/python/guatiao/src -python-path greeter_kind/python
 ```

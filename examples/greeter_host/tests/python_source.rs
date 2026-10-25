@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The example host adding the guatiao-py bridge as a source and calling
+//! The example host adding the guatiao-source-py bridge as a source and calling
 //! greeters written in Python as the trait. The bridge is its own
 //! workspace, built against a Python: `GUATIAO_PY_BRIDGE` names the build,
 //! and without it this states a skip.
@@ -14,7 +14,7 @@ use std::process::Command;
 fn the_host_calls_greeters_written_in_python_through_the_bridge() {
     let Ok(bridge) = std::env::var("GUATIAO_PY_BRIDGE") else {
         println!(
-            "skipped: GUATIAO_PY_BRIDGE names no guatiao-py build (crates/guatiao-py, built \
+            "skipped: GUATIAO_PY_BRIDGE names no guatiao-source-py build (crates/guatiao-source-py, built \
              against a Python whose library is on the search path)"
         );
         return;

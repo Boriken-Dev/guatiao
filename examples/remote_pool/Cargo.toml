@@ -1,6 +1,6 @@
 [package]
 name = "remote_pool"
-description = "An example guatiao-remote host: one call fanned out to several peers at once, the answers gathered"
+description = "An example guatiao-source-remote host: one call fanned out to several peers at once, the answers gathered"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
-guatiao-remote = { path = "../../crates/guatiao-remote", features = ["tcp"] }
+guatiao-source-remote = { path = "../../crates/guatiao-source-remote", features = ["tcp"] }
 greeter_kind = { path = "../greeter_kind" }
 
 [lints]

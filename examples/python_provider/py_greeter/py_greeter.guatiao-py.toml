@@ -1,4 +1,4 @@
-# What guatiao-py reads before importing anything: the module, which is
+# What guatiao-source-py reads before importing anything: the module, which is
 # the library (its id is the module's name), the kinds its providers
 # serve, and where it is. With no `version` here, the module's own
 # `__version__` is read as a literal from its source. `paths` are relative

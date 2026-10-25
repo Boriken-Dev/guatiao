@@ -12,7 +12,7 @@ function host(varargin)
 % provider that builds instances from a configuration is given one its
 % schema refuses, then one it accepts. The greeters written in M are
 % registered beside them, and the greeters written in Python are served by
-% the guatiao-py bridge when one is named. Everything it opened is closed
+% the guatiao-source-py bridge when one is named. Everything it opened is closed
 % before it returns, and it prints what it did.
 %
 %   host('target/debug', 'c-greeter')

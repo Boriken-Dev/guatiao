@@ -1,6 +1,6 @@
 [package]
 name = "wasm_greeter_rust"
-description = "Greeters written in Rust and compiled to WebAssembly, served by the guatiao-wasm source"
+description = "Greeters written in Rust and compiled to WebAssembly, served by the guatiao-source-wasm source"
 version = "1.0.0"
 edition = "2024"
 license = "MPL-2.0"
@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [dependencies]
-guatiao-wasm-guest = { path = "../../crates/guatiao-wasm/guest" }
+guatiao-wasm-guest = { path = "../../crates/guatiao-source-wasm/guest" }
 
 [profile.release]
 # A panic stops the module: the host names it and makes the library

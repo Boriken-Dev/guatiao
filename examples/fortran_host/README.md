@@ -14,7 +14,7 @@ cd examples/fortran_host
 GUATIAO_LIBRARY=../../target/debug fpm run --compiler gfortran -- ../../target/debug
 ```
 
-With `--python-source BRIDGE --python-dir DIR` the guatiao-py bridge
+With `--python-source BRIDGE --python-dir DIR` the guatiao-source-py bridge
 serves the Python greeters described under DIR too.
 
 ## Tests

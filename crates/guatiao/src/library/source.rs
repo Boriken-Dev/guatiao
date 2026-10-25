@@ -18,7 +18,7 @@
 //!
 //! ```ignore
 //! let mut registry = Registry::new("my-host", "1.0");
-//! registry.add_source_file(Path::new("guatiao_py.dll"), &config)?;
+//! registry.add_source_file(Path::new("guatiao_source_py.dll"), &config)?;
 //! registry.watch_dir(Path::new("plugins"), ScanRules::default())?;
 //! let changed = registry.refresh();          // and again, whenever the host likes
 //! ```

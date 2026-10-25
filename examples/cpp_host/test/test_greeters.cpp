@@ -6,7 +6,7 @@
 // Rust, C, Python, Go and C++ through one description of the kind, every
 // slot, and has a Rust caller call each of them through the kind's Rust
 // proxy. Every greeter comes through a source the registry keeps (watched
-// directories, the guatiao-py bridge), loaded by one refresh(); the C++
+// directories, the guatiao-source-py bridge), loaded by one refresh(); the C++
 // one is a library file like the rest. Native threads then call the C++
 // greeter, a configured provider builds instances, and the C++ library is
 // unmapped once nothing it served is alive.
@@ -14,7 +14,7 @@
 // Where each greeter is: GUATIAO_RUST_GREETERS (the workspace's build,
 // holding derived_greeter and greeter_caller), the C and C++ ones built by
 // this project, GUATIAO_GO_LIBRARY (a directory holding the Go greeter
-// built with -buildmode=c-shared), GUATIAO_PY_BRIDGE (the guatiao-py
+// built with -buildmode=c-shared), GUATIAO_PY_BRIDGE (the guatiao-source-py
 // bridge). One missing is a stated skip, and a failure under
 // GUATIAO_REQUIRE_ALL=1.
 
@@ -155,7 +155,7 @@ void add_sources(guatiao::registry& reg, std::vector<greeter_case>& cases) {
   cases[1].present = true;
   std::string bridge = env("GUATIAO_PY_BRIDGE");
   if (bridge.empty()) {
-    skip("GUATIAO_PY_BRIDGE names no guatiao-py bridge: the Python greeters are not served");
+    skip("GUATIAO_PY_BRIDGE names no guatiao-source-py bridge: the Python greeters are not served");
   } else {
     std::string repo = GUATIAO_REPO;
     guatiao::value config = guatiao::make(item::map(

@@ -53,7 +53,7 @@ func (l *list) Set(v string) error { *l = append(*l, v); return nil }
 
 func main() {
 	var pythonDirs, pythonPaths list
-	pythonSource := flag.String("python-source", "", "the guatiao-py bridge, as a source of Python libraries")
+	pythonSource := flag.String("python-source", "", "the guatiao-source-py bridge, as a source of Python libraries")
 	flag.Var(&pythonDirs, "python-dir", "a directory of Python libraries for the bridge (repeatable)")
 	flag.Var(&pythonPaths, "python-path", "a directory the Python libraries import from (repeatable)")
 	withGo := flag.Bool("go", true, "register the greeters written in Go, linked into this program")

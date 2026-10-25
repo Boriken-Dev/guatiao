@@ -94,7 +94,7 @@ arguments raise, naming the slot and the argument.
 - **One interpreter thread.** A Lua table handed to a provider as an
   object is called only while this thread is in a call and only from it:
   a provider that calls it from a thread of its own (a Lua library
-  through the guatiao-lua source, which runs on its own thread) gets
+  through the guatiao-source-lua source, which runs on its own thread) gets
   `internal`. Its table is kept for the process.
 - **The module carries the guatiao library**, exporting its C functions
   too: a C library that links guatiao by name finds them here.

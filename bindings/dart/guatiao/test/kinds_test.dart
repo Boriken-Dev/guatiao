@@ -191,16 +191,16 @@ String? _buildCGreeter({bool ignoresCarrier = false}) {
   return null;
 }
 
-/// The guatiao-py bridge's file, or null where it was not built.
+/// The guatiao-source-py bridge's file, or null where it was not built.
 String? bridge() {
   final named =
       Platform.environment['GUATIAO_PY_BRIDGE'] ??
       repoPath([
         'crates',
-        'guatiao-py',
+        'guatiao-source-py',
         'target',
         'debug',
-        dllFilename('guatiao_py'),
+        dllFilename('guatiao_source_py'),
       ]);
   return File(named).existsSync() ? named : null;
 }
@@ -363,7 +363,7 @@ void main() {
     test('written in Python, through the bridge', () {
       final file = bridge();
       if (file == null) {
-        markTestSkipped('no guatiao-py build: set GUATIAO_PY_BRIDGE');
+        markTestSkipped('no guatiao-source-py build: set GUATIAO_PY_BRIDGE');
         return;
       }
       reg.addSourceFile(file, {

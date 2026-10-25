@@ -5,7 +5,7 @@
 
 // Greeters written in JavaScript, in the shape the Node binding gives
 // providers: the same file runs under Node (`libraryOf`) and under the
-// guatiao-js source (QuickJS), serving the same kinds as the greeters in
+// guatiao-source-js source (QuickJS), serving the same kinds as the greeters in
 // Rust, C, Python and Lua.
 //
 // The module is the library: its id and version are its package's

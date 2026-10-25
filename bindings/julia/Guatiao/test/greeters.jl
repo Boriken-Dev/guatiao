@@ -52,7 +52,7 @@ const HOST = Registry("julia-greeters", "0.1")
 # Every greeter written in another language comes through a source the
 # registry keeps, and one refresh loads them all: the workspace's own
 # directory and the C and Go greeters' as watched directories, the Python
-# greeters through the guatiao-py bridge.
+# greeters through the guatiao-source-py bridge.
 Guatiao.watch_dir!(HOST, library_dir(); rules = "kind=greeter")
 push!(PRESENT, :rust)
 let dir = build_c_greeter()
@@ -74,7 +74,7 @@ end
 let py = bridge()
     named = haskey(ENV, "GUATIAO_PY_BRIDGE")
     if py === nothing
-        absent_greeter(:python, "no guatiao-py build: set GUATIAO_PY_BRIDGE")
+        absent_greeter(:python, "no guatiao-source-py build: set GUATIAO_PY_BRIDGE")
     else
         try
             Guatiao.add_source_file!(HOST, py, bridge_config())

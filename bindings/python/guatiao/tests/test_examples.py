@@ -62,10 +62,10 @@ def test_the_python_host_calls_every_greeter_it_finds(tmp_path):
 def test_the_python_host_serves_python_greeters_through_the_bridge() -> None:
     bridge = Path(
         os.environ.get("GUATIAO_PY_BRIDGE")
-        or native.REPO / "crates" / "guatiao-py" / "target" / "debug" / native.library_name("guatiao_py")
+        or native.REPO / "crates" / "guatiao-source-py" / "target" / "debug" / native.library_name("guatiao_source_py")
     )
     if not bridge.is_file():
-        pytest.skip(f"no guatiao-py build at {bridge}")
+        pytest.skip(f"no guatiao-source-py build at {bridge}")
     host = native.REPO / "examples" / "python_host" / "host.py"
     out = _run(
         host,

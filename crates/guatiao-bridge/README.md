@@ -92,7 +92,7 @@ guatiao::source!(serves = "lua", make = start);
 A host adds the file and refreshes:
 
 ```rust,ignore
-registry.add_source_file(Path::new("guatiao_lua.dll"), &config)?;
+registry.add_source_file(Path::new("guatiao_source_lua.dll"), &config)?;
 let changed = registry.refresh();
 ```
 
