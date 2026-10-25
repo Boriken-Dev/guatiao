@@ -7,7 +7,8 @@
 //!
 //! | key | holds |
 //! | --- | --- |
-//! | `connect` | `tcp://host:port`, `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), or for a child `child` instead |
+//! | `connect` | `tcp://host:port`, `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
+//! | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `trust` | `local`, `trusted` or `secure`; `local` for a child |
 //! | `key`, `key_file` | the trusted level's pre-shared key, as text or a file's bytes |
@@ -128,6 +129,18 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
             }
             Ok((
                 Box::new(crate::transport::tcp::TcpConnect::new(rest)),
+                options_of(map, trust)?,
+            ))
+        }
+        #[cfg(feature = "rdma")]
+        "rdma" => {
+            use crate::transport::rdma::{RdmaConnect, RdmaPort};
+            if trust != Trust::Trusted {
+                return Err(refused("`rdma://` runs the trusted level"));
+            }
+            let port = text(map, "rdma_device")?.map_or_else(RdmaPort::first, RdmaPort::named);
+            Ok((
+                Box::new(RdmaConnect::new(rest).port(port)),
                 options_of(map, trust)?,
             ))
         }

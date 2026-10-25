@@ -14,6 +14,9 @@ const ALLOWED: &[&str] = &[
     "exports.rs",
     // The shared rings: a mapping, atomics on it, copies in and out.
     "transport/shm.rs",
+    // libibverbs opened at run time: its structs, calls and registered
+    // memory, behind safe types.
+    "transport/rdma/verbs.rs",
 ];
 
 fn sources(dir: &Path, into: &mut Vec<PathBuf>) {

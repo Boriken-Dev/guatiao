@@ -22,11 +22,13 @@ guatiao-remote-server (--stdio | --listen tcp://ADDRESS:PORT) [options]
 
   --stdio               serve one link on stdin and stdout (a host's child)
   --listen URL          serve every link to URL (tcp:// is the trusted level,
-                        local://name the local one: a socket path or a pipe name)
+                        local://name the local one: a socket path or a pipe name;
+                        rdma://ADDRESS:PORT is RDMA, experimental, Linux only)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
   --range CIDR          an address range peers are accepted from, others
                         closed unread (trusted; repeatable; required)
   --key-file PATH       the trusted level's pre-shared key
+  --rdma-device NAME    the RDMA device rdma:// goes through (default: the first)
   --kinds PATH          a kind description document (repeatable)
   --load PATH           a library to load (repeatable)
   --scan DIR            a directory of libraries to load (repeatable)
@@ -41,6 +43,7 @@ struct Args {
     trust: Option<Trust>,
     ranges: Vec<String>,
     key_file: Option<PathBuf>,
+    rdma_device: Option<String>,
     kinds: Vec<PathBuf>,
     load: Vec<PathBuf>,
     scan: Vec<PathBuf>,
@@ -58,6 +61,7 @@ fn parse() -> Result<Args, String> {
         trust: None,
         ranges: Vec::new(),
         key_file: None,
+        rdma_device: None,
         kinds: Vec::new(),
         load: Vec::new(),
         scan: Vec::new(),
@@ -84,6 +88,7 @@ fn parse() -> Result<Args, String> {
             }
             "--range" => a.ranges.push(need(&mut it, &flag)?),
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),
+            "--rdma-device" => a.rdma_device = Some(need(&mut it, &flag)?),
             "--kinds" => a.kinds.push(need(&mut it, &flag)?.into()),
             "--load" => a.load.push(need(&mut it, &flag)?.into()),
             "--scan" => a.scan.push(need(&mut it, &flag)?.into()),
@@ -197,6 +202,8 @@ fn run() -> Result<(), String> {
     match scheme {
         #[cfg(feature = "tcp")]
         "tcp" => serve_tcp(&server, address, &a.ranges),
+        #[cfg(feature = "rdma")]
+        "rdma" => serve_rdma(&server, address, &a.ranges, a.rdma_device.as_deref()),
         #[cfg(feature = "local")]
         "local" => serve_local(&server, address),
         #[cfg(feature = "shm")]
@@ -206,28 +213,32 @@ fn run() -> Result<(), String> {
 }
 
 #[cfg(feature = "tcp")]
-fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), String> {
-    use guatiao_remote::transport::tcp::{Accepted, Range, TcpListen};
+fn ranges_of(
+    server: &Server,
+    scheme: &str,
+    ranges: &[String],
+) -> Result<Vec<guatiao_remote::transport::tcp::Range>, String> {
     if server.options().trust() != Trust::Trusted {
-        return Err("tcp:// serves the trusted level: pass --trust trusted".to_string());
+        return Err(format!(
+            "{scheme}:// serves the trusted level: pass --trust trusted"
+        ));
     }
-    let ranges = ranges
+    ranges
         .iter()
-        .map(|r| Range::parse(r))
-        .collect::<Result<Vec<_>, _>>()?;
-    let listener = TcpListen::bind(address, &ranges).map_err(|e| e.to_string())?;
-    eprintln!(
-        "guatiao-remote: serving tcp://{} to {}",
-        listener.local_addr().map_err(|e| e.to_string())?,
-        ranges
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+        .map(|r| guatiao_remote::transport::tcp::Range::parse(r))
+        .collect()
+}
+
+/// Serves every link `accept` hands over, each on a thread of its own.
+#[cfg(feature = "tcp")]
+fn serve_accepted(
+    server: &Server,
+    accept: impl Fn() -> std::io::Result<guatiao_remote::transport::tcp::Accepted>,
+) -> Result<(), String> {
+    use guatiao_remote::transport::tcp::Accepted;
     let server = alloc::sync::Arc::new(server.clone());
     loop {
-        match listener.accept() {
+        match accept() {
             Ok(Accepted::Connection(conn)) => {
                 let server = alloc::sync::Arc::clone(&server);
                 std::thread::spawn(move || {
@@ -243,6 +254,48 @@ fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), St
             Err(e) => eprintln!("guatiao-remote: accept: {e}"),
         }
     }
+}
+
+#[cfg(feature = "tcp")]
+fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), String> {
+    use guatiao_remote::transport::tcp::TcpListen;
+    let ranges = ranges_of(server, "tcp", ranges)?;
+    let listener = TcpListen::bind(address, &ranges).map_err(|e| e.to_string())?;
+    eprintln!(
+        "guatiao-remote: serving tcp://{} to {}",
+        listener.local_addr().map_err(|e| e.to_string())?,
+        ranges
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    serve_accepted(server, || listener.accept())
+}
+
+#[cfg(feature = "rdma")]
+fn serve_rdma(
+    server: &Server,
+    address: &str,
+    ranges: &[String],
+    device: Option<&str>,
+) -> Result<(), String> {
+    use guatiao_remote::transport::rdma::{RdmaListen, RdmaPort};
+    let ranges = ranges_of(server, "rdma", ranges)?;
+    let port = device.map_or_else(RdmaPort::first, RdmaPort::named);
+    let listener = RdmaListen::bind(address, &ranges)
+        .map_err(|e| e.to_string())?
+        .port(port);
+    eprintln!(
+        "guatiao-remote: serving rdma://{} to {}",
+        listener.local_addr().map_err(|e| e.to_string())?,
+        ranges
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    serve_accepted(server, || listener.accept())
 }
 
 #[cfg(feature = "local")]

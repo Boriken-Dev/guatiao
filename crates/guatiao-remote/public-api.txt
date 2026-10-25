@@ -402,6 +402,47 @@ impl core::fmt::Debug for guatiao_remote::transport::local::LocalListen
 pub fn guatiao_remote::transport::local::LocalListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao_remote::transport::memory
 pub fn guatiao_remote::transport::memory::pair() -> (guatiao_remote::transport::Connection, guatiao_remote::transport::Connection)
+pub mod guatiao_remote::transport::rdma
+pub struct guatiao_remote::transport::rdma::RdmaConnect
+impl guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::new(&str) -> guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::port(self, guatiao_remote::transport::rdma::RdmaPort) -> guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::timeout(self, core::time::Duration) -> guatiao_remote::transport::rdma::RdmaConnect
+impl core::clone::Clone for guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::rdma::RdmaConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_remote::transport::rdma::RdmaListen
+impl guatiao_remote::transport::rdma::RdmaListen
+pub fn guatiao_remote::transport::rdma::RdmaListen::accept(&self) -> core::io::error::Result<guatiao_remote::transport::tcp::Accepted>
+pub fn guatiao_remote::transport::rdma::RdmaListen::bind(&str, &[guatiao_remote::transport::tcp::Range]) -> core::io::error::Result<guatiao_remote::transport::rdma::RdmaListen>
+pub fn guatiao_remote::transport::rdma::RdmaListen::from_listener(std::net::tcp::TcpListener, &[guatiao_remote::transport::tcp::Range]) -> core::io::error::Result<guatiao_remote::transport::rdma::RdmaListen>
+pub fn guatiao_remote::transport::rdma::RdmaListen::local_addr(&self) -> core::io::error::Result<core::net::socket_addr::SocketAddr>
+pub fn guatiao_remote::transport::rdma::RdmaListen::port(self, guatiao_remote::transport::rdma::RdmaPort) -> guatiao_remote::transport::rdma::RdmaListen
+impl core::fmt::Debug for guatiao_remote::transport::rdma::RdmaListen
+pub fn guatiao_remote::transport::rdma::RdmaListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::transport::rdma::RdmaPort
+impl guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::first() -> guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::gid_index(self, u8) -> guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::named(&str) -> guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::port(self, u8) -> guatiao_remote::transport::rdma::RdmaPort
+impl core::clone::Clone for guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::transport::rdma::RdmaPort
+impl core::cmp::PartialEq for guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::default() -> guatiao_remote::transport::rdma::RdmaPort
+impl core::fmt::Debug for guatiao_remote::transport::rdma::RdmaPort
+pub fn guatiao_remote::transport::rdma::RdmaPort::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_remote::transport::rdma::RdmaPort
+pub const guatiao_remote::transport::rdma::RING: usize
+pub const guatiao_remote::transport::rdma::SETUP_TIMEOUT: core::time::Duration
+pub fn guatiao_remote::transport::rdma::devices() -> core::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub mod guatiao_remote::transport::shm
 pub struct guatiao_remote::transport::shm::ShmConnect
 impl guatiao_remote::transport::shm::ShmConnect
@@ -494,6 +535,9 @@ pub fn guatiao_remote::transport::child::ChildCommand::describe(&self) -> alloc:
 impl guatiao_remote::transport::Connect for guatiao_remote::transport::local::LocalConnect
 pub fn guatiao_remote::transport::local::LocalConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub fn guatiao_remote::transport::local::LocalConnect::describe(&self) -> alloc::string::String
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::rdma::RdmaConnect
+pub fn guatiao_remote::transport::rdma::RdmaConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::rdma::RdmaConnect::describe(&self) -> alloc::string::String
 impl guatiao_remote::transport::Connect for guatiao_remote::transport::shm::ShmConnect
 pub fn guatiao_remote::transport::shm::ShmConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
 pub fn guatiao_remote::transport::shm::ShmConnect::describe(&self) -> alloc::string::String
