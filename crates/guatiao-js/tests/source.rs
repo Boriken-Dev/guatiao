@@ -535,6 +535,12 @@ export class Spin extends Provider {
       for (;;) {}
     }
     if (name === 'import-forever') for (;;) import('./dep.js');
+    if (name === 'levels') {
+      let most = 0;
+      const down = (n) => { most = n; down(n + 1); };
+      try { down(1); } catch (e) {}
+      return { greeting: String(most) };
+    }
     return { greeting: `calm, ${name}` };
   }
 }
@@ -973,6 +979,31 @@ fn a_library_opens_under_the_least_depth_limit() {
 
 /// Opening a library is under the limits too: a module whose reactions
 /// spin while it awaits forever is stopped, and the source carries on.
+/// No depth limit gives a call more stack than having none.
+#[test]
+fn a_large_depth_limit_reaches_no_deeper_than_none() {
+    let dir = scratch("large-depth");
+    put(&dir, "js_levels", "version = \"1.0.0\"\n", &spin());
+    let levels = |limits_given: Option<Map>| -> u64 {
+        let mut registry = serving(&config(&dir, limits_given));
+        assert!(registry.refresh().refused.is_empty());
+        greeting(
+            &greeter(&registry, "js_levels_spin")
+                .greet("levels")
+                .expect("counted"),
+        )
+        .parse()
+        .expect("a count")
+    };
+    let none = levels(None);
+    let large = levels(Some(limits(&[("depth", 100_000)])));
+    assert!(
+        large <= none,
+        "depth 100000 reached {large} levels, none {none}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_module_that_never_finishes_loading_is_stopped() {
     let dir = scratch("never-loads");
