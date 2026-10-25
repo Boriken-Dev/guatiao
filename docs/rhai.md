@@ -124,18 +124,27 @@ import another module, and its `print` and `debug` do nothing. A function
 body or closure nests expressions at most 16 deep; a script with a deeper
 one does not open.
 
-**Set `operations`.** Rhai copies and drops the values a script nests
-(arrays, maps, closures that capture closures) by recursion on the native
-stack, and nothing but the operations it takes bounds how deep they nest.
-With `operations` set, each call runs on a stack that holds what it can
-build, and values a library keeps are dropped on a large one; the stack is
-mapped for the call, which costs about 25 microseconds (on Windows the
-whole stack is committed memory). Comparing or writing a nested value
-recurses through Rhai's own calls; when that reaches the end of the
-call's stack the call stops at its depth limit. `to_json` refuses a map
-nested deeper than 512 levels or holding more than 1 000 000 values. Without `operations`, a script can nest
-values until the stack ends and the host process aborts. What a provider
-builds up in its own state over many calls is not covered either.
+**Set `operations` for a library that nests values deeply.** Rhai copies
+and drops the values a script nests (arrays, maps, closures that capture
+closures) by recursion on the native stack, and nothing but the
+operations it takes bounds how deep they nest: each level costs at least
+one. The engine's thread reserves a stack for the limits when the source
+starts, 640 bytes for each operation (at least a hundred thousand) beside
+32 KiB for each call level: about 66 MB with no limits, 1.3 GB at
+`operations` 2 000 000, 10.7 GB at the cap, and about five times as much
+when the source is a debug build. Memory is used only as deep as a script
+goes, so a call costs the same under any limits; what the deepest call
+touched stays in use until the source closes. On Linux the
+reservation counts toward the system's commit limit, and a system that
+will not reserve it refuses the source (`GUATIAO_ERR_UNSUPPORTED`, naming
+the stack): lower `operations`. Comparing or writing a nested value
+recurses through Rhai's own calls; when that nears the end of the stack
+the call stops at its depth limit. `to_json` refuses a map nested deeper
+than 512 levels or holding more than 1 000 000 values. Without
+`operations`, a script that nests values more than a hundred thousand
+levels deep can run past the stack and abort the host process. What a
+provider builds up in its own state over many calls is not covered
+either.
 
 `memory` is the weakest of the four: Rhai counts each container, not the
 sum of them. A script can hold many containers each under the limit, so

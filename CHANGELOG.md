@@ -183,7 +183,9 @@ write now.
   the library a manifest describes, answer calls, close) and states its
   `ThreadModel`: called from any thread, behind its own lock, or pinned to
   an engine thread the bridge starts, which queues calls from other
-  threads and runs one the engine makes into itself there and then.
+  threads and runs one the engine makes into itself there and then; that
+  thread's stack is the one `Engine::stack_size` asks for, reserved and
+  used only as deep as the engine goes.
   `BridgeSource` is the engine as a guatiao `Source`, exported with
   `guatiao::source!`: manifests read without running code
   (`ManifestFormat` names the file suffix, the id key and the code a stamp
