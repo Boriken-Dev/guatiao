@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! CPython as a guatiao-bridge engine: a library is a module, its manifest
-//! a `*.guatiao-py.toml`, its tables built by the Python binding itself.
+//! a `*.guatiao.toml` of type `python`, its tables built by the Python binding itself.
 
 #![forbid(unsafe_code)]
 
@@ -23,7 +23,7 @@ impl Engine for Python {
     const THREADS: ThreadModel = ThreadModel::Locked;
 
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-py.toml",
+        serves: "python",
         id_key: "module",
         code_extensions: &["py"],
         skip_dirs: &["__pycache__"],

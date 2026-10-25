@@ -62,8 +62,8 @@ def _copy_greeter(into: Path, module: str) -> Path:
     into.mkdir(parents=True, exist_ok=True)
     source = (_EXAMPLES / "py_greeter" / "py_greeter.py").read_text(encoding="utf-8")
     (into / f"{module}.py").write_text(source, encoding="utf-8")
-    (into / f"{module}.guatiao-py.toml").write_text(
-        f'module = "{module}"\nkinds = ["greeter", "counter"]\npaths = ["."]\n',
+    (into / f"{module}.guatiao.toml").write_text(
+        f'type = "python"\nmodule = "{module}"\nkinds = ["greeter", "counter"]\npaths = ["."]\n',
         encoding="utf-8",
     )
     return into / f"{module}.py"
@@ -117,7 +117,7 @@ def test_a_deleted_manifest_retires_its_library(reg, tmp_path):
     reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)]})
     assert [s["id"] for s in reg.refresh()["loaded"]] == ["py_tally"]
     assert "py_tally" in sys.modules
-    (tmp_path / "py_tally" / "py_tally.guatiao-py.toml").unlink()
+    (tmp_path / "py_tally" / "py_tally.guatiao.toml").unlink()
     changed = reg.refresh()
     assert [s["id"] for s in changed["retired"]] == ["py_tally"]
     assert reg.collect() == ["py_tally"]
@@ -128,23 +128,23 @@ def test_what_cannot_be_opened_is_refused_in_words(reg, tmp_path):
     clash = tmp_path / "clash"
     clash.mkdir()
     (clash / "json.py").write_text('__version__ = "1"\n', encoding="utf-8")
-    (clash / "clash.guatiao-py.toml").write_text('module = "json"\nkinds = ["greeter"]\n', encoding="utf-8")
-    (tmp_path / "broken.guatiao-py.toml").write_text("module = \n", encoding="utf-8")
+    (clash / "clash.guatiao.toml").write_text('type = "python"\nmodule = "json"\nkinds = ["greeter"]\n', encoding="utf-8")
+    (tmp_path / "broken.guatiao.toml").write_text("module = \n", encoding="utf-8")
     liar = tmp_path / "liar"
     _copy_greeter(liar, "py_liar")
-    (liar / "py_liar.guatiao-py.toml").write_text(
-        'module = "py_liar"\nversion = "9.9.9"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
+    (liar / "py_liar.guatiao.toml").write_text(
+        'type = "python"\nmodule = "py_liar"\nversion = "9.9.9"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
     )
     computed = tmp_path / "computed"
     computed.mkdir()
     (computed / "py_computed.py").write_text('__version__ = ".".join(["1", "0"])\n', encoding="utf-8")
-    (computed / "computed.guatiao-py.toml").write_text(
-        'module = "py_computed"\nkinds = ["counter"]\n', encoding="utf-8"
+    (computed / "computed.guatiao.toml").write_text(
+        'type = "python"\nmodule = "py_computed"\nkinds = ["counter"]\n', encoding="utf-8"
     )
     reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)]})
     refused = {r["id"]: r["why"] for r in reg.refresh()["refused"]}
     assert "`json` is already imported from" in refused["json"]
-    assert any("broken.guatiao-py.toml" in why for why in refused.values())
+    assert any("broken.guatiao.toml" in why for why in refused.values())
     assert "version `9.9.9`" in refused["py_liar"] and "`1.0.0`" in refused["py_liar"]
     assert "put `version` in the manifest" in refused["py_computed"]
     assert reg.libraries() == []

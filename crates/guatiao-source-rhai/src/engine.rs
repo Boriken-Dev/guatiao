@@ -4,7 +4,7 @@
 
 //! Rhai as a guatiao-bridge engine: a library is a script whose last
 //! expression is a map of providers, its manifest a
-//! `*.guatiao-rhai.toml`, each provider a map whose function members are
+//! `*.guatiao.toml` of type `rhai`, each provider a map whose function members are
 //! the slots, served through tables the bridge builds from the kinds'
 //! descriptions.
 
@@ -386,7 +386,7 @@ impl Engine for RhaiEngine {
     const THREADS: ThreadModel = ThreadModel::Pinned;
 
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-rhai.toml",
+        serves: "rhai",
         id_key: "module",
         code_extensions: &["rhai"],
         skip_dirs: &[],

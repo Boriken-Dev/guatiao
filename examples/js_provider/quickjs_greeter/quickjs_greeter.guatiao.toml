@@ -4,6 +4,7 @@
 # package's: `package.json` beside this file. `paths` are relative to this
 # file: the files a library may import, and where editing a `.js` file is
 # what a refresh notices; the greeter kinds' module is outside the package.
+type = "js"
 name = "quickjs_greeter"
 kinds = ["greeter", "counter"]
 paths = [".", "../../greeter_kind/node"]

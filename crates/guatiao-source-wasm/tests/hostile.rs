@@ -252,8 +252,8 @@ fn pushy(name: &str) -> std::path::PathBuf {
     let dir = scratch(name);
     let bytes = wat::parse_str(guest()).expect("the guest parses");
     std::fs::write(
-        dir.join("pushy.guatiao-wasm.toml"),
-        "module = \"pushy\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n",
+        dir.join("pushy.guatiao.toml"),
+        "type = \"wasm\"\nmodule = \"pushy\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n",
     )
     .expect("written");
     std::fs::write(dir.join("pushy.wasm"), bytes).expect("written");
@@ -457,8 +457,8 @@ fn a_wide_map_is_taken_in_an_answer_and_a_write_back_charged_by_its_nodes() {
 
 fn put_wat(dir: &Path, id: &str, text: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao-wasm.toml")),
-        format!("module = \"{id}\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n"),
+        dir.join(format!("{id}.guatiao.toml")),
+        format!("type = \"wasm\"\nmodule = \"{id}\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n"),
     )
     .expect("written");
     std::fs::write(
@@ -599,8 +599,8 @@ fn growing_past_a_module_maximum_fails_in_the_guest_and_counts_nothing() {
 fn a_module_past_the_size_bound_is_refused_unread() {
     let dir = scratch("huge");
     std::fs::write(
-        dir.join("huge.guatiao-wasm.toml"),
-        "module = \"huge\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n",
+        dir.join("huge.guatiao.toml"),
+        "type = \"wasm\"\nmodule = \"huge\"\nkinds = [\"greeter\"]\nversion = \"1.0.0\"\n",
     )
     .expect("written");
     let file = std::fs::File::create(dir.join("huge.wasm")).expect("created");

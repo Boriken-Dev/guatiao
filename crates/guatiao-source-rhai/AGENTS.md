@@ -16,9 +16,10 @@ The root re-exports everything public: `RhaiEngine`, `RhaiValues`,
 `Handle`, `Refusal`, `Absent`, `Exact`, and `rhai`. The root is
 `deny(unsafe_code)`; `exports.rs` (`guatiao::source!`) alone allows it.
 
-## A library (`*.guatiao-rhai.toml` and its script)
+## A library (a `*.guatiao.toml` and its script)
 
 ```toml
+type = "rhai"                     # required: the source that serves it
 module = "pkg.greeters"           # required: the script is pkg/greeters.rhai; the library's id
 kinds = ["greeter", "counter"]    # required: every kind its providers serve
 paths = ["."]                     # where the script is, relative to this file
@@ -140,7 +141,7 @@ sorted; a test checks that is the only difference.
 ## The engine (`RhaiEngine`)
 
 `impl guatiao_bridge::Engine`: `ThreadModel::Pinned` (one `rhai::Engine`,
-not `Send`, on the bridge's thread), manifests `*.guatiao-rhai.toml` with
+not `Send`, on the bridge's thread), manifests `*.guatiao.toml` of type `rhai` with
 `id_key = "module"` and code extension `rhai`, `Opened::Described`. Every
 provider of a library shares the library's one compiled script.
 

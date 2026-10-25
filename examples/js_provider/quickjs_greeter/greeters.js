@@ -10,7 +10,7 @@
 //
 // The module is the library: its id and version are its package's
 // (`package.json` beside it), its providers the `Provider` classes it
-// exports. `quickjs_greeter.guatiao-js.toml` beside it says which kinds it
+// exports. `quickjs_greeter.guatiao.toml` beside it says which kinds it
 // serves and where its code is, which the source reads before running
 // anything. The kinds come from the module guatiao-kind wrote from their
 // description, so nothing here says what a slot takes.

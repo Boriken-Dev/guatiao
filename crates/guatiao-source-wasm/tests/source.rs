@@ -204,8 +204,8 @@ fn put(dir: &Path, id: &str, module: &Path, version: Option<&str>) {
         .map(|v| format!("version = \"{v}\"\n"))
         .unwrap_or_default();
     std::fs::write(
-        dir.join(format!("{id}.guatiao-wasm.toml")),
-        format!("module = \"{id}\"\nkinds = [\"greeter\", \"counter\", \"wide\"]\n{version}"),
+        dir.join(format!("{id}.guatiao.toml")),
+        format!("type = \"wasm\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\", \"wide\"]\n{version}"),
     )
     .expect("written");
     std::fs::copy(module, dir.join(format!("{id}.wasm"))).expect("copied");
@@ -242,7 +242,7 @@ fn rebuilt_is_served(name: &str, first: &Path, edited: &Path, version: Option<&s
     );
 
     drop(new);
-    std::fs::remove_file(dir.join(format!("{id}.guatiao-wasm.toml"))).expect("removed");
+    std::fs::remove_file(dir.join(format!("{id}.guatiao.toml"))).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     assert_eq!(registry.collect().len(), 1, "closed");

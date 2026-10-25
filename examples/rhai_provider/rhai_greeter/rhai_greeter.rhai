@@ -9,7 +9,7 @@
 // `VERSION` below, its providers the maps its last expression names. A
 // provider is a map whose function members are the kinds' slots; `this`
 // in one is the map itself, which is where its state lives.
-// `rhai_greeter.guatiao-rhai.toml` beside it is what the source reads
+// `rhai_greeter.guatiao.toml` beside it is what the source reads
 // before running anything.
 
 const VERSION = "1.0.0";

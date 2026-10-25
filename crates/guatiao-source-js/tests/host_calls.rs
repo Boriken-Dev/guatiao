@@ -229,8 +229,8 @@ fn registry(dir: &Path) -> Registry {
     std::fs::write(dir.join("kinds.json"), KINDS).expect("written");
     std::fs::write(dir.join("feeder.js"), FEEDER.replace("KINDS", KINDS)).expect("written");
     std::fs::write(
-        dir.join("feeder.guatiao-js.toml"),
-        "name = \"feeder\"\nversion = \"1.0.0\"\nmain = \"feeder.js\"\nkinds = [\"feeder\"]\n",
+        dir.join("feeder.guatiao.toml"),
+        "type = \"js\"\nname = \"feeder\"\nversion = \"1.0.0\"\nmain = \"feeder.js\"\nkinds = [\"feeder\"]\n",
     )
     .expect("written");
     let mut config = Map::new();

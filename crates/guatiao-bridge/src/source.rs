@@ -23,8 +23,8 @@ use crate::thread::Runner;
 /// exports with `guatiao::source!`, or a Rust host adds with
 /// `Registry::add_source`.
 ///
-/// Each library is a manifest ([`ManifestFormat`](crate::ManifestFormat)
-/// says how they are named) in the configuration's `dirs` or
+/// Each library is a manifest of its type ([`ManifestFormat`](crate::ManifestFormat))
+/// in the configuration's `dirs` or
 /// `manifests`. A refresh lists them without running any code (a version
 /// the manifest leaves out is read by [`Engine::version_of`]), opens a new
 /// or changed one through [`Engine::open`], and closes one the registry

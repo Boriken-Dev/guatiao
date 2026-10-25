@@ -4,6 +4,7 @@
 # `__version__` is read as a literal from its source. `paths` are relative
 # to this file and go on sys.path while the library is open; editing a
 # `.py` file under them is what a refresh notices.
+type = "python"
 module = "py_greeter"
 kinds = ["greeter", "counter"]
 paths = ["."]

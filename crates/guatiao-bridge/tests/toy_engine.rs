@@ -89,7 +89,7 @@ impl Engine for Toy {
     type Library = u64;
     const THREADS: ThreadModel = ThreadModel::Pinned;
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-toy.toml",
+        serves: "toy",
         id_key: "module",
         code_extensions: &["toy"],
         skip_dirs: &[],
@@ -281,8 +281,8 @@ fn scratch(name: &str) -> PathBuf {
 
 fn put(dir: &Path, id: &str, manifest_extra: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao-toy.toml")),
-        format!("module = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
+        dir.join(format!("{id}.guatiao.toml")),
+        format!("type = \"toy\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
     )
     .expect("written");
     std::fs::write(dir.join(format!("{id}.toy")), code).expect("written");
@@ -423,7 +423,7 @@ fn an_edit_serves_new_code_while_the_old_instance_keeps_working() {
 
     // Gone from disk: retired, then closed.
     drop(new);
-    std::fs::remove_file(dir.join("toy_edit.guatiao-toy.toml")).expect("removed");
+    std::fs::remove_file(dir.join("toy_edit.guatiao.toml")).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     registry.collect();
@@ -459,7 +459,7 @@ fn a_library_that_does_not_run_is_refused_in_its_words() {
         "broken = yes\n",
     );
     put(&dir, "toy_unversioned", "", "word = hi\n");
-    std::fs::write(dir.join("toy_bad.guatiao-toy.toml"), "module = \n").expect("written");
+    std::fs::write(dir.join("toy_bad.guatiao.toml"), "module = \n").expect("written");
     let (mut registry, _source) = serving(&dir, None);
     let changed = registry.refresh();
     assert!(changed.loaded.is_empty(), "{changed:?}");
@@ -475,9 +475,7 @@ fn a_library_that_does_not_run_is_refused_in_its_words() {
         "{reasons:?}"
     );
     assert!(
-        reasons
-            .iter()
-            .any(|r| r.contains("toy_bad.guatiao-toy.toml")),
+        reasons.iter().any(|r| r.contains("toy_bad.guatiao.toml")),
         "{reasons:?}"
     );
     let _ = std::fs::remove_dir_all(&dir);

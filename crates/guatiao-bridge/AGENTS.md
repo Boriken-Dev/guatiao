@@ -107,8 +107,8 @@ one such a library is refused, `Unavailable`), `config()`, `kinds()`,
 `threads()`, `run(|e| ..)` (reach the engine where its thread model says;
 `T: Send + 'static`).
 
-- **list**: every manifest in `dirs` (and their immediate
-  subdirectories) and `manifests`, each once, in path order. Runs no code
+- **list**: every manifest of the engine's type in `dirs` (and their
+  immediate subdirectories) and `manifests`, each once, in path order. Runs no code
   except `version_of` for a manifest without `version`. A manifest that
   does not parse is listed under its path; one whose version cannot be
   read, under its id with no kinds: opening either says why.
@@ -131,13 +131,18 @@ paths `` (`GUATIAO_ERR_BAD_VALUE`).
 ## Manifests (`manifest`)
 
 ```rust
-pub struct ManifestFormat { pub suffix, pub id_key, pub code_extensions, pub skip_dirs }
-manifest::find(&format, dirs, files) -> Vec<Found>;  manifest::read(&format, path) -> Found
+pub struct ManifestFormat { pub serves, pub id_key, pub code_extensions, pub skip_dirs }
+manifest::SUFFIX = ".guatiao.toml";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai"]
+manifest::find(&format, dirs, files) -> Vec<Found>;  manifest::read(&format, path) -> Option<Found>
 Manifest: path() id() version() kinds() paths() stamp() table()
 Found::{Library(Manifest), Broken { path, stamp, why }}
 ```
 
-`id_key` (required, text), `version` (optional), `kinds`, `paths`
+A manifest is a file named `*.guatiao.toml`. `type` (required, text)
+names the source that serves it, `serves`: a manifest of another type
+in `TYPES` is passed over without a word (`read` answers `None`), and
+one with no `type`, or a type neither in `TYPES` nor the format's own,
+is `Found::Broken`. `id_key` (required, text), `version` (optional), `kinds`, `paths`
 (default `["."]`, made absolute, not canonical). Stamp: FNV-1a of the
 manifest's bytes, `:`, the newest modification time of a code file under
 its paths (at most 10 000 files, 8 levels, `skip_dirs` skipped).

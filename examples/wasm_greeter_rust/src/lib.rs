@@ -8,7 +8,7 @@
 //!
 //! The module is the library: its id is the manifest's `module`, its
 //! version the crate's (a `guatiao.version` section), its providers those
-//! [`library`] builds. `wasm_greeter_rust.guatiao-wasm.toml` beside this
+//! [`library`] builds. `wasm_greeter_rust.guatiao.toml` beside this
 //! crate is what the source reads before running anything.
 
 use guatiao_wasm_guest::guatiao::value::convert::TryAsRef;

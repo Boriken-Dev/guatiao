@@ -4,7 +4,7 @@
 
 //! QuickJS as a guatiao-bridge engine: a library is an ES module whose
 //! exported `Provider` classes are its providers, its manifest a
-//! `*.guatiao-js.toml`, served through tables the bridge builds from the
+//! `*.guatiao.toml` of type `js`, served through tables the bridge builds from the
 //! kinds' descriptions.
 
 use alloc::collections::BTreeMap;
@@ -591,7 +591,7 @@ impl Engine for JsEngine {
     const THREADS: ThreadModel = ThreadModel::Pinned;
 
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-js.toml",
+        serves: "js",
         id_key: "name",
         code_extensions: &["js", "mjs", "json"],
         skip_dirs: &["node_modules"],

@@ -77,8 +77,8 @@ def test_an_edit_is_served_and_a_deleted_library_retired(reg, tmp_path):
     lib.mkdir()
     code = (_EXAMPLES / "lua_greeter" / "lua_greeter.lua").read_text(encoding="utf-8")
     (lib / "lua_edited.lua").write_text(code, encoding="utf-8")
-    (lib / "lua_edited.guatiao-lua.toml").write_text(
-        'module = "lua_edited"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
+    (lib / "lua_edited.guatiao.toml").write_text(
+        'type = "lua"\nmodule = "lua_edited"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
     )
     reg.add_source_file(_SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS]})
     assert [s["id"] for s in reg.refresh()["loaded"]] == ["lua_edited"]
@@ -109,8 +109,8 @@ def test_a_runaway_call_is_stopped_and_the_host_carries_on(reg, tmp_path):
         "return { _VERSION = '1.0.0', providers = { spin = Spin } }\n",
         encoding="utf-8",
     )
-    (tmp_path / "lua_spin.guatiao-lua.toml").write_text(
-        'module = "lua_spin"\nkinds = ["greeter"]\n', encoding="utf-8"
+    (tmp_path / "lua_spin.guatiao.toml").write_text(
+        'type = "lua"\nmodule = "lua_spin"\nkinds = ["greeter"]\n', encoding="utf-8"
     )
     reg.add_source_file(
         _SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS], "limits": {"operations": 100000}}

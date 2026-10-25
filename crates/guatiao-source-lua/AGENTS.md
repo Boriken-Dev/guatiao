@@ -26,9 +26,10 @@ The root re-exports everything public: `LuaEngine` (with `source`),
 `Refusal`, `BufferView`, `Exact`, `Bytes`, `Absent`, and `mlua`. The root
 is `deny(unsafe_code)`; `exports.rs` (`guatiao::source!`) alone allows it.
 
-## A library (`*.guatiao-lua.toml` and its module)
+## A library (a `*.guatiao.toml` and its module)
 
 ```toml
+type = "lua"                      # required: the source that serves it
 module = "pkg.greeters"           # required: found as require finds it; the library's id
 kinds = ["greeter", "counter"]    # required: every kind its providers serve
 paths = ["."]                     # where the module and its own modules are, relative to this file
@@ -151,7 +152,7 @@ than 512. Every shared wire vector comes back the same.
 ## The engine (`LuaEngine`, with `source`)
 
 `impl guatiao_bridge::Engine`: `ThreadModel::Pinned` (one `mlua::Lua`,
-not `Send`, on the bridge's thread), manifests `*.guatiao-lua.toml` with
+not `Send`, on the bridge's thread), manifests `*.guatiao.toml` of type `lua` with
 `id_key = "module"` and code extension `lua`, `Opened::Described`.
 
 ```rust

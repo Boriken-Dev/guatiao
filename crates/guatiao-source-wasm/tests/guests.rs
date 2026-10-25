@@ -117,8 +117,8 @@ fn guest(kinds: &[&str]) -> String {
 /// A library of one module, `bytes`, under `id`.
 fn put(dir: &Path, id: &str, bytes: &[u8], manifest_extra: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao-wasm.toml")),
-        format!("module = \"{id}\"\nkinds = [\"greeter\"]\n{manifest_extra}"),
+        dir.join(format!("{id}.guatiao.toml")),
+        format!("type = \"wasm\"\nmodule = \"{id}\"\nkinds = [\"greeter\"]\n{manifest_extra}"),
     )
     .expect("written");
     std::fs::write(dir.join(format!("{id}.wasm")), bytes).expect("written");

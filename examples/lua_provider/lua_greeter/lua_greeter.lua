@@ -7,7 +7,7 @@
 --
 -- The module is the library: its id is its name, its version `_VERSION`,
 -- its providers the tables under `providers`, each a table of methods
--- named for the kinds' slots. `lua_greeter.guatiao-lua.toml` beside it is
+-- named for the kinds' slots. `lua_greeter.guatiao.toml` beside it is
 -- what the source reads before running anything.
 
 local guatiao = require "guatiao"

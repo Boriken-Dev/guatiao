@@ -25,7 +25,8 @@ new code.
 ## A manifest
 
 ```toml
-# py_greeter.guatiao-py.toml
+# py_greeter.guatiao.toml
+type = "python"                     # the source that serves it
 module = "py_greeter"               # the library: its id, imported by this name
 kinds = ["greeter", "counter"]      # checked against what the module serves
 paths = ["."]                       # put on sys.path, relative to this file

@@ -79,8 +79,8 @@ def test_an_edit_is_served_and_a_deleted_library_retired(reg, tmp_path):
     lib.mkdir()
     code = (_EXAMPLES / "rhai_greeter" / "rhai_greeter.rhai").read_text(encoding="utf-8")
     (lib / "rhai_edited.rhai").write_text(code, encoding="utf-8")
-    (lib / "rhai_edited.guatiao-rhai.toml").write_text(
-        'module = "rhai_edited"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
+    (lib / "rhai_edited.guatiao.toml").write_text(
+        'type = "rhai"\nmodule = "rhai_edited"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
     )
     reg.add_source_file(_SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS]})
     assert [s["id"] for s in reg.refresh()["loaded"]] == ["rhai_edited"]
@@ -113,8 +113,8 @@ let spin = #{ kinds: ["greeter"], greet: |name| {
 """,
         encoding="utf-8",
     )
-    (tmp_path / "rhai_spin.guatiao-rhai.toml").write_text(
-        'module = "rhai_spin"\nkinds = ["greeter"]\n', encoding="utf-8"
+    (tmp_path / "rhai_spin.guatiao.toml").write_text(
+        'type = "rhai"\nmodule = "rhai_spin"\nkinds = ["greeter"]\n', encoding="utf-8"
     )
     reg.add_source_file(
         _SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS], "limits": {"operations": 100000}}

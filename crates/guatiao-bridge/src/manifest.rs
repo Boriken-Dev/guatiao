@@ -4,15 +4,21 @@
 
 //! Manifests: what a library is, read without running it.
 //!
-//! A manifest is a TOML file named `<anything><suffix>` beside or above
-//! the library's code:
+//! A manifest is a TOML file named `<anything>.guatiao.toml` ([`SUFFIX`])
+//! beside or above the library's code, its `type` naming the source that
+//! serves it:
 //!
 //! ```toml
+//! type = "python"              # the source that serves it: a format's `serves`
 //! module = "greeters"          # the id key a format names: the library's id
 //! version = "1.0.0"            # optional: else the engine reads it from the code
 //! kinds = ["greeter"]          # every kind its providers serve
 //! paths = ["."]                # where its code is, relative to this file
 //! ```
+//!
+//! A source passes over a manifest of another type guatiao's sources serve
+//! ([`TYPES`]) without a word, and lists one with no `type`, or a type
+//! none of them serves, as broken, so a refresh reports it.
 //!
 //! Its stamp changes with the manifest's content and with the newest
 //! modification of a code file under its paths, so a refresh notices an
@@ -23,16 +29,24 @@ use std::path::{Path, PathBuf};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Alloc, List, Map};
 
+/// What every manifest's file name ends with.
+pub const SUFFIX: &str = ".guatiao.toml";
+
+/// The `type`s guatiao's own sources serve: each the name its
+/// `guatiao::source!` declares.
+pub const TYPES: &[&str] = &["python", "js", "lua", "wasm", "rhai"];
+
 /// The most code files a stamp looks at under one library's paths, and
 /// how deep it walks: a library is a package, not a disk.
 const MOST_FILES: usize = 10_000;
 const DEEPEST: usize = 8;
 
-/// How one engine's manifests are named and what its code looks like.
+/// Which manifests are one engine's and what its code looks like.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ManifestFormat {
-    /// What a manifest's file name ends with (`.guatiao-py.toml`).
-    pub suffix: &'static str,
+    /// The `type` its manifests name (`python`): the name its source's
+    /// `guatiao::source!` declares.
+    pub serves: &'static str,
     /// The key holding the library's id (`module`).
     pub id_key: &'static str,
     /// Extensions of the code files a stamp follows, without the dot.
@@ -47,7 +61,16 @@ impl ManifestFormat {
             && path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with(self.suffix))
+                .is_some_and(|n| n.ends_with(SUFFIX))
+    }
+
+    /// The types a manifest may name: guatiao's, and this engine's own.
+    fn known(&self) -> String {
+        let mut known: Vec<&str> = TYPES.to_vec();
+        if !known.contains(&self.serves) {
+            known.push(self.serves);
+        }
+        known.join(", ")
     }
 
     fn is_code(&self, path: &Path) -> bool {
@@ -150,8 +173,9 @@ impl Found {
     }
 }
 
-/// Every manifest in `dirs` (and their immediate subdirectories) and in
-/// `files`, each once, in path order.
+/// Every manifest of `format`'s type in `dirs` (and their immediate
+/// subdirectories) and in `files`, each once, in path order; a manifest
+/// with no type, or a type no source serves, is in it as broken.
 pub fn find(format: &ManifestFormat, dirs: &[PathBuf], files: &[PathBuf]) -> Vec<Found> {
     let mut paths: Vec<PathBuf> = files.to_vec();
     for dir in dirs {
@@ -185,7 +209,7 @@ pub fn find(format: &ManifestFormat, dirs: &[PathBuf], files: &[PathBuf]) -> Vec
         }
     });
     paths.sort();
-    paths.iter().map(|p| read(format, p)).collect()
+    paths.iter().filter_map(|p| read(format, p)).collect()
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {
@@ -251,12 +275,15 @@ fn text_list(map: &Map, key: &str) -> Result<Vec<String>, String> {
     }
 }
 
-/// Reads one manifest. Runs nothing.
-pub fn read(format: &ManifestFormat, path: &Path) -> Found {
-    let broken = |stamp: String, why: String| Found::Broken {
-        path: path.to_path_buf(),
-        stamp,
-        why: format!("{}: {why}", path.display()),
+/// Reads one manifest, or `None` when its `type` is another source's.
+/// Runs nothing.
+pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
+    let broken = |stamp: String, why: String| {
+        Some(Found::Broken {
+            path: path.to_path_buf(),
+            stamp,
+            why: format!("{}: {why}", path.display()),
+        })
     };
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
@@ -278,6 +305,25 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Found {
     let Some(map) = TryAsRef::<Map>::try_as_ref(&value) else {
         return broken(file_stamp, "not a table".to_string());
     };
+    match map.get("type").and_then(TryAsRef::<str>::try_as_ref) {
+        Some(named) if named == format.serves => {}
+        Some(named) if TYPES.contains(&named) => return None,
+        Some(_) => {
+            return broken(
+                file_stamp,
+                format!("`type` names none of the sources: {}", format.known()),
+            );
+        }
+        None => {
+            return broken(
+                file_stamp,
+                format!(
+                    "`type` is missing or not text: it names the source that serves the library ({})",
+                    format.known()
+                ),
+            );
+        }
+    }
     let text_field = |key: &str| -> Result<String, String> {
         map.get(key)
             .and_then(TryAsRef::<str>::try_as_ref)
@@ -327,7 +373,7 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Found {
         })
     };
     match read() {
-        Ok(manifest) => Found::Library(manifest),
+        Ok(manifest) => Some(Found::Library(manifest)),
         Err(why) => broken(file_stamp, why),
     }
 }
@@ -337,7 +383,7 @@ mod tests {
     use super::*;
 
     const PY: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-py.toml",
+        serves: "python",
         id_key: "module",
         code_extensions: &["py"],
         skip_dirs: &["__pycache__"],
@@ -351,17 +397,27 @@ mod tests {
         dir
     }
 
+    fn broken_why(found: &[Found], file: &str) -> String {
+        found
+            .iter()
+            .find_map(|f| match f {
+                Found::Broken { path, why, .. } if path.ends_with(file) => Some(why.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{file} is not listed as broken: {found:?}"))
+    }
+
     #[test]
     fn a_manifest_is_read_and_its_stamp_follows_its_code() {
         let dir = scratch("read");
         std::fs::create_dir_all(dir.join("lib")).unwrap();
         std::fs::write(
-            dir.join("lib").join("one.guatiao-py.toml"),
-            "module = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\n",
+            dir.join("lib").join("one.guatiao.toml"),
+            "type = \"python\"\nmodule = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\n",
         )
         .unwrap();
         std::fs::write(dir.join("lib").join("one.py"), "x = 1\n").unwrap();
-        std::fs::write(dir.join("broken.guatiao-py.toml"), "id = \n").unwrap();
+        std::fs::write(dir.join("broken.guatiao.toml"), "id = \n").unwrap();
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 2);
@@ -378,7 +434,8 @@ mod tests {
 
         std::thread::sleep(core::time::Duration::from_millis(20));
         std::fs::write(dir.join("lib").join("one.py"), "x = 2\n").unwrap();
-        let Found::Library(again) = read(&PY, &dir.join("lib").join("one.guatiao-py.toml")) else {
+        let Some(Found::Library(again)) = read(&PY, &dir.join("lib").join("one.guatiao.toml"))
+        else {
             panic!("still a library");
         };
         assert_ne!(
@@ -392,12 +449,87 @@ mod tests {
     #[test]
     fn a_field_of_the_wrong_kind_is_named() {
         let dir = scratch("wrong");
-        let path = dir.join("w.guatiao-py.toml");
-        std::fs::write(&path, "module = \"w\"\nkinds = \"greeter\"\n").unwrap();
-        let Found::Broken { why, .. } = read(&PY, &path) else {
+        let path = dir.join("w.guatiao.toml");
+        std::fs::write(
+            &path,
+            "type = \"python\"\nmodule = \"w\"\nkinds = \"greeter\"\n",
+        )
+        .unwrap();
+        let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
             panic!("refused");
         };
         assert!(why.contains("`kinds` is not a list"), "{why}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn another_sources_manifest_is_passed_over_and_a_missing_or_unknown_type_is_named() {
+        let dir = scratch("types");
+        let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+        write(
+            "mine.guatiao.toml",
+            "type = \"python\"\nmodule = \"mine\"\n",
+        );
+        write(
+            "theirs.guatiao.toml",
+            "type = \"lua\"\nmodule = \"theirs\"\n",
+        );
+        write("untyped.guatiao.toml", "module = \"untyped\"\n");
+        write("numbered.guatiao.toml", "type = 3\nmodule = \"numbered\"\n");
+        write(
+            "typo.guatiao.toml",
+            "type = \"pyhton\"\nmodule = \"typo\"\n",
+        );
+        write(
+            "old.guatiao-py.toml",
+            "type = \"python\"\nmodule = \"old\"\n",
+        );
+
+        let found = find(&PY, core::slice::from_ref(&dir), &[]);
+        assert_eq!(found.len(), 4, "{found:?}");
+        assert!(found.iter().any(|f| f.id() == "mine"));
+        assert!(!found.iter().any(|f| f.id().contains("theirs")));
+        assert!(!found.iter().any(|f| f.id().contains("old")));
+        for file in ["untyped.guatiao.toml", "numbered.guatiao.toml"] {
+            let why = broken_why(&found, file);
+            assert!(why.contains("`type` is missing or not text"), "{why}");
+            assert!(why.contains("python, js, lua, wasm, rhai"), "{why}");
+        }
+        let why = broken_why(&found, "typo.guatiao.toml");
+        assert!(why.contains("`type` names none of the sources"), "{why}");
+
+        assert!(read(&PY, &dir.join("theirs.guatiao.toml")).is_none());
+        let named = find(&PY, &[], &[dir.join("theirs.guatiao.toml")]);
+        assert!(
+            named.is_empty(),
+            "a file named in `manifests` too: {named:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_engine_of_its_own_type_reads_its_manifests_and_names_its_type() {
+        const TOY: ManifestFormat = ManifestFormat {
+            serves: "toy",
+            id_key: "module",
+            code_extensions: &[],
+            skip_dirs: &[],
+        };
+        let dir = scratch("own");
+        std::fs::write(
+            dir.join("t.guatiao.toml"),
+            "type = \"toy\"\nmodule = \"t\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("u.guatiao.toml"), "module = \"u\"\n").unwrap();
+        let found = find(&TOY, core::slice::from_ref(&dir), &[]);
+        assert!(
+            found
+                .iter()
+                .any(|f| matches!(f, Found::Library(m) if m.id() == "t"))
+        );
+        let why = broken_why(&found, "u.guatiao.toml");
+        assert!(why.contains("python, js, lua, wasm, rhai, toy"), "{why}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
