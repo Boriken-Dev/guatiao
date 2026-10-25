@@ -689,11 +689,11 @@ int cmd_remote_call(gt_call *c) {
       const mxArray *steps = mxGetCell(refs[j], 2);
       double oid = mxGetScalar(mxGetCell(refs[j], 1));
       gt_owner *o = (gt_owner *)gt_handle_get((uint64_t)oid, GT_H_OWNER);
-      owner_alloc = o->alloc;
       if (!gt_walk_mx(c, mxGetCell(refs[j], 1), steps, &node)) {
         ok = 0;
         break;
       }
+      owner_alloc = o->alloc; /* found: the walk refuses a closed owner */
       if (s >= S_LENT_VALUE && s <= S_LENT_LIST && (o->flags & GT_READONLY)) {
         ok = gt_fail(c, GUATIAO_ERR_UNSUPPORTED, "argument %d: a read-only view is not lent", j + 1);
         break;
