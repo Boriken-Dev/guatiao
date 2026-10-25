@@ -935,6 +935,25 @@ fn unbounded_recursion_is_an_error_not_a_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A depth limit bounds the script's recursion, not the work of opening a
+/// library: the least one still opens one, and stops a recursion.
+#[test]
+fn a_library_opens_under_the_least_depth_limit() {
+    let dir = scratch("least-depth");
+    put(&dir, "js_least", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(&dir, Some(limits(&[("depth", 1)]))));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let spin = greeter(&registry, "js_least_spin");
+    let deep = spin.greet("deep").unwrap_err();
+    assert_eq!(deep.message(), "stopped at its depth limit (1)");
+    assert_eq!(
+        greeting(&spin.greet("after").expect("carries on")),
+        "calm, after"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn time_stops_a_call_too() {
     let dir = scratch("time");
