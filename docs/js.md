@@ -133,7 +133,7 @@ The shapes are the Node binding's, with these exceptions:
 
 - **Wait.** There is no event loop and no timer. Promise reactions run
   when each call returns, under the call's limits (a call whose reactions
-  run past them is the one stopped, and the rest die with it), and a slot
+  run past them is the one stopped, and the rest are ended unrun), and a slot
   answers before it returns: an `async` slot is refused.
 - **Stop native work mid-call.** A limit is looked at once per poll: one
   long `repeat` or sort runs to its end, and the memory limit bounds what
