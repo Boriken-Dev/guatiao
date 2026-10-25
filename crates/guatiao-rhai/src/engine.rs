@@ -262,9 +262,9 @@ impl RhaiEngine {
                 "the provider is already running: a call re-entered it",
             )
         })?;
-        // Everything the script made is read and dropped on the call's
-        // stack: Rhai copies and drops nested values by recursion. That
-        // includes the method, whose curried values are copied with it.
+        // Everything the script made is read and dropped within the call,
+        // the method's curried values included: Rhai copies and drops nested
+        // values by recursion, in the stack the call keeps free for them.
         let outcome = self.meter.run(|| {
             let method = Self::method(&this, slot.name())?;
             let result = method
@@ -413,6 +413,13 @@ impl Engine for RhaiEngine {
         })
     }
 
+    /// Every call level the limits allow and, below the deepest, the
+    /// values their operations can nest: reserved, and used only as deep
+    /// as a script goes.
+    fn stack_size(config: &Config) -> Option<usize> {
+        crate::limits::thread_stack(config.limits())
+    }
+
     /// The script's `const VERSION = "...";`, read from its parse: nothing
     /// is run.
     fn version_of(&self, manifest: &Manifest) -> Result<String, BridgeError> {
@@ -447,7 +454,7 @@ impl Engine for RhaiEngine {
             )));
         }
         // What the script ends with is read, and what is not kept dropped,
-        // on the call's stack.
+        // within the call.
         let (offered, providers) = self.meter.run(|| {
             let result: Dynamic = self
                 .engine
@@ -482,17 +489,19 @@ impl Engine for RhaiEngine {
         self.answer(&lib, &state, call)
     }
 
-    /// The object's map goes; what it held goes with it now.
+    /// The object's map goes; what it held goes with it now. Rhai drops a
+    /// nested value by recursion, which the engine thread's stack holds
+    /// (see `limits`).
     fn release(&self, handle: &u64, object: u64) {
         if let Ok(lib) = self.library(*handle) {
             let gone = lib.objects.borrow_mut().remove(&object);
-            self.meter.dropping(|| drop(gone));
+            drop(gone);
         }
     }
 
     fn close(&self, handle: u64) {
         let gone = self.libraries.borrow_mut().remove(&handle);
-        self.meter.dropping(|| drop(gone));
+        drop(gone);
     }
 }
 

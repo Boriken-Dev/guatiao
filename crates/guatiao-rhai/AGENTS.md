@@ -174,29 +174,39 @@ overflows it aborts the host process. So function bodies and closures nest
 expressions at most 16 deep (`set_max_expr_depths(64, 16)`; a deeper
 script does not open: "Expression exceeds maximum complexity"), which
 bounds a level of calls at 14 KiB in a release build and 85 KiB in a debug
-one, and every call runs on a stack sized from the limits: 32 KiB (192 KiB
-in debug) for each call level, and, when `operations` is set, 320 bytes
-(1 KiB in debug) for each third operation, the nesting a script can build
-with them (the fewest operations that nest one level is four). A stack the
-thread's own would not hold is mapped for the call, which costs about 25
-microseconds: with nothing set, or `depth` up to about 40, a call is
-under 10; with `operations` set, about 30 to 40. Everything a call makes
-is read and dropped on that stack: its answer, a value it throws, the lent
-arguments it changed, and what a script's last expression holds beyond its
-providers. Values a library keeps are dropped on a stack for what one call
-can nest, and at least a hundred thousand levels.
+one. The engine thread's stack (`Engine::stack_size`) is sized from the
+limits once, when the source starts: 32 KiB (192 KiB in debug) for each
+call level, and below them 640 bytes (3 KiB in debug) for each
+operation, at least a hundred thousand of them: the nesting a script can
+build, since every level costs at least one operation, and copying,
+dropping or formatting a nested value recurses within one operation (at
+most 496 bytes a level measured in a release build). That is about 66 MB
+with nothing set, 1.3 GB at `operations` 2 000 000 and 10.7 GB at its cap
+(about five times as much in a debug build). It is reserved, not used:
+memory goes to the stack only as deep as a script reaches, and a call
+costs the same whatever the limits (a few microseconds through the whole
+path, release). A stack does not shrink: what the deepest call touched
+stays the thread's until the source closes. On Linux the reservation
+counts toward the commit limit, and a system that will not reserve it
+refuses the source (`GUATIAO_ERR_UNSUPPORTED`, "the engine thread did not
+start with a stack of N bytes"): lower `operations`. A 32-bit process
+holds the reservation for `operations` up to about a million (about
+200 000 in a debug build). Where the
+system does not report a thread's stack (Android, iOS), what is left is
+measured from where the engine started.
+Everything a call makes is read and dropped within its call: its answer,
+a value it throws, the lent arguments it changed, and what a script's last
+expression holds beyond its providers.
 
 Rhai also recurses through its own function calls over a nested value:
 comparing one (`==`, `contains`), writing it (`to_string`, `to_debug`,
 string interpolation), about 2 KiB a level in a release build. Every
 operation checks the stack left (`stacker::remaining_stack`), and below
-what the call's nesting needs plus 256 KiB (1 MiB in debug) the call stops
-at its depth limit, as if it had recursed that deep. `to_json` writes a
-map nested at most 512 levels and holding at most 1 000 000 values (a
-value two closures share counted in each); a larger one is
+what the nesting needs plus 256 KiB (1 MiB in debug) the call stops at its
+depth limit, as if it had recursed that deep. `to_json` writes a map
+nested at most 512 levels and holding at most 1 000 000 values (a value
+two closures share counted in each); a larger one is
 `GUATIAO_ERR_BAD_VALUE`.
-On Windows a mapped stack is committed memory, not only address space:
-`operations` near its cap commits about 1.8 GB for a call.
 
 ## Errors
 
@@ -225,14 +235,12 @@ or `operations` above 16 777 216, `GUATIAO_ERR_BAD_VALUE`.
 ## Gotchas
 
 - **Nesting is bounded by `operations`, per call.** Without `operations`
-  a script can nest values (arrays, maps, closures that capture the last
-  one) until the native stack ends and the host aborts: no size limit
-  bounds how deep they nest, and a closure chain costs one operation a
-  level. With it, one call is safe, and a library's values are dropped on a
-  large stack. **Not covered**: depth built up over many calls in a
-  provider's state (`this`), which no limit sees. Set `operations`, and
-  do not serve scripts that keep state you cannot trust to a host that
-  cannot afford an abort.
+  the stack holds values nested a hundred thousand levels; a script that
+  nests deeper (arrays, maps, closures that capture the last one: no size
+  limit bounds how deep they nest) can run past the native stack and abort
+  the host. With it, whatever one call nests fits. **Not covered**: depth
+  built up over many calls in a provider's state (`this`), which no limit
+  sees. Set `operations` when a library nests values deeply.
 - **`memory` does not bound the whole**: it bounds each string, array and
   map, nested ones counted. A script can hold many strings each under the
   limit, and a map filled with `m[key] = value` is not counted at all (the
