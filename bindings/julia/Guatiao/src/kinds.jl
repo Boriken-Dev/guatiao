@@ -367,7 +367,15 @@ function carrier(kind::Symbol)
 end
 
 "Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it."
-makes_local() = exports("guatiao", "guatiao_value_make_local")
+function makes_local()
+    found = MAKES_LOCAL[]
+    found >> 1 == GENERATION[] && return isodd(found)
+    answer = exports("guatiao", "guatiao_value_make_local")
+    MAKES_LOCAL[] = GENERATION[] << 1 | Int(answer)
+    return answer
+end
+"`makes_local()`'s answer in the low bit, above the `GENERATION` it was found in: one word, read whole."
+const MAKES_LOCAL = Ref(-2)
 
 function answer_tree(out::Ref, kind::Symbol)
     root = new_root()
