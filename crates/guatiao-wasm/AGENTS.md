@@ -136,7 +136,7 @@ the whole budget):
 | limit | kept by |
 | --- | --- |
 | `operations` | wasmtime fuel (on only when set), and the host's work for the guest: a unit per 8 bytes it copies in or out, fills with randomness, or a bulk instruction (`memory.fill`, `memory.copy`, `memory.init`, `table.*`) touches, a module being rewritten to charge them; a unit per node it decodes and per 4 map keys compared |
-| `time_ms` | epoch deadlines, a 1 ms ticker thread per source (on only when set); checked again after the host's work |
+| `time_ms` | epoch deadlines, a 1 ms ticker thread per source that sleeps while no call runs (on only when set); checked again after the host's work |
 | `memory` | a limiter refusing linear memory and tables (8 bytes an entry) past the limit together, in bytes; and the most the host takes from the guest at once (below) |
 | `depth` | refused at start (`GUATIAO_ERR_BAD_VALUE`): a guest's stack overflowing traps on its own |
 
