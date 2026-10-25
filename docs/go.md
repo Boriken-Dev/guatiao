@@ -145,7 +145,7 @@ is decoded into the method's Go type, or kept as a `*guatiao.Value` the
 caller closes; an object answered is a remote whose `Close` destroys it.
 
 Sources work as in every binding: `reg.AddSourceFile(path, config)` adds a
-source such as the guatiao-py bridge, and `reg.Refresh()` loads what it
+source such as the guatiao-source-py bridge, and `reg.Refresh()` loads what it
 serves. A Go host calls greeters written in Python that way.
 
 ## As a provider
@@ -277,7 +277,7 @@ goroutine, as its provider allows. What C holds of a Go value is a
   function, which Go can only get from an `//export` written at build
   time: a kind's glue comes from `go generate`, where Python reads a
   `Protocol` class when it runs.
-- **Serve another process's modules.** guatiao-py serves Python modules
+- **Serve another process's modules.** guatiao-source-py serves Python modules
   to any host; nothing serves Go packages from source, though a Go library
   built as a file is loaded by any host, which Python's cannot be.
 - **Build without limit.** A library's entry and its providers' `create`,
@@ -291,7 +291,7 @@ goroutine, as its provider allows. What C holds of a Go value is a
 ## The examples
 
 - `examples/go_host/` scans for greeters in any language, registers the
-  Go library, optionally adds the guatiao-py bridge, and calls every slot
+  Go library, optionally adds the guatiao-source-py bridge, and calls every slot
   of the kind; its README has the commands, and its tests call the Rust,
   C, Python and Go greeters both ways.
 - `examples/go_provider/go_greeter/` is the library above, and

@@ -1119,6 +1119,48 @@ export class Hello extends Provider implements Greeter { /* unchanged */ }
 is its C name in camelCase (`greet_into` is `greetInto`), as the
 hand-written descriptions in this repository already spelled them.
 
+## Sources
+
+### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao.toml`
+
+No release carried the source crates or their manifests: this is for a
+checkout, or a pin on a git revision, since `0.0.0-alpha.1`.
+
+| before | now |
+| --- | --- |
+| `crates/guatiao-py`, `guatiao_py.dll`, `libguatiao_py.so` | `crates/guatiao-source-py`, `guatiao_source_py.dll`, `libguatiao_source_py.so` |
+| `crates/guatiao-js`, `guatiao_js` | `crates/guatiao-source-js`, `guatiao_source_js` |
+| `crates/guatiao-lua`, `guatiao_lua` | `crates/guatiao-source-lua`, `guatiao_source_lua` |
+| `crates/guatiao-wasm`, `guatiao_wasm` | `crates/guatiao-source-wasm`, `guatiao_source_wasm` |
+| `crates/guatiao-rhai`, `guatiao_rhai` | `crates/guatiao-source-rhai`, `guatiao_source_rhai` |
+| `guatiao-remote`, `use guatiao_remote::..` | `guatiao-source-remote`, `use guatiao_source_remote::..` |
+
+The server is still `guatiao-remote-server`, the guest crate still
+`guatiao-wasm-guest`, and the environment variables naming a build
+(`GUATIAO_PY_BRIDGE`, `GUATIAO_WASM_SOURCE`, ...) are unchanged.
+
+A manifest's file name no longer says which source reads it; its `type`
+does, and a file named the old way is not read:
+
+```toml
+# before: greeters.guatiao-py.toml
+module = "greeters"
+kinds = ["greeter"]
+```
+
+```toml
+# now: greeters.guatiao.toml
+type = "python"
+module = "greeters"
+kinds = ["greeter"]
+```
+
+The types are `python`, `js`, `lua`, `wasm` and `rhai`
+([the format](encodings.md#a-library-manifest)). A bridge on
+`guatiao-bridge` names its type, `ManifestFormat { serves: "toy", .. }`,
+where it named `suffix: ".guatiao-toy.toml"`, and `manifest::read`
+answers `Option<Found>`: `None` for another source's manifest.
+
 ## Needs nothing from you
 
 - **Loosened, never tightened**: the `Kind` bound is off `Remote`,

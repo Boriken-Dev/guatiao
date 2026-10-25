@@ -65,7 +65,7 @@ class inheriting two kinds inherits two names. The example kinds are
 ```matlab
 reg = guatiao.Registry('my-host', '1.0');
 reg.watch_dir('/opt/plugins', 'kind=greeter');
-reg.add_source_file('/opt/app/libguatiao_py.so', struct('dirs', {{'/opt/app/py'}}));
+reg.add_source_file('/opt/app/libguatiao_source_py.so', struct('dirs', {{'/opt/app/py'}}));
 reg.refresh();
 
 g = reg.bind('py_greeter_hello', 'greeterkind.Greeter');   % an instance of the kind's class
@@ -169,7 +169,7 @@ library's.
 - **Run a provider on a library's own thread.** Python takes the GIL on
   any thread; the interpreter here belongs to one thread, and is reached
   only while a call into guatiao is in progress.
-- **Serve another process.** guatiao-py serves Python modules to any host;
+- **Serve another process.** guatiao-source-py serves Python modules to any host;
   nothing serves M classes to a host that is not running MATLAB or Octave,
   which would need one embedded in a bridge.
 - **Run without a compiler.** The MEX file is built on the user's machine
@@ -197,7 +197,7 @@ library's.
 ## The examples
 
 - `examples/matlab_host/host.m` scans for greeters in any language,
-  registers the M library, optionally adds the guatiao-py bridge, and
+  registers the M library, optionally adds the guatiao-source-py bridge, and
   calls every slot of the kind; its README has the commands.
 - `examples/matlab_provider/mlgreeter/` is the library above.
 - `examples/greeter_kind/matlab/+greeterkind/` declares the greeter kinds.

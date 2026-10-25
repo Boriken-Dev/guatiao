@@ -166,7 +166,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          for crate in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi guatiao-remote; do
+          for crate in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi guatiao-source-remote; do
             cargo public-api -p "$crate" --all-features -ss > "$RUNNER_TEMP/$crate.txt"
             diff -u "crates/$crate/public-api.txt" "$RUNNER_TEMP/$crate.txt" || status=1
           done
@@ -269,10 +269,10 @@ jobs:
         id: python
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Build the guatiao-py bridge against this Python
+      - name: Build the guatiao-source-py bridge against this Python
         # So `test_bridge` and the example host's bridge leg run rather
         # than skip: a Python host serving Python libraries through it.
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: Install
@@ -297,7 +297,7 @@ jobs:
           MYPYPATH: bindings/python/guatiao/src:bindings/python/guatiao-serde/src:bindings/python/guatiao-intake/src:examples/greeter_kind/python
 
   bridge:
-    name: guatiao-py (py${{ matrix.python-version }}, ${{ matrix.os }})
+    name: guatiao-source-py (py${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # The bridge from hosts that are not Python: a Rust host (its tests and
     # the example host) and a C host, each adding it as a source and
@@ -323,7 +323,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - uses: actions/setup-python@v5
         id: python
         with:
@@ -339,24 +339,24 @@ jobs:
         # The guatiao library the C host links, and the example host.
         run: cargo build --workspace --all-features
       - name: Format check and clippy
-        working-directory: crates/guatiao-py
+        working-directory: crates/guatiao-source-py
         run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: Build the bridge
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: What the bridge links to reach Python
         run: |
           case "$RUNNER_OS" in
-            Linux)   readelf -d crates/guatiao-py/target/debug/libguatiao_py.so | grep NEEDED ;;
-            macOS)   otool -L crates/guatiao-py/target/debug/libguatiao_py.dylib ;;
-            Windows) llvm-readobj --coff-imports crates/guatiao-py/target/debug/guatiao_py.dll | grep 'Name:' ;;
+            Linux)   readelf -d crates/guatiao-source-py/target/debug/libguatiao_source_py.so | grep NEEDED ;;
+            macOS)   otool -L crates/guatiao-source-py/target/debug/libguatiao_source_py.dylib ;;
+            Windows) llvm-readobj --coff-imports crates/guatiao-source-py/target/debug/guatiao_source_py.dll | grep 'Name:' ;;
           esac
       - name: Test, from a Rust host and a C host
         run: |
-          cargo test --manifest-path crates/guatiao-py/Cargo.toml -- --nocapture 2>&1 | tee bridge-test.log
+          cargo test --manifest-path crates/guatiao-source-py/Cargo.toml -- --nocapture 2>&1 | tee bridge-test.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "skipped:" bridge-test.log
         env:
@@ -365,9 +365,9 @@ jobs:
       - name: The example host serves the Python greeters
         run: |
           case "$RUNNER_OS" in
-            Linux)   bridge=crates/guatiao-py/target/debug/libguatiao_py.so ;;
-            macOS)   bridge=crates/guatiao-py/target/debug/libguatiao_py.dylib ;;
-            Windows) bridge=crates/guatiao-py/target/debug/guatiao_py.dll ;;
+            Linux)   bridge=crates/guatiao-source-py/target/debug/libguatiao_source_py.so ;;
+            macOS)   bridge=crates/guatiao-source-py/target/debug/libguatiao_source_py.dylib ;;
+            Windows) bridge=crates/guatiao-source-py/target/debug/guatiao_source_py.dll ;;
           esac
           GREETER_HOST_SOURCE=$bridge \
           GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
@@ -380,7 +380,7 @@ jobs:
   lua:
     name: Lua (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # The guatiao-lua source from a Rust host, a C host and the Python
+    # The guatiao-source-lua source from a Rust host, a C host and the Python
     # suite, in each Lua it builds with; and the loadable module required
     # by a stock interpreter (Lua 5.4, and LuaJIT where packaged), hosting
     # greeters written in Rust, C, Python and Lua. Each crate is a
@@ -403,8 +403,8 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
-            crates/guatiao-lua
+            crates/guatiao-source-py
+            crates/guatiao-source-lua
             bindings/lua/guatiao
       - uses: actions/setup-python@v5
         id: python
@@ -456,41 +456,41 @@ jobs:
           cl /nologo /O2 /MD "/Fo$out\obj\lua.obj" "/Fe$out\lua.exe" lua.c "$out\lua54.lib"
           if ($LASTEXITCODE) { exit 1 }
           "GUATIAO_LUA=$out\lua.exe" >> $env:GITHUB_ENV
-      - name: Build the workspace, guatiao-py and the source
+      - name: Build the workspace, guatiao-source-py and the source
         # The Rust greeter and the guatiao library the C hosts link; the
         # Python greeters; the Lua source, which its tests add as a file.
         run: |
           cargo build --workspace --all-features
-          cargo build --manifest-path crates/guatiao-py/Cargo.toml
-          cargo build --manifest-path crates/guatiao-lua/Cargo.toml
+          cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
+          cargo build --manifest-path crates/guatiao-source-lua/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: Format check and clippy
         run: |
-          for crate in crates/guatiao-lua bindings/lua/guatiao; do
+          for crate in crates/guatiao-source-lua bindings/lua/guatiao; do
             (cd "$crate" && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
           done
       - name: Where the tests find what they call
         run: |
           case "$RUNNER_OS" in
-            Linux)   py=libguatiao_py.so;    lua=libguatiao_lua.so ;;
-            macOS)   py=libguatiao_py.dylib; lua=libguatiao_lua.dylib ;;
-            Windows) py=guatiao_py.dll;      lua=guatiao_lua.dll ;;
+            Linux)   py=libguatiao_source_py.so;    lua=libguatiao_source_lua.so ;;
+            macOS)   py=libguatiao_source_py.dylib; lua=libguatiao_source_lua.dylib ;;
+            Windows) py=guatiao_source_py.dll;      lua=guatiao_source_lua.dll ;;
           esac
           {
             echo "GUATIAO_LIBRARY=$GITHUB_WORKSPACE/target/debug"
-            echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$py"
-            echo "GUATIAO_LUA_SOURCE=$GITHUB_WORKSPACE/crates/guatiao-lua/target/debug/$lua"
+            echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$py"
+            echo "GUATIAO_LUA_SOURCE=$GITHUB_WORKSPACE/crates/guatiao-source-lua/target/debug/$lua"
           } >> "$GITHUB_ENV"
       - name: The source, Lua 5.4, from a Rust, a C and a Lua host
         run: |
-          cargo test --manifest-path crates/guatiao-lua/Cargo.toml -- --nocapture 2>&1 | tee lua-test.log
+          cargo test --manifest-path crates/guatiao-source-lua/Cargo.toml -- --nocapture 2>&1 | tee lua-test.log
           test "${PIPESTATUS[0]}" -eq 0
           if grep -n "skipped:" lua-test.log; then exit 1; fi
       - name: The source in Lua 5.5 and Luau
         run: |
           for flavour in lua55 luau; do
-            cargo test --manifest-path crates/guatiao-lua/Cargo.toml --no-default-features \
+            cargo test --manifest-path crates/guatiao-source-lua/Cargo.toml --no-default-features \
               --features "$flavour,source" --target-dir "target-$flavour"
           done
       - name: The source from Python
@@ -517,7 +517,7 @@ jobs:
           if grep -n "skipped:" jit-test.log; then exit 1; fi
 
   wasm-source:
-    name: guatiao-wasm (${{ matrix.os }})
+    name: guatiao-source-wasm (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # The WebAssembly source from a Rust host, a C host and a Python host,
     # over guests written in Rust (wasm32-unknown-unknown) and Go (wasip1,
@@ -543,8 +543,8 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-wasm
-            crates/guatiao-wasm/guest
+            crates/guatiao-source-wasm
+            crates/guatiao-source-wasm/guest
             examples/wasm_greeter_rust
       - uses: actions/setup-go@v5
         with:
@@ -557,21 +557,21 @@ jobs:
         run: cargo build -p guatiao --features load
       - name: Format check and clippy (source, Rust guest crate, example)
         run: |
-          (cd crates/guatiao-wasm && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
-          (cd crates/guatiao-wasm/guest && cargo fmt --check && cargo clippy --all-targets -- -D warnings \
+          (cd crates/guatiao-source-wasm && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
+          (cd crates/guatiao-source-wasm/guest && cargo fmt --check && cargo clippy --all-targets -- -D warnings \
             && cargo clippy --target wasm32-unknown-unknown -- -D warnings)
           (cd examples/wasm_greeter_rust && cargo fmt --check \
             && cargo clippy --release --target wasm32-unknown-unknown -- -D warnings)
       - name: The Rust guest crate and the Go guest package, natively
         run: |
-          (cd crates/guatiao-wasm/guest && cargo test)
-          (cd crates/guatiao-wasm/guest-go && test -z "$(gofmt -l .)" && go vet ./... && go test ./...)
+          (cd crates/guatiao-source-wasm/guest && cargo test)
+          (cd crates/guatiao-source-wasm/guest-go && test -z "$(gofmt -l .)" && go vet ./... && go test ./...)
           (cd examples/wasm_greeter_go && test -z "$(gofmt -l .)" && GOOS=wasip1 GOARCH=wasm go vet .)
       - name: Build the source
-        run: cargo build --manifest-path crates/guatiao-wasm/Cargo.toml
+        run: cargo build --manifest-path crates/guatiao-source-wasm/Cargo.toml
       - name: Test, from a Rust host and a C host (builds both guests)
         run: |
-          cargo test --manifest-path crates/guatiao-wasm/Cargo.toml -- --nocapture 2>&1 | tee wasm-test.log
+          cargo test --manifest-path crates/guatiao-source-wasm/Cargo.toml -- --nocapture 2>&1 | tee wasm-test.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "skipped:" wasm-test.log
         env:
@@ -592,7 +592,7 @@ jobs:
     # The previous and the current LTS on the three platforms: the
     # library's filename, how it is found and koffi's prebuilt part are
     # each per platform. The greeters are written in Rust, C, Python
-    # (through the guatiao-py bridge) and TypeScript, and a stated skip
+    # (through the guatiao-source-py bridge) and TypeScript, and a stated skip
     # (no compiler, no bridge) fails the job.
     strategy:
       fail-fast: false
@@ -611,7 +611,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters and the Rust caller of any
         # greeter (`examples/greeter_caller`).
@@ -625,8 +625,8 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-node@v4
@@ -666,11 +666,11 @@ jobs:
         working-directory: bindings/node/guatiao
         run: |
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge"
           npm test 2>&1 | tee node-test.log
           test "${PIPESTATUS[0]}" -eq 0
           if grep -nE "[0-9]+ skipped" node-test.log; then exit 1; fi
@@ -708,7 +708,7 @@ jobs:
     # platform. The three modules are tested together through
     # bindings/go/go.work, and serde and intake again each alone against
     # the core by a replace, as a consumer builds them. The examples'
-    # greeters are written in Rust, C, Python (through the guatiao-py
+    # greeters are written in Rust, C, Python (through the guatiao-source-py
     # bridge) and Go, both ways, and the Go library built as a file is
     # scanned and called by the Rust example host. A stated skip fails the
     # job.
@@ -731,7 +731,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters, the Rust caller of any greeter
         # and the Rust example host.
@@ -745,8 +745,8 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -765,11 +765,11 @@ jobs:
       - name: Test the binding and the examples
         run: |
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge"
           (cd bindings/go && go test -count=1 -v ./guatiao/... ./guatiao-serde/... ./guatiao-intake/...) 2>&1 | tee go-test.log
           test "${PIPESTATUS[0]}" -eq 0
           # serde and intake alone, outside the workspace: their own go.mod
@@ -814,7 +814,7 @@ jobs:
     name: Julia bindings (julia ${{ matrix.julia }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # Julia's LTS and its current release on the three platforms. The tests
-    # call greeters written in Rust, C, Python (through the guatiao-py
+    # call greeters written in Rust, C, Python (through the guatiao-source-py
     # bridge), Go (built as a library file) and Julia, both ways, and run
     # the example host. A stated skip fails the job.
     strategy:
@@ -834,7 +834,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters and the Rust caller of any greeter.
         run: cargo build --workspace --all-features
@@ -847,8 +847,8 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -873,11 +873,11 @@ jobs:
       - name: Test the binding and the examples
         run: |
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge"
           julia --version
           julia --startup-file=no --project=bindings/julia/Guatiao -e 'using Pkg; Pkg.test()'
           # GuatiaoSerde and GuatiaoIntake, each in a temporary environment
@@ -895,7 +895,7 @@ jobs:
     name: R bindings (R ${{ matrix.r }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # R's floor and its current release on the three platforms. The tests
-    # call greeters written in Rust, C, Python (through the guatiao-py
+    # call greeters written in Rust, C, Python (through the guatiao-source-py
     # bridge), Go (built as a library file) and R, both ways, and run the
     # example host, all inside R CMD check. A stated skip fails the job, and
     # so does any check WARNING.
@@ -916,7 +916,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters and the Rust caller of any greeter.
         run: cargo build --workspace --all-features
@@ -929,8 +929,8 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -961,11 +961,11 @@ jobs:
       - name: Build and check the package
         run: |
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge"
           R --version | head -1
           mkdir -p "$RUNNER_TEMP/r-check"
           R CMD build --no-manual bindings/r/guatiao
@@ -1002,7 +1002,7 @@ jobs:
     name: Octave bindings (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # Ubuntu's Octave (the floor here) and MSYS2's on Windows. The tests
-    # call greeters written in Rust, C, Python (through the guatiao-py
+    # call greeters written in Rust, C, Python (through the guatiao-source-py
     # bridge), Go (built as a library file) and M, both ways, and run the
     # example host; a stated skip fails the job.
     strategy:
@@ -1021,7 +1021,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         run: cargo build --workspace --all-features
       - uses: actions/setup-python@v5
@@ -1031,8 +1031,8 @@ jobs:
       - name: Where a host that is not Python finds libpython
         if: runner.os != 'Windows'
         run: echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -1073,7 +1073,7 @@ jobs:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
           GUATIAO_REPO: ${{ github.workspace }}
           GUATIAO_GO_LIBRARY: ${{ runner.temp }}/go-library
-          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/libguatiao_py.so
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-source-py/target/debug/libguatiao_source_py.so
           GUATIAO_REQUIRE_ALL: "1"
           PYTHONDONTWRITEBYTECODE: "1"
       - name: Test (Windows)
@@ -1085,7 +1085,7 @@ jobs:
           export GUATIAO_LIBRARY="$(cygpath -m "$GITHUB_WORKSPACE/target/debug")"
           export GUATIAO_REPO="$(cygpath -m "$GITHUB_WORKSPACE")"
           export GUATIAO_GO_LIBRARY="$(cygpath -m "$RUNNER_TEMP/go-library")"
-          export GUATIAO_PY_BRIDGE="$(cygpath -m "$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/guatiao_py.dll")"
+          export GUATIAO_PY_BRIDGE="$(cygpath -m "$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/guatiao_source_py.dll")"
           cd bindings/matlab/guatiao/tests
           octave-cli --no-gui --eval "run_tests('Exit', true)"
         env:
@@ -1121,7 +1121,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         run: cargo build --workspace --all-features
       - uses: actions/setup-python@v5
@@ -1135,8 +1135,8 @@ jobs:
             macOS) echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV" ;;
             Windows) echo "$pythonLocation" >> "$GITHUB_PATH" ;;
           esac
-      - name: Build the guatiao-py bridge, for the Python greeters
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+      - name: Build the guatiao-source-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -1173,16 +1173,16 @@ jobs:
         run: |
           w() { if [ "$RUNNER_OS" = Windows ]; then cygpath -m "$1"; else echo "$1"; fi; }
           case "$RUNNER_OS" in
-            Linux) bridge=libguatiao_py.so ;;
-            macOS) bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux) bridge=libguatiao_source_py.so ;;
+            macOS) bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
           {
             echo "GUATIAO_LIBRARY=$(w "$GITHUB_WORKSPACE/target/debug")"
             echo "GUATIAO_REPO=$(w "$GITHUB_WORKSPACE")"
             echo "GUATIAO_GO_LIBRARY=$(w "$RUNNER_TEMP/go-library")"
             echo "GUATIAO_C_GREETER=$(w "$RUNNER_TEMP/c-greeter")"
-            echo "GUATIAO_PY_BRIDGE=$(w "$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge")"
+            echo "GUATIAO_PY_BRIDGE=$(w "$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge")"
           } >> "$GITHUB_ENV"
       - name: Test
         uses: matlab-actions/run-command@v3
@@ -1198,7 +1198,7 @@ jobs:
     # gfortran, Intel ifx and LLVM flang, on the three platforms where each
     # runs (ifx is x64 only and has no macOS build; flang comes from
     # apt.llvm.org). The binding builds with fpm and with CMake; the host's
-    # tests call greeters written in Rust, C, Python (through the guatiao-py
+    # tests call greeters written in Rust, C, Python (through the guatiao-source-py
     # bridge), Go (built as a library file) and Fortran, both ways; the
     # Fortran library file is scanned and called by the Rust and Python
     # example hosts. A stated skip fails the job.
@@ -1229,7 +1229,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters, the Rust caller of any greeter
         # and the Rust example host.
@@ -1243,15 +1243,15 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
+      - name: Build the guatiao-source-py bridge, for the Python greeters
         run: |
-          cargo build --manifest-path crates/guatiao-py/Cargo.toml
+          cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge" >> "$GITHUB_ENV"
+          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge" >> "$GITHUB_ENV"
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -1375,7 +1375,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The three header-only packages (each suite built with exceptions on
     # and off, and the files that must not compile), the host calling
-    # greeters written in Rust, C, Python (through the guatiao-py bridge),
+    # greeters written in Rust, C, Python (through the guatiao-source-py bridge),
     # Go (built as a library file) and C++ through sources and refresh();
     # the C++ library file scanned and called by the Rust and Python example
     # hosts; and a project outside the repository consuming the packages
@@ -1407,7 +1407,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The libraries, the Rust greeters, the Rust caller of any greeter
         # and the Rust example host.
@@ -1421,15 +1421,15 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
+      - name: Build the guatiao-source-py bridge, for the Python greeters
         run: |
-          cargo build --manifest-path crates/guatiao-py/Cargo.toml
+          cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
           case "$RUNNER_OS" in
-            Linux)   bridge=libguatiao_py.so ;;
-            macOS)   bridge=libguatiao_py.dylib ;;
-            Windows) bridge=guatiao_py.dll ;;
+            Linux)   bridge=libguatiao_source_py.so ;;
+            macOS)   bridge=libguatiao_source_py.dylib ;;
+            Windows) bridge=guatiao_source_py.dll ;;
           esac
-          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge" >> "$GITHUB_ENV"
+          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-source-py/target/debug/$bridge" >> "$GITHUB_ENV"
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: actions/setup-go@v5
@@ -1539,7 +1539,7 @@ jobs:
         with:
           workspaces: |
             .
-            crates/guatiao-py
+            crates/guatiao-source-py
       - name: Build native libraries
         # The bindings drive a shared library, and `--all-features` is
         # what exports the registry surface and the serde formats.
@@ -1553,11 +1553,11 @@ jobs:
         run: |
           echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
-      - name: Build the guatiao-py bridge, for the Python greeters
+      - name: Build the guatiao-source-py bridge, for the Python greeters
         # The kinds cases call a greeter written in Python through it, and
         # one written in C, which each suite compiles with the runner's
         # own compiler.
-        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        run: cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: dart-lang/setup-dart@v1
@@ -1615,7 +1615,7 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
-          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_py.dll' || runner.os == 'macOS' && 'libguatiao_py.dylib' || 'libguatiao_py.so' }}
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-source-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_source_py.dll' || runner.os == 'macOS' && 'libguatiao_source_py.dylib' || 'libguatiao_source_py.so' }}
           # Plain lines, so the skip count stays where the check reads it.
           NO_COLOR: '1'
       - name: Test on the floor
@@ -1637,7 +1637,7 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
-          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_py.dll' || runner.os == 'macOS' && 'libguatiao_py.dylib' || 'libguatiao_py.so' }}
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-source-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_source_py.dll' || runner.os == 'macOS' && 'libguatiao_source_py.dylib' || 'libguatiao_source_py.so' }}
           # Plain lines, so the skip count stays where the check reads it.
           NO_COLOR: '1'
 

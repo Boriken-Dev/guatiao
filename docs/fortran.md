@@ -109,7 +109,7 @@ A remote has the kind's methods, so code written against
 answers are values in its allocator; `create(key, config, instance)` checks
 a configuration against the provider's schema and builds an instance;
 `add_source_file`, `watch_dir` and `refresh` keep libraries that come and
-go, the guatiao-py bridge serving Python modules among them.
+go, the guatiao-source-py bridge serving Python modules among them.
 
 ## As a provider
 
@@ -228,7 +228,7 @@ provider's procedures that a slot reaches need the same (or ifx's
 ## The examples
 
 - `examples/fortran_host/` scans for greeters in any language, registers
-  the Fortran library, optionally adds the guatiao-py bridge, and calls
+  the Fortran library, optionally adds the guatiao-source-py bridge, and calls
   every slot of the kind; its tests call the Rust, C, Python, Go and
   Fortran greeters both ways and the Fortran one from native threads.
 - `examples/fortran_greeter/` is the library above, its test checking

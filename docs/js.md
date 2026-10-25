@@ -1,6 +1,6 @@
 # JavaScript without Node: a source of libraries
 
-`guatiao-js` is a [source](language-bridges.md) whose libraries are
+`guatiao-source-js` is a [source](language-bridges.md) whose libraries are
 JavaScript modules, run by [QuickJS](https://github.com/quickjs-ng/quickjs)
 built into one file. A host in any language adds the file once and calls
 providers written in JavaScript as it calls the ones written in Rust, C
@@ -18,10 +18,10 @@ here.**
 The file is built from this repository, with a C compiler (QuickJS is C):
 
 ```bash
-cargo build --release --manifest-path crates/guatiao-js/Cargo.toml
+cargo build --release --manifest-path crates/guatiao-source-js/Cargo.toml
 ```
 
-It is `libguatiao_js.so`, `libguatiao_js.dylib` or `guatiao_js.dll`, a
+It is `libguatiao_source_js.so`, `libguatiao_source_js.dylib` or `guatiao_source_js.dll`, a
 workspace of its own and not published.
 
 ## A library
@@ -51,7 +51,8 @@ export class Hello extends Provider {
 ```
 
 ```toml
-# greeters.guatiao-js.toml
+# greeters.guatiao.toml
+type = "js"                       # the source that serves it
 name = "greeters"                 # the library's id: the package's name
 kinds = ["greeter", "counter"]    # every kind its providers serve
 paths = ["."]                     # the files it may import, relative to this file
@@ -83,12 +84,12 @@ let mut config = Map::new();
 config.set("dirs", List::from_iter(["/opt/myapp/js"]));
 config.set("kinds", List::from_iter(["/opt/myapp/greeter_kind.kinds.json"]));
 config.set("limits", limits);        // optional
-registry.add_source_file(Path::new("/opt/myapp/libguatiao_js.so"), &config)?;
+registry.add_source_file(Path::new("/opt/myapp/libguatiao_source_js.so"), &config)?;
 let changed = registry.refresh();
 ```
 
 ```python
-reg.add_source_file("libguatiao_js.so", {"dirs": ["js"], "kinds": ["greeter_kind.kinds.json"]})
+reg.add_source_file("libguatiao_source_js.so", {"dirs": ["js"], "kinds": ["greeter_kind.kinds.json"]})
 reg.refresh()
 reg.bind("greeters_hello", Greeter).greet("ana")
 ```

@@ -1,6 +1,6 @@
 # Providers on another process, machine or network
 
-`guatiao-remote` lets a host call providers that live somewhere else: in
+`guatiao-source-remote` lets a host call providers that live somewhere else: in
 a child process, on another machine, on a device across a network. The
 device runs a **server** over its own registry; the host adds a
 **remote source** and, after `refresh()`, sees the device's providers as
@@ -18,8 +18,8 @@ lets them go.
 In Rust, add the source to a registry:
 
 ```rust
-use guatiao_remote::transport::tcp::TcpConnect;
-use guatiao_remote::{LinkOptions, RemoteSource, Trust};
+use guatiao_source_remote::transport::tcp::TcpConnect;
+use guatiao_source_remote::{LinkOptions, RemoteSource, Trust};
 
 let source = RemoteSource::new(
     Box::new(TcpConnect::new("192.0.2.21:7000")),
@@ -47,7 +47,7 @@ configuration map:
 ```c
 /* {"child": ["guatiao-remote-server", "--stdio", "--kinds", "greeter_kind.kinds.json",
               "--load", "libderived_greeter.so"]} */
-guatiao_registry_add_source_file(reg, guatiao_cstr("libguatiao_remote.so"), &config, &err);
+guatiao_registry_add_source_file(reg, guatiao_cstr("libguatiao_source_remote.so"), &config, &err);
 guatiao_registry_refresh(reg, &alloc, &answer);
 ```
 
@@ -112,11 +112,11 @@ interface. Elsewhere the transport is compiled in and every call answers
 `Unsupported`.
 
 ```toml
-guatiao-remote = { version = "…", features = ["rdma"] }
+guatiao-source-remote = { version = "…", features = ["rdma"] }
 ```
 
 ```rust
-use guatiao_remote::transport::rdma::{RdmaConnect, RdmaListen, RdmaPort};
+use guatiao_source_remote::transport::rdma::{RdmaConnect, RdmaListen, RdmaPort};
 
 // The device: the first one listed and its first IPv4 address, or one named.
 let listener = RdmaListen::bind("0.0.0.0:7001", &ranges)?.port(RdmaPort::named("mlx5_0"));
@@ -152,7 +152,7 @@ configuration names `connect: rdma://host:port`.
 - **Tested** on Soft-RoCE (one rxe device, both ends on one machine):
   every slot shape, the key and the ranges, frames ten rings long and
   eight at once, a link ended from either side
-  (`crates/guatiao-remote/rdma-tests`, which fails without a device).
+  (`crates/guatiao-source-remote/rdma-tests`, which fails without a device).
 
 **Measured on Soft-RoCE only.** Soft-RoCE is RDMA done in software by the
 kernel's network stack, so these numbers say nothing about an RDMA NIC.
@@ -207,8 +207,8 @@ network by default.
 ## The protocol
 
 Every implementation, in any language, speaks the same frames. The
-shared vectors are `crates/guatiao-remote/tests/vectors/remote.json`;
-`crates/guatiao-remote/tests/c/` holds a codec, a client and a server
+shared vectors are `crates/guatiao-source-remote/tests/vectors/remote.json`;
+`crates/guatiao-source-remote/tests/c/` holds a codec, a client and a server
 written in C over guatiao's C API.
 
 ### Frames
