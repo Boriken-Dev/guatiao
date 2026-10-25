@@ -33,7 +33,10 @@
  * comment calls lent is the caller's map for this call only. It adds an
  * entry, growing the map through the allocator the map records, and
  * neither frees it nor keeps it. `c_greeter_check_lending` is the other
- * direction: C lending a map of its own to any greeter's `check`.
+ * direction: C lending a map of its own to any greeter's `check`. Built
+ * with GREETER_IGNORES_CARRIER, `check` instead rebuilds the map in this
+ * file's allocator, which the map then records, as a careless library
+ * writing a fresh map over a lent one does.
  *
  * `greet`, `greet_into`, `greet_from` and `check` are filled. `shout` and `start` are left null:
  * to the host that is an older table, and its proxy runs the trait's
@@ -257,8 +260,11 @@ EXPORT bool c_greeter_take_kept(guatiao_map *out) {
  * array grows and the key is built through the allocator the map
  * records, as any growth of it must be; the value is built through this
  * file's own, and a Rust caller moves it into the map's once the call
- * returns. This file links nothing; a C library that links guatiao would
- * call `guatiao_map_set` on a value wrapping the map instead. */
+ * returns. Built with GREETER_IGNORES_CARRIER, the array moves into this
+ * file's allocator and the map records it, key and all: a caller then
+ * moves the map back into the allocator it recorded before the call.
+ * This file links nothing; a C library that links guatiao would call
+ * `guatiao_map_set` on a value wrapping the map instead. */
 static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
                             guatiao_provider_error *err) {
   (void)ctx;
@@ -270,6 +276,27 @@ static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
       !a->alloc || !a->free) {
     return refuse(err, GUATIAO_ERR_ALLOC, "the map records no allocator, says C");
   }
+#if defined(GREETER_IGNORES_CARRIER)
+  {
+    size_t cap = config->len + 4;
+    guatiao_entry *fresh = (guatiao_entry *)ALLOC.alloc(
+        ALLOC.ctx, cap * sizeof(guatiao_entry), _Alignof(guatiao_entry));
+    if (!fresh) {
+      return GUATIAO_ERR_ALLOC;
+    }
+    if (config->len) {
+      memcpy(fresh, config->ptr, config->len * sizeof(guatiao_entry));
+    }
+    if (config->cap) {
+      a->free(a->ctx, config->ptr, config->cap * sizeof(guatiao_entry),
+              _Alignof(guatiao_entry));
+    }
+    config->ptr = fresh;
+    config->cap = cap;
+    config->alloc = &ALLOC;
+    a = &ALLOC;
+  }
+#else
   if (config->len >= config->cap) {
     /* `cap == 0` is storage the map does not own: copied out, never freed. */
     size_t cap = config->len < 2 ? 4 : config->len * 2;
@@ -288,6 +315,7 @@ static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
     config->ptr = grown;
     config->cap = cap;
   }
+#endif
   guatiao_entry *e = &config->ptr[config->len];
   guatiao_str none = {NULL, 0};
   guatiao_str by = {(const uint8_t *)"C", 1};
