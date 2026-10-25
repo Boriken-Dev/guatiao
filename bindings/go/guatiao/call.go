@@ -6,6 +6,7 @@ package guatiao
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
@@ -98,6 +99,7 @@ func (c *Call) Borrow(x any, class TreeClass) (unsafe.Pointer, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.keep(r.o)
 		return arm(node, class)
 	}
 	v, err := NewValue(x)
@@ -126,8 +128,16 @@ func (c *Call) Lend(x any, class TreeClass) (unsafe.Pointer, error) {
 	if home == nil {
 		home = alloc
 	}
+	c.keep(r.o) // End runs the hooks newest first: the owner outlives the settle
 	c.after = append(c.after, func() { native.ValueMakeLocal(node, home) })
 	return arm(node, class)
+}
+
+// keep holds o, the owner of a tree the call reads or changes, until End:
+// glue that does not touch its argument again would otherwise let the
+// collector free the tree during the call.
+func (c *Call) keep(o owner) {
+	c.after = append(c.after, func() { runtime.KeepAlive(o) })
 }
 
 // Take is x for a tree handed over: a *Value is moved (left absent), a
