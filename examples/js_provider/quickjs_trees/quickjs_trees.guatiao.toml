@@ -1,4 +1,5 @@
 # A library of the guatiao-source-js source only: see trees.js.
+type = "js"
 name = "quickjs_trees"
 kinds = ["greeter"]
 paths = [".", "../../greeter_kind/node"]

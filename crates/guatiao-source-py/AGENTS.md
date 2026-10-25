@@ -31,7 +31,7 @@ over the one interpreter.
 
 | key | holds | default |
 | --- | --- | --- |
-| `dirs` | directories whose `*.guatiao-py.toml` files, and those of their immediate subdirectories, are libraries | none |
+| `dirs` | directories whose `*.guatiao.toml` files of type `python`, and those of their immediate subdirectories, are libraries | none |
 | `manifests` | manifest files, listed as well | none |
 | `paths` | put first on `sys.path` once, when the source is added: where `guatiao` and shared kind modules are | none |
 

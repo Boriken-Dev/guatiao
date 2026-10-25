@@ -50,9 +50,10 @@ put the directory holding it (`sys.base_prefix`) there.
 
 ## Quick start
 
-A manifest beside each library, `py_greeter.guatiao-py.toml`:
+A manifest beside each library, `py_greeter.guatiao.toml`:
 
 ```toml
+type = "python"                     # the source that serves it
 module = "py_greeter"               # the library: its id, imported by this name
 kinds = ["greeter", "counter"]      # checked against what the module serves
 paths = ["."]                       # put on sys.path, relative to this file
@@ -91,7 +92,7 @@ holds two libraries and the commands that serve them to the example hosts.
 | --- | --- |
 | `guatiao_source` | the entry point a host's `add_source_file` calls; answers a `guatiao_source_info` |
 | configuration | `{"dirs": [..], "manifests": [..], "paths": [..]}` |
-| `*.guatiao-py.toml` | one Python library: `module`, `kinds`, `paths`, optional `version` |
+| `*.guatiao.toml` | one Python library: `type = "python"`, `module`, `kinds`, `paths`, optional `version` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-py/AGENTS.md)
 is the full reference.

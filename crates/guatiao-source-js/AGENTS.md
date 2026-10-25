@@ -17,9 +17,10 @@ root is `deny(unsafe_code)`; three small modules allow it, each with a
 the memory of a typed array QuickJS lends) and `frame.rs` (entering a
 context a call is already inside).
 
-## A library (`*.guatiao-js.toml` and its module)
+## A library (a `*.guatiao.toml` and its module)
 
 ```toml
+type = "js"                       # required: the source that serves it
 name = "quickjs_greeter"          # required: the library's id (a package's name)
 kinds = ["greeter", "counter"]    # required: every kind its providers serve
 version = "1.0.0"                 # optional: else the package.json beside this file
@@ -181,7 +182,7 @@ key (`"1"`) comes first in an object whatever its place in the map.
 ## The engine (`JsEngine`)
 
 `impl guatiao_bridge::Engine`: `ThreadModel::Pinned` (one QuickJS runtime,
-not `Send`, on the bridge's thread), manifests `*.guatiao-js.toml` with
+not `Send`, on the bridge's thread), manifests `*.guatiao.toml` of type `js` with
 `id_key = "name"` and code extensions `js`, `mjs`, `json`,
 `Opened::Described`. `JsEngine::memory_used()` is the bytes QuickJS holds
 for every library open (0 when asked from inside a call).

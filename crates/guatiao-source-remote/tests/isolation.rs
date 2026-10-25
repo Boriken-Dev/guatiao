@@ -57,8 +57,8 @@ fn a_crashing_python_provider_leaves_the_host_running_and_a_refresh_restarts_it(
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("py_fragile.py"), MODULE).unwrap();
     std::fs::write(
-        dir.join("py_fragile.guatiao-py.toml"),
-        "module = \"py_fragile\"\nkinds = [\"greeter\"]\npaths = [\".\"]\n",
+        dir.join("py_fragile.guatiao.toml"),
+        "type = \"python\"\nmodule = \"py_fragile\"\nkinds = [\"greeter\"]\npaths = [\".\"]\n",
     )
     .unwrap();
 

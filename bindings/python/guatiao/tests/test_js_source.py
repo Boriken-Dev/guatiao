@@ -52,8 +52,8 @@ def _library(directory: Path, name: str, kinds: str, code: str) -> None:
     its absolute path."""
     here = _KINDS_MODULE.resolve().as_posix()
     (directory / f"{name}.js").write_text(code.replace("__KINDS__", here), encoding="utf-8")
-    (directory / f"{name}.guatiao-js.toml").write_text(
-        f'name = "{name}"\nversion = "1.0.0"\nmain = "{name}.js"\nkinds = [{kinds}]\n'
+    (directory / f"{name}.guatiao.toml").write_text(
+        f'type = "js"\nname = "{name}"\nversion = "1.0.0"\nmain = "{name}.js"\nkinds = [{kinds}]\n'
         f'paths = [".", "{_KINDS_MODULE.resolve().parent.as_posix()}"]\n',
         encoding="utf-8",
     )

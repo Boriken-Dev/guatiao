@@ -66,7 +66,7 @@ impl Engine for Lua {
     type Library = u64;
     const THREADS: ThreadModel = ThreadModel::Pinned;
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-lua.toml",
+        serves: "lua",
         id_key: "module",
         code_extensions: &["lua"],
         skip_dirs: &[],

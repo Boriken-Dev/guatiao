@@ -119,8 +119,8 @@ fn registry(dir: &Path) -> Registry {
     .expect("written");
     std::fs::write(dir.join("rhai_relay.rhai"), RELAY).expect("written");
     std::fs::write(
-        dir.join("rhai_relay.guatiao-rhai.toml"),
-        "module = \"rhai_relay\"\nkinds = [\"relay\"]\n",
+        dir.join("rhai_relay.guatiao.toml"),
+        "type = \"rhai\"\nmodule = \"rhai_relay\"\nkinds = [\"relay\"]\n",
     )
     .expect("written");
     let mut config = Map::new();

@@ -190,7 +190,7 @@ mod tests {
         type Library = u64;
         const THREADS: ThreadModel = ThreadModel::Pinned;
         const MANIFESTS: ManifestFormat = ManifestFormat {
-            suffix: ".local.toml",
+            serves: "local",
             id_key: "id",
             code_extensions: &[],
             skip_dirs: &[],

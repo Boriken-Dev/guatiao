@@ -4,6 +4,7 @@
 # `_VERSION` is read as a literal from its file. `paths` are relative to
 # this file: where `require` finds the module and its own modules, and
 # where editing a `.lua` file is what a refresh notices.
+type = "lua"
 module = "lua_greeter"
 kinds = ["greeter", "counter"]
 paths = ["."]

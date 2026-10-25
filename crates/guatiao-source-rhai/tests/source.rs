@@ -106,8 +106,8 @@ fn scratch(name: &str) -> PathBuf {
 /// A library of one module: `code` is its file, `id` its name.
 fn put(dir: &Path, id: &str, manifest_extra: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao-rhai.toml")),
-        format!("module = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
+        dir.join(format!("{id}.guatiao.toml")),
+        format!("type = \"rhai\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
     )
     .expect("written");
     std::fs::write(dir.join(format!("{id}.rhai")), code).expect("written");
@@ -329,7 +329,7 @@ fn an_edit_serves_new_code_and_a_deleted_library_retires() {
     );
 
     drop(new);
-    std::fs::remove_file(dir.join("rhai_edited.guatiao-rhai.toml")).expect("removed");
+    std::fs::remove_file(dir.join("rhai_edited.guatiao.toml")).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     assert_eq!(registry.collect().len(), 1, "closed");

@@ -4,6 +4,7 @@
 # the script's own `const VERSION = "...";` is read from its parse.
 # `paths` are relative to this file: where the script is, and where
 # editing a `.rhai` file is what a refresh notices.
+type = "rhai"
 module = "rhai_greeter"
 kinds = ["greeter", "counter"]
 paths = ["."]

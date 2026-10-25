@@ -66,9 +66,10 @@ fn library() -> Library {
 guatiao_wasm_guest::export!(library, version = env!("CARGO_PKG_VERSION"));
 ```
 
-its manifest beside the module, `greeters.guatiao-wasm.toml`:
+its manifest beside the module, `greeters.guatiao.toml`:
 
 ```toml
+type = "wasm"            # the source that serves it
 module = "greeters"      # greeters.wasm
 kinds = ["greeter"]
 ```

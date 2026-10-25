@@ -13,7 +13,7 @@ runs them with QuickJS built into one file:
   it is for this source only.
 
 Each is a package (`package.json` names it and gives its version), a module
-and a manifest, `*.guatiao-js.toml`, which the source reads before it runs
+and a manifest, `*.guatiao.toml` of type `js`, which the source reads before it runs
 anything. The kinds are loaded from the module `guatiao-kind` wrote from
 their description, [`../greeter_kind/node/greeter_kind.js`](../greeter_kind/node/greeter_kind.js).
 

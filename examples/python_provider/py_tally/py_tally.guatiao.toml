@@ -1,4 +1,5 @@
 # A version stated here must be the module's `__version__`.
+type = "python"
 module = "py_tally"
 version = "0.1.0"
 kinds = ["counter"]

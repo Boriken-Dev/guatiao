@@ -48,7 +48,7 @@ pub trait Engine: 'static {
     /// Where it may be called from.
     const THREADS: ThreadModel;
 
-    /// How its manifests are named and what its code looks like.
+    /// Which manifests are its own (their `type`) and what its code looks like.
     const MANIFESTS: ManifestFormat;
 
     /// Starts the engine for a source's configuration, on the thread it
