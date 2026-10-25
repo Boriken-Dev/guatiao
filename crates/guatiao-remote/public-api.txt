@@ -1,0 +1,578 @@
+pub mod guatiao_remote
+pub mod guatiao_remote::client
+pub struct guatiao_remote::client::RemoteSource
+impl guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::disconnect(&self)
+pub fn guatiao_remote::client::RemoteSource::link(&self) -> core::result::Result<alloc::sync::Arc<guatiao_remote::link::Link>, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::client::RemoteSource::new(alloc::boxed::Box<dyn guatiao_remote::transport::Connect>, guatiao_remote::link::LinkOptions) -> guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::objects_out(&self) -> usize
+impl core::clone::Clone for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao::library::serving::Source for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::close(&self, &str, &str)
+pub fn guatiao_remote::client::RemoteSource::list(&self, guatiao::library::raw::host::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::client::RemoteSource::open(&self, guatiao::library::raw::host::Host, &str) -> core::result::Result<guatiao::library::raw::entry::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
+pub mod guatiao_remote::config
+pub fn guatiao_remote::config::client_of(&guatiao::value::types::map::Map) -> core::result::Result<(alloc::boxed::Box<dyn guatiao_remote::transport::Connect>, guatiao_remote::link::LinkOptions), guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::config::options_of(&guatiao::value::types::map::Map, guatiao_remote::protocol::Trust) -> core::result::Result<guatiao_remote::link::LinkOptions, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::config::trust_of(&str) -> core::result::Result<guatiao_remote::protocol::Trust, guatiao::library::kind::ProviderError>
+pub mod guatiao_remote::link
+#[non_exhaustive] pub enum guatiao_remote::link::LinkError
+pub guatiao_remote::link::LinkError::Io(core::io::error::Error)
+pub guatiao_remote::link::LinkError::Protocol(guatiao_remote::protocol::ProtocolError)
+pub guatiao_remote::link::LinkError::Refused
+pub guatiao_remote::link::LinkError::Refused::status: guatiao::value::status::Status
+pub guatiao_remote::link::LinkError::Refused::why: alloc::string::String
+pub guatiao_remote::link::LinkError::Trust(alloc::string::String)
+impl core::convert::From<core::io::error::Error> for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::from(core::io::error::Error) -> guatiao_remote::link::LinkError
+impl core::convert::From<guatiao_remote::link::LinkError> for guatiao::library::kind::ProviderError
+pub fn guatiao::library::kind::ProviderError::from(guatiao_remote::link::LinkError) -> guatiao::library::kind::ProviderError
+impl core::convert::From<guatiao_remote::protocol::ProtocolError> for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::from(guatiao_remote::protocol::ProtocolError) -> guatiao_remote::link::LinkError
+impl core::error::Error for guatiao_remote::link::LinkError
+impl core::fmt::Debug for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::link::Link
+impl guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::alive(&self) -> bool
+pub fn guatiao_remote::link::Link::close(&self, &str, &str)
+pub fn guatiao_remote::link::Link::end(&self)
+pub fn guatiao_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guatiao_bridge::kinds::Kinds>
+pub fn guatiao_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::open(&self, &str, &str) -> core::result::Result<(), guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::peer(&self) -> &str
+pub fn guatiao_remote::link::Link::ping(&self) -> core::result::Result<core::time::Duration, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::trust(&self) -> guatiao_remote::protocol::Trust
+pub fn guatiao_remote::link::Link::why(&self) -> alloc::string::String
+impl core::fmt::Debug for guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::drop(&mut self)
+pub struct guatiao_remote::link::LinkOptions
+impl guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::handshake_timeout(self, core::time::Duration) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::key(self, &[u8]) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::max_calls(self, usize) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::max_frame(self, usize) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::new(guatiao_remote::protocol::Trust) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::timeout(self, core::option::Option<core::time::Duration>) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::token(self, &str) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::trust(&self) -> guatiao_remote::protocol::Trust
+impl core::clone::Clone for guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao_remote::link::DEFAULT_MAX_CALLS: usize
+pub const guatiao_remote::link::DEFAULT_MAX_FRAME: usize
+pub const guatiao_remote::link::DEFAULT_TIMEOUT: core::time::Duration
+pub mod guatiao_remote::protocol
+pub mod guatiao_remote::protocol::args
+#[non_exhaustive] pub enum guatiao_remote::protocol::args::Decoded<'a>
+pub guatiao_remote::protocol::args::Decoded::Bool(bool)
+pub guatiao_remote::protocol::args::Decoded::Buffer(alloc::vec::Vec<u8>)
+pub guatiao_remote::protocol::args::Decoded::Bytes(&'a [u8])
+pub guatiao_remote::protocol::args::Decoded::Float(f64)
+pub guatiao_remote::protocol::args::Decoded::Int(i64)
+pub guatiao_remote::protocol::args::Decoded::List(guatiao::value::types::list::List)
+pub guatiao_remote::protocol::args::Decoded::Map(guatiao::value::types::map::Map)
+pub guatiao_remote::protocol::args::Decoded::Object(guatiao_remote::protocol::args::ObjectRef)
+pub guatiao_remote::protocol::args::Decoded::Str(&'a str)
+pub guatiao_remote::protocol::args::Decoded::Uint(u64)
+pub guatiao_remote::protocol::args::Decoded::Value(core::option::Option<guatiao::value::value::Value>)
+impl<'a> core::fmt::Debug for guatiao_remote::protocol::args::Decoded<'a>
+pub fn guatiao_remote::protocol::args::Decoded<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum guatiao_remote::protocol::args::ObjectRef
+pub guatiao_remote::protocol::args::ObjectRef::Receivers(u64)
+pub guatiao_remote::protocol::args::ObjectRef::Senders(u64)
+impl core::clone::Clone for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::args::ObjectRef
+impl core::cmp::PartialEq for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_remote::protocol::args::ObjectRef
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::args::ObjectRef
+pub const guatiao_remote::protocol::args::MAX_BUFFER: usize
+pub fn guatiao_remote::protocol::args::decode_answer(&guatiao::library::kind::description::SlotDescription, &[u8], &mut [guatiao::library::kind::runtime::Arg<'_>], guatiao::value::alloc::Alloc, &mut dyn core::ops::function::FnMut(&str, guatiao_remote::protocol::args::ObjectRef) -> core::result::Result<guatiao::library::kind::runtime::RawObject, guatiao_remote::protocol::ProtocolError>) -> core::result::Result<guatiao::library::kind::runtime::Answer, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::args::decode_args<'a>(&guatiao::library::kind::description::SlotDescription, &'a [u8], guatiao::value::alloc::Alloc) -> core::result::Result<alloc::vec::Vec<guatiao_remote::protocol::args::Decoded<'a>>, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::args::encode_answer(&guatiao::library::kind::description::SlotDescription, guatiao::library::kind::runtime::Answer, &mut alloc::vec::Vec<u8>, &mut dyn core::ops::function::FnMut(guatiao::library::kind::runtime::RawObject) -> guatiao_remote::protocol::args::ObjectRef) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::args::encode_args(&guatiao::library::kind::description::SlotDescription, &[guatiao::library::kind::runtime::Arg<'_>], &[core::option::Option<guatiao_remote::protocol::args::ObjectRef>], &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::args::encode_writebacks(&guatiao::library::kind::description::SlotDescription, &[guatiao_remote::protocol::args::Decoded<'_>], &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub mod guatiao_remote::protocol::catalog
+pub struct guatiao_remote::protocol::catalog::Catalog
+pub guatiao_remote::protocol::catalog::Catalog::kinds: alloc::vec::Vec<guatiao::value::value::Value>
+pub guatiao_remote::protocol::catalog::Catalog::libraries: alloc::vec::Vec<guatiao_remote::protocol::catalog::LibraryEntry>
+impl guatiao_remote::protocol::catalog::Catalog
+pub fn guatiao_remote::protocol::catalog::Catalog::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_remote::protocol::catalog::Catalog, alloc::string::String>
+pub fn guatiao_remote::protocol::catalog::Catalog::to_value(&self) -> guatiao::value::value::Value
+impl core::clone::Clone for guatiao_remote::protocol::catalog::Catalog
+pub fn guatiao_remote::protocol::catalog::Catalog::clone(&self) -> Self
+impl core::default::Default for guatiao_remote::protocol::catalog::Catalog
+pub fn guatiao_remote::protocol::catalog::Catalog::default() -> Self
+impl core::fmt::Debug for guatiao_remote::protocol::catalog::Catalog
+pub fn guatiao_remote::protocol::catalog::Catalog::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::protocol::catalog::LibraryEntry
+pub guatiao_remote::protocol::catalog::LibraryEntry::id: alloc::string::String
+pub guatiao_remote::protocol::catalog::LibraryEntry::providers: alloc::vec::Vec<guatiao_remote::protocol::catalog::ProviderEntry>
+pub guatiao_remote::protocol::catalog::LibraryEntry::stamp: alloc::string::String
+pub guatiao_remote::protocol::catalog::LibraryEntry::version: alloc::string::String
+impl core::clone::Clone for guatiao_remote::protocol::catalog::LibraryEntry
+pub fn guatiao_remote::protocol::catalog::LibraryEntry::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::catalog::LibraryEntry
+impl core::cmp::PartialEq for guatiao_remote::protocol::catalog::LibraryEntry
+pub fn guatiao_remote::protocol::catalog::LibraryEntry::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_remote::protocol::catalog::LibraryEntry
+pub fn guatiao_remote::protocol::catalog::LibraryEntry::default() -> Self
+impl core::fmt::Debug for guatiao_remote::protocol::catalog::LibraryEntry
+pub fn guatiao_remote::protocol::catalog::LibraryEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::catalog::LibraryEntry
+pub struct guatiao_remote::protocol::catalog::ProviderEntry
+pub guatiao_remote::protocol::catalog::ProviderEntry::id: alloc::string::String
+pub guatiao_remote::protocol::catalog::ProviderEntry::meta: core::option::Option<guatiao::value::types::map::Map>
+pub guatiao_remote::protocol::catalog::ProviderEntry::name: alloc::string::String
+pub guatiao_remote::protocol::catalog::ProviderEntry::tables: alloc::vec::Vec<guatiao_remote::protocol::catalog::TableEntry>
+impl core::clone::Clone for guatiao_remote::protocol::catalog::ProviderEntry
+pub fn guatiao_remote::protocol::catalog::ProviderEntry::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::catalog::ProviderEntry
+impl core::cmp::PartialEq for guatiao_remote::protocol::catalog::ProviderEntry
+pub fn guatiao_remote::protocol::catalog::ProviderEntry::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_remote::protocol::catalog::ProviderEntry
+pub fn guatiao_remote::protocol::catalog::ProviderEntry::default() -> Self
+impl core::fmt::Debug for guatiao_remote::protocol::catalog::ProviderEntry
+pub fn guatiao_remote::protocol::catalog::ProviderEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::catalog::ProviderEntry
+pub struct guatiao_remote::protocol::catalog::TableEntry
+pub guatiao_remote::protocol::catalog::TableEntry::kind: alloc::string::String
+pub guatiao_remote::protocol::catalog::TableEntry::slots: alloc::vec::Vec<alloc::string::String>
+pub guatiao_remote::protocol::catalog::TableEntry::table: u64
+impl core::clone::Clone for guatiao_remote::protocol::catalog::TableEntry
+pub fn guatiao_remote::protocol::catalog::TableEntry::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::catalog::TableEntry
+impl core::cmp::PartialEq for guatiao_remote::protocol::catalog::TableEntry
+pub fn guatiao_remote::protocol::catalog::TableEntry::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_remote::protocol::catalog::TableEntry
+pub fn guatiao_remote::protocol::catalog::TableEntry::default() -> Self
+impl core::fmt::Debug for guatiao_remote::protocol::catalog::TableEntry
+pub fn guatiao_remote::protocol::catalog::TableEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::catalog::TableEntry
+pub mod guatiao_remote::protocol::kind
+pub const guatiao_remote::protocol::kind::CALL: u8
+pub const guatiao_remote::protocol::kind::CANCEL: u8
+pub const guatiao_remote::protocol::kind::CLOSE: u8
+pub const guatiao_remote::protocol::kind::GOODBYE: u8
+pub const guatiao_remote::protocol::kind::HELLO: u8
+pub const guatiao_remote::protocol::kind::LIST: u8
+pub const guatiao_remote::protocol::kind::OPEN: u8
+pub const guatiao_remote::protocol::kind::PING: u8
+pub const guatiao_remote::protocol::kind::PONG: u8
+pub const guatiao_remote::protocol::kind::PROOF: u8
+pub const guatiao_remote::protocol::kind::RELEASE: u8
+pub const guatiao_remote::protocol::kind::REPLY: u8
+pub const guatiao_remote::protocol::kind::WELCOME: u8
+#[non_exhaustive] pub enum guatiao_remote::protocol::Decoded<'a>
+pub guatiao_remote::protocol::Decoded::Bool(bool)
+pub guatiao_remote::protocol::Decoded::Buffer(alloc::vec::Vec<u8>)
+pub guatiao_remote::protocol::Decoded::Bytes(&'a [u8])
+pub guatiao_remote::protocol::Decoded::Float(f64)
+pub guatiao_remote::protocol::Decoded::Int(i64)
+pub guatiao_remote::protocol::Decoded::List(guatiao::value::types::list::List)
+pub guatiao_remote::protocol::Decoded::Map(guatiao::value::types::map::Map)
+pub guatiao_remote::protocol::Decoded::Object(guatiao_remote::protocol::args::ObjectRef)
+pub guatiao_remote::protocol::Decoded::Str(&'a str)
+pub guatiao_remote::protocol::Decoded::Uint(u64)
+pub guatiao_remote::protocol::Decoded::Value(core::option::Option<guatiao::value::value::Value>)
+impl<'a> core::fmt::Debug for guatiao_remote::protocol::args::Decoded<'a>
+pub fn guatiao_remote::protocol::args::Decoded<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_remote::protocol::Frame<'a>
+pub guatiao_remote::protocol::Frame::Call
+pub guatiao_remote::protocol::Frame::Call::args: &'a [u8]
+pub guatiao_remote::protocol::Frame::Call::call: u64
+pub guatiao_remote::protocol::Frame::Call::parent: u64
+pub guatiao_remote::protocol::Frame::Call::slot: u64
+pub guatiao_remote::protocol::Frame::Call::target: guatiao_remote::protocol::Target
+pub guatiao_remote::protocol::Frame::Cancel
+pub guatiao_remote::protocol::Frame::Cancel::call: u64
+pub guatiao_remote::protocol::Frame::Close
+pub guatiao_remote::protocol::Frame::Close::library: &'a str
+pub guatiao_remote::protocol::Frame::Close::stamp: &'a str
+pub guatiao_remote::protocol::Frame::Goodbye
+pub guatiao_remote::protocol::Frame::Goodbye::message: &'a str
+pub guatiao_remote::protocol::Frame::Goodbye::status: u32
+pub guatiao_remote::protocol::Frame::Hello
+pub guatiao_remote::protocol::Frame::Hello::nonce: [u8; 16]
+pub guatiao_remote::protocol::Frame::Hello::options: guatiao::value::value::Value
+pub guatiao_remote::protocol::Frame::Hello::trust: guatiao_remote::protocol::Trust
+pub guatiao_remote::protocol::Frame::List
+pub guatiao_remote::protocol::Frame::List::call: u64
+pub guatiao_remote::protocol::Frame::Open
+pub guatiao_remote::protocol::Frame::Open::call: u64
+pub guatiao_remote::protocol::Frame::Open::library: &'a str
+pub guatiao_remote::protocol::Frame::Open::stamp: &'a str
+pub guatiao_remote::protocol::Frame::Ping
+pub guatiao_remote::protocol::Frame::Ping::n: u64
+pub guatiao_remote::protocol::Frame::Pong
+pub guatiao_remote::protocol::Frame::Pong::n: u64
+pub guatiao_remote::protocol::Frame::Proof
+pub guatiao_remote::protocol::Frame::Proof::proof: &'a [u8]
+pub guatiao_remote::protocol::Frame::Release
+pub guatiao_remote::protocol::Frame::Release::object: u64
+pub guatiao_remote::protocol::Frame::Reply
+pub guatiao_remote::protocol::Frame::Reply::body: &'a [u8]
+pub guatiao_remote::protocol::Frame::Reply::call: u64
+pub guatiao_remote::protocol::Frame::Reply::status: u32
+pub guatiao_remote::protocol::Frame::Welcome
+pub guatiao_remote::protocol::Frame::Welcome::nonce: [u8; 16]
+pub guatiao_remote::protocol::Frame::Welcome::options: guatiao::value::value::Value
+pub guatiao_remote::protocol::Frame::Welcome::proof: &'a [u8]
+impl<'a> guatiao_remote::protocol::Frame<'a>
+pub fn guatiao_remote::protocol::Frame<'a>::decode(&'a [u8], guatiao::value::alloc::Alloc) -> core::result::Result<guatiao_remote::protocol::Frame<'a>, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::Frame<'a>::encode(&self, &mut alloc::vec::Vec<u8>, usize) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+impl<'a> core::clone::Clone for guatiao_remote::protocol::Frame<'a>
+pub fn guatiao_remote::protocol::Frame<'a>::clone(&self) -> Self
+impl<'a> core::cmp::PartialEq for guatiao_remote::protocol::Frame<'a>
+pub fn guatiao_remote::protocol::Frame<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for guatiao_remote::protocol::Frame<'a>
+pub fn guatiao_remote::protocol::Frame<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::StructuralPartialEq for guatiao_remote::protocol::Frame<'a>
+pub enum guatiao_remote::protocol::ObjectRef
+pub guatiao_remote::protocol::ObjectRef::Receivers(u64)
+pub guatiao_remote::protocol::ObjectRef::Senders(u64)
+impl core::clone::Clone for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::args::ObjectRef
+impl core::cmp::PartialEq for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::protocol::args::ObjectRef
+pub fn guatiao_remote::protocol::args::ObjectRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_remote::protocol::args::ObjectRef
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::args::ObjectRef
+#[non_exhaustive] pub enum guatiao_remote::protocol::ProtocolError
+pub guatiao_remote::protocol::ProtocolError::Field
+pub guatiao_remote::protocol::ProtocolError::Field::at: usize
+pub guatiao_remote::protocol::ProtocolError::Field::why: &'static str
+pub guatiao_remote::protocol::ProtocolError::NotThisProtocol
+pub guatiao_remote::protocol::ProtocolError::NotUtf8
+pub guatiao_remote::protocol::ProtocolError::NotUtf8::at: usize
+pub guatiao_remote::protocol::ProtocolError::Overlong
+pub guatiao_remote::protocol::ProtocolError::Overlong::at: usize
+pub guatiao_remote::protocol::ProtocolError::TooLarge
+pub guatiao_remote::protocol::ProtocolError::TooLarge::len: usize
+pub guatiao_remote::protocol::ProtocolError::TooLarge::max: usize
+pub guatiao_remote::protocol::ProtocolError::Trailing
+pub guatiao_remote::protocol::ProtocolError::Trailing::at: usize
+pub guatiao_remote::protocol::ProtocolError::Truncated
+pub guatiao_remote::protocol::ProtocolError::Truncated::at: usize
+pub guatiao_remote::protocol::ProtocolError::UnknownFrame
+pub guatiao_remote::protocol::ProtocolError::UnknownFrame::kind: u8
+pub guatiao_remote::protocol::ProtocolError::Value(alloc::string::String)
+pub guatiao_remote::protocol::ProtocolError::Version
+pub guatiao_remote::protocol::ProtocolError::Version::theirs: u8
+pub guatiao_remote::protocol::ProtocolError::Wire
+pub guatiao_remote::protocol::ProtocolError::Wire::at: usize
+pub guatiao_remote::protocol::ProtocolError::Wire::why: alloc::string::String
+impl core::clone::Clone for guatiao_remote::protocol::ProtocolError
+pub fn guatiao_remote::protocol::ProtocolError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::ProtocolError
+impl core::cmp::PartialEq for guatiao_remote::protocol::ProtocolError
+pub fn guatiao_remote::protocol::ProtocolError::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao_remote::protocol::ProtocolError> for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::from(guatiao_remote::protocol::ProtocolError) -> guatiao_remote::link::LinkError
+impl core::error::Error for guatiao_remote::protocol::ProtocolError
+impl core::fmt::Debug for guatiao_remote::protocol::ProtocolError
+pub fn guatiao_remote::protocol::ProtocolError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_remote::protocol::ProtocolError
+pub fn guatiao_remote::protocol::ProtocolError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::ProtocolError
+pub enum guatiao_remote::protocol::Target
+pub guatiao_remote::protocol::Target::Object(u64)
+pub guatiao_remote::protocol::Target::Table(u64)
+impl core::clone::Clone for guatiao_remote::protocol::Target
+pub fn guatiao_remote::protocol::Target::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::Target
+impl core::cmp::PartialEq for guatiao_remote::protocol::Target
+pub fn guatiao_remote::protocol::Target::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::protocol::Target
+pub fn guatiao_remote::protocol::Target::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao_remote::protocol::Target
+pub fn guatiao_remote::protocol::Target::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao_remote::protocol::Target
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::Target
+#[non_exhaustive] pub enum guatiao_remote::protocol::Trust
+pub guatiao_remote::protocol::Trust::Local
+pub guatiao_remote::protocol::Trust::Secure
+pub guatiao_remote::protocol::Trust::Trusted
+impl guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::name(self) -> &'static str
+impl core::clone::Clone for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::Trust
+impl core::cmp::PartialEq for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao_remote::protocol::Trust
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::Trust
+pub const guatiao_remote::protocol::HANDSHAKE_MAX_FRAME: usize
+pub const guatiao_remote::protocol::MAGIC: [u8; 4]
+pub const guatiao_remote::protocol::VERSION: u8
+pub fn guatiao_remote::protocol::catalog_of(&[u8], guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::decode_answer(&guatiao::library::kind::description::SlotDescription, &[u8], &mut [guatiao::library::kind::runtime::Arg<'_>], guatiao::value::alloc::Alloc, &mut dyn core::ops::function::FnMut(&str, guatiao_remote::protocol::args::ObjectRef) -> core::result::Result<guatiao::library::kind::runtime::RawObject, guatiao_remote::protocol::ProtocolError>) -> core::result::Result<guatiao::library::kind::runtime::Answer, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::decode_args<'a>(&guatiao::library::kind::description::SlotDescription, &'a [u8], guatiao::value::alloc::Alloc) -> core::result::Result<alloc::vec::Vec<guatiao_remote::protocol::args::Decoded<'a>>, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::encode_answer(&guatiao::library::kind::description::SlotDescription, guatiao::library::kind::runtime::Answer, &mut alloc::vec::Vec<u8>, &mut dyn core::ops::function::FnMut(guatiao::library::kind::runtime::RawObject) -> guatiao_remote::protocol::args::ObjectRef) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::encode_args(&guatiao::library::kind::description::SlotDescription, &[guatiao::library::kind::runtime::Arg<'_>], &[core::option::Option<guatiao_remote::protocol::args::ObjectRef>], &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::finish(&mut [u8], usize, usize) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::finish_with(&mut [u8], usize, usize, usize) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::put_catalog(&mut alloc::vec::Vec<u8>, &guatiao::value::value::Value) -> core::result::Result<(), guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::refusal(&mut alloc::vec::Vec<u8>, u64, u32, &str)
+pub fn guatiao_remote::protocol::refusal_words(&[u8]) -> core::result::Result<&str, guatiao_remote::protocol::ProtocolError>
+pub fn guatiao_remote::protocol::start(&mut alloc::vec::Vec<u8>, u8) -> usize
+pub fn guatiao_remote::protocol::start_call(&mut alloc::vec::Vec<u8>, u64, u64, guatiao_remote::protocol::Target, u64) -> usize
+pub fn guatiao_remote::protocol::start_reply(&mut alloc::vec::Vec<u8>, u64, u32) -> usize
+pub mod guatiao_remote::server
+pub struct guatiao_remote::server::Described
+impl guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::add_json(&mut self, &str) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::kinds(&self) -> &guatiao_bridge::kinds::Kinds
+pub fn guatiao_remote::server::Described::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::new() -> guatiao_remote::server::Described
+impl core::clone::Clone for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::clone(&self) -> Self
+impl core::default::Default for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::default() -> Self
+impl core::fmt::Debug for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::server::Server
+impl guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::end_links(&self)
+pub fn guatiao_remote::server::Server::links(&self) -> usize
+pub fn guatiao_remote::server::Server::links_holding(&self) -> usize
+pub fn guatiao_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_remote::server::Described, guatiao_remote::link::LinkOptions) -> guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::objects_out(&self) -> usize
+pub fn guatiao_remote::server::Server::options(&self) -> &guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::server::Server::refresh(&self) -> guatiao::library::source::Refreshed
+pub fn guatiao_remote::server::Server::registry(&self) -> std::sync::poison::mutex::MutexGuard<'_, guatiao::library::registry::Registry>
+pub fn guatiao_remote::server::Server::serve(&self, guatiao_remote::transport::Connection) -> core::result::Result<alloc::sync::Arc<guatiao_remote::link::Link>, guatiao_remote::link::LinkError>
+impl core::clone::Clone for guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod guatiao_remote::transport
+pub mod guatiao_remote::transport::child
+pub struct guatiao_remote::transport::child::ChildCommand
+impl guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::arg(self, impl core::convert::Into<std::ffi::os_str::OsString>) -> guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::args<I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<std::ffi::os_str::OsString>>(self, I) -> guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::env(self, impl core::convert::Into<std::ffi::os_str::OsString>, impl core::convert::Into<std::ffi::os_str::OsString>) -> guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::new(impl core::convert::Into<std::path::PathBuf>) -> guatiao_remote::transport::child::ChildCommand
+impl core::clone::Clone for guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::child::ChildCommand::describe(&self) -> alloc::string::String
+pub fn guatiao_remote::transport::child::stdio() -> guatiao_remote::transport::Connection
+pub mod guatiao_remote::transport::memory
+pub fn guatiao_remote::transport::memory::pair() -> (guatiao_remote::transport::Connection, guatiao_remote::transport::Connection)
+pub mod guatiao_remote::transport::stream
+pub struct guatiao_remote::transport::stream::StreamReader<R: alloc::io::read::Read>
+impl<R: alloc::io::read::Read + core::marker::Send> guatiao_remote::transport::stream::StreamReader<R>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::new(R) -> guatiao_remote::transport::stream::StreamReader<R>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::with_timeout(R, impl core::ops::function::FnMut(&R, core::option::Option<core::time::Duration>) -> core::io::error::Result<()> + core::marker::Send + 'static) -> guatiao_remote::transport::stream::StreamReader<R>
+impl<R: alloc::io::read::Read + core::marker::Send> guatiao_remote::transport::FrameRead for guatiao_remote::transport::stream::StreamReader<R>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
+pub struct guatiao_remote::transport::stream::StreamWriter<W: core::io::write::Write>
+impl<W: core::io::write::Write + core::marker::Send> guatiao_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::new(W) -> guatiao_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::with_shutdown(W, impl core::ops::function::FnMut() + core::marker::Send + 'static) -> guatiao_remote::transport::stream::StreamWriter<W>
+impl<W: core::io::write::Write + core::marker::Send> guatiao_remote::transport::FrameWrite for guatiao_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+pub mod guatiao_remote::transport::tcp
+#[non_exhaustive] pub enum guatiao_remote::transport::tcp::Accepted
+pub guatiao_remote::transport::tcp::Accepted::Connection(guatiao_remote::transport::Connection)
+pub guatiao_remote::transport::tcp::Accepted::Refused(core::net::socket_addr::SocketAddr)
+impl core::fmt::Debug for guatiao_remote::transport::tcp::Accepted
+pub fn guatiao_remote::transport::tcp::Accepted::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::transport::tcp::Range
+impl guatiao_remote::transport::tcp::Range
+pub fn guatiao_remote::transport::tcp::Range::contains(&self, core::net::ip_addr::IpAddr) -> bool
+pub fn guatiao_remote::transport::tcp::Range::parse(&str) -> core::result::Result<guatiao_remote::transport::tcp::Range, alloc::string::String>
+impl core::clone::Clone for guatiao_remote::transport::tcp::Range
+pub fn guatiao_remote::transport::tcp::Range::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::transport::tcp::Range
+impl core::cmp::PartialEq for guatiao_remote::transport::tcp::Range
+pub fn guatiao_remote::transport::tcp::Range::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::transport::tcp::Range
+pub fn guatiao_remote::transport::tcp::Range::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_remote::transport::tcp::Range
+pub fn guatiao_remote::transport::tcp::Range::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_remote::transport::tcp::Range
+impl core::marker::StructuralPartialEq for guatiao_remote::transport::tcp::Range
+pub struct guatiao_remote::transport::tcp::TcpConnect
+impl guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::new(&str) -> guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::timeout(self, core::time::Duration) -> guatiao_remote::transport::tcp::TcpConnect
+impl core::clone::Clone for guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::tcp::TcpConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_remote::transport::tcp::TcpListen
+impl guatiao_remote::transport::tcp::TcpListen
+pub fn guatiao_remote::transport::tcp::TcpListen::accept(&self) -> core::io::error::Result<guatiao_remote::transport::tcp::Accepted>
+pub fn guatiao_remote::transport::tcp::TcpListen::bind(&str, &[guatiao_remote::transport::tcp::Range]) -> core::io::error::Result<guatiao_remote::transport::tcp::TcpListen>
+pub fn guatiao_remote::transport::tcp::TcpListen::local_addr(&self) -> core::io::error::Result<core::net::socket_addr::SocketAddr>
+impl core::fmt::Debug for guatiao_remote::transport::tcp::TcpListen
+pub fn guatiao_remote::transport::tcp::TcpListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao_remote::transport::tcp::CONNECT_TIMEOUT: core::time::Duration
+pub struct guatiao_remote::transport::Connection
+pub guatiao_remote::transport::Connection::closer: core::option::Option<alloc::boxed::Box<(dyn core::ops::function::Fn() + core::marker::Send + core::marker::Sync)>>
+pub guatiao_remote::transport::Connection::peer: alloc::string::String
+pub guatiao_remote::transport::Connection::reader: alloc::boxed::Box<dyn guatiao_remote::transport::FrameRead>
+pub guatiao_remote::transport::Connection::writer: alloc::boxed::Box<dyn guatiao_remote::transport::FrameWrite>
+impl core::fmt::Debug for guatiao_remote::transport::Connection
+pub fn guatiao_remote::transport::Connection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait guatiao_remote::transport::Connect: core::marker::Send + core::marker::Sync
+pub fn guatiao_remote::transport::Connect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::Connect::describe(&self) -> alloc::string::String
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::child::ChildCommand
+pub fn guatiao_remote::transport::child::ChildCommand::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::child::ChildCommand::describe(&self) -> alloc::string::String
+impl guatiao_remote::transport::Connect for guatiao_remote::transport::tcp::TcpConnect
+pub fn guatiao_remote::transport::tcp::TcpConnect::connect(&self) -> core::io::error::Result<guatiao_remote::transport::Connection>
+pub fn guatiao_remote::transport::tcp::TcpConnect::describe(&self) -> alloc::string::String
+pub trait guatiao_remote::transport::FrameRead: core::marker::Send
+pub fn guatiao_remote::transport::FrameRead::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
+pub fn guatiao_remote::transport::FrameRead::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
+impl<R: alloc::io::read::Read + core::marker::Send> guatiao_remote::transport::FrameRead for guatiao_remote::transport::stream::StreamReader<R>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
+pub fn guatiao_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
+pub trait guatiao_remote::transport::FrameWrite: core::marker::Send
+pub fn guatiao_remote::transport::FrameWrite::shutdown(&mut self)
+pub fn guatiao_remote::transport::FrameWrite::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_remote::transport::FrameWrite::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+impl<W: core::io::write::Write + core::marker::Send> guatiao_remote::transport::FrameWrite for guatiao_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+#[non_exhaustive] pub enum guatiao_remote::LinkError
+pub guatiao_remote::LinkError::Io(core::io::error::Error)
+pub guatiao_remote::LinkError::Protocol(guatiao_remote::protocol::ProtocolError)
+pub guatiao_remote::LinkError::Refused
+pub guatiao_remote::LinkError::Refused::status: guatiao::value::status::Status
+pub guatiao_remote::LinkError::Refused::why: alloc::string::String
+pub guatiao_remote::LinkError::Trust(alloc::string::String)
+impl core::convert::From<core::io::error::Error> for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::from(core::io::error::Error) -> guatiao_remote::link::LinkError
+impl core::convert::From<guatiao_remote::link::LinkError> for guatiao::library::kind::ProviderError
+pub fn guatiao::library::kind::ProviderError::from(guatiao_remote::link::LinkError) -> guatiao::library::kind::ProviderError
+impl core::convert::From<guatiao_remote::protocol::ProtocolError> for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::from(guatiao_remote::protocol::ProtocolError) -> guatiao_remote::link::LinkError
+impl core::error::Error for guatiao_remote::link::LinkError
+impl core::fmt::Debug for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_remote::link::LinkError
+pub fn guatiao_remote::link::LinkError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_remote::Trust
+pub guatiao_remote::Trust::Local
+pub guatiao_remote::Trust::Secure
+pub guatiao_remote::Trust::Trusted
+impl guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::name(self) -> &'static str
+impl core::clone::Clone for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_remote::protocol::Trust
+impl core::cmp::PartialEq for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao_remote::protocol::Trust
+pub fn guatiao_remote::protocol::Trust::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao_remote::protocol::Trust
+impl core::marker::StructuralPartialEq for guatiao_remote::protocol::Trust
+pub struct guatiao_remote::Described
+impl guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::add_json(&mut self, &str) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::kinds(&self) -> &guatiao_bridge::kinds::Kinds
+pub fn guatiao_remote::server::Described::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::server::Described::new() -> guatiao_remote::server::Described
+impl core::clone::Clone for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::clone(&self) -> Self
+impl core::default::Default for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::default() -> Self
+impl core::fmt::Debug for guatiao_remote::server::Described
+pub fn guatiao_remote::server::Described::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::Link
+impl guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::alive(&self) -> bool
+pub fn guatiao_remote::link::Link::close(&self, &str, &str)
+pub fn guatiao_remote::link::Link::end(&self)
+pub fn guatiao_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guatiao_bridge::kinds::Kinds>
+pub fn guatiao_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::open(&self, &str, &str) -> core::result::Result<(), guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::peer(&self) -> &str
+pub fn guatiao_remote::link::Link::ping(&self) -> core::result::Result<core::time::Duration, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::link::Link::trust(&self) -> guatiao_remote::protocol::Trust
+pub fn guatiao_remote::link::Link::why(&self) -> alloc::string::String
+impl core::fmt::Debug for guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for guatiao_remote::link::Link
+pub fn guatiao_remote::link::Link::drop(&mut self)
+pub struct guatiao_remote::LinkOptions
+impl guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::handshake_timeout(self, core::time::Duration) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::key(self, &[u8]) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::max_calls(self, usize) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::max_frame(self, usize) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::new(guatiao_remote::protocol::Trust) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::timeout(self, core::option::Option<core::time::Duration>) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::token(self, &str) -> guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::trust(&self) -> guatiao_remote::protocol::Trust
+impl core::clone::Clone for guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::link::LinkOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_remote::RemoteSource
+impl guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::disconnect(&self)
+pub fn guatiao_remote::client::RemoteSource::link(&self) -> core::result::Result<alloc::sync::Arc<guatiao_remote::link::Link>, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::client::RemoteSource::new(alloc::boxed::Box<dyn guatiao_remote::transport::Connect>, guatiao_remote::link::LinkOptions) -> guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::objects_out(&self) -> usize
+impl core::clone::Clone for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao::library::serving::Source for guatiao_remote::client::RemoteSource
+pub fn guatiao_remote::client::RemoteSource::close(&self, &str, &str)
+pub fn guatiao_remote::client::RemoteSource::list(&self, guatiao::library::raw::host::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao_remote::client::RemoteSource::open(&self, guatiao::library::raw::host::Host, &str) -> core::result::Result<guatiao::library::raw::entry::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
+pub struct guatiao_remote::Server
+impl guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::end_links(&self)
+pub fn guatiao_remote::server::Server::links(&self) -> usize
+pub fn guatiao_remote::server::Server::links_holding(&self) -> usize
+pub fn guatiao_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_remote::server::Described, guatiao_remote::link::LinkOptions) -> guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::objects_out(&self) -> usize
+pub fn guatiao_remote::server::Server::options(&self) -> &guatiao_remote::link::LinkOptions
+pub fn guatiao_remote::server::Server::refresh(&self) -> guatiao::library::source::Refreshed
+pub fn guatiao_remote::server::Server::registry(&self) -> std::sync::poison::mutex::MutexGuard<'_, guatiao::library::registry::Registry>
+pub fn guatiao_remote::server::Server::serve(&self, guatiao_remote::transport::Connection) -> core::result::Result<alloc::sync::Arc<guatiao_remote::link::Link>, guatiao_remote::link::LinkError>
+impl core::clone::Clone for guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_remote::server::Server
+pub fn guatiao_remote::server::Server::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
