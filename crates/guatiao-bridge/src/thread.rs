@@ -75,16 +75,20 @@ impl<E: Engine> Runner<E> {
         }
     }
 
-    /// Starts the engine on a thread of its own with `make`, and waits until
-    /// it has started or refused.
+    /// Starts the engine on a thread of its own with `make`, its stack
+    /// `stack` bytes when given, and waits until it has started or refused.
     pub(crate) fn pinned(
         name: &str,
+        stack: Option<usize>,
         make: impl FnOnce() -> Result<E, BridgeError> + Send + 'static,
     ) -> Result<Runner<E>, BridgeError> {
         let (queue, jobs) = mpsc::channel::<Job>();
         let (ready, started) = mpsc::channel::<Result<(), BridgeError>>();
-        let spawned = thread::Builder::new()
-            .name(name.to_string())
+        let mut builder = thread::Builder::new().name(name.to_string());
+        if let Some(bytes) = stack {
+            builder = builder.stack_size(bytes);
+        }
+        let spawned = builder
             .spawn(move || {
                 let engine = match catch_unwind(AssertUnwindSafe(make)) {
                     Ok(Ok(engine)) => engine,
@@ -107,7 +111,12 @@ impl<E: Engine> Runner<E> {
                 OWNED.with(|owned| owned.borrow_mut().take());
             })
             .map_err(|e| {
-                BridgeError::Unavailable(format!("the engine thread did not start: {e}"))
+                BridgeError::Unavailable(match stack {
+                    Some(bytes) => format!(
+                        "the engine thread did not start with a stack of {bytes} bytes: {e}"
+                    ),
+                    None => format!("the engine thread did not start: {e}"),
+                })
             })?;
         started.recv().map_err(|_| BridgeError::EngineGone)??;
         Ok(Runner {
@@ -200,7 +209,33 @@ mod tests {
 
     fn pinned() -> Runner<Local> {
         let config = Config::from_map(&guatiao::Map::new()).expect("empty");
-        Runner::pinned("bridge-test", move || Local::start(&config)).expect("started")
+        Runner::pinned("bridge-test", None, move || Local::start(&config)).expect("started")
+    }
+
+    /// Recurses until `bytes` of stack lie below the first frame.
+    fn use_stack(bytes: usize) -> usize {
+        #[inline(never)]
+        fn down(start: usize, bytes: usize) -> usize {
+            let pad = core::hint::black_box([0u8; 4096]);
+            let here = core::ptr::addr_of!(pad) as usize;
+            if start.saturating_sub(here) >= bytes {
+                return usize::from(pad[0]);
+            }
+            core::hint::black_box(down(start, bytes)) + usize::from(pad[1])
+        }
+        let top = 0u8;
+        down(core::ptr::addr_of!(top) as usize, bytes)
+    }
+
+    #[test]
+    fn a_pinned_engine_runs_on_the_stack_it_asked_for() {
+        // Far past any platform's default thread stack, which would abort.
+        let config = Config::from_map(&guatiao::Map::new()).expect("empty");
+        let runner: Runner<Local> = Runner::pinned("bridge-stack", Some(256 << 20), move || {
+            Local::start(&config)
+        })
+        .expect("started");
+        assert_eq!(runner.run(|_| use_stack(64 << 20)).expect("ran"), 0);
     }
 
     #[test]
