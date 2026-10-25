@@ -18,6 +18,9 @@
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
+// Or windows.h defines min and max as macros, and std::numeric_limits'
+// own min() and max() no longer compile.
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <dlfcn.h>
