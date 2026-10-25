@@ -393,7 +393,7 @@ on its remote.
 | `"bool"`, `"int8"`..`"uint32"`, `"float"`, `"double"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
 | `"int64"`, `"uint64"`, `"size"`, `"intptr"` | the C scalar | an R integer, a whole double, an `integer64`, a `number` or a string spelling an integer, read exactly | as `int64` says (below) |
 | `"value"`, `"map"`, `"list"` | `const guatiao_value *` / `map *` / `list *` | a value, a view or R data | a read-only view, valid for the call |
-| `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere is moved there when the call returns |
+| `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent |
 | `taken("value")`, `taken("map")`, `taken("list")` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or R data | a value the method owns (and closes, or the collector frees) |
 | answer `"value"`, `"map"`, `"list"` | `guatiao_value/map/list *out` | a value, moved into this binding's allocator on arrival when the slot built it in its own | any R data or a value, built in the allocator the carrier names (`list()` is an empty map too) |
 | answer `"string"` | `guatiao_string *out` | a string | a string |
