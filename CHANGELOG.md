@@ -33,6 +33,26 @@ write now.
   as `nil, err`, and Lua tables handed to providers as objects.
 - **`RawObject::lend`**: an object a caller owns, lent to a slot that
   takes a lent one, without `unsafe`.
+- **`guatiao-remote`: providers called across a process, a machine or a
+  network.** A new crate, published with the others. A device runs
+  `guatiao-remote-server` (or `Server` over a `Registry`); a host adds a
+  `RemoteSource`, or in any language the crate's library file as a
+  source, and after `refresh()` calls the device's providers through the
+  kinds' own traits and C tables. Every slot shape crosses: borrowed,
+  taken and lent trees, buffers, every answer, objects both ways, and a
+  callback during a call, which runs on the thread that lent the object.
+  A remote object holds its library on the far side until its handle is
+  dropped, its call is cancelled or the link is lost; a call past its
+  timeout or on a lost link answers `GUATIAO_ERR_GONE` and the host
+  carries on. Transports: a server in a child process, and TCP at the
+  trusted level (feature `tcp`): an address range the listener binds and
+  accepts in, and a pre-shared key both sides prove. The protocol is
+  stated for every language in `docs/remote.md`, with shared vectors and a
+  C codec, client and server.
+- **`DescribedRemote::implements` and `DescribedRemote::kind`**: whether
+  a provider's table fills a slot, read under the table's own size, so a
+  caller that lists a table's slots leaves the unfilled ones to its own
+  default.
 - **`guatiao-bridge`: what every bridge to a language runtime shares.** A
   new crate, `#![forbid(unsafe_code)]`, published with the others. A
   runtime implements `Engine` (start from the host's configuration, open
