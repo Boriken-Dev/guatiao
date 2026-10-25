@@ -133,7 +133,7 @@ mapped for the call, which costs about 25 microseconds (on Windows the
 whole stack is committed memory). Comparing or writing a nested value
 recurses through Rhai's own calls; when that reaches the end of the
 call's stack the call stops at its depth limit. `to_json` refuses a map
-nested deeper than 512 levels. Without `operations`, a script can nest
+nested deeper than 512 levels or holding more than 1 000 000 values. Without `operations`, a script can nest
 values until the stack ends and the host process aborts. What a provider
 builds up in its own state over many calls is not covered either.
 
