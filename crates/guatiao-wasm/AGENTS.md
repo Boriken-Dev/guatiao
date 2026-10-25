@@ -180,8 +180,9 @@ key that is not a list of text, a misspelled limit or `depth`,
 
 ## Gotchas
 
-- **A guest runs on the calling thread's stack**, up to wasmtime's 512 KiB
-  for its own frames: call from a thread with more than that to spare.
+- **A guest runs on the calling thread's stack**, up to 512 KiB for its
+  own frames and 512 KiB for the host's below them; an entry with less
+  than that left runs on a 4 MiB stack of its own, so any thread may call.
 - **A wait can deadlock a library**: a host object a guest calls that
   waits for another thread calling the same library waits forever.
 - **Opening compiles**: a Go module takes seconds (a 1.6 MB one, 2.6 s in

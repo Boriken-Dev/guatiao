@@ -42,6 +42,9 @@ wasmtime = { version = "36.0.19", default-features = false, features = [
 ] }
 # WASI's `random_get`, for a guest that imports it.
 getrandom = "0.3.4"
+# A guest runs on its caller's stack: an entry with too little left runs
+# on a segment of its own, as rustc runs its deep recursion.
+stacker = "0.1.25"
 
 [dev-dependencies]
 # The kinds' traits, which a Rust host calls the wasm greeters through.

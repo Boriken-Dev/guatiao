@@ -27,7 +27,7 @@ use guatiao_bridge::{
 use wasmtime::{ExternType, FuncType, Linker, Module};
 
 use crate::abi::{self, export};
-use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable};
+use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
 use crate::{section, wasi};
 
 /// Increments the engine's epoch every millisecond while a time limit is
@@ -403,7 +403,8 @@ impl Engine for WasmEngine {
         wasm.consume_fuel(limits.operations.is_some())
             .epoch_interruption(limits.time.is_some())
             .wasm_multi_memory(false)
-            .wasm_memory64(false);
+            .wasm_memory64(false)
+            .max_wasm_stack(instance::WASM_STACK);
         let engine = wasmtime::Engine::new(&wasm)
             .map_err(|e| BridgeError::Unavailable(format!("wasmtime did not start: {e}")))?;
         let mut linker = Linker::new(&engine);
@@ -443,6 +444,37 @@ impl Engine for WasmEngine {
     /// Compiles the module, checks its exports and imports, instantiates it
     /// and reads its declaration, each step under the limits.
     fn open(
+        &self,
+        manifest: &Manifest,
+        version: &str,
+    ) -> Result<Opened<Arc<WasmLibrary>>, BridgeError> {
+        with_stack(|| self.open_here(manifest, version))
+    }
+
+    fn call(&self, lib: &Arc<WasmLibrary>, call: &mut Call) -> Result<Reply, ProviderError> {
+        with_stack(|| self.call_here(lib, call))
+    }
+
+    /// Tells the guest its object was destroyed; deferred to the next
+    /// call when the library is busy on this thread.
+    fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
+        with_stack(|| match lib.enter() {
+            Some(mut entered) => self.release_in(&mut entered.slot, object),
+            None => lib
+                .deferred
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(object),
+        });
+    }
+
+    fn close(&self, lib: Arc<WasmLibrary>) {
+        drop(lib);
+    }
+}
+
+impl WasmEngine {
+    fn open_here(
         &self,
         manifest: &Manifest,
         version: &str,
@@ -501,7 +533,7 @@ impl Engine for WasmEngine {
         })
     }
 
-    fn call(&self, lib: &Arc<WasmLibrary>, call: &mut Call) -> Result<Reply, ProviderError> {
+    fn call_here(&self, lib: &WasmLibrary, call: &mut Call) -> Result<Reply, ProviderError> {
         let mut entered = lib.enter().ok_or_else(busy)?;
         let slot = &mut *entered.slot;
         self.settle(lib, slot);
@@ -650,22 +682,5 @@ impl Engine for WasmEngine {
             }
             Some(_) => Reply::Value(answered("a value")?),
         })
-    }
-
-    /// Tells the guest its object was destroyed; deferred to the next
-    /// call when the library is busy on this thread.
-    fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
-        match lib.enter() {
-            Some(mut entered) => self.release_in(&mut entered.slot, object),
-            None => lib
-                .deferred
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(object),
-        }
-    }
-
-    fn close(&self, lib: Arc<WasmLibrary>) {
-        drop(lib);
     }
 }
