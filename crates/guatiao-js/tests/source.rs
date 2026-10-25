@@ -733,6 +733,11 @@ fn reactions_a_stopped_call_queued_die_with_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// How long ending what a stopped call left may take: a fraction of a
+/// second is measured, in either build.
+const ENDS_WITHIN: core::time::Duration =
+    core::time::Duration::from_secs(if cfg!(debug_assertions) { 20 } else { 8 });
+
 /// What a stopped call left queued is ended however much of it there is,
 /// at a cost that does not grow with what each reaction would run, and
 /// the source and its other libraries carry on.
@@ -762,10 +767,7 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
             "{name}"
         );
         let took = started.elapsed();
-        assert!(
-            took < core::time::Duration::from_secs(8),
-            "{name} took {took:?}"
-        );
+        assert!(took < ENDS_WITHIN, "{name} took {took:?}");
         assert_eq!(
             greeting(&spin.greet("after").expect("the source still serves")),
             "calm, after",
@@ -807,10 +809,7 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
             "{name}"
         );
         let took = started.elapsed();
-        assert!(
-            took < core::time::Duration::from_secs(8),
-            "{name} took {took:?}"
-        );
+        assert!(took < ENDS_WITHIN, "{name} took {took:?}");
         assert_eq!(
             greeting(&spin.greet("after").expect("serves")),
             "calm, after",
@@ -977,8 +976,6 @@ fn a_library_opens_under_the_least_depth_limit() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Opening a library is under the limits too: a module whose reactions
-/// spin while it awaits forever is stopped, and the source carries on.
 /// No depth limit gives a call more stack than having none.
 #[test]
 fn a_large_depth_limit_reaches_no_deeper_than_none() {
@@ -1004,6 +1001,8 @@ fn a_large_depth_limit_reaches_no_deeper_than_none() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Opening a library is under the limits too: a module whose reactions
+/// spin while it awaits forever is stopped, and the source carries on.
 #[test]
 fn a_module_that_never_finishes_loading_is_stopped() {
     let dir = scratch("never-loads");
