@@ -413,9 +413,13 @@ frames; `--spin MICROSECONDS` is `LinkOptions::spin` on both ends;
 `local://` and `shm://` take a socket path or a pipe name. `run` ends the
 server when it is done.
 
-Local and provisional: three runs each, medians. The host is an x86-64
-Linux server, the VM a guest on it (virtio, MTU 9000); Windows is the
-ARM64 workstation.
+Local and provisional: three runs each, medians, unless a row says
+otherwise. The host is an x86-64 Linux server, the VM a guest on it
+(virtio, MTU 9000); the FreeBSD VM (4 cores) and the macOS VM are guests
+on the same host (`remote-freebsd-macos.jsonl`); Windows is the ARM64
+workstation. The macOS VM is slow at everything, raw sockets included
+(about 500 µs a raw TCP round trip from the host): its rows show that the
+crate builds and runs there, not what macOS costs.
 
 | run | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | protocol B/call | wire B/call | CPU µs/call, client / server |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -429,6 +433,14 @@ ARM64 workstation.
 | Windows, TCP loopback | 28.8 | 73.2 | 52 377 | 792 | 21.3 | - | 32.0 / 30.5 |
 | Windows, named pipe | 16.2 | 42.9 | 138 732 | 1 571 | 21.3 | - | 19.5 / 18.8 |
 | Windows, shared memory | 1.3 | 5.4 | 331 859 | 1 289 | 21.3 | - | 4.7 / 4.7 |
+| host to FreeBSD VM, TCP | 120.5 | 186.6 | 17 657 | 266 | 21.3 | 125.3 | 81.8 / 81.7 |
+| FreeBSD VM, TCP loopback (one run) | 17.5 | 30.2 | 32 855 | 444 | 21.3 | - | 22.6 / 22.4 |
+| FreeBSD VM, Unix socket (one run) | 16.3 | 35.5 | 39 108 | 372 | 21.3 | - | 23.1 / 22.4 |
+| FreeBSD VM, shared memory (one run) | 6.3 | 18.2 | 33 729 | 735 | 21.3 | - | 13.4 / 13.4 |
+| host to macOS VM, TCP | 702.5 | 1 555.1 | 7 197 | 56 | 21.3 | 177.3 | 116.7 / 411.7 |
+| macOS VM, TCP loopback (one run) | 656.7 | 1 268.5 | 6 790 | 631 | 21.3 | - | 378.1 / 372.1 |
+| macOS VM, Unix socket (one run) | 587.0 | 1 205.1 | 6 947 | 58 | 21.3 | - | 379.1 / 376.0 |
+| macOS VM, shared memory (one run) | 676.5 | 1 261.3 | 6 948 | 627 | 21.3 | - | 459.2 / 453.2 |
 
 How long a waiting thread polls (`remote-host-to-vm-spin.jsonl`, host to
 VM, MTU 9000):
