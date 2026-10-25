@@ -39,6 +39,7 @@ mod stream;
 pub use stream::{Decoder, Encoded, Encoder, decode_as, encode_of, to_bytes_of};
 
 use alloc::fmt;
+use std::collections::HashSet;
 
 use super::alloc::Alloc;
 use super::convert::TryAsRef;
@@ -329,6 +330,7 @@ pub(crate) fn decode_at(alloc: Alloc, bytes: &[u8], base: usize) -> Result<Value
                             map: Map::new_in(alloc),
                             left,
                             key: None,
+                            seen: (left > stream::LINEAR as u64).then(HashSet::new),
                         });
                         continue;
                     }
@@ -347,12 +349,21 @@ pub(crate) fn decode_at(alloc: Alloc, bytes: &[u8], base: usize) -> Result<Value
                     .map_err(|error| WireError::Alloc { at, error })?;
                 *left -= 1;
             }
-            Some(Frame::Map { map, left, key }) => {
+            Some(Frame::Map {
+                map,
+                left,
+                key,
+                seen,
+            }) => {
                 let (key, key_at) = key.take().expect("a map's value is read after its key");
-                if map.contains_key(key) {
+                let repeated = match seen {
+                    Some(seen) => !seen.insert(key),
+                    None => map.contains_key(key),
+                };
+                if repeated {
                     return Err(WireError::DuplicateKey { at: key_at });
                 }
-                map.set_in(key, value, alloc)
+                map.insert_node(key, value, alloc)
                     .map_err(|error| WireError::Alloc { at, error })?;
                 *left -= 1;
             }
@@ -370,6 +381,10 @@ enum Frame<'a> {
         map: Map,
         left: u64,
         key: Option<(&'a str, usize)>,
+        /// The keys read so far, for a map declaring more than
+        /// [`stream::LINEAR`] entries: bytes anyone wrote can make a map as
+        /// large as they like, and a scan per key is quadratic in it.
+        seen: Option<HashSet<&'a str>>,
     },
 }
 

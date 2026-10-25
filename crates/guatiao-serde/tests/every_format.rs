@@ -361,6 +361,44 @@ fn a_repeated_key_is_replaced_or_refused_by_format() {
     );
 }
 
+/// A wide JSON object reads in time linear in its keys, into a tree and
+/// through a walk, and a key repeated far from the first still replaces it
+/// where it stands.
+#[test]
+#[cfg(feature = "json")]
+fn a_wide_object_reads_in_linear_time_and_a_repeat_replaces_in_place() {
+    use guatiao_serde::text::json;
+    let n = 100_000;
+    let mut text = String::from("{");
+    for i in 0..n {
+        text.push_str(&format!("\"k{i:06}\":{i},"));
+    }
+    text.push_str("\"k000000\":-1,\"k000040\":-2,\"k099999\":-3}");
+
+    let started = std::time::Instant::now();
+    let tree = json::from_str(&text, Alloc::rust(), Presentation::new()).unwrap();
+    let walked = json::from_str_as::<Value>(&text, Presentation::new()).unwrap();
+    let took = started.elapsed();
+    // A scan per key is some 5e9 comparisons here, minutes in a debug build.
+    assert!(took.as_secs() < 20, "{n} keys took {took:?}");
+    assert_eq!(walked, tree);
+
+    let map = TryAsRef::<Map>::try_as_ref(&tree).expect("a map");
+    assert_eq!(map.len(), n);
+    let at = |i: usize| {
+        let entry = &map.entries()[i];
+        let number = TryAsRef::<Number>::try_as_ref(entry.value()).expect("a number");
+        (
+            entry.key().to_string(),
+            AsRef::<str>::as_ref(number).to_string(),
+        )
+    };
+    assert_eq!(at(0), ("k000000".to_string(), "-1".to_string()));
+    assert_eq!(at(1), ("k000001".to_string(), "1".to_string()));
+    assert_eq!(at(40), ("k000040".to_string(), "-2".to_string()));
+    assert_eq!(at(n - 1), ("k099999".to_string(), "-3".to_string()));
+}
+
 /// How deep each format reads before it refuses, which is the parser's own
 /// bound where it has one and below `MAX_DEPTH` for YAML and TOML.
 #[test]

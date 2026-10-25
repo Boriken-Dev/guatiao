@@ -18,8 +18,8 @@ use guatiao::value::wire::{
     Decoder, Encoded, Encoder, WireError, decode, decode_as, to_bytes, to_bytes_of,
 };
 use guatiao::{
-    Bytes, FromValue, Kinds, List, MAX_DEPTH, Map, MapError, Number, ToValue, TryAsMut, Value,
-    ValueError,
+    Bytes, FromValue, Kinds, List, MAX_DEPTH, Map, MapError, Number, ToValue, TryAsMut, TryAsRef,
+    Value, ValueError,
 };
 use serde_json::Value as Json;
 
@@ -111,6 +111,110 @@ fn every_malformed_vector_is_refused_where_the_tree_decoder_refuses_it() {
             other => panic!("{name}: bytes walked: {other:?}"),
         }
     }
+}
+
+/// A map of `n` keys, `k000000` on, as wire bytes, with the key at
+/// `copy_to` (when given) made the same as the one at `copy_from`; and
+/// where that repeat starts.
+fn wide_map(n: usize, repeat: Option<(usize, usize)>) -> (Vec<u8>, usize) {
+    // Streamed from a `BTreeMap`: `Map::set` scans, which is quadratic here.
+    let map: BTreeMap<String, i64> = (0..n).map(|i| (format!("k{i:06}"), i as i64)).collect();
+    let mut bytes = to_bytes_of(&map).expect("encodes");
+    let Some((from, to)) = repeat else {
+        return (bytes, 0);
+    };
+    let find = |key: &str| {
+        bytes
+            .windows(key.len())
+            .position(|w| w == key.as_bytes())
+            .expect("the key is in the bytes")
+    };
+    let at = find(&format!("k{to:06}"));
+    let from = format!("k{from:06}");
+    bytes[at..at + from.len()].copy_from_slice(from.as_bytes());
+    // The repeat is reported at its length's byte, one before its text.
+    (bytes, at - 1)
+}
+
+/// A map past a few keys checks each new key against a set, not every key
+/// before it: the reader of bytes anyone wrote stays linear in them.
+#[test]
+fn a_wide_map_is_read_in_linear_time_and_a_repeat_anywhere_is_found() {
+    let n = 100_000;
+    let (bytes, _) = wide_map(n, None);
+    let started = std::time::Instant::now();
+    let tree = decode(&bytes).expect("decodes");
+    let streamed = decode_as::<Value>(&bytes).expect("streams");
+    let walked = built(&Encoded(&bytes)).expect("walks");
+    let took = started.elapsed();
+    let map: &Map = TryAsRef::try_as_ref(&tree).expect("a map");
+    assert_eq!(map.len(), n);
+    assert_eq!(streamed, tree);
+    assert_eq!(walked, tree);
+    // A scan per key is some 5e9 comparisons here, minutes in a debug build.
+    assert!(took.as_secs() < 20, "{n} keys took {took:?}");
+
+    for (from, to) in [(3, 7), (3, 40), (17, 99_999), (99_998, 99_999)] {
+        let (bytes, at) = wide_map(n, Some((from, to)));
+        let tree_error = decode(&bytes).unwrap_err();
+        assert_eq!(
+            tree_error,
+            WireError::DuplicateKey { at },
+            "k{from} at k{to}"
+        );
+        assert_eq!(
+            decode_as::<Value>(&bytes).unwrap_err(),
+            tree_error,
+            "streamed"
+        );
+        match built(&Encoded(&bytes)) {
+            Err(ValueError::Unparsed { at: walked, .. }) => assert_eq!(walked, at, "walked"),
+            other => panic!("walked: {other:?}"),
+        }
+    }
+}
+
+/// A sink finds a key it already holds through a hash past a few keys, so
+/// a wide map from events is built in linear time, and a repeated key,
+/// which a text format or a C walker may send, still replaces the first
+/// where it stands.
+#[test]
+fn a_sink_builds_a_wide_map_in_linear_time_and_a_repeat_replaces_in_place() {
+    let n = 100_000;
+    let repeats = [(0, "-1"), (3, "-2"), (40, "-3"), (n - 1, "-4")];
+    let started = std::time::Instant::now();
+    let mut sink = TreeSink::new();
+    sink.map_begin(None).unwrap();
+    for i in 0..n {
+        sink.key(&format!("k{i:06}")).unwrap();
+        sink.number(&i.to_string()).unwrap();
+    }
+    for (i, replaced) in repeats {
+        sink.key(&format!("k{i:06}")).unwrap();
+        sink.number(replaced).unwrap();
+    }
+    sink.map_end().unwrap();
+    let took = started.elapsed();
+    // A scan per key is some 5e9 comparisons here, minutes in a debug build.
+    assert!(took.as_secs() < 20, "{n} keys took {took:?}");
+
+    let value = sink.into_value().unwrap();
+    let map: &Map = TryAsRef::try_as_ref(&value).expect("a map");
+    assert_eq!(map.len(), n);
+    for (i, entry) in map.iter().enumerate() {
+        assert_eq!(
+            entry.key(),
+            format!("k{i:06}"),
+            "the order is the first one's"
+        );
+    }
+    for (i, replaced) in repeats {
+        assert_eq!(
+            map[format!("k{i:06}").as_str()],
+            Value::from(Number::new(replaced).unwrap())
+        );
+    }
+    assert_eq!(map["k000001"], Value::from(Number::new("1").unwrap()));
 }
 
 // --- a type that walks: derived, and written by hand -------------------------------

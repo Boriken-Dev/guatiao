@@ -921,6 +921,17 @@ write now.
 
 ### Fixed
 
+- **Reading a wide map is linear in its keys.** Every reader of wire
+  bytes (`decode`, `decode_as`, `Decoder`, walking `Encoded` bytes,
+  `guatiao_wire_decode`, `guatiao_wire_visit`) checked each key against
+  every earlier key of its map, and a `Value` built from a walk
+  (`decode_as::<Value>`, `TreeSink`, `guatiao_value_from_walker`, and
+  through them JSON, TOML and YAML read by guatiao-serde) looked each key
+  up the same way. So a document anyone wrote could make a reader spend
+  seconds on a few hundred kilobytes and hours on megabytes. Past 16 keys
+  a map's keys are now found through a hash. A repeated key is still
+  refused on the wire at the byte where it starts, and where a format
+  allows one it still replaces the first in its place.
 - **On FreeBSD a C program needs no `-pthread`.** A program built
   without it bound libc's failing thread stubs, and the library aborted
   with `fatal runtime error: out of TLS keys`. Every library that links

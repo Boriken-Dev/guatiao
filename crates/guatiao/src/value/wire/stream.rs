@@ -24,7 +24,51 @@ use crate::value::visit::{
 
 /// Past this many keys, a map's repeated-key check hashes rather than
 /// comparing with every earlier key.
-const LINEAR: usize = 16;
+pub(super) const LINEAR: usize = 16;
+
+/// The keys of every map open while reading, innermost last, each map's
+/// from where it started. A map past [`LINEAR`] keys also keeps them in a
+/// set: bytes anyone wrote can make a map as large as they like, and a scan
+/// per key is quadratic in it.
+#[derive(Debug, Default)]
+struct OpenKeys<'b> {
+    list: Vec<&'b str>,
+    /// A set for each open map past `LINEAR` keys, with where it started.
+    sets: Vec<(usize, HashSet<&'b str>)>,
+}
+
+impl<'b> OpenKeys<'b> {
+    fn len(&self) -> usize {
+        self.list.len()
+    }
+
+    /// Adds `key` to the map whose keys start at `start`: false, adding
+    /// nothing, when that map already has it.
+    fn insert(&mut self, start: usize, key: &'b str) -> bool {
+        let hashed = matches!(self.sets.last(), Some((s, _)) if *s == start);
+        let repeated = match self.sets.last_mut() {
+            Some((_, set)) if hashed => !set.insert(key),
+            _ => self.list[start..].contains(&key),
+        };
+        if repeated {
+            return false;
+        }
+        self.list.push(key);
+        if !hashed && self.list.len() - start > LINEAR {
+            self.sets
+                .push((start, self.list[start..].iter().copied().collect()));
+        }
+        true
+    }
+
+    /// Forgets the keys of the maps that started at `start` or later.
+    fn truncate(&mut self, start: usize) {
+        self.list.truncate(start);
+        while matches!(self.sets.last(), Some((s, _)) if *s >= start) {
+            self.sets.pop();
+        }
+    }
+}
 
 // --- writing -------------------------------------------------------------------
 
@@ -301,7 +345,7 @@ pub struct Decoder<'b> {
     reader: Reader<'b>,
     depth: u32,
     /// The keys of every open map, innermost last; each map's start.
-    keys: Vec<&'b str>,
+    keys: OpenKeys<'b>,
     failure: Option<WireError>,
 }
 
@@ -315,7 +359,7 @@ impl<'b> Decoder<'b> {
                 base: 0,
             },
             depth: 0,
-            keys: Vec::new(),
+            keys: OpenKeys::default(),
             failure: None,
         }
     }
@@ -373,10 +417,9 @@ impl<'b> Decoder<'b> {
                     Ok(key) => key,
                     Err(e) => break Err(e),
                 };
-                if self.keys[start..].contains(&key) {
+                if !self.keys.insert(start, key) {
                     break Err(WireError::DuplicateKey { at });
                 }
-                self.keys.push(key);
             }
             match self.reader.token() {
                 Ok(Token::List(n)) => open.push((n, None)),
@@ -512,10 +555,9 @@ impl MapWalker for Entries<'_, '_> {
             Ok(key) => key,
             Err(e) => return Err(d.fail(e)),
         };
-        if d.keys[self.frame.start..].contains(&key) {
+        if !d.keys.insert(self.frame.start, key) {
             return Err(d.fail(WireError::DuplicateKey { at }));
         }
-        d.keys.push(key);
         self.frame.pending = true;
         Ok(Some(read(key)))
     }
@@ -594,7 +636,7 @@ fn unparsed(error: WireError) -> ValueError {
 struct Node<'b, 'k> {
     bytes: &'b [u8],
     at: usize,
-    keys: &'k core::cell::RefCell<Vec<&'b str>>,
+    keys: &'k core::cell::RefCell<OpenKeys<'b>>,
     depth: u32,
     end: core::cell::Cell<Option<usize>>,
 }
@@ -670,10 +712,9 @@ impl Walk for Node<'_, '_> {
                     for _ in 0..count {
                         let at = reader.offset();
                         let key = reader.text().map_err(unparsed)?;
-                        if self.keys.borrow()[start..].contains(&key) {
+                        if !self.keys.borrow_mut().insert(start, key) {
                             return Err(unparsed(WireError::DuplicateKey { at }).into());
                         }
-                        self.keys.borrow_mut().push(key);
                         let child = self.child(reader.at);
                         entries.entry(key, &child)?;
                         reader.at = self.after(&child)?;
@@ -693,7 +734,7 @@ impl Walk for Node<'_, '_> {
 
 impl Walk for Encoded<'_> {
     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
-        let keys = core::cell::RefCell::new(Vec::new());
+        let keys = core::cell::RefCell::new(OpenKeys::default());
         let root = Node {
             bytes: self.0,
             at: 0,
