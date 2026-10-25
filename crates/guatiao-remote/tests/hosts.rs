@@ -39,9 +39,16 @@ fn greeters() -> Option<(PathBuf, PathBuf, PathBuf)> {
         println!("skipped: derived_greeter is not built; build the workspace first");
         return None;
     };
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("remote_hosts");
-    std::fs::create_dir_all(&dir).unwrap();
-    let c = procs::c_greeter(&cc, &dir);
+    // Built once: the tests run at once, and two compilers writing one
+    // library collide.
+    static BUILT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    let c = BUILT
+        .get_or_init(|| {
+            let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("remote_hosts");
+            std::fs::create_dir_all(&dir).unwrap();
+            procs::c_greeter(&cc, &dir)
+        })
+        .clone();
     Some((derived, c, cc))
 }
 
