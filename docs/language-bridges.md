@@ -5,10 +5,10 @@ providers that any guatiao host loads, in any language. It is a
 [source](python.md#serving-python-to-any-host): a file the host adds once,
 whose libraries are that language's modules, listed without running them,
 opened when they appear or change, and closed once nothing holds them.
-`guatiao-py` is one for Python, [`guatiao-lua`](lua.md) one for Lua,
-`guatiao-js` is QuickJS as one, serving libraries written as the Node
+`guatiao-source-py` is one for Python, [`guatiao-source-lua`](lua.md) one for Lua,
+`guatiao-source-js` is QuickJS as one, serving libraries written as the Node
 binding's providers ([JavaScript without Node](js.md)), and
-`guatiao-wasm` one for WebAssembly modules compiled from any language
+`guatiao-source-wasm` one for WebAssembly modules compiled from any language
 ([providers compiled to WebAssembly](wasm.md#providers-compiled-to-webassembly)).
 `guatiao-bridge` is what every such bridge shares, so a bridge for a new
 language is its runtime and its value conversion, and nothing else.
@@ -41,7 +41,7 @@ impl Engine for Toy {
     type Library = u64;                         // the engine's key for an open library
     const THREADS: ThreadModel = ThreadModel::Pinned;
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        suffix: ".guatiao-toy.toml",            // greeters.guatiao-toy.toml
+        serves: "toy",                          // type = "toy" in greeters.guatiao.toml
         id_key: "module",                       // module = "greeters": the library's id
         code_extensions: &["toy"],              // what a stamp follows
         skip_dirs: &[],
@@ -99,9 +99,11 @@ the runtime goes.
 
 ## Manifests and stamps
 
-A library is a manifest, a small TOML file beside its code:
+A library is a manifest, a small TOML file named `<name>.guatiao.toml`
+beside its code ([the format](encodings.md#a-library-manifest)):
 
 ```toml
+type = "toy"                     # the format's `serves`: the source that reads it
 module = "greeters"              # the format's id key: the library's id
 version = "1.0.0"                # optional: else Engine::version_of reads it from the code
 kinds = ["greeter"]              # every kind its providers serve
@@ -116,7 +118,15 @@ The host's configuration names where they are:
 | `manifests` | manifest files |
 | `kinds` | kind description documents |
 | `limits` | `{"operations": n, "memory": bytes, "time_ms": n, "depth": n}` |
-| anything else | the engine's own (`guatiao-py`'s `paths`) |
+| anything else | the engine's own (`guatiao-source-py`'s `paths`) |
+
+A source lists the manifests of its own type and passes over those of
+guatiao's sources (`manifest::TYPES`: `python`, `js`, `lua`, `wasm`,
+`rhai`); one with no `type`, or a type that is neither, is listed and
+refused when opened. A bridge of your own picks a type no other source
+uses, as `guatiao::source!` names it; guatiao's sources report its
+manifests as naming none of theirs, so keep its libraries in directories
+of their own.
 
 A refresh lists the manifests, running nothing; the stamp of each is the
 manifest's content and the newest modification of a code file under its

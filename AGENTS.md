@@ -16,15 +16,15 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions by the mechanism a source is given (`with_mechanism`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
 | `crates/guatiao-libffi/` | `Libffi`, libffi as the `Mechanism` core's run-time kind tables are built on (`library/kind/runtime.rs`): a call interface per slot signature, a closure per served slot, `ffi_call` per call; builds libffi from C, not on wasm32; published; `tests/described_kinds.rs` (with the C caller `tests/c_consumer/described_caller.c`) and `tests/closures.rs` run the tables through it natively, while core's own tests run them under Miri through a mechanism with no foreign code |
-| `crates/guatiao-remote/` | providers called across a process, a machine or a network: `RemoteSource` (a peer's providers as a `Source`; the cdylib is the source file any host adds), `Server` over a registry, the `guatiao-remote-server` binary, one framed protocol (`protocol`, no I/O) over `transport` (a child's stdio; a Unix socket or named pipe with `local`; shared memory with `shm`; trusted TCP with `tcp`; RDMA, experimental and Linux only, with `rdma`); `docs/remote.md` states it; `tests/vectors/remote.json` and `tests/c/` (a codec, a C client and server, a C host) check it from C; `rdma-tests/` is a workspace of its own holding the tests that need an RDMA device (`cargo test --manifest-path crates/guatiao-remote/rdma-tests/Cargo.toml`; Soft-RoCE will do, and without a device every test fails); published |
-| `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
-| `crates/guatiao-lua/` | a source of libraries written in Lua (a guatiao-bridge engine, Lua built in from C: `lua54` default, `lua55`, `luau`), and Lua's side of guatiao (values, handles on kinds, a registry) the loadable module builds on; cdylib + rlib, a workspace of its own (exclusive Lua features), not published |
-| `crates/guatiao-js/` | a source of libraries written in JavaScript, run by QuickJS (rquickjs) built into the file: a cdylib exporting `guatiao_source`, libraries written as the Node binding's providers; a workspace of its own (no other build needs a C compiler for QuickJS), not published; its tests are in `crates/guatiao-js/tests`, the Python host's in `bindings/python/guatiao/tests/test_js_source.py` |
-| `examples/js_provider/` | `quickjs_greeter/`, a library in JavaScript that runs under the Node binding and the guatiao-js source, and `quickjs_trees/`, one taking trees as plain data; `README.md` has the commands |
-| `crates/guatiao-wasm/` | a source of libraries compiled to WebAssembly: a cdylib exporting `guatiao_source` over a wasmtime engine (`ThreadModel::Locked`, a store per library), guatiao ABI 1 in `src/abi.rs`, a WASI preview-1 shim granting stdio, a clock and randomness; `guest/` is `guatiao-wasm-guest` (Rust guests, `wasm32-unknown-unknown`) and `guest-go/` the Go guest package (`wasip1` reactors); each its own workspace or module, not published; `tests/guests.rs` runs hand-written modules, `tests/source.rs` both example guests from a Rust and a C host |
-| `examples/wasm_greeter_rust/`, `examples/wasm_greeter_go/` | greeters in Rust and in Go compiled to WebAssembly, each beside its `*.guatiao-wasm.toml`; built by `crates/guatiao-wasm`'s tests |
-| `crates/guatiao-rhai/` | a source of libraries written in Rhai: a cdylib exporting `guatiao_source`, Rhai built in (libffi for the kind tables); a library is a script ending in a map of providers, with a `*.guatiao-rhai.toml` manifest; a workspace of its own, not published; its tests (a Rust host, the crate's own file, a C host) are in `crates/guatiao-rhai/tests`, the Python host's in `bindings/python/guatiao/tests/test_rhai_source.py` |
-| `examples/rhai_provider/` | `rhai_greeter/`, greeters written in Rhai: a script and its `*.guatiao-rhai.toml`, serving every slot of the example kinds |
+| `crates/guatiao-source-remote/` | providers called across a process, a machine or a network: `RemoteSource` (a peer's providers as a `Source`; the cdylib is the source file any host adds), `Server` over a registry, the `guatiao-remote-server` binary, one framed protocol (`protocol`, no I/O) over `transport` (a child's stdio; a Unix socket or named pipe with `local`; shared memory with `shm`; trusted TCP with `tcp`; RDMA, experimental and Linux only, with `rdma`); `docs/remote.md` states it; `tests/vectors/remote.json` and `tests/c/` (a codec, a C client and server, a C host) check it from C; `rdma-tests/` is a workspace of its own holding the tests that need an RDMA device (`cargo test --manifest-path crates/guatiao-source-remote/rdma-tests/Cargo.toml`; Soft-RoCE will do, and without a device every test fails); published |
+| `crates/guatiao-source-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
+| `crates/guatiao-source-lua/` | a source of libraries written in Lua (a guatiao-bridge engine, Lua built in from C: `lua54` default, `lua55`, `luau`), and Lua's side of guatiao (values, handles on kinds, a registry) the loadable module builds on; cdylib + rlib, a workspace of its own (exclusive Lua features), not published |
+| `crates/guatiao-source-js/` | a source of libraries written in JavaScript, run by QuickJS (rquickjs) built into the file: a cdylib exporting `guatiao_source`, libraries written as the Node binding's providers; a workspace of its own (no other build needs a C compiler for QuickJS), not published; its tests are in `crates/guatiao-source-js/tests`, the Python host's in `bindings/python/guatiao/tests/test_js_source.py` |
+| `examples/js_provider/` | `quickjs_greeter/`, a library in JavaScript that runs under the Node binding and the guatiao-source-js source, and `quickjs_trees/`, one taking trees as plain data; `README.md` has the commands |
+| `crates/guatiao-source-wasm/` | a source of libraries compiled to WebAssembly: a cdylib exporting `guatiao_source` over a wasmtime engine (`ThreadModel::Locked`, a store per library), guatiao ABI 1 in `src/abi.rs`, a WASI preview-1 shim granting stdio, a clock and randomness; `guest/` is `guatiao-wasm-guest` (Rust guests, `wasm32-unknown-unknown`) and `guest-go/` the Go guest package (`wasip1` reactors); each its own workspace or module, not published; `tests/guests.rs` runs hand-written modules, `tests/source.rs` both example guests from a Rust and a C host |
+| `examples/wasm_greeter_rust/`, `examples/wasm_greeter_go/` | greeters in Rust and in Go compiled to WebAssembly, each beside its `*.guatiao.toml`; built by `crates/guatiao-source-wasm`'s tests |
+| `crates/guatiao-source-rhai/` | a source of libraries written in Rhai: a cdylib exporting `guatiao_source`, Rhai built in (libffi for the kind tables); a library is a script ending in a map of providers, with a `*.guatiao.toml` manifest; a workspace of its own, not published; its tests (a Rust host, the crate's own file, a C host) are in `crates/guatiao-source-rhai/tests`, the Python host's in `bindings/python/guatiao/tests/test_rhai_source.py` |
+| `examples/rhai_provider/` | `rhai_greeter/`, greeters written in Rhai: a script and its `*.guatiao.toml`, serving every slot of the example kinds |
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
@@ -36,27 +36,27 @@ public surface); this file is about the repository.
 | `examples/dart_host/` | a host program in Dart: calls greeters written in Rust, C, Python and Dart through the greeter kind's classes and has the Rust caller (`examples/greeter_caller`) call the Dart one; `dart build cli` makes it an AOT executable |
 | `examples/dart_provider/` | `dart_greeter/`, a library written in Dart: provider classes, its identity written from its `pubspec.yaml` by `dart run guatiao:kind identity` |
 | `examples/flutter_app/` | a Flutter app over the three Dart packages from the checkout: their build hooks build the libraries with cargo for each target; it prints what each surface answered, what a greeter written in Dart answered through its table, and where its library was loaded from (`GUATIAO_EXAMPLE_EXIT=1` ends a desktop run there); `pubspec.yaml` shows the user define that builds `examples/app_library` instead |
-| `examples/remote_pool/` | a guatiao-remote host fanning one call out to three peers at once (servers on loopback ports in the same process), a registry per peer since identical devices serve the same library; `cargo run -p remote_pool`, and its test runs it |
+| `examples/remote_pool/` | a guatiao-source-remote host fanning one call out to three peers at once (servers on loopback ports in the same process), a registry per peer since identical devices serve the same library; `cargo run -p remote_pool`, and its test runs it |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md`, `docs/migrating.md`, `docs/configuration.md`, `docs/bridges.md` and the root `README.md` and compares them with the text shown; `tests/configuration_files.rs` reads a configuration from TOML text through guatiao |
-| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
-| `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
-| `examples/lua_provider/` | `lua_greeter`, a library written in Lua (a module and its `*.guatiao-lua.toml`) serving every slot of the example kinds |
-| `examples/lua_host/` | `host.lua`, a host in Lua: loads libraries and sources, calls every slot of every greeter; guatiao-lua's tests run it embedded, the module's in a stock interpreter |
+| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-source-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
+| `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao.toml` manifest; commands in its `README.md` |
+| `examples/lua_provider/` | `lua_greeter`, a library written in Lua (a module and its `*.guatiao.toml`) serving every slot of the example kinds |
+| `examples/lua_host/` | `host.lua`, a host in Lua: loads libraries and sources, calls every slot of every greeter; guatiao-source-lua's tests run it embedded, the module's in a stock interpreter |
 | `examples/greeter_caller/` | a cdylib whose C functions call every slot of a greeter, or of a `wide` provider, through the kind's Rust proxy, for a host in another language to have its providers called from Rust |
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node/guatiao`: `npm ci` here, after `npm run build` there (its dependencies live in `bindings/node/node_modules`) |
-| `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/guatiao/test/examples.test.ts` runs it |
+| `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-source-py`, calls every slot; `bindings/node/guatiao/test/examples.test.ts` runs it |
 | `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |
 | `examples/node_js/` | a library and a host in plain JavaScript, run with no build step, and kinds defined in JavaScript as classes (`echo_kind.js`), which `describe.js` writes as `echo_kind.kinds.json` for the other languages' generators; `bindings/node/guatiao/test/examples.test.ts` runs it and checks the description is current, the Dart suite generates from it |
 | `examples/go.mod` | the Go examples' module, using `bindings/go/guatiao` through a `replace`; `examples/internal/` holds what its tests drive in C |
-| `examples/go_host/` | a host program in Go: scans for greeters in any language, registers the Go library, optionally adds `guatiao-py`, calls every slot; its tests call the Rust, C, Python and Go greeters both ways |
+| `examples/go_host/` | a host program in Go: scans for greeters in any language, registers the Go library, optionally adds `guatiao-source-py`, calls every slot; its tests call the Rust, C, Python and Go greeters both ways |
 | `examples/go_provider/` | `go_greeter/`, a library written in Go (the package is the library), and `cshared/`, the same as a `-buildmode=c-shared` file the Rust example host scans |
-| `examples/julia_host/` | a host program in Julia: scans for greeters in any language, registers the Julia library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
+| `examples/julia_host/` | a host program in Julia: scans for greeters in any language, registers the Julia library, optionally adds `guatiao-source-py`, calls every slot; the binding's tests run it |
 | `examples/julia_provider/` | `JlGreeter/`, a library written in Julia (the package is the library) |
-| `examples/r_host/` | a host program in R: scans for greeters in any language, registers the R library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
+| `examples/r_host/` | a host program in R: scans for greeters in any language, registers the R library, optionally adds `guatiao-source-py`, calls every slot; the binding's tests run it |
 | `examples/r_provider/` | `rgreeter/`, a library written in R (the package is the library) |
-| `examples/matlab_host/` | a host program in MATLAB or Octave: scans for greeters in any language, registers the M library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
+| `examples/matlab_host/` | a host program in MATLAB or Octave: scans for greeters in any language, registers the M library, optionally adds `guatiao-source-py`, calls every slot; the binding's tests run it |
 | `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
-| `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-py`, calls every slot; its test calls every greeter both ways |
+| `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-source-py`, calls every slot; its test calls every greeter both ways |
 | `examples/greeter_kind/cpp/` | the example kinds declared in C++ over `greeter_kind.h` (`GUATIAO_KIND`), what a C++ host and a C++ library include |
 | `examples/cpp_greeter/` | a library written in C++ (CMake): classes serving the example kinds, a library file a scan finds (`GUATIAO_LIBRARY`) |
 | `examples/cpp_host/` | a host program in C++ (CMake) and its test calling the greeters written in Rust, C, Python, Go and C++ through sources and `refresh()`; it builds the C greeter and the C++ one |
@@ -80,7 +80,7 @@ public surface); this file is about the repository.
 | `bindings/cpp/guatiao/` | C++ bindings over the C ABI, header-only (`include/guatiao/`), linking the library: the CMake package `guatiao` (`guatiao::guatiao`, `guatiaoConfig.cmake`, `cmake/GuatiaoNative.cmake` finding or cargo-building the library) with its own `AGENTS.md`; `cmake/GuatiaoTests.cmake` builds every suite with exceptions on and off; `tests/compile_fail/` holds files that must not compile; `tests/support/` the harness the satellites' suites share |
 | `bindings/cpp/guatiao-serde/`, `bindings/cpp/guatiao-intake/` | the CMake packages `guatiao-serde` (`guatiao::serde`) and `guatiao-intake` (`guatiao::intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/matlab/guatiao/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
-| `bindings/lua/guatiao/` | the module a stock Lua requires (`require "guatiao"`, `luaopen_guatiao`): a cdylib over `guatiao-lua` built against the interpreter that loads it (`lua54` default, `lua55`, `luajit`), the guatiao library linked in; `guatiao-dev-1.rockspec` (`luarocks make`); its own `AGENTS.md`; a workspace of its own |
+| `bindings/lua/guatiao/` | the module a stock Lua requires (`require "guatiao"`, `luaopen_guatiao`): a cdylib over `guatiao-source-lua` built against the interpreter that loads it (`lua54` default, `lua55`, `luajit`), the guatiao library linked in; `guatiao-dev-1.rockspec` (`luarocks make`); its own `AGENTS.md`; a workspace of its own |
 | `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, a kind's description among them, stated for any language), `kinds.md` (how each language declares a kind and a provider), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md`, `fortran.md`, `cpp.md` and `lua.md` (Python, Node, Go, Julia, R, MATLAB and Octave, Fortran, C++ and Lua as a host and as a provider), `language-bridges.md` (a bridge to another language on guatiao-bridge), `rhai.md` (scripts written in Rhai served to any host), `bridges.md` (a format of its own on the visitor traits, from Rust, C and the bindings), `js.md` (JavaScript without Node), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), `python/documents.py` and `dart/` (a document to Python and Dart objects three ways), `remote/` (`guatiao-remote-bench`: `serve` and `run` over each transport, one JSON line of five metrics), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
@@ -168,7 +168,7 @@ Each crate commits its public surface. A change to it regenerates the
 snapshot in the same commit; CI fails on any difference:
 
 ```bash
-for c in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi guatiao-remote; do
+for c in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi guatiao-source-remote; do
   cargo public-api -p $c --all-features -ss > crates/$c/public-api.txt
 done
 ```
@@ -190,16 +190,16 @@ GUATIAO_WRITE_HEADER=1 cargo test -p greeter_kind --test description_is_current 
 Lua, after `cargo build --workspace --all-features` (the Rust greeter
 and the library the C hosts link): the source and the module are
 workspaces of their own, built before their tests, which add them as
-files. `GUATIAO_PY_BRIDGE` (a guatiao-py build) adds the Python
+files. `GUATIAO_PY_BRIDGE` (a guatiao-source-py build) adds the Python
 greeters, `GUATIAO_LUA` names the stock interpreter (else `lua`), and
 `GUATIAO_LUA_SOURCE` the source for the module's host test:
 
 ```bash
-cargo build --manifest-path crates/guatiao-lua/Cargo.toml
-GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-lua/Cargo.toml
-cargo test --manifest-path crates/guatiao-lua/Cargo.toml --no-default-features --features luau,source
+cargo build --manifest-path crates/guatiao-source-lua/Cargo.toml
+GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-source-lua/Cargo.toml
+cargo test --manifest-path crates/guatiao-source-lua/Cargo.toml --no-default-features --features luau,source
 cargo build --manifest-path bindings/lua/guatiao/Cargo.toml
-GUATIAO_LIBRARY=target/debug GUATIAO_LUA_SOURCE=crates/guatiao-lua/target/debug/libguatiao_lua.so \
+GUATIAO_LIBRARY=target/debug GUATIAO_LUA_SOURCE=crates/guatiao-source-lua/target/debug/libguatiao_source_lua.so \
   cargo test --manifest-path bindings/lua/guatiao/Cargo.toml
 ```
 
@@ -364,14 +364,14 @@ GUATIAO_CPP_LIBRARY=examples/cpp_host/build/greeters/cpp cargo test -p greeter_h
 what that package needs: build the workspace again before the Go, Julia,
 R, MATLAB, Octave, Fortran, C++, Python, Dart or Node suites.
 
-The `guatiao-py` bridge, against the Python it will run with. Its tests
+The `guatiao-source-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
 (or `GUATIAO_PY_BRIDGE`); on Windows the directory holding `python3.dll`
 must be on `PATH` for a host that is not Python:
 
 ```bash
-PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-py/Cargo.toml
-GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-py/Cargo.toml
+PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-source-py/Cargo.toml
+GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-source-py/Cargo.toml
 ```
 
 The WebAssembly source, its Rust guest crate and its Go guest package:
@@ -379,9 +379,9 @@ The WebAssembly source, its Rust guest crate and its Go guest package:
 ```bash
 rustup target add wasm32-unknown-unknown        # the Rust guest; Go 1.24 or later builds the Go one
 cargo build -p guatiao --features load          # what the C host's test links
-GUATIAO_LIBRARY=$PWD/target/debug cargo test --manifest-path crates/guatiao-wasm/Cargo.toml
-(cd crates/guatiao-wasm/guest && cargo test)
-(cd crates/guatiao-wasm/guest-go && go vet ./... && go test ./...)
+GUATIAO_LIBRARY=$PWD/target/debug cargo test --manifest-path crates/guatiao-source-wasm/Cargo.toml
+(cd crates/guatiao-source-wasm/guest && cargo test)
+(cd crates/guatiao-source-wasm/guest-go && go vet ./... && go test ./...)
 ```
 
 Each crate with a C surface commits its header and has a test comparing
@@ -466,17 +466,17 @@ Four workflows:
   every library on every ABI; the iOS simulator app on macOS. Its `node` job installs the
   `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
-  the guatiao-py bridge serving the Python greeters (a stated skip fails
+  the guatiao-source-py bridge serving the Python greeters (a stated skip fails
   it), and checks what `npm pack` ships for each. Its `go` job runs the three Go modules
   through `bindings/go/go.work`, serde and intake again each alone (their
   own `go.mod`, the core replaced by the checkout's), and `examples` (vet,
   gofmt, tests) on Go 1.26 and 1.27 on the three
-  platforms, with the C greeter, the guatiao-py bridge and a stated skip
+  platforms, with the C greeter, the guatiao-source-py bridge and a stated skip
   failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
   and builds the Go library as a file for the Rust example host's
   `go_library` test. Its `julia` job runs `bindings/julia/Guatiao`'s tests on
   Julia's LTS and current release on the three platforms, with the C
-  greeter, the guatiao-py bridge and the Go library file, a stated skip
+  greeter, the guatiao-source-py bridge and the Go library file, a stated skip
   failing the job, then `GuatiaoSerde`'s and `GuatiaoIntake`'s, each in a
   temporary environment holding the core from the checkout. Its `r` job
   runs `R CMD check` of `bindings/r/guatiao` on R 4.2 and the current release on
@@ -512,7 +512,7 @@ the same version the PEP 440 way in the `pyproject.toml` of
 `bindings/python/guatiao`, `guatiao-serde` and `guatiao-intake` and each one's
 `__version__` (`0.0.0-alpha.0` is `0.0.0a0`; the last two pin
 `guatiao==x.y.z`); the `=x.y.z` pins between the crates;
-`crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
+`crates/guatiao-source-py/Cargo.toml`'s own version and pins (a workspace of its
 own, so the workspace version does not reach it); the `package.json` of
 `bindings/node/guatiao`, `guatiao-serde` and `guatiao-intake` (the last two
 with their `guatiao` dependency), `bindings/node/package-lock.json` and the
@@ -562,7 +562,7 @@ and `bindings/go/guatiao-intake/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
 release finishes it. The seven crates go in dependency order: `guatiao-derive`,
 `guatiao`, `guatiao-serde`, `guatiao-intake`, `guatiao-libffi`, `guatiao-bridge`,
-`guatiao-remote`, each naming
+`guatiao-source-remote`, each naming
 the others with `=x.y.z`; in every other registry the core package goes first and the serde
 and intake packages after it.
 
@@ -570,7 +570,7 @@ and intake packages after it.
 
 | registry | first release | afterwards |
 | --- | --- | --- |
-| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge`, `guatiao-libffi` or `guatiao-remote` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
+| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge`, `guatiao-libffi` or `guatiao-source-remote` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |

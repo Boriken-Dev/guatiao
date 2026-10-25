@@ -1,7 +1,7 @@
 # Lua: host and provider
 
 Lua plays both parts. As a **provider** it writes a library, a Lua module
-returning a table, that the `guatiao-lua` source serves to a host in any
+returning a table, that the `guatiao-source-lua` source serves to a host in any
 language. As a **host** it loads libraries written in any language and
 calls their providers, through the `guatiao` module a stock Lua
 interpreter requires. Both read kinds from their descriptions
@@ -19,7 +19,7 @@ cargo and a C compiler.
 
 ```bash
 # The source: Lua 5.4 built in (or --no-default-features --features lua55,source / luau,source)
-cargo build --release --manifest-path crates/guatiao-lua/Cargo.toml
+cargo build --release --manifest-path crates/guatiao-source-lua/Cargo.toml
 
 # The module, for the Lua that will load it (lua54, lua55 or luajit)
 cd bindings/lua/guatiao && luarocks make --local
@@ -71,7 +71,8 @@ return M
 and its manifest beside it:
 
 ```toml
-# greeters.guatiao-lua.toml
+# greeters.guatiao.toml
+type = "lua"
 module = "greeters"
 kinds = ["greeter", "counter"]
 paths = ["."]
@@ -99,7 +100,7 @@ A host adds the source with where the manifests and the kinds are, and
 any limits:
 
 ```python
-registry.add_source_file("libguatiao_lua.so", {
+registry.add_source_file("libguatiao_source_lua.so", {
     "dirs": ["/opt/myapp/lua"],
     "kinds": ["/opt/myapp/greeter_kind.kinds.json"],
     "limits": {"operations": 1_000_000, "time_ms": 100, "memory": 64 << 20},
@@ -129,7 +130,7 @@ local guatiao = require "guatiao"
 local kinds = guatiao.kinds("greeter_kind.kinds.json")
 local registry = guatiao.registry("my-host", "1.0")
 registry:load_file("libderived_greeter.so")
-registry:add_source_file("libguatiao_lua.so", { dirs = { "lua" }, kinds = { "greeter_kind.kinds.json" } })
+registry:add_source_file("libguatiao_source_lua.so", { dirs = { "lua" }, kinds = { "greeter_kind.kinds.json" } })
 registry:refresh()
 
 for _, p in ipairs(registry:providers("greeter")) do

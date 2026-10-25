@@ -58,7 +58,7 @@ library(greeterkind)
 
 reg <- registry("my-host", "1.0")
 reg$watch_dir("/opt/plugins", rules = "kind=greeter")
-reg$add_source_file("/opt/app/libguatiao_py.so", list(dirs = list("/opt/app/py")))
+reg$add_source_file("/opt/app/libguatiao_source_py.so", list(dirs = list("/opt/app/py")))
 reg$refresh()
 
 g <- reg$bind("py_greeter_hello", Greeter)
@@ -174,7 +174,7 @@ Rust frames between the library and R; it crosses as a status
 - **Run a provider on a library's own thread.** Python takes the GIL on
   any thread; R has no such lock, and its interpreter belongs to its main
   thread, so a call from another thread is refused.
-- **Serve another process.** guatiao-py serves Python modules to any
+- **Serve another process.** guatiao-source-py serves Python modules to any
   host; nothing serves R packages to a host that is not running R, which
   would need R embedded in a bridge.
 - **Hold a 64-bit integer as a number.** A 64-bit answer past 2^53 is a
@@ -190,7 +190,7 @@ Rust frames between the library and R; it crosses as a status
 ## The examples
 
 - `examples/r_host/host.R` scans for greeters in any language, registers
-  the R library, optionally adds the guatiao-py bridge, and calls every
+  the R library, optionally adds the guatiao-source-py bridge, and calls every
   slot of the kind; its README has the commands.
 - `examples/r_provider/rgreeter/` is the library above.
 - `examples/greeter_kind/r/greeterkind/` declares the greeter kinds.

@@ -560,6 +560,39 @@ JavaScript classes (`describeKinds`) into the same document, and a floor
 hash it is not given is the FNV-1a of the shape and the required slots
 spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
 
+## A library manifest
+
+A library one of guatiao's sources serves (a Python module, a JavaScript
+package, a Lua module, a Rhai script, a WebAssembly module) is described
+by a manifest the source reads without running anything: a TOML file
+named `<name>.guatiao.toml` beside or above the library's code.
+
+```toml
+type = "python"              # the source that serves it
+module = "greeters"          # the library's id
+version = "1.0.0"            # optional: else read from the code
+kinds = ["greeter"]          # every kind its providers serve
+paths = ["."]                # where its code is, relative to this file
+```
+
+| key | holds |
+| --- | --- |
+| `type` | required text: the source that serves it, as the source declares itself (`source=<type>`): `python`, `js`, `lua`, `wasm` or `rhai` |
+| `module`, or `name` for `js` | required text, not empty: the library's id |
+| `version` | optional text: without it the source reads the version from the code, as its page says |
+| `kinds` | a list of text: every kind its providers serve |
+| `paths` | a list of text, relative to the manifest's directory, `["."]` when absent: where the code is; editing a code file under them is what a refresh notices |
+| anything else | the source's own (`main` for `js`) |
+
+A source finds manifests in each directory its configuration's `dirs`
+names and in their immediate subdirectories, and in the files its
+`manifests` names. It reads those of its own `type` and passes over those
+of another type above without a word, so one directory may hold
+libraries for several sources. A manifest with no `type`, or a type none
+of them serves, is listed as a library that does not open, in words
+naming the file: a host that adds several sources over its directory
+hears of it from each.
+
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
 Each text form above has C functions that read it into a plain struct,

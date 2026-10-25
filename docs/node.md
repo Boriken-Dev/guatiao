@@ -263,7 +263,7 @@ A tree answered is a `Value` the caller closes; an object answered is an
 `ObjectHandle` whose `close()` destroys it.
 
 Sources work as in every binding: `reg.addSourceFile(path, config)` adds
-a source such as the guatiao-py bridge, and `reg.refresh()` loads what it
+a source such as the guatiao-source-py bridge, and `reg.refresh()` loads what it
 serves. A Node host calls greeters written in Python that way.
 
 ## As a provider
@@ -349,7 +349,7 @@ host's services from inside a library. The repository's
 binding's tests have it call every slot of a TypeScript greeter.
 
 Serving Node modules to a host that is not a Node process (a bridge, as
-guatiao-py is for Python) is not offered.
+guatiao-source-py is for Python) is not offered.
 
 ## Threads
 
@@ -361,7 +361,7 @@ from Node's thread that waits for such a thread never returns.
 
 ## What Node does not do that Python does
 
-- **Serve another process.** guatiao-py serves Python modules to any host;
+- **Serve another process.** guatiao-source-py serves Python modules to any host;
   nothing serves Node modules to a host that is not Node.
 - **Answer from more than one thread at a time.** Python's calls are
   serialised by the GIL but run on the calling thread; Node's run on its
@@ -377,7 +377,7 @@ from Node's thread that waits for such a thread never returns.
 ## The examples
 
 - `examples/node_host/` scans for greeters in any language, registers
-  the TypeScript library, optionally adds the guatiao-py bridge, and calls
+  the TypeScript library, optionally adds the guatiao-source-py bridge, and calls
   every slot of the kind; its README has the commands.
 - `examples/node_provider/node_greeter/` is the library above.
 - `examples/node_js/` is a library and a host in plain JavaScript, with a

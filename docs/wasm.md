@@ -130,7 +130,7 @@ the refusals and each language's spelling are on the
 ## Providers compiled to WebAssembly
 
 The other way round: a **native host** calling providers that run as
-WebAssembly. The `guatiao-wasm` source (`crates/guatiao-wasm`, built from
+WebAssembly. The `guatiao-source-wasm` source (`crates/guatiao-source-wasm`, built from
 this repository, not published) is a file any host adds, in Rust, C,
 Python or any language with a binding, the way it adds any
 [source](language-bridges.md): its libraries are WebAssembly modules,
@@ -141,12 +141,13 @@ platform, and a refresh serves a rebuilt one while the old build answers
 the instances taken from it.
 
 ```bash
-cargo build --release --manifest-path crates/guatiao-wasm/Cargo.toml
+cargo build --release --manifest-path crates/guatiao-source-wasm/Cargo.toml
 ```
 
-A library is a module and a manifest beside it, `greeters.guatiao-wasm.toml`:
+A library is a module and a manifest beside it, `greeters.guatiao.toml`:
 
 ```toml
+type = "wasm"                     # the source that serves it
 module = "greeters"               # greeters.wasm, in this directory
 kinds = ["greeter", "counter"]    # every kind its providers serve
 version = "1.0.0"                 # optional when the module states its own
@@ -159,7 +160,7 @@ descriptions are, and its limits:
 from guatiao import Registry
 
 reg = Registry("myapp", "1.0")
-reg.add_source_file("libguatiao_wasm.so", {
+reg.add_source_file("libguatiao_source_wasm.so", {
     "dirs": ["/opt/myapp/wasm"],
     "kinds": ["/opt/myapp/greeter_kind.kinds.json"],
     "limits": {"operations": 10_000_000, "time_ms": 100, "memory": 64 * 1024 * 1024},
@@ -186,7 +187,7 @@ its [wire encoding](encodings.md#values-on-the-wire) in the module's
 memory. A call is the wire list `[kind, method, arg...]`; its answer a
 wire value, or a status and its words. The whole interface, every refusal
 and its status are in the crate's
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-wasm/AGENTS.md).
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-wasm/AGENTS.md).
 A module that imports anything else, beyond fifteen WASI preview-1
 functions that grant stdio, a clock and randomness, is refused before it
 runs.

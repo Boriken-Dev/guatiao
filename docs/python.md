@@ -2,7 +2,7 @@
 
 Python plays both parts. As a **host** it loads libraries written in any
 language and calls their providers; as a **provider** it writes a library
-that a Python host registers directly, and that the `guatiao-py` bridge
+that a Python host registers directly, and that the `guatiao-source-py` bridge
 serves to a host in Rust, C, Dart or Python. Both use the `guatiao`
 package, ctypes bindings over the C ABI, and the same kind classes.
 
@@ -88,7 +88,7 @@ against its schema.
 A **source** serves libraries that come and go while the host runs:
 
 ```python
-reg.add_source_file("/opt/myapp/libguatiao_py.so", {"dirs": ["/opt/myapp/python"]})
+reg.add_source_file("/opt/myapp/libguatiao_source_py.so", {"dirs": ["/opt/myapp/python"]})
 reg.watch_dir("/opt/myapp/plugins", rules="kind=greeter")
 changed = reg.refresh()     # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...]}
 ```
@@ -169,16 +169,17 @@ reg.bind("greeters_hello", Greeter).greet("ana")
 
 ## Serving Python to any host
 
-`guatiao-py` is a source file, built from this repository against the
+`guatiao-source-py` is a source file, built from this repository against the
 Python it will run with:
 
 ```bash
-PYO3_PYTHON=python3 cargo build --release --manifest-path crates/guatiao-py/Cargo.toml
+PYO3_PYTHON=python3 cargo build --release --manifest-path crates/guatiao-source-py/Cargo.toml
 ```
 
-Each library beside it gets a manifest, `greeters.guatiao-py.toml`:
+Each library beside it gets a manifest, `greeters.guatiao.toml`:
 
 ```toml
+type = "python"                     # the source that serves it
 module = "greeters"                 # the library: its id, imported by this name
 kinds = ["greeter", "counter"]      # checked against what the module serves
 paths = ["."]                       # put on sys.path, relative to this file
@@ -199,7 +200,7 @@ old build still answer.
 
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
 holds two libraries and the commands that serve them to the Rust and
-Python example hosts. `guatiao-py` is CPython as the engine of a
+Python example hosts. `guatiao-source-py` is CPython as the engine of a
 [language bridge](language-bridges.md): the manifests, stamps and refresh
 are the bridge's.
 

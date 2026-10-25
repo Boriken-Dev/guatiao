@@ -14,7 +14,7 @@ write now.
 
 ### Added
 
-- **guatiao-remote: RDMA, experimental and Linux only** (feature `rdma`,
+- **guatiao-source-remote: RDMA, experimental and Linux only** (feature `rdma`,
   off by default). `rdma://host:port` sets a link up over a trusted TCP
   connection, admitted by address range as TCP's is, then carries every
   frame as one-sided RDMA writes into a ring each side registered; the
@@ -24,7 +24,7 @@ write now.
   `RdmaListen`, `RdmaPort` and `devices()` in `transport::rdma`;
   `guatiao-remote-server --listen rdma://...` and the source file's
   `connect: rdma://...` take it too. Tested on Soft-RoCE
-  (`crates/guatiao-remote/rdma-tests`, a workspace of its own, since its
+  (`crates/guatiao-source-remote/rdma-tests`, a workspace of its own, since its
   tests need a device); numbers measured there say nothing about RDMA
   hardware.
 - **Node: a kind born in TypeScript or JavaScript is written as a
@@ -72,13 +72,13 @@ write now.
   left out, or any other signature than the one described: the
   difference the compiler cannot see, since both are the same C pointer.
   The example greeter kinds are checked.
-- **`guatiao-js`: libraries written in JavaScript, served to any host
-  without Node.** A source file (`crates/guatiao-js`, built from this
+- **`guatiao-source-js`: libraries written in JavaScript, served to any host
+  without Node.** A source file (`crates/guatiao-source-js`, built from this
   repository, not published) with QuickJS built in. A library is an ES
   module whose exported classes extend `Provider`, implement the kinds
   they list in `static kinds` and refuse with `BadValue`, the Node
   binding's authoring shape, so the same file runs under Node and here;
-  it is described by a `*.guatiao-js.toml` manifest, with its version and
+  it is described by a `*.guatiao.toml` manifest of type `js`, with its version and
   entry taken from the `package.json` beside it, and its kinds come from
   their `<crate>.kinds.json`. Each library runs in a context of its own,
   and holds only the host objects it was given:
@@ -90,12 +90,12 @@ write now.
   integers cross as
   `bigint`, a decimal a double would change as an `ExactNumber`. See
   `docs/js.md` for what differs from Node.
-- **`guatiao-wasm`: libraries compiled to WebAssembly, served to any host,
-  sandboxed.** A source file (`crates/guatiao-wasm`, built from this
+- **`guatiao-source-wasm`: libraries compiled to WebAssembly, served to any host,
+  sandboxed.** A source file (`crates/guatiao-source-wasm`, built from this
   repository, not published) with wasmtime built in: a library is a core
   WebAssembly module speaking guatiao ABI 1 (five exports, five imports,
   every value as its wire encoding in the module's memory), described by a
-  `*.guatiao-wasm.toml` manifest and its kinds' `<crate>.kinds.json`.
+  `*.guatiao.toml` manifest of type `wasm` and its kinds' `<crate>.kinds.json`.
   Guests in Rust (`guatiao-wasm-guest`) and in Go 1.24 or later (the
   `guest` package, Go's own `wasip1` toolchain), with example greeters in
   both (`examples/wasm_greeter_rust`, `examples/wasm_greeter_go`). A module
@@ -116,11 +116,11 @@ write now.
   reads `derived_greeter_shouter`'s form and checks it against its
   schema.
 
-- **`guatiao-rhai`: libraries written in Rhai, served to any host.** A
-  source file (`crates/guatiao-rhai`, built from this repository, not
+- **`guatiao-source-rhai`: libraries written in Rhai, served to any host.** A
+  source file (`crates/guatiao-source-rhai`, built from this repository, not
   published) with Rhai built in: a library is a script ending in a map of
   providers, whose function members are the kinds' slots and whose other
-  members are their state, described by a `*.guatiao-rhai.toml` manifest
+  members are their state, described by a `*.guatiao.toml` manifest of type `rhai`
   and the kinds' `<crate>.kinds.json`; its version is the script's
   `const VERSION`, read from the parse. Refresh runs an edited script
   afresh while the old build answers the instances taken from it; limits
@@ -133,12 +133,12 @@ write now.
   reaches no file, cannot import, and its `print` does nothing. Values keep
   null apart from absent, an exact number's text and bytes apart from
   text; a map's keys come back in byte order, as a Rhai map keeps them.
-- **`guatiao-lua`: libraries written in Lua, served to any host.** A
-  source file (`crates/guatiao-lua`, built from this repository, not
+- **`guatiao-source-lua`: libraries written in Lua, served to any host.** A
+  source file (`crates/guatiao-source-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a
   library is a Lua module returning a table whose `providers` are tables
   of methods named for the kinds' slots, described by a
-  `*.guatiao-lua.toml` manifest and its kinds' `<crate>.kinds.json`.
+  `*.guatiao.toml` manifest of type `lua` and its kinds' `<crate>.kinds.json`.
   Refresh runs an edited module afresh while the old build answers the
   instances taken from it; limits stop runaway code (operations, time,
   depth, memory), a `pcall` around it included, and the host carries on.
@@ -152,7 +152,7 @@ write now.
   as `nil, err`, and Lua tables handed to providers as objects.
 - **`RawObject::lend`**: an object a caller owns, lent to a slot that
   takes a lent one, without `unsafe`.
-- **`guatiao-remote`: providers called across a process, a machine or a
+- **`guatiao-source-remote`: providers called across a process, a machine or a
   network.** A new crate, published with the others. A device runs
   `guatiao-remote-server` (or `Server` over a `Registry`); a host adds a
   `RemoteSource`, or in any language the crate's library file as a
@@ -206,7 +206,7 @@ write now.
   alone: `Libffi` prepares a slot's signature as a libffi call interface,
   makes each served slot a libffi closure, and calls a table through
   `ffi_call`. A bridge for a runtime with no FFI hands it to its source
-  (`with_mechanism(Arc::new(Libffi))`); `guatiao-lua` does. It builds
+  (`with_mechanism(Arc::new(Libffi))`); `guatiao-source-lua` does. It builds
   libffi from C and is not available on wasm32; `guatiao` and
   `guatiao-bridge` build no C.
 - **A source written in Rust is a file any host adds.**
@@ -726,12 +726,12 @@ write now.
 - **Python: the package is typed** (`py.typed`) and checked with
   `mypy --strict`, as are the Python examples; `Map.get(key, default)`
   answers plain data like a `dict`.
-- **`guatiao-py`, a source of libraries written in Python.** A cdylib
+- **`guatiao-source-py`, a source of libraries written in Python.** A cdylib
   exporting `guatiao_source` and declaring `source=python`: a host in any
   language adds it with `add_source_file` and a configuration naming
   where Python libraries are described (`dirs`, `manifests`) and what to
   put on `sys.path` first (`paths`). Each library is a manifest,
-  `*.guatiao-py.toml`, naming its `module`, the `kinds` it serves, the
+  `*.guatiao.toml` of type `python`, naming its `module`, the `kinds` it serves, the
   `paths` it imports from, and optionally its `version` (otherwise a
   literal `__version__`, read without importing). Listing imports
   nothing; opening imports the module afresh and refuses one whose name,
@@ -744,7 +744,7 @@ write now.
   status** (`guatiao.BadValue("nobody to greet")`), which is how Python
   code refuses a call.
 - **An example host in Python**, `examples/python_host/`: it scans for
-  greeter libraries in any language, or adds the `guatiao-py` bridge, and
+  greeter libraries in any language, or adds the `guatiao-source-py` bridge, and
   calls every slot of the kind, objects included. The greeter kinds are
   Python classes beside their C header,
   `examples/greeter_kind/python/greeter_kind.py`, and
@@ -965,13 +965,31 @@ write now.
 
 ### Changed
 
+- **The source crates are `guatiao-source-<kind>`, and a library's
+  manifest is `<name>.guatiao.toml` with a `type`.** `guatiao-py`,
+  `guatiao-js`, `guatiao-lua`, `guatiao-wasm`, `guatiao-rhai` and
+  `guatiao-remote` are `guatiao-source-py`, `-js`, `-lua`, `-wasm`,
+  `-rhai` and `-remote`, their files `guatiao_source_py.dll`,
+  `libguatiao_source_lua.so` and so on; the server is still
+  `guatiao-remote-server`. A manifest is named `<name>.guatiao.toml`
+  whatever serves it, and its `type` names the source as that source
+  declares itself: `python`, `js`, `lua`, `wasm` or `rhai`. A source
+  passes over a manifest of another of these types, and reports one with
+  no `type`, or a type none of them serves, in words naming the file; a
+  file named the old way (`*.guatiao-py.toml`, ...) is not read.
+  `guatiao-bridge`'s `ManifestFormat` names its type (`serves`) in place
+  of a `suffix`, `manifest::SUFFIX` and `manifest::TYPES` are the name
+  and the types, and `manifest::read` answers `None` for another source's
+  manifest. No release carried these crates; the
+  [migration page](https://boriken-dev.github.io/guatiao/migrating/) has
+  what a checkout's code writes now.
 - **`guatiao_intake.h` names its separator `GUATIAO_INTAKE_SEPARATOR`.**
   The bare `SEPARATOR` macro took the name from every C and C++ file
   including the header; the value is still `'.'`, and Rust's
   `guatiao_intake::SEPARATOR` keeps its name. Dart's generated constant is
   renamed to match.
 
-- **`guatiao-py` is CPython as a `guatiao-bridge` engine.** Its
+- **`guatiao-source-py` is CPython as a `guatiao-bridge` engine.** Its
   manifests, stamps, refresh and source table are the bridge's, and its
   entry point is written by `guatiao::source!`; it keeps the interpreter,
   reading a module's `__version__`, and finding its own file. What a host
@@ -1102,7 +1120,7 @@ write now.
   A load that fails is now tried again with the library's directory in
   place of the host's, `PATH` still searched.
 
-- **CPython served by `guatiao-py` inside a Node host frees what a call
+- **CPython served by `guatiao-source-py` inside a Node host frees what a call
   drops, on Linux.** koffi runs each call on a stack of its own, which
   CPython 3.14 took for an overflowing one, deferring every deallocation
   for good: a closed Python conversation kept its listener forever. The

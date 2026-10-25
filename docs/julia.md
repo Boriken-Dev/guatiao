@@ -98,7 +98,7 @@ first. A refusal is a `GuatiaoError` with the provider's status and words.
 
 Libraries that come and go are a **source**: `watch_dir!` makes a
 directory one, `add_source_file!` adds a bridge to another language (the
-guatiao-py bridge serves Python modules), and `refresh!` makes the
+guatiao-source-py bridge serves Python modules), and `refresh!` makes the
 registry agree with every source when the host asks. `retire!`, `unload!`
 and `collect!` take a library out, unmapping it when it agrees.
 
@@ -180,7 +180,7 @@ first).
 
 ## What Julia does not do that Python does
 
-- **Serve another process.** guatiao-py serves Python modules to any
+- **Serve another process.** guatiao-source-py serves Python modules to any
   host; nothing serves Julia packages to a host that is not running
   Julia, which would need `libjulia` embedded in a bridge.
 - **Read a kind from a class.** Python reads a `Protocol` class's
@@ -202,7 +202,7 @@ first).
 ## The examples
 
 - `examples/julia_host/host.jl` scans for greeters in any language,
-  registers the Julia library, optionally adds the guatiao-py bridge, and
+  registers the Julia library, optionally adds the guatiao-source-py bridge, and
   calls every slot of the kind; its README has the commands.
 - `examples/julia_provider/JlGreeter/` is the library above.
 - `examples/greeter_kind/julia/GreeterKind/` declares the greeter kinds.

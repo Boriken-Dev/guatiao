@@ -88,8 +88,8 @@ an application that carries it — named by `GUATIAO_LIBRARY`; the Lua
 module carries the library inside.
 
 Libraries written in Python and in Lua reach any host through a source
-file of their own: [`crates/guatiao-py`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-py/README.md)
-and [`crates/guatiao-lua`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-lua/README.md).
+file of their own: [`crates/guatiao-source-py`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-py/README.md)
+and [`crates/guatiao-source-lua`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-lua/README.md).
 
 JSON, TOML and YAML, and forms, are a package of their own beside each
 core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI

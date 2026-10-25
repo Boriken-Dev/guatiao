@@ -2,7 +2,7 @@
 
 [Rhai](https://rhai.rs) is a small scripting language written in Rust, made
 to be embedded in a program and to run code that program did not write.
-`guatiao-rhai` makes a Rhai script a **provider** that any guatiao host
+`guatiao-source-rhai` makes a Rhai script a **provider** that any guatiao host
 loads, in any language: a file the host adds once, whose libraries are
 scripts, listed without running them, opened when they appear or change,
 and run under limits the host sets.
@@ -19,11 +19,11 @@ published. Rhai is Rust and is built into the file; libffi, which the kind
 tables need, is built from C, so a C compiler is needed.
 
 ```bash
-cargo build --release --manifest-path crates/guatiao-rhai/Cargo.toml
+cargo build --release --manifest-path crates/guatiao-source-rhai/Cargo.toml
 ```
 
-The file is `libguatiao_rhai.so`, `libguatiao_rhai.dylib` or
-`guatiao_rhai.dll`.
+The file is `libguatiao_source_rhai.so`, `libguatiao_source_rhai.dylib` or
+`guatiao_source_rhai.dll`.
 
 ## Write a library
 
@@ -31,7 +31,8 @@ A library is a script and a manifest beside it. The manifest says what
 the source reads before running anything:
 
 ```toml
-# greeters.guatiao-rhai.toml
+# greeters.guatiao.toml
+type = "rhai"                 # the source that serves it
 module = "greeters"           # the library's id; the script is greeters.rhai
 kinds = ["greeter"]           # every kind its providers serve
 paths = ["."]                 # where the script is; an edit under it is noticed
@@ -82,7 +83,7 @@ let mut config = Map::new();
 config.set("dirs", List::from_iter(["/opt/myapp/rhai"]));
 config.set("kinds", List::from_iter(["/opt/myapp/greeter_kind.kinds.json"]));
 config.set("limits", limits);       // {"operations": 1000000, "time_ms": 250, ..}
-registry.add_source_file(Path::new("/opt/myapp/libguatiao_rhai.so"), &config)?;
+registry.add_source_file(Path::new("/opt/myapp/libguatiao_source_rhai.so"), &config)?;
 let changed = registry.refresh();
 let hello = registry.offer::<dyn Greeter>("greeters_hello");
 ```
@@ -92,7 +93,7 @@ From Python:
 ```python
 reg = Registry("app", "1.0")
 reg.add_source_file(
-    "/opt/myapp/libguatiao_rhai.so",
+    "/opt/myapp/libguatiao_source_rhai.so",
     {"dirs": ["/opt/myapp/rhai"], "kinds": ["/opt/myapp/greeter_kind.kinds.json"],
      "limits": {"operations": 1_000_000, "time_ms": 250}},
 )
@@ -163,5 +164,5 @@ set `operations` and `time_ms` beside it. With a limit on arrays, each
   own; a call from another thread is queued.
 
 The crate's
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-rhai/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-rhai/AGENTS.md)
 is the full reference.
