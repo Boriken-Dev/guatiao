@@ -14,6 +14,24 @@ write now.
 
 ### Added
 
+- **Node: a kind born in TypeScript or JavaScript is written as a
+  description.** In TypeScript a kind can be declared as interfaces, the
+  way a Rust trait declares one: `guatiao-kind tally_kind.ts --out ...`
+  reads them through the TypeScript 7 compiler (an optional peer
+  dependency; `describeInterfaces` in `guatiao/describe` from code) and
+  writes the kinds' document beside the module. The types come from
+  `guatiao/kinds`: `u32`, `i64` and the other scalars, `Taken<MapRef>`
+  and `Lent<MapRef>` for how a tree crosses, `extends ObjectKind` for an
+  object kind; a method with `?` is an appended slot, `@throws` marks a
+  slot that can refuse, doc comments become the description's, and
+  anything a table cannot hold is refused with its file, line and column.
+  A floor hash not given is the one the same required slots get from
+  `#[guatiao::kind]`. A kind defined in JavaScript as a class is
+  described by `describeKinds()`, with no compiler (`slot(...).named()`
+  and `.doc()`, `static doc`). Either document is the one `kindsOf()`
+  loads and Dart's `dart run guatiao:kind` writes classes from:
+  `examples/tally_kind` is a kind that exists only as TypeScript
+  interfaces, served from Node and from Dart.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a

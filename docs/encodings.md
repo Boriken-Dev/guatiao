@@ -553,7 +553,12 @@ A `kind` an argument or answer names is found in the same document, or
 among kinds the reader already holds. A description is written by
 `#[guatiao::kind]` (`<Trait>Vtable::description()`, one kind as compact
 JSON); a kind crate writes its document with the same switch that writes
-its header, and a test compares the committed copy with a fresh one.
+its header, and a test compares the committed copy with a fresh one. A
+kind that has no trait is written by the language that declares it: Node
+reads TypeScript interfaces (`guatiao-kind`, `describeInterfaces`) and
+JavaScript classes (`describeKinds`) into the same document, and a floor
+hash it is not given is the FNV-1a of the shape and the required slots
+spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
 
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
