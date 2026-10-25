@@ -24,8 +24,8 @@ guatiao-remote-server (--stdio | --listen tcp://ADDRESS:PORT) [options]
   --listen URL          serve every link to URL (tcp:// is the trusted level,
                         local://name the local one: a socket path or a pipe name)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
-  --range CIDR          an address range the listener binds and accepts in
-                        (trusted; repeatable; required)
+  --range CIDR          an address range peers are accepted from, others
+                        closed unread (trusted; repeatable; required)
   --key-file PATH       the trusted level's pre-shared key
   --kinds PATH          a kind description document (repeatable)
   --load PATH           a library to load (repeatable)
