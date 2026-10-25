@@ -123,7 +123,7 @@ fn fd_write(caller: &mut Caller<'_, State>, fd: i32, iovs: i32, count: i32, out:
         else {
             return FAULT;
         };
-        for iov in table.chunks_exact(8) {
+        for iov in table.as_chunks::<8>().0 {
             let (ptr, len) = (u32_le(iov, 0), u32_le(iov, 4));
             let Some(bytes) = span(data, ptr, len as usize) else {
                 return FAULT;
@@ -183,8 +183,10 @@ fn poll_oneoff(caller: &mut Caller<'_, State>, input: i32, output: i32, n: i32, 
     };
     let mut events = vec![0u8; n as usize * 32];
     for (sub, event) in subscriptions
-        .chunks_exact(48)
-        .zip(events.chunks_exact_mut(32))
+        .as_chunks::<48>()
+        .0
+        .iter()
+        .zip(events.as_chunks_mut::<32>().0)
     {
         event[..8].copy_from_slice(&sub[..8]);
         let tag = sub[8];
