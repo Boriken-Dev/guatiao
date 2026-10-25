@@ -109,7 +109,7 @@ included, and a stop is an error the host reads while the runtime goes on:
 | limit | kept by |
 | --- | --- |
 | `operations`, `time_ms` | QuickJS's interrupt handler, polled once per 10 000 calls and loop iterations; `try`, `catch` and `finally` cannot hold it back |
-| `depth` | the native stack QuickJS may use below the call's entry, about 740 bytes a level (more on some targets and in debug builds) and a fixed allowance for opening a library |
+| `depth` | the native stack QuickJS may use below the call's entry, about 740 bytes a level (more on some targets and in debug builds), plus a fixed allowance every call gets for its own work, such as opening a library; at most 1 MiB in all |
 | `memory` | QuickJS's allocator, for the whole runtime; reached in many small steps, QuickJS may have no memory left for its error and throw `null`, which is `GUATIAO_ERR_INTERNAL` (`thrown: null`) rather than `GUATIAO_ERR_ALLOC` |
 
 ## From Node, what differs

@@ -202,7 +202,7 @@ opening a library included:
 | --- | --- |
 | `operations` | QuickJS's interrupt handler, polled once per 10 000 calls and loop iterations; a poll spends 10 000, so the stop comes within one poll past the limit |
 | `time_ms` | the same poll |
-| `depth` | the native stack QuickJS may use below the call's entry: 740 bytes per level (measured on Linux x86-64; a level takes more on other targets and in debug builds), at least 16 KiB and at most 1 MiB, plus 64 KiB (256 KiB in a debug build) for opening a library; a stack overflow while it is set is the limit |
+| `depth` | the native stack QuickJS may use below the call's entry: 740 bytes per level (measured on Linux x86-64; a level takes more on other targets and in debug builds), at least 16 KiB, plus 64 KiB (256 KiB in a debug build) every call gets for its own work, such as opening a library; at most 1 MiB in all, as with no limit; a stack overflow while it is set is the limit |
 | `memory` | QuickJS's allocator, for the whole runtime, in bytes; 128 KiB of it (a quarter, if the limit is small) is held back, so that the error that stops a call can always be made |
 
 A stop is `GUATIAO_ERR_INTERNAL` ("stopped at its operations limit
