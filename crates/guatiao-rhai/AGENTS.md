@@ -160,7 +160,7 @@ opening a library included:
 | --- | --- |
 | `operations` | Rhai's operation count (`set_max_operations`), at most 16 777 216; a `try`/`catch` cannot catch the stop |
 | `time_ms` | a progress callback reading the clock every 64 operations; not catchable either; a call inside another has the shorter of the two |
-| `depth` | Rhai's call levels (`set_max_call_levels`), at most 8192. Unset: 32 |
+| `depth` | Rhai's call levels (`set_max_call_levels`), at most 8192. Unset: 32. Also any recursion that reaches the end of the stack the call was given (below) |
 | `memory` | in bytes, turned into Rhai's size limits: a string may be that long, an array holds `memory / 16` items (a blob counts a byte as one), a map `memory / 64` |
 
 A stop is `GUATIAO_ERR_INTERNAL` ("stopped at its operations limit
@@ -180,8 +180,21 @@ in debug) for each call level, and, when `operations` is set, 320 bytes
 with them (the fewest operations that nest one level is four). A stack the
 thread's own would not hold is mapped for the call, which costs about 25
 microseconds: with nothing set, or `depth` up to about 40, a call is
-under 10; with `operations` set, about 30 to 40. Values a library keeps
-are dropped on a stack for a hundred thousand levels.
+under 10; with `operations` set, about 30 to 40. Everything a call makes
+is read and dropped on that stack: its answer, a value it throws, the lent
+arguments it changed, and what a script's last expression holds beyond its
+providers. Values a library keeps are dropped on a stack for what one call
+can nest, and at least a hundred thousand levels.
+
+Rhai also recurses through its own function calls over a nested value:
+comparing one (`==`, `contains`), writing it (`to_string`, `to_debug`,
+string interpolation), about 2 KiB a level in a release build. Every
+operation checks the stack left (`stacker::remaining_stack`), and below
+what the call's nesting needs plus 256 KiB (1 MiB in debug) the call stops
+at its depth limit, as if it had recursed that deep. `to_json` writes a
+map nested at most 512 levels; a deeper one is `GUATIAO_ERR_BAD_VALUE`.
+On Windows a mapped stack is committed memory, not only address space:
+`operations` near its cap commits about 1.8 GB for a call.
 
 ## Errors
 

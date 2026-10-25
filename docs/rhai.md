@@ -115,7 +115,7 @@ with a status that names the limit while the host carries on:
 | --- | --- | --- |
 | `operations` | a script past that many Rhai operations (at most 16 777 216) | `GUATIAO_ERR_INTERNAL` |
 | `time_ms` | a call that runs longer | `GUATIAO_ERR_INTERNAL` |
-| `depth` | recursion past that many calls (32 when unset, at most 8192) | `GUATIAO_ERR_INTERNAL` |
+| `depth` | recursion past that many calls (32 when unset, at most 8192), or any recursion past the stack the call has | `GUATIAO_ERR_INTERNAL` |
 | `memory` | a string, array or map larger than the limit allows | `GUATIAO_ERR_ALLOC` |
 
 A stop cannot be caught by the script: a `try`/`catch` around a loop does
@@ -129,10 +129,13 @@ one does not open.
 stack, and nothing but the operations it takes bounds how deep they nest.
 With `operations` set, each call runs on a stack that holds what it can
 build, and values a library keeps are dropped on a large one; the stack is
-mapped for the call, which costs about 25 microseconds. Without it, a
-script can nest values until the stack ends and the host process aborts.
-What a provider builds up in its own state over many calls is not
-covered either.
+mapped for the call, which costs about 25 microseconds (on Windows the
+whole stack is committed memory). Comparing or writing a nested value
+recurses through Rhai's own calls; when that reaches the end of the
+call's stack the call stops at its depth limit. `to_json` refuses a map
+nested deeper than 512 levels. Without `operations`, a script can nest
+values until the stack ends and the host process aborts. What a provider
+builds up in its own state over many calls is not covered either.
 
 `memory` is the weakest of the four: Rhai counts each container, not the
 sum of them. A script can hold many containers each under the limit, so
