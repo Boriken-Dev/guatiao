@@ -954,6 +954,54 @@ fn a_library_opens_under_the_least_depth_limit() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Opening a library is under the limits too: a module whose reactions
+/// spin while it awaits forever is stopped, and the source carries on.
+#[test]
+fn a_module_that_never_finishes_loading_is_stopped() {
+    let dir = scratch("never-loads");
+    put(
+        &dir,
+        "js_never",
+        "version = \"1.0.0\"\n",
+        &format!(
+            "{}{}",
+            preamble(),
+            r#"
+const again = () => { Promise.resolve().then(again); for (;;) {} };
+Promise.resolve().then(again);
+await new Promise(() => {});
+export class Never extends Provider { static kinds = [Greeter]; greet(name) { return { greeting: name }; } }
+"#
+        ),
+    );
+    put(&dir, "js_calm", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(
+        &dir,
+        Some(limits(&[("operations", 2_000_000), ("time_ms", 500)])),
+    ));
+    let changed = within(120, move || {
+        let changed = registry.refresh();
+        (changed, registry)
+    });
+    let (changed, registry) = changed;
+    let reason = changed
+        .refused
+        .iter()
+        .find(|r| r.id.as_deref() == Some("js_never"))
+        .map(|r| r.reason.clone())
+        .expect("refused");
+    assert!(reason.starts_with("stopped at its"), "{reason}");
+    assert_eq!(
+        greeting(
+            &greeter(&registry, "js_calm_spin")
+                .greet("x")
+                .expect("served")
+        ),
+        "calm, x"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn time_stops_a_call_too() {
     let dir = scratch("time");

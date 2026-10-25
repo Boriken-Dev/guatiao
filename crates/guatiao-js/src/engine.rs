@@ -366,21 +366,32 @@ impl JsEngine {
         prelude::install(ctx).map_err(failed)?;
         let core = prelude::core(ctx, self.shared.bounds).map_err(failed)?;
         let promise = Module::import(ctx, entry.display().to_string()).map_err(failed)?;
-        let namespace: Object<'js> = match promise.finish() {
-            Ok(namespace) => namespace,
-            Err(rquickjs::Error::WouldBlock) => {
+        // The module's jobs run until it settles, and no further once a
+        // limit stopped the opening: what is left is ended when the frame
+        // returns, as a call's is.
+        let settled = loop {
+            if let Some(settled) = promise.result::<Object<'js>>() {
+                break settled;
+            }
+            if self.meter.stopped() {
+                return Err(BridgeError::engine(format!(
+                    "{id}: {} was stopped while it loaded",
+                    entry.display()
+                )));
+            }
+            if !ctx.execute_pending_job() {
                 return Err(BridgeError::engine(format!(
                     "{id}: {} never finishes loading: it awaits something nothing here provides",
                     entry.display()
                 )));
             }
-            Err(e) => {
-                return Err(BridgeError::engine(format!(
-                    "{id}: {}",
-                    words_of(errors::caught(ctx, Some(&core), &e, words))
-                )));
-            }
         };
+        let namespace = settled.map_err(|e| {
+            BridgeError::engine(format!(
+                "{id}: {}",
+                words_of(errors::caught(ctx, Some(&core), &e, words))
+            ))
+        })?;
 
         let mut classes: Vec<(String, Constructor<'js>)> = Vec::new();
         for entry in namespace.props::<String, Js<'js>>() {
