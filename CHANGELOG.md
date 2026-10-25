@@ -14,6 +14,19 @@ write now.
 
 ### Added
 
+- **guatiao-remote: RDMA, experimental and Linux only** (feature `rdma`,
+  off by default). `rdma://host:port` sets a link up over a trusted TCP
+  connection, admitted by address range as TCP's is, then carries every
+  frame as one-sided RDMA writes into a ring each side registered; the
+  TCP connection stays open as the peer's liveness. libibverbs (rdma-core)
+  is opened at run time, so building needs none of it; elsewhere than
+  Linux the transport answers `Unsupported`. `RdmaConnect`,
+  `RdmaListen`, `RdmaPort` and `devices()` in `transport::rdma`;
+  `guatiao-remote-server --listen rdma://...` and the source file's
+  `connect: rdma://...` take it too. Tested on Soft-RoCE
+  (`crates/guatiao-remote/rdma-tests`, a workspace of its own, since its
+  tests need a device); numbers measured there say nothing about RDMA
+  hardware.
 - **Node: a kind born in TypeScript or JavaScript is written as a
   description.** In TypeScript a kind can be declared as interfaces, the
   way a Rust trait declares one: `guatiao-kind tally_kind.ts --out ...`

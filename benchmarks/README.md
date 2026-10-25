@@ -468,3 +468,28 @@ VM, MTU 9000):
   on loopback and to the VM alike, where the Unix socket and shared
   memory reach 100 000-180 000 through the same link. Why is not yet
   measured.
+
+RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
+`--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
+set-up. One x86-64 Linux VM with one rxe device, both ends on it, beside
+trusted TCP and the Unix socket on the same VM, three runs each, medians.
+**Soft-RoCE is RDMA done in software by the kernel's network stack: these
+numbers say nothing about an RDMA NIC.**
+
+| run, same VM | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | protocol B/call | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- | --- |
+| RDMA, Soft-RoCE loopback | 11.2 | 18.6 | 17 536 | 388 | 21.3 | 22.9 / 22.9 |
+| Unix socket | 19.4 | 44.5 | 108 172 | 540 | 21.3 | 28.9 / 27.9 |
+| TCP loopback | 41.2 | 132.4 | 9 539 | 561 | 21.3 | 48.2 / 46.6 |
+
+- perftest on the same device: 64-byte RDMA writes take about 3.0 µs one
+  way (`ib_write_lat`), 4 MiB writes move 1 751-1 815 MiB/s
+  (`ib_write_bw`).
+- **The bulk path stays where the link's copies put it**: 388 MB/s for a
+  4 MiB round trip against 1.8 GB/s of raw Soft-RoCE, as TCP's ~400 MB/s
+  stands against 3.2-3.9 GB/s of raw TCP. RDMA removes none of the
+  link's copies and adds one into the staging area.
+- CPU per call is the two processes' own; Soft-RoCE's work in kernel
+  threads is not counted.
+- The runs were noisy (TCP's p50 was 38.9, 93.2 and 41.2 µs): read the
+  medians as an order, not as figures.
