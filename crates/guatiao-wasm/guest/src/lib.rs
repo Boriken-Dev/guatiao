@@ -108,9 +108,7 @@ macro_rules! export {
             request: usize,
             len: usize,
         ) -> u32 {
-            // SAFETY: the host passes back what `guatiao_guest_alloc`
-            // answered for `len`, once, as guatiao ABI 1 requires.
-            unsafe { $crate::glue::call($make, object, target, request, len) }
+            $crate::glue::call($make, object, target, request, len)
         }
 
         /// guatiao ABI 1: an object this module answered was destroyed.
@@ -220,6 +218,29 @@ mod tests {
         let garbage = guatiao_guest_alloc(3);
         assert_eq!(guatiao_guest_call(0, 0, garbage, 3), 7, "not a request");
         answers();
+    }
+
+    #[test]
+    fn a_request_not_handed_out_is_refused_and_none_is_taken_twice() {
+        let (at, len) = request("counter", "count", Vec::new());
+        assert_eq!(
+            guatiao_guest_call(0, 0, at + 1, len),
+            7,
+            "not an address alloc answered"
+        );
+        assert_eq!(
+            guatiao_guest_call(0, 0, at, len + 1),
+            7,
+            "not the length asked for"
+        );
+        assert_eq!(guatiao_guest_call(0, 0, at, len), 0);
+        assert_eq!(guatiao_guest_call(0, 0, at, len), 7, "taken back already");
+        let told = answers();
+        assert!(
+            core::str::from_utf8(&told[0])
+                .is_ok_and(|w| w.contains("not one guatiao_guest_alloc handed out")),
+            "{told:?}"
+        );
     }
 
     #[test]
