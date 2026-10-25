@@ -13,7 +13,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use wasmtime::{Caller, Linker, Memory};
 
-use crate::instance::State;
+use crate::instance::{State, charge, in_time};
 
 /// The module the functions are imported from.
 pub(crate) const MODULE: &str = "wasi_snapshot_preview1";
@@ -47,6 +47,13 @@ const IO: i32 = 29;
 const KEPT: usize = 4096;
 /// The most subscriptions one `poll_oneoff` answers.
 const MOST_SUBSCRIPTIONS: u32 = 1024;
+/// The most buffers one `fd_write` takes.
+const MOST_IOVS: u32 = 1024;
+/// The most bytes one `random_get` fills: the host does it between the
+/// instructions a time limit interrupts.
+const MOST_RANDOM: u32 = 1 << 20;
+/// Bytes of host work per unit of fuel charged.
+const BYTES_PER_FUEL: u64 = 8;
 
 /// What WASI keeps for one instance.
 #[derive(Debug)]
@@ -104,12 +111,22 @@ fn span(memory: &[u8], address: u32, len: usize) -> Option<&[u8]> {
     memory.get(start..start.checked_add(len)?)
 }
 
-fn fd_write(caller: &mut Caller<'_, State>, fd: i32, iovs: i32, count: i32, out: i32) -> i32 {
+fn fd_write(
+    caller: &mut Caller<'_, State>,
+    fd: i32,
+    iovs: i32,
+    count: i32,
+    out: i32,
+) -> wasmtime::Result<i32> {
     if fd != 1 && fd != 2 {
-        return BADF;
+        return Ok(BADF);
     }
+    if count as u32 > MOST_IOVS {
+        return Ok(INVAL);
+    }
+    charge(caller, u64::from(count as u32))?;
     let Some(m) = memory(caller) else {
-        return FAULT;
+        return Ok(FAULT);
     };
     let room = KEPT.saturating_sub(caller.data().wasi.stderr.len());
     let mut kept = Vec::new();
@@ -121,12 +138,12 @@ fn fd_write(caller: &mut Caller<'_, State>, fd: i32, iovs: i32, count: i32, out:
             .and_then(|n| n.checked_mul(8))
             .and_then(|len| span(data, iovs as u32, len))
         else {
-            return FAULT;
+            return Ok(FAULT);
         };
         for iov in table.as_chunks::<8>().0 {
             let (ptr, len) = (u32_le(iov, 0), u32_le(iov, 4));
             let Some(bytes) = span(data, ptr, len as usize) else {
-                return FAULT;
+                return Ok(FAULT);
             };
             if fd == 2 {
                 let take = bytes.len().min(room - kept.len());
@@ -136,7 +153,9 @@ fn fd_write(caller: &mut Caller<'_, State>, fd: i32, iovs: i32, count: i32, out:
         }
     }
     caller.data_mut().wasi.stderr.extend_from_slice(&kept);
-    write(caller, out, &total.to_le_bytes())
+    charge(caller, u64::from(total) / BYTES_PER_FUEL)?;
+    in_time(caller)?;
+    Ok(write(caller, out, &total.to_le_bytes()))
 }
 
 fn clock_time_get(caller: &mut Caller<'_, State>, id: i32, out: i32) -> i32 {
@@ -154,32 +173,45 @@ fn clock_time_get(caller: &mut Caller<'_, State>, id: i32, out: i32) -> i32 {
     )
 }
 
-fn random_get(caller: &mut Caller<'_, State>, address: i32, len: i32) -> i32 {
+fn random_get(caller: &mut Caller<'_, State>, address: i32, len: i32) -> wasmtime::Result<i32> {
+    if len as u32 > MOST_RANDOM {
+        return Ok(INVAL);
+    }
+    charge(caller, u64::from(len as u32) / BYTES_PER_FUEL)?;
     let Some(m) = memory(caller) else {
-        return FAULT;
+        return Ok(FAULT);
     };
     let start = at(address);
     let Some(bytes) = start
         .checked_add(at(len))
         .and_then(|end| m.data_mut(&mut *caller).get_mut(start..end))
     else {
-        return FAULT;
+        return Ok(FAULT);
     };
-    match getrandom::fill(bytes) {
+    let filled = match getrandom::fill(bytes) {
         Ok(()) => SUCCESS,
         Err(_) => IO,
-    }
+    };
+    in_time(caller)?;
+    Ok(filled)
 }
 
 /// Every subscription answered at once: a clock's as elapsed (nothing
 /// sleeps on the host's thread), a file descriptor's with `BADF`.
-fn poll_oneoff(caller: &mut Caller<'_, State>, input: i32, output: i32, n: i32, out: i32) -> i32 {
+fn poll_oneoff(
+    caller: &mut Caller<'_, State>,
+    input: i32,
+    output: i32,
+    n: i32,
+    out: i32,
+) -> wasmtime::Result<i32> {
     let n = n as u32;
     if n == 0 || n > MOST_SUBSCRIPTIONS {
-        return INVAL;
+        return Ok(INVAL);
     }
+    charge(caller, u64::from(n))?;
     let Some(subscriptions) = read(caller, input, n as usize * 48) else {
-        return FAULT;
+        return Ok(FAULT);
     };
     let mut events = vec![0u8; n as usize * 32];
     for (sub, event) in subscriptions
@@ -194,11 +226,12 @@ fn poll_oneoff(caller: &mut Caller<'_, State>, input: i32, output: i32, n: i32, 
         event[8..10].copy_from_slice(&errno.to_le_bytes());
         event[10] = tag;
     }
+    in_time(caller)?;
     let written = write(caller, output, &events);
     if written != SUCCESS {
-        return written;
+        return Ok(written);
     }
-    write(caller, out, &n.to_le_bytes())
+    Ok(write(caller, out, &n.to_le_bytes()))
 }
 
 /// fds 0 to 2: character devices, stdin readable, the others writable.

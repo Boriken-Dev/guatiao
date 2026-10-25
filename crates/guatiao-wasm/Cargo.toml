@@ -40,6 +40,10 @@ wasmtime = { version = "36.0.19", default-features = false, features = [
     "runtime",
     "std",
 ] }
+# Under an operations limit, a module's bulk instructions are rewritten to
+# be charged by their length: the same wasmparser wasmtime reads with.
+wasm-encoder = { version = "0.236.1", default-features = false, features = ["std", "wasmparser"] }
+wasmparser = { version = "0.236.1", default-features = false, features = ["std", "simd"] }
 # WASI's `random_get`, for a guest that imports it.
 getrandom = "0.3.4"
 # A guest runs on its caller's stack: an entry with too little left runs

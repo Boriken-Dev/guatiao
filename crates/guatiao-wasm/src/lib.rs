@@ -30,6 +30,7 @@ mod engine;
 #[allow(unsafe_code)]
 mod exports;
 mod instance;
+mod meter;
 mod section;
 mod wasi;
 

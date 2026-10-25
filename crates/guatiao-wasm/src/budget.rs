@@ -64,11 +64,16 @@ fn leb(bytes: &[u8], mut at: usize) -> Option<(u64, usize)> {
     None
 }
 
+/// Map keys compared while decoding per unit of fuel charged.
+const COMPARISONS_PER_FUEL: u64 = 4;
+
 /// Walks `bytes` as the wire grammar lays them out, without building
 /// anything, and refuses what would cost more than `budget`. What is not
-/// a value is left to the decoder to refuse, with its offset. Answers the
-/// nodes counted.
+/// a value is left to the decoder to refuse, with its offset. Answers what
+/// decoding costs in fuel: a unit per node, and per
+/// [`COMPARISONS_PER_FUEL`] map keys compared.
 pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
+    let fuel = |nodes: u64, work: u64| nodes.saturating_add(work / COMPARISONS_PER_FUEL);
     let len = bytes.len() as u64;
     if len > budget {
         return Err(Refused::TooLarge { budget });
@@ -87,12 +92,12 @@ pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
         let in_map = top.1;
         if in_map {
             let Some((n, after)) = leb(bytes, at) else {
-                return Ok(nodes);
+                return Ok(fuel(nodes, work));
             };
             at = after.saturating_add(usize::try_from(n).unwrap_or(usize::MAX));
         }
         let Some(&tag) = bytes.get(at) else {
-            return Ok(nodes);
+            return Ok(fuel(nodes, work));
         };
         at += 1;
         nodes += 1;
@@ -104,13 +109,13 @@ pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
             2 => at += 1,
             3..=5 => {
                 let Some((n, after)) = leb(bytes, at) else {
-                    return Ok(nodes);
+                    return Ok(fuel(nodes, work));
                 };
                 at = after.saturating_add(usize::try_from(n).unwrap_or(usize::MAX));
             }
             6 | 7 => {
                 let Some((n, after)) = leb(bytes, at) else {
-                    return Ok(nodes);
+                    return Ok(fuel(nodes, work));
                 };
                 at = after;
                 // Every element is at least a byte: the decoder builds no
@@ -125,10 +130,10 @@ pub(crate) fn check(bytes: &[u8], budget: u64) -> Result<u64, Refused> {
                 }
                 open.push((n, tag == 7));
             }
-            _ => return Ok(nodes),
+            _ => return Ok(fuel(nodes, work)),
         }
     }
-    Ok(nodes)
+    Ok(fuel(nodes, work))
 }
 
 /// Why bytes a guest handed over were not taken.

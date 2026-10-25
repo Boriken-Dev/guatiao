@@ -28,7 +28,7 @@ use wasmtime::{ExternType, FuncType, Linker, Module};
 use crate::abi::{self, export};
 use crate::budget::{self, Undecoded};
 use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
-use crate::{section, wasi};
+use crate::{meter, section, wasi};
 
 /// The largest module a source reads and compiles.
 pub(crate) const MOST_MODULE_BYTES: u64 = 128 << 20;
@@ -240,8 +240,9 @@ fn shape(ty: &FuncType) -> String {
     )
 }
 
-/// Checks what a module exports and imports before any of its code runs.
-fn check_shape(module: &Module, id: &str) -> Result<(), BridgeError> {
+/// Checks what a module exports and imports before any of its code runs;
+/// `metered` when the host's rewrite added the charge.
+fn check_shape(module: &Module, id: &str, metered: bool) -> Result<(), BridgeError> {
     const WANTED: [(&str, &str, bool); 6] = [
         (export::ABI, "() -> (i32)", true),
         (export::ALLOC, "(i32) -> (i32)", true),
@@ -291,6 +292,8 @@ fn check_shape(module: &Module, id: &str) -> Result<(), BridgeError> {
             ]
             .contains(&import.name()),
             wasi::MODULE => wasi::NAMES.contains(&import.name()),
+            // The rewrite's own: it refuses a guest importing it first.
+            meter::MODULE => metered && import.name() == meter::BULK,
             _ => false,
         };
         if !known {
@@ -501,13 +504,20 @@ impl WasmEngine {
                 "{id} states version {stated}, and its manifest {version}"
             )));
         }
+        let metered = self.limits.operations.is_some();
+        let bytes = if metered {
+            meter::metered(&bytes)
+                .map_err(|e| BridgeError::engine(format!("{id} does not compile: {e}")))?
+        } else {
+            bytes
+        };
         let module = Module::new(&self.engine, &bytes).map_err(|e| {
             BridgeError::engine(format!(
                 "{id} does not compile: {}",
                 e.to_string().lines().next().unwrap_or("")
             ))
         })?;
-        check_shape(&module, id)?;
+        check_shape(&module, id, metered)?;
         let engine_error = |e: ProviderError| BridgeError::engine(e.message().to_string());
         let mut live = Live::new(
             &self.engine,
