@@ -4,9 +4,10 @@
 
 //! Guests that push on the host rather than on themselves: a stack overflow
 //! on a thread with little stack, answers that would swell when decoded,
-//! tables that add up, maps that cost the square of their keys and host
-//! work a loop of imports asks for. What could take the process down runs
-//! in a child process; what could hang runs under a timeout.
+//! tables that add up, maps that cost the square of their keys, host work
+//! a loop of imports asks for and two libraries calling each other from
+//! two threads. What could take the process down runs in a child process;
+//! what could hang runs under a timeout.
 
 mod common;
 
@@ -15,7 +16,7 @@ extern crate alloc;
 use alloc::sync::Arc;
 use core::time::Duration;
 use std::path::Path;
-use std::sync::{Mutex, mpsc};
+use std::sync::{Barrier, Mutex, mpsc};
 use std::time::Instant;
 
 use common::*;
@@ -692,4 +693,63 @@ fn large_wasi_requests_are_refused_to_the_guest() {
         );
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// --- two libraries, two threads ----------------------------------------------------
+
+/// Waits for the other thread to be inside its library, then calls the
+/// other library, and keeps its own until the other thread has tried too.
+struct Crossing {
+    other: Arc<dyn Greeter>,
+    both_inside: Arc<Barrier>,
+    both_tried: Arc<Barrier>,
+    heard: Arc<Mutex<Vec<String>>>,
+}
+
+impl Listener for Crossing {
+    fn heard(&mut self, _what: &str) {
+        self.both_inside.wait();
+        let answer = match self.other.greet("x") {
+            Ok(m) => greeting(&m).to_string(),
+            Err(e) => format!("{:?}", e.status),
+        };
+        self.heard.lock().unwrap().push(answer);
+        self.both_tried.wait();
+    }
+}
+
+#[test]
+fn libraries_calling_each_other_from_two_threads_answer_busy_not_deadlock() {
+    let (Some(rust), Some(go)) = (rust_example(), go_example()) else {
+        return;
+    };
+    let mut registry = serving(&config(&[&rust, &go], None));
+    assert_eq!(registry.refresh().loaded.len(), 2);
+    let r = greeter(&registry, "wasm_greeter_rust_hello");
+    let g = greeter(&registry, "wasm_greeter_go_hello");
+    let both_inside = Arc::new(Barrier::new(2));
+    let both_tried = Arc::new(Barrier::new(2));
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let (done, finished) = mpsc::channel();
+    for (into, other) in [(Arc::clone(&r), Arc::clone(&g)), (g, r)] {
+        let mut listener = Crossing {
+            other,
+            both_inside: Arc::clone(&both_inside),
+            both_tried: Arc::clone(&both_tried),
+            heard: Arc::clone(&heard),
+        };
+        let done = done.clone();
+        std::thread::spawn(move || {
+            let told = into.greet_into("ana", &mut listener).is_ok();
+            let _ = done.send(told);
+        });
+    }
+    for _ in 0..2 {
+        let told = finished
+            .recv_timeout(Duration::from_secs(20))
+            .expect("both calls answer: no deadlock");
+        assert!(told);
+    }
+    let heard = heard.lock().unwrap();
+    assert_eq!(*heard, ["GUATIAO_ERR_BUSY", "GUATIAO_ERR_BUSY"]);
 }

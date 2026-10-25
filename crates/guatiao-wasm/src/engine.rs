@@ -10,10 +10,11 @@
 use alloc::borrow::Cow;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::cell::Cell;
 use core::time::Duration;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError, mpsc};
-use std::thread::{self, JoinHandle, ThreadId};
+use std::thread::{self, JoinHandle};
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{AnswerType, ArgType};
@@ -71,6 +72,11 @@ impl Drop for Ticker {
     }
 }
 
+std::thread_local! {
+    /// How many libraries this thread is inside a call of.
+    static INSIDE: Cell<usize> = const { Cell::new(0) };
+}
+
 /// The engine: one wasmtime engine and linker for the source, the kinds it
 /// was given, and its limits. `Send + Sync`: every library locks its own
 /// store.
@@ -89,7 +95,6 @@ pub struct WasmLibrary {
     module: Module,
     providers: Vec<String>,
     slot: Mutex<Slot>,
-    inside: Mutex<Option<ThreadId>>,
     deferred: Mutex<Vec<u64>>,
 }
 
@@ -119,54 +124,43 @@ impl Slot {
     }
 }
 
-/// A library entered by this thread: its lock, and the thread named as
-/// inside it until dropped.
+/// A library this thread is inside a call of: its lock.
 struct Entered<'a> {
     slot: MutexGuard<'a, Slot>,
-    inside: &'a Mutex<Option<ThreadId>>,
 }
 
 impl Drop for Entered<'_> {
     fn drop(&mut self) {
-        *self.inside.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        INSIDE.with(|n| n.set(n.get().saturating_sub(1)));
     }
 }
 
 fn busy() -> ProviderError {
     ProviderError::new(
         Status::GUATIAO_ERR_BUSY,
-        "the library is in a call on this thread already: what it called cannot call it back",
+        "the library is in a call, and this thread is inside a call of a library already: waiting could deadlock",
     )
 }
 
 impl WasmLibrary {
-    /// Takes the library's lock: waits for another thread's call, refuses
-    /// one on this thread (`None`).
+    /// Takes the library's lock. A thread inside no library's call waits
+    /// for it; one inside a call (this library's or another's, through a
+    /// host object) is refused (`None`) when it is held, since two such
+    /// threads waiting on each other's libraries would wait forever.
     fn enter(&self) -> Option<Entered<'_>> {
-        let me = thread::current().id();
+        fn recover<'a>(poisoned: PoisonError<MutexGuard<'a, Slot>>) -> MutexGuard<'a, Slot> {
+            let mut slot = poisoned.into_inner();
+            slot.discard();
+            slot
+        }
         let guard = match self.slot.try_lock() {
             Ok(guard) => guard,
-            Err(TryLockError::WouldBlock) => {
-                if *self.inside.lock().unwrap_or_else(PoisonError::into_inner) == Some(me) {
-                    return None;
-                }
-                self.slot.lock().unwrap_or_else(|poisoned| {
-                    let mut slot = poisoned.into_inner();
-                    slot.discard();
-                    slot
-                })
-            }
-            Err(TryLockError::Poisoned(poisoned)) => {
-                let mut slot = poisoned.into_inner();
-                slot.discard();
-                slot
-            }
+            Err(TryLockError::WouldBlock) if INSIDE.with(Cell::get) > 0 => return None,
+            Err(TryLockError::WouldBlock) => self.slot.lock().unwrap_or_else(recover),
+            Err(TryLockError::Poisoned(poisoned)) => recover(poisoned),
         };
-        *self.inside.lock().unwrap_or_else(PoisonError::into_inner) = Some(me);
-        Some(Entered {
-            slot: guard,
-            inside: &self.inside,
-        })
+        INSIDE.with(|n| n.set(n.get() + 1));
+        Some(Entered { slot: guard })
     }
 
     /// Its id.
@@ -471,7 +465,7 @@ impl Engine for WasmEngine {
     }
 
     /// Tells the guest its object was destroyed; deferred to the next
-    /// call when the library is busy on this thread.
+    /// call when the library is busy and this thread is inside a call.
     fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
         with_stack(|| match lib.enter() {
             Some(mut entered) => self.release_in(&mut entered.slot, object),
@@ -548,7 +542,6 @@ impl WasmEngine {
                     objects: BTreeMap::new(),
                     next_object: 0,
                 }),
-                inside: Mutex::new(None),
                 deferred: Mutex::new(Vec::new()),
             }),
             providers,

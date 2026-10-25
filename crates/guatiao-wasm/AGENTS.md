@@ -116,10 +116,12 @@ guatiao::source!(serves = "wasm", make = start);
 
 - **Each opened library is one instance in a store of its own**, behind
   its own lock, called on the caller's thread: calls into different
-  libraries run at once, calls into one wait their turn. A call that
-  re-enters a library on the thread already inside it (a host object it
-  called calling it back) is `GUATIAO_ERR_BUSY`; an object destroyed then
-  is released at the library's next call.
+  libraries run at once, calls into one wait their turn. A thread already
+  inside a call of any of this crate's libraries (a host object a guest
+  called, calling a library) does not wait: a library busy then answers
+  `GUATIAO_ERR_BUSY`, since two such threads waiting on each other's
+  libraries would wait forever. An object destroyed then is released at
+  the library's next call.
 - **A trap or a limit discards the instance**: the call answers the error,
   and the next call makes the library afresh from its compiled module.
   What the instance held goes with it: its state, the objects it answered
