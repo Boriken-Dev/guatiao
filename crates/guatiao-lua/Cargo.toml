@@ -31,7 +31,7 @@ default = ["lua54", "source"]
 lua54 = ["mlua/lua54"]
 lua55 = ["mlua/lua55"]
 # Luau, with its sandbox on: libraries cannot change the standard ones.
-luau = ["mlua/luau"]
+luau = ["mlua/luau", "dep:luau0-src"]
 # LuaJIT, for the loadable module only: its operations limit does not hold
 # for compiled code, so no source runs on it.
 luajit = ["mlua/luajit"]
@@ -51,6 +51,10 @@ guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
 # table, are libffi closures and calls.
 guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
 mlua = { version = "0.12.2" }
+
+[build-dependencies]
+# mlua-sys 0.13.0 misreads Luau 744's bytecode (mlua-rs/mlua#748): lift with the next mlua release.
+luau0-src = { version = "=0.22.0", optional = true }
 
 [dev-dependencies]
 # The kinds' traits, which a Rust host calls the Lua greeters through.
