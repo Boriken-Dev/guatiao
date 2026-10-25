@@ -17,6 +17,7 @@ function cases = t_greeters()
     'a host calls the M greeter', @() exercise('m')
     'an answer built in the library''s allocator outlives the unload', @careless_answer
     'what a slot grew a lent map with outlives the unload', @lent_grown
+    'a closed value passed to a slot is refused', @closed_argument
     'the Rust proxy calls every greeter', @rust_proxy
     'a table that is not the kind''s is refused before it runs', @floor_refused
     'nothing an M greeter served is left once its holders are done', @nothing_left
@@ -204,6 +205,15 @@ function lent_grown()
   expect_equal(config.data(), struct('name', 'ivy', 'checked_by', 'C'), 'the lent map outlives it');
   config.close();
   own.close();
+end
+
+function closed_argument()
+  [reg, ~] = host();
+  g = reg.bind('derived_greeter_hello', 'greeterkind.Greeter');
+  config = guatiao.Value(struct('name', 'bo'));
+  config.close();
+  expect_error(@() g.check(config), 'guatiao:Gone', 'a closed value is not lent');
+  expect_error(@() g.greet_from(config), 'guatiao:Gone', 'nor handed over');
 end
 
 function rust_proxy()
