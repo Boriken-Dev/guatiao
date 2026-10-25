@@ -92,7 +92,10 @@ is a source written in Rust that a Rust host and a C host add.
 | `Pinned` | lives on one thread (Lua, QuickJS, Rhai): the bridge starts it there; a call from another thread is queued and waited for, and a call it makes into itself through the host runs there and then | `BridgeSource::pinned` |
 
 A pinned runtime need not be `Send`: it is created on its thread and
-never leaves it.
+never leaves it. A runtime that recurses on the native stack asks for
+that thread's stack with `Engine::stack_size(config)`, from the limits
+it was given: the size is reserved, and memory is used only as deep as
+the runtime goes.
 
 ## Manifests and stamps
 
