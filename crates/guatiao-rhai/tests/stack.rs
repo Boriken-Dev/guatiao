@@ -44,7 +44,9 @@ let p = #{{ kinds: ["greeter"], greet: |name| {{ down(0); #{{ greeting: "x" }} }
 fn deepest(label: &str, open: &str, close: &str) -> usize {
     let mut best = 0;
     for nest in 1..=40 {
-        let dir = scratch(&format!("stack-probe-{label}-{nest}"));
+        // Two tests probe at once: each in directories of its own.
+        let thread = format!("{:?}", std::thread::current().id()).replace(['(', ')'], "");
+        let dir = scratch(&format!("stack-probe-{label}-{nest}-{thread}"));
         put(&dir, "rhai_probe", &recursing(open, close, nest));
         let mut registry = serving(&config(&dir, None));
         let loads = registry.refresh().refused.is_empty();
