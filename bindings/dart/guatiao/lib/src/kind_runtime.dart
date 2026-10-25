@@ -438,12 +438,13 @@ Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
   return node;
 }
 
-/// [node], a tree lent for a call, moved where it stands into the
-/// allocator it records, so what the callee grew it with outlives the
-/// callee's library. A refusal leaves it whole, where it was.
-void _settle(Pointer<guatiao_value> node) {
+/// [node], a tree lent for a call, moved where it stands into [home],
+/// the allocator it recorded when it was lent, so what the callee grew it
+/// with, or wrote over it, outlives the callee's library. A refusal leaves
+/// it whole, where it was.
+void _settle(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) {
   if (_makesLocal) {
-    native.core().bindings.guatiao_value_make_local(node, _recorded(node));
+    native.core().bindings.guatiao_value_make_local(node, home);
   }
 }
 
@@ -727,8 +728,11 @@ final class CallScope extends SlotCall {
     if (tag != null && node.ref.tag != tag.code) {
       throw ArgumentError('expected a ${tag.name}, got a ${ref.tag.name}');
     }
-    // What the callee grew it with may be in its library's allocator.
-    after(() => _settle(node));
+    // What the callee grew it with may be in its library's allocator:
+    // moved into the one the tree records now, which a callee writing a
+    // fresh tree over it would change.
+    final home = _recorded(node);
+    after(() => _settle(node, home));
     return node;
   }
 

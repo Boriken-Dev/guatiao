@@ -403,8 +403,9 @@ void main() {
     );
 
     test('what a C slot grew a lent map with outlives the unload', () {
-      // A greeter of its own, so no other registry keeps it mapped.
-      final dir = _buildCGreeter();
+      // A greeter of its own, so no other registry keeps it mapped, whose
+      // `check` rebuilds the lent map in its own allocator.
+      final dir = _buildCGreeter(ignoresCarrier: true);
       if (dir == null) {
         markTestSkipped('no C compiler');
         return;

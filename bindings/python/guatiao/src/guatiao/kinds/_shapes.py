@@ -170,12 +170,13 @@ def _make_local(node: "_abi.Value") -> None:
         raise_for_status(status, "moving the answer into this binding's allocator")
 
 
-def _settle(node: "_abi.Value") -> None:
-    """Moves a tree lent for a call where it stands into the allocator it
-    records, so what the callee grew it with outlives the callee's
-    library. A refusal leaves it whole, where it was."""
+def _settle(node: "_abi.Value", home: Any) -> None:
+    """Moves a tree lent for a call where it stands into `home`, the
+    allocator it recorded when it was lent, so what the callee grew it
+    with, or wrote over it, outlives the callee's library. A refusal
+    leaves it whole, where it was."""
     if _makes_local():
-        _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(_recorded_alloc(node)))
+        _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(home))
 
 
 def _recorded_alloc(node: "_abi.Value") -> Any:
@@ -419,8 +420,11 @@ class _Tree(Shape):
                 )
             value._writable()
             node = value._require_node()
-            # What the callee grew it with may be in its library's allocator.
-            scope.after(lambda: _settle(node))
+            # What the callee grew it with may be in its library's
+            # allocator: moved into the one the tree records now, which a
+            # callee writing a fresh tree over it would change.
+            home = _recorded_alloc(node)
+            scope.after(lambda: _settle(node, home))
             return ctypes.byref(self._arm(node))
         # Handed over: given up now, and freed by `close()` if the call
         # never happens.

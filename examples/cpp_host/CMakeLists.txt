@@ -43,8 +43,8 @@ if(WIN32)
 endif()
 
 # The same greeter twice more, each in a directory of its own for a test
-# that unmaps it: one built to ignore the carrier (its answers are built in
-# its own allocator), one stock.
+# that unmaps it, both built to ignore the carrier: its answers are built
+# in its own allocator, and a lent map is rebuilt there.
 foreach(variant IN ITEMS careless lent)
   set(dir "${CMAKE_BINARY_DIR}/greeters/c_${variant}")
   add_library(c_greeter_${variant} SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../crates/guatiao/tests/c_consumer/greeter_in_c.c")
@@ -52,12 +52,12 @@ foreach(variant IN ITEMS careless lent)
   set_target_properties(c_greeter_${variant} PROPERTIES
     C_STANDARD 11
     OUTPUT_NAME c_greeter
-    LIBRARY_OUTPUT_DIRECTORY "${dir}" RUNTIME_OUTPUT_DIRECTORY "${dir}")
+    LIBRARY_OUTPUT_DIRECTORY "${dir}" RUNTIME_OUTPUT_DIRECTORY "${dir}" ARCHIVE_OUTPUT_DIRECTORY "${dir}")
   if(WIN32)
     set_target_properties(c_greeter_${variant} PROPERTIES PREFIX "")
   endif()
+  target_compile_definitions(c_greeter_${variant} PRIVATE GREETER_IGNORES_CARRIER)
 endforeach()
-target_compile_definitions(c_greeter_careless PRIVATE GREETER_IGNORES_CARRIER)
 
 option(CPP_HOST_TESTS "Build the C++ host's test" ON)
 if(CPP_HOST_TESTS)

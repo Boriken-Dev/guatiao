@@ -528,35 +528,43 @@ struct send<list> {
   }
   void after(const guatiao_alloc*) noexcept {}
 };
-/// A tree lent for the call: anything the callee built into it elsewhere
-/// is moved into the allocator the tree records once the call returns.
+/// A tree lent for the call: anything the callee built into it elsewhere,
+/// or wrote over it, is moved once the call returns into the allocator the
+/// tree recorded when it was lent.
 template <>
 struct send<node> {
   node v;
-  guatiao_value* arg() const noexcept { return v.raw(); }
+  const guatiao_alloc* lent_in = nullptr;
+  guatiao_value* arg() noexcept {
+    if (v.raw()) lent_in = recorded(*v.raw());
+    return v.raw();
+  }
   void after(const guatiao_alloc* home) noexcept {
     if (!v.raw()) return;
-    const guatiao_alloc* a = recorded(*v.raw());
-    (void)settle(*v.raw(), a ? a : home);
+    (void)settle(*v.raw(), lent_in ? lent_in : home);
   }
 };
 template <>
 struct send<map_ref> {
   map_ref v;
-  guatiao_map* arg() const noexcept {
+  const guatiao_alloc* lent_in = nullptr;
+  guatiao_map* arg() noexcept {
     guatiao_value* n = v.as_node().raw();
+    if (n) lent_in = recorded(*n);
     return n && n->tag == GUATIAO_MAP ? &n->payload.map : nullptr;
   }
-  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node()}.after(home); }
+  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node(), lent_in}.after(home); }
 };
 template <>
 struct send<list_ref> {
   list_ref v;
-  guatiao_list* arg() const noexcept {
+  const guatiao_alloc* lent_in = nullptr;
+  guatiao_list* arg() noexcept {
     guatiao_value* n = v.as_node().raw();
+    if (n) lent_in = recorded(*n);
     return n && n->tag == GUATIAO_LIST ? &n->payload.list : nullptr;
   }
-  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node()}.after(home); }
+  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node(), lent_in}.after(home); }
 };
 template <class K>
 struct send<object<K>> {

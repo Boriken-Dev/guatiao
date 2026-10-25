@@ -754,8 +754,13 @@ class Tree extends ShapeImpl {
       }
       value.owner.checkWritable();
       const node = value.requireNode();
-      // What the callee grew it with may be in its library's allocator.
-      if (makesLocal()) scope.after(() => void makeLocal(node, recordedAlloc(node)));
+      // What the callee grew it with may be in its library's allocator:
+      // moved into the one the tree records now, which a callee writing a
+      // fresh tree over it would change.
+      if (makesLocal()) {
+        const home = recordedAlloc(node);
+        scope.after(() => void makeLocal(node, home));
+      }
       return this.#arm(node);
     }
     // Handed over: given up now; freed if the call never happens.
