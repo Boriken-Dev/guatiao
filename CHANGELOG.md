@@ -77,10 +77,11 @@ write now.
   `guest` package, Go's own `wasip1` toolchain), with example greeters in
   both (`examples/wasm_greeter_rust`, `examples/wasm_greeter_go`). A module
   sees its own memory and what a call hands it: no files, network or
-  environment. Operations, time and memory limits stop runaway code; a trap
-  or a limit discards the instance, the next call makes it afresh, and the
-  host carries on. Calls run on the caller's thread, each library behind a
-  lock of its own.
+  environment. Operations, time and memory limits stop runaway code, and
+  count what the host does for a module (copies, randomness, bulk memory
+  instructions, decoding) and takes from it; a trap or a limit discards
+  the instance, the next call makes it afresh, and the host carries on.
+  Calls run on the caller's thread, each library behind a lock of its own.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a

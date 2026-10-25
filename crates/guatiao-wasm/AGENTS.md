@@ -197,7 +197,8 @@ key that is not a list of text, a misspelled limit or `depth`,
   own frames and 512 KiB for the host's below them; an entry with less
   than that left runs on a 4 MiB stack of its own, so any thread may call.
 - **A wait can deadlock a library**: a host object a guest calls that
-  waits for another thread calling the same library waits forever.
+  waits for another thread calling the same library waits forever (that
+  thread waits for the library).
 - **Opening compiles**: a Go module takes seconds (a 1.6 MB one, 2.6 s in
   a release build on one x86-64 core); a refresh compiles again only a
   library whose stamp changed. Re-making an instance after a stop does
