@@ -106,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   into this binding's on arrival (`guatiao_value_make_local`; a library
   older than that export is left as it answered). What a slot grew a lent
   tree with is moved, once the call returns, into the allocator the tree
-  records.
+  recorded when it was lent, so a slot that wrote a fresh tree over it in
+  its own allocator is moved home too.
 
 ## [0.0.0-alpha.1] - 2026-10-19
 
