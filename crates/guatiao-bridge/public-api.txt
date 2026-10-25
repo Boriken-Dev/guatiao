@@ -301,6 +301,7 @@ pub fn guatiao_bridge::Engine::call(&self, &Self::Library, &mut guatiao_bridge::
 pub fn guatiao_bridge::Engine::close(&self, Self::Library)
 pub fn guatiao_bridge::Engine::open(&self, &guatiao_bridge::manifest::Manifest, &str) -> core::result::Result<guatiao_bridge::Opened<Self::Library>, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Engine::release(&self, &Self::Library, u64)
+pub fn guatiao_bridge::Engine::stack_size(&guatiao_bridge::Config) -> core::option::Option<usize> where Self: core::marker::Sized
 pub fn guatiao_bridge::Engine::start(&guatiao_bridge::Config) -> core::result::Result<Self, guatiao_bridge::BridgeError> where Self: core::marker::Sized
 pub fn guatiao_bridge::Engine::version_of(&self, &guatiao_bridge::manifest::Manifest) -> core::result::Result<alloc::string::String, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::text_list(&guatiao::value::types::map::Map, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, guatiao_bridge::BridgeError>

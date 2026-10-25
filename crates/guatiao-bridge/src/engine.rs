@@ -57,6 +57,19 @@ pub trait Engine: 'static {
     where
         Self: Sized;
 
+    /// The stack, in bytes, of the thread a [`Pinned`](ThreadModel::Pinned)
+    /// engine is started on for `config`; `None` (the default) leaves the
+    /// platform's. The size is reserved, and memory is used only as the
+    /// stack grows into it; a size the system will not reserve refuses the
+    /// source as `Unavailable`. Not asked of other thread models.
+    fn stack_size(config: &Config) -> Option<usize>
+    where
+        Self: Sized,
+    {
+        let _ = config;
+        None
+    }
+
     /// The version a manifest leaves out, read from the library's code
     /// without running it. Refused by default.
     fn version_of(&self, manifest: &Manifest) -> Result<String, BridgeError> {

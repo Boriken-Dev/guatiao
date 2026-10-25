@@ -95,11 +95,12 @@ impl<E: Engine> BridgeSource<E> {
 
     /// Starts the engine on a thread of its own, named `thread`, which
     /// owns it for the life of this source: every call is queued to it.
+    /// The thread's stack is the one [`Engine::stack_size`] asks for.
     pub fn pinned(config: &guatiao::Map, thread: &str) -> Result<BridgeSource<E>, BridgeError> {
         let config = Config::from_map(config)?;
         let kinds = kinds_of(&config)?;
         let on_thread = config.clone();
-        let runner = Runner::pinned(thread, move || E::start(&on_thread))?;
+        let runner = Runner::pinned(thread, E::stack_size(&config), move || E::start(&on_thread))?;
         Ok(BridgeSource {
             runner,
             config,

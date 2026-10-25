@@ -35,6 +35,7 @@ pub trait Engine: 'static {
     const THREADS: ThreadModel;                       // Any | Locked | Pinned
     const MANIFESTS: ManifestFormat;
     fn start(config: &Config) -> Result<Self, BridgeError>;            // on the thread it is called from
+    fn stack_size(config: &Config) -> Option<usize>;                   // Pinned thread's stack; default: None
     fn version_of(&self, m: &Manifest) -> Result<String, BridgeError>; // default: refused
     fn open(&self, m: &Manifest, version: &str) -> Result<Opened<Self::Library>, BridgeError>;
     fn call(&self, lib: &Self::Library, call: &mut Call) -> Result<Reply, ProviderError>; // default: UNSUPPORTED
@@ -55,7 +56,12 @@ Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
   thread it owns for the life of the source: calls from other threads
   are queued and waited for; a call made **on** that thread (the engine
   calling one of its own providers through the host) runs there and then.
-  A `Pinned` engine need not be `Send`.
+  A `Pinned` engine need not be `Send`. Its thread's stack is
+  `E::stack_size(&config)` bytes (`None`, the default: the platform's):
+  reserved address space, used only as deep as the engine goes (on Linux
+  the reservation counts toward the commit limit, and one larger than
+  memory and swap is refused). A size the system will not reserve refuses
+  the source, `Unavailable` (`GUATIAO_ERR_UNSUPPORTED`).
 - **Every method takes `&self`**, and is re-entered when the engine calls
   itself through the host.
 - **A panic** in any call is caught; it answers `EngineGone`
