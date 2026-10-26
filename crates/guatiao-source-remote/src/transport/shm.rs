@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
+use super::deferred::deferred;
 use super::local::{LocalConnect, LocalListen};
 use super::stream::{StreamReader, StreamWriter};
 use super::{Connect, Connection, FrameRead, FrameWrite};
@@ -509,22 +510,33 @@ impl ShmListen {
         })
     }
 
-    /// The next link, its file mapped.
+    /// The next link. Its file is mapped on the link's first read, on the
+    /// thread serving it, the client's path read within the bound the link
+    /// set for its reads (10 s when none is set; a Windows pipe's reads
+    /// take no bound): accepting reads nothing.
     pub fn accept(&self) -> io::Result<Connection> {
-        let local = self.local.accept()?;
+        let mut local = self.local.accept()?;
         let peer = local.peer.clone();
-        let (mut read, mut write) = bell_of(local);
-        read.set_timeout(Some(Duration::from_secs(10)))?;
-        let mut frame = Vec::new();
-        if !read.read_frame(&mut frame, 4096)? {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-        read.set_timeout(None)?;
-        let path = core::str::from_utf8(&frame)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "a path that is not UTF-8"))?;
-        let region = map(Path::new(path), false)?;
-        write.write_frame(&[1, 0, 0, 0, 1])?;
-        Ok(connection(&region, false, bell(read, write), peer))
+        let abort = local.closer.take();
+        let setup = {
+            let peer = peer.clone();
+            move |bound: Option<Duration>| {
+                let (mut read, mut write) = bell_of(local);
+                read.set_timeout(Some(bound.unwrap_or(Duration::from_secs(10))))?;
+                let mut frame = Vec::new();
+                if !read.read_frame(&mut frame, 4096)? {
+                    return Err(io::ErrorKind::UnexpectedEof.into());
+                }
+                read.set_timeout(None)?;
+                let path = core::str::from_utf8(&frame).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "a path that is not UTF-8")
+                })?;
+                let region = map(Path::new(path), false)?;
+                write.write_frame(&[1, 0, 0, 0, 1])?;
+                Ok(connection(&region, false, bell(read, write), peer))
+            }
+        };
+        Ok(deferred(peer, Box::new(setup), abort))
     }
 }
 
