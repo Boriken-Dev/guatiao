@@ -758,11 +758,10 @@ With `--state-dir` (TLS) it presents the identity there, which native
 peers pin; the trust store decides clients as on every TLS transport.
 
 Chrome refuses a certificate pinned by hash that carries no X.509v3
-extension, and the ones this build makes carry none
-(coqui-peer-tls's generated identities): until they do, a page reaches a
-rotating server only by a certificate given with `--identity` that has
-one (any extension: a subjectAltName, a subject key identifier) and is
-valid for at most 14 days.
+extension. The certificates the server makes carry a subjectAltName, a
+subject key identifier and basicConstraints; one given with
+`--identity` for a page to pin needs at least one extension and a
+validity of at most 14 days.
 
 In Rust, `transport::webtransport::{WtConnect, WtListen}`:
 `WtListen::bind(address, &config)` presents the configuration's
