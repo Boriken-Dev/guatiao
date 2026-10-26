@@ -972,7 +972,18 @@ handed or answered object stays held until the side with the handle
 sends RELEASE; a lent one only until the call it was lent for returns,
 after which a call on it answers `GUATIAO_ERR_GONE`. A side passing back
 an object of the receiver's own sets the low bit, and the receiver uses
-the object itself.
+the object itself; one the receiver lent for a call cannot come back
+handed over or answered: that call or answer is refused
+`GUATIAO_ERR_WRONG_KIND`.
+
+An object handed over in a call is the receiver's on every path. A call
+it refuses before running (too busy, made during a call that has
+returned, into a library it does not have open, nested too deep) still
+takes what it handed: the receiver sends RELEASE for each of the
+sender's objects and drops each of its own given back. A receiver that
+cannot read the arguments at all (a table it never named, an object
+already let go, a slot past its kind's) cannot find them, and they stay
+held until the link ends.
 
 ### Cancelling, failing, bounds
 

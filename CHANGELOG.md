@@ -1543,6 +1543,15 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a call refused before it runs lets go of the
+  objects handed over in it.** A call the serving side refused as too
+  busy, as made during a call that had returned, as nested too deep, or
+  into a library not open on the link left every object handed over in
+  it held for the link's life: the caller's until the link ended, and a
+  host's own given back never dropped. The serving side now reads the
+  call's arguments, sends RELEASE for the caller's objects and drops its
+  own; a call refused while its objects are received takes every one of
+  them first.
 - **guatiao-source-remote: a refused token no longer tells its length.**
   A server compared a client's token with its own only when both were as
   long, so a client timing its refusals could learn the required token's
