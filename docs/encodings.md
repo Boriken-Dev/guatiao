@@ -628,9 +628,12 @@ key_file = "lab-printer.key"     # the trusted level's key, relative to this fil
 | key | holds |
 | --- | --- |
 | `name` | required text, not empty and holding no `/`: the peer's name. Its libraries and providers are served as `<name>/<id>` |
-| `connect` | required text: `tcp://host:port`, `local://name`, `shm://name` or `rdma://host:port` |
-| `trust` | text: `local` (for `local://` and `shm://`), `trusted` (for `tcp://` and `rdma://`) or `secure`, which no transport of this build runs and is refused as unsupported; required unless the source's configuration names it |
+| `connect` | required text: `tcp://host:port`, `ws://host:port/path`, `tls://host:port`, `local://name`, `shm://name` or `rdma://host:port` |
+| `trust` | text: `local` (for `local://` and `shm://`), `trusted` (for `tcp://`, `ws://` and `rdma://`) or `secure` (for `tls://`, in a build with the `tls` feature; refused as unsupported without it); required unless the source's configuration names it |
 | `key_file` | text, relative to the manifest's directory: a file holding the trusted level's pre-shared key |
+| `pins` | list of text: the fingerprints (`sha256:<hex>`) of the peer's certificate the secure level trusts |
+| `policy` | table: the secure level's TLS policy, coqui-peer-tls's text form version 1 ([the keys](remote.md#the-secure-level)) |
+| `identity_file`, `state_dir` | text, relative to the manifest's directory: the identity this host presents to the peer at the secure level, a PEM file or a directory holding `identity.pem` |
 | `timeout_ms`, `max_frame`, `max_calls` | whole numbers: a call's wait (`0` for as long as the link lives) and the link's bounds |
 | `rdma_device` | text: the RDMA device `rdma://` goes through |
 
@@ -640,8 +643,8 @@ holds, as is one naming `child` (a manifest describes a peer that
 listens; a child the host starts is the host's own configuration) and
 one naming a key not listed here. Keys the manifest leaves out are taken
 from the source's configuration. Its stamp is its content and the path
-and content of the key file the peer uses: a change to either is a new
-peer.
+and content of the key file and the identity file the peer uses: a change
+to any is a new peer.
 
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 

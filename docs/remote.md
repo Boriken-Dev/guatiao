@@ -35,12 +35,16 @@ configuration map:
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`; `ws://host:port/path` (WebSocket); `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
+| `connect` | `tcp://host:port`; `ws://host:port/path` (WebSocket); `tls://host:port` (the secure level); `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first listed) |
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `trust` | `local`, `trusted` or `secure`; `local` for a child |
 | `key`, `key_file` | the trusted level's pre-shared key: text, or a file's bytes |
-| `token` | what a secure client presents |
+| `token` | what a secure client presents, when its server requires one |
+| `state_dir` | secure: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
+| `identity_file` | secure: the identity file instead of `state_dir` (made when absent) |
+| `pins` | secure: a list of the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
+| `policy` | secure: the TLS policy, a map (below, [Trust](#trust)); strict when absent |
 | `timeout_ms` | how long a call waits for its answer; `0` waits as long as the link lives (default 30 000) |
 | `max_frame`, `max_calls` | the link's bounds (defaults 64 MiB and 64) |
 | `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above then apply to every peer whose manifest does not name them |
@@ -95,7 +99,9 @@ the others are served, and an unreachable peer's libraries stay listed,
 answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed one
 after another, so a peer slow to refuse a connection slows the refresh.
 A manifest names its key by file, never inline, since it lies in a
-search path.
+search path; a secure peer's manifest names its `pins` and `policy`, and
+the identity this host presents to it by `identity_file` or `state_dir`,
+paths beside the manifest.
 
 A call that gets no answer within its timeout is cancelled and answers
 `GUATIAO_ERR_GONE`, as does every call open when the link is lost; the
@@ -152,8 +158,7 @@ cancelled.
 The page holds the key, so whoever reads the page can link: serve the
 page only to those who may call the device, and keep the server's ranges
 to the network they are on. The server does not read the `Origin` a
-browser sends. `wss://`, WebTransport and the secure level are not in
-this build.
+browser sends. `wss://` and WebTransport are not in this build.
 
 ## A server
 
@@ -162,6 +167,25 @@ guatiao-remote-server --listen tcp://192.0.2.21:7000 --trust trusted \
     --range 192.0.2.0/24 --key-file link.key \
     --kinds greeter_kind.kinds.json --scan /opt/providers
 ```
+
+At the secure level it presents an identity of its own and admits the
+clients it trusts:
+
+```text
+guatiao-remote-server --listen tls://0.0.0.0:7000 --trust secure \
+    --state-dir /var/lib/guatiao-remote \
+    --kinds greeter_kind.kinds.json --scan /opt/providers
+guatiao-remote-server --state-dir /var/lib/guatiao-remote --waiting
+guatiao-remote-server --state-dir /var/lib/guatiao-remote --accept sha256:...
+```
+
+The first line it prints names its address and its fingerprint, what a
+client pins. A client it does not know is refused and listed by
+`--waiting` with the address it came from; `--accept` admits it from its
+next link on. `--pin FINGERPRINT` (repeatable) trusts fixed clients
+instead of the store, `--identity PATH` names an identity file instead
+of a state directory, `--policy PATH` reads a TLS policy (TOML or JSON,
+below), and `--acl PATH` or `--range CIDR` the access control list.
 
 It serves the providers of the libraries it loads (`--load`, `--scan`)
 and of the sources it adds (`--source path=json`, refreshed every
@@ -180,6 +204,7 @@ over a `Registry` does the same.
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
 | `tcp://host:port` | another machine, at the trusted level | 22–36 µs on loopback; 114–123 µs from a host to a VM on it |
 | `ws://host:port/path` | a browser, or any WebSocket client, at the trusted level (feature `ws`): one binary message per frame body | not measured |
+| `tls://host:port` | any network, at the secure level (feature `tls`): mutual TLS 1.3 | 33–37 µs on loopback |
 | `rdma://host:port` | another machine with an RDMA device, at the trusted level; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -293,17 +318,147 @@ network by default.
 - **`trusted`**: a network the owner isolates between known devices. No
   encryption. The listener binds whatever address it is given, a
   wildcard (`0.0.0.0`, `::`) or one peers route to included: where to
-  listen is the deployment's choice. It names the address ranges it
-  accepts peers from, and **a peer from outside them is closed unread**.
+  listen is the deployment's choice. It admits peers by an access
+  control list (below), and **a peer the list denies is closed unread**.
   Both sides prove a pre-shared key in the handshake, so a wrong peer
   does not link by accident. **This is not a defence against anyone on that network**: it
   reads and changes traffic freely. Use it only where the network itself
   is the boundary.
-- **`secure`**: any network: TLS 1.3 or QUIC, with a token or client
-  certificates. No transport of this build runs it yet: a configuration
-  or a manifest naming it is refused with `GUATIAO_ERR_UNSUPPORTED`, so
-  reach a device across an open network only through one you secure
-  yourself.
+- **`secure`**: any network: mutual TLS 1.3 over TCP (`tls://`, feature
+  `tls`), through [coqui-peer-tls](https://github.com/Boriken-Dev/coqui-peer-tls).
+  Each side presents a certificate of its own, self-issued, and knows the
+  other by its **fingerprint**, `sha256:<hex>` (the SHA-256 of the
+  certificate's DER encoding: `openssl x509 -outform DER | sha256sum`).
+  What a peer proves is its fingerprint, not its address: the link's
+  `Link::peer_id()` answers it, and the access control list may name it.
+  A `token` may be required on top.
+
+### Admission: the access control list
+
+A network listener admits peers by an ordered list of `permit` and
+`deny` rules ([coqui-net-acl](https://github.com/Boriken-Dev/coqui-net-acl)):
+the first rule matching a connection decides, and `default` (`deny`
+unless set) decides one no rule matches. A rule matches the connecting
+address (`source`, `any` by default), and may narrow to the local
+address and port connected to (`destination`, `port`) and, at the secure
+level, to a peer's fingerprint. Nothing is refused about where a
+listener binds: an empty list binds and denies every peer.
+
+```toml
+default = "deny"
+
+[[rule]]
+action = "deny"
+source = "192.0.2.66"
+
+[[rule]]
+action = "permit"
+source = "192.0.2.0/24"
+port = "7000"
+
+[[rule]]                  # secure level only
+action = "permit"
+fingerprint = "sha256:3f5a..."
+```
+
+A listener decides by address as it accepts, before anything is read: a
+denied peer is closed unread. A rule naming a fingerprint is decided
+after the TLS handshake has proved one, and never matches a peer at the
+trusted level, which proves none. A fingerprint in the list is
+canonicalised (any spelling `PeerId` reads) and must be a SHA-256 one. In
+Rust the listeners take a `coqui_net_acl::Acl` (re-exported as
+`guatiao_source_remote::acl`); `guatiao-remote-server` reads one with
+`--acl PATH` (this form, in TOML or JSON) or builds one of permit rules
+from `--range CIDR`, and at the secure level takes it from the policy's
+`[acl]` table. A secure listener with no list admits every source to the
+handshake, where the certificate decides.
+
+### The secure level
+
+```rust
+use guatiao_source_remote::transport::tls::{TlsConfig, TlsConnect, TlsListen};
+
+// A device: its identity and trust store in one directory.
+let device = TlsConfig::open(Path::new("/var/lib/guatiao-remote"))?;
+let listener = TlsListen::bind("0.0.0.0:7000", &device)?;
+println!("pin {}", device.fingerprint());
+
+// A host: its own identity, pinning the device.
+let host = TlsConfig::open(Path::new("state"))?.pins([device_fingerprint]);
+let source = RemoteSource::new(
+    Box::new(TlsConnect::new("192.0.2.21:7000", &host)?),
+    LinkOptions::new(Trust::Secure),
+);
+```
+
+- **Identity.** A PEM file holding one certificate and its PKCS#8 key
+  (`identity.pem` under a state directory, made on first use with an
+  ECDSA P-256 key, readable by its owner alone on Unix). It is a secret:
+  a manifest names it by path.
+- **Whom a side trusts.** Fixed pins (`pins`, `--pin`), or, when none are
+  given, the peers a trust store has accepted. Every certificate must
+  prove its key in the handshake, be inside its validity dates and come
+  without a chain (under the strict policy).
+- **Pairing.** A server with a store records a client it does not know
+  as *waiting*, with the address it came from, once the client has proved
+  it holds its key (a stolen certificate leaves no entry), and refuses
+  it. An operator lists the waiting clients and accepts one by
+  fingerprint; its next link goes through. Waiting entries are capped per
+  source address and in all. Removing a peer from the store refuses its
+  next link: TLS session resumption is off at both ends.
+- **A refused client** is told so in words naming its own fingerprint:
+  TLS 1.3 lets a client finish its handshake before the server has
+  checked its certificate, so the refusal arrives as the link ending
+  before the server's first answer.
+- **The handshake** runs on the server's serving thread, bounded as a
+  whole by the link's handshake timeout, so a client that connects and
+  stalls holds only that thread for that long. Both ends require the
+  application protocol `guatiao-remote`.
+- **The policy** is coqui-peer-tls's, in its text form (version 1),
+  in a configuration's `policy` map, a manifest's `[policy]` table or the
+  server's `--policy` file. It starts from a `profile` and overrides any
+  field; unknown keys are refused:
+
+  | key | strict (the default) |
+  | --- | --- |
+  | `profile` | `strict`; `compatible` and `legacy` add TLS 1.2 (and SHA-1 pins), which this build lacks: they are refused |
+  | `tls_versions` | `["1.3"]` |
+  | `cipher_suites`, `kx_groups` | all ring has for those versions; IANA names narrow them |
+  | `pin_digests` | `["sha256", "sha384", "sha512"]` |
+  | `check_validity` | `true` |
+  | `allow_chain_when_pinned` | `false` |
+  | `waiting_per_source`, `waiting_total`, `waiting_rerecord_secs` | `16`, `1000`, `60` |
+  | `acl` | none (the server's access control list, above) |
+
+  Every setting looser than strict is listed by `TlsConfig::weakened()`,
+  and the server prints each when it starts.
+- **From C, Python or any language** the secure level is the source
+  file's configuration keys above. A peer in another language speaks the
+  same protocol inside TLS 1.3 with the same files: OpenSSL presents the
+  identity file, pins by comparing the SHA-256 of the peer's DER
+  certificate, offers ALPN `guatiao-remote`, and keeps a trust store in
+  coqui-peer's format (`peers/{accepted,waiting}/<hex>.pem`).
+
+Measured on loopback, five runs each alternating, medians, local and
+provisional (`benchmarks/results/remote-tls-*.jsonl`; the WSL runs on a
+busy machine):
+
+| link, loopback | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- |
+| Windows ARM64, trusted TCP | 30.2 | 67.0 | 95 276 | 1 301 | 35.9 / 38.3 |
+| Windows ARM64, TLS | 32.8 | 65.9 | 121 606 | 662 | 41.4 / 37.5 |
+| WSL (aarch64), trusted TCP | 56.2 | 172.8 | 59 866 | 1 807 | 59.5 / 58.6 |
+| WSL (aarch64), TLS | 37.4 | 171.7 | 80 360 | 931 | 49.7 / 50.3 |
+
+A small call costs TLS a few microseconds or nothing; 32 threads calling
+at once go faster than over plain TCP, as frames written together share
+records and reads; a 4 MiB round trip moves about half as many bytes,
+the cost of sealing and opening every byte on top of the link's own
+copies. Small calls stay near their idle time while large ones stream
+beside them on the same link (`small_calls_stay_quick_while_large_ones_stream`).
+
+Not in this build: QUIC, `wss://`, CA-signed certificates
+(coqui-peer-tls's `ca` feature) and TLS 1.2.
 
 ## The protocol
 
@@ -349,7 +504,10 @@ Statuses are guatiao's own (`GUATIAO_ERR_*`).
 ### The handshake
 
 The client sends HELLO; the server answers WELCOME, or GOODBYE with why
-it refuses (another trust level, a wrong token). Options are a map:
+it refuses (another trust level, a wrong token). At the secure level the
+frames cross inside the TLS session, after its handshake, and a HELLO
+asking for the secure level over a transport that proves no peer is
+refused. Options are a map:
 `max_frame` (the largest body the sender reads), `max_calls` (how many of
 the peer's calls it runs at once), and `token` from a secure client. Each
 side sends no frame larger than the other's `max_frame`, and keeps no
