@@ -1413,6 +1413,12 @@ write now.
   document from one kind by its `kinds` key, skipping any other key; one
   without `kinds` is refused. The committed `.kinds.json` files and what
   is generated from them are rewritten.
+- **The bindings need `guatiao_value_make_local`,
+  `guatiao_map_settle_lent` and `guatiao_kind_document_read`.** Dart, Go,
+  Julia, Node, Python, R, MATLAB and Octave, and Fortran no longer leave a
+  tree where it stands, or settle a lent map without dropping its bad
+  keys, when the core lacks one: Go, R, MATLAB and Fortran refuse to open
+  such a core, the others name the missing export when it is called.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate

@@ -276,9 +276,9 @@ module guatiao_c
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
-    gt_export('guatiao_value_make_local           ', 2, 'newer'), &
-    gt_export('guatiao_map_settle_lent            ', 2, 'newer'), &
-    gt_export('guatiao_kind_document_read         ', 4, 'newer'), &
+    gt_export('guatiao_value_make_local           ', 2, ''), &
+    gt_export('guatiao_map_settle_lent            ', 2, ''), &
+    gt_export('guatiao_kind_document_read         ', 4, ''), &
     gt_export('guatiao_value_null                 ', 1, ''), &
     gt_export('guatiao_value_absent               ', 1, ''), &
     gt_export('guatiao_value_bool                 ', 2, ''), &

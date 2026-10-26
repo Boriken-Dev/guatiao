@@ -39,9 +39,9 @@
   X(guatiao_status, guatiao_value_clone,                                                       \
     (const guatiao_alloc *alloc, const guatiao_value *src, guatiao_value *out), (alloc, src, out), "") \
   X(guatiao_status, guatiao_value_make_local,                                                  \
-    (guatiao_value *v, const guatiao_alloc *alloc), (v, alloc), "make-local")                   \
+    (guatiao_value *v, const guatiao_alloc *alloc), (v, alloc), "")                             \
   X(guatiao_status, guatiao_map_settle_lent,                                                   \
-    (guatiao_value *node, const guatiao_alloc *home), (node, home), "settle-lent")              \
+    (guatiao_value *node, const guatiao_alloc *home), (node, home), "")                         \
   X(guatiao_status, guatiao_value_null, (guatiao_value *out), (out), "")                       \
   X(guatiao_status, guatiao_value_absent, (guatiao_value *out), (out), "")                     \
   X(guatiao_status, guatiao_value_bool, (bool b, guatiao_value *out), (b, out), "")            \

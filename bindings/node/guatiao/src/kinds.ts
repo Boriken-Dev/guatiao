@@ -297,7 +297,7 @@ export class Scope {
   settle(): number {
     let status: number = Status.OK;
     for (const [node, home, isMap] of this.#lent.splice(0)) {
-      const moved = isMap && checksKeys() ? n.core().fn.guatiao_map_settle_lent!(node, home) : makeLocal(node, home);
+      const moved = isMap ? n.core().fn.guatiao_map_settle_lent!(node, home) : makeLocal(node, home);
       if (moved !== Status.OK && status === Status.OK) status = moved;
     }
     return status;
@@ -426,16 +426,6 @@ function raiseCheck(status: number): void {
   if (status !== Status.OK) throw errorFor(status);
 }
 
-/** Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it. */
-function makesLocal(): boolean {
-  return !n.core().missing.has('guatiao_value_make_local');
-}
-
-/** Whether the core settles a lent map, removing a key that is not UTF-8. */
-function checksKeys(): boolean {
-  return !n.core().missing.has('guatiao_map_settle_lent');
-}
-
 /**
  * The tree at `node`, moved where it stands into `alloc`, so it outlives
  * the library: a slot that ignored the carrier built it in its own.
@@ -450,7 +440,6 @@ function makeLocal(node: bigint, alloc: bigint): number {
  * caller handed over. Freed, and the refusal thrown, when the move fails.
  */
 function homed(node: bigint, what: string): bigint {
-  if (!makesLocal()) return node;
   const status = makeLocal(node, binding());
   if (status !== Status.OK) {
     n.freeNode(node);
@@ -815,7 +804,7 @@ class Tree extends ShapeImpl {
       // What the callee grew it with may be in its library's allocator:
       // moved into the one the tree records now, which a callee writing a
       // fresh tree over it would change.
-      if (makesLocal()) scope.lend(node, recordedAlloc(node), this.tag === Tag.MAP);
+      scope.lend(node, recordedAlloc(node), this.tag === Tag.MAP);
       return this.#arm(node);
     }
     // Handed over: given up now; freed if the call never happens.

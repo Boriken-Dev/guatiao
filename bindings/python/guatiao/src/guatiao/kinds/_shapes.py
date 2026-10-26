@@ -69,10 +69,10 @@ class Scope:
         tree whose move is refused is left whole, where it stands."""
         status = int(_abi.Status.OK)
         lent, self._lent = self._lent, []
-        if lent and _makes_local():
+        if lent:
             core = _lib.core()
             for node, home, is_map in lent:
-                settle = core.guatiao_map_settle_lent if is_map and _checks_keys() else core.guatiao_value_make_local
+                settle = core.guatiao_map_settle_lent if is_map else core.guatiao_value_make_local
                 moved = settle(ctypes.byref(node), ctypes.byref(home))
                 if moved != _abi.Status.OK and status == _abi.Status.OK:
                     status = int(moved)
@@ -171,37 +171,11 @@ def _free_node(node: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(node))
 
 
-def _makes_local() -> bool:
-    """Whether the core moves a tree home: a library older than
-    `guatiao_value_make_local` leaves a tree as the slot built it."""
-    global _MAKES_LOCAL
-    if _MAKES_LOCAL is None:
-        _MAKES_LOCAL = "guatiao_value_make_local" not in _lib.core().symbols_missing()
-    return _MAKES_LOCAL
-
-
-_MAKES_LOCAL: "bool | None" = None
-
-
-def _checks_keys() -> bool:
-    """Whether the core settles a lent map, removing a key the callee
-    wrote that is not UTF-8."""
-    global _CHECKS_KEYS
-    if _CHECKS_KEYS is None:
-        _CHECKS_KEYS = "guatiao_map_settle_lent" not in _lib.core().symbols_missing()
-    return _CHECKS_KEYS
-
-
-_CHECKS_KEYS: "bool | None" = None
-
-
 def _make_local(node: "_abi.Value", what: str = "the answer") -> None:
     """Moves a tree into this binding's allocator, so it outlives the
     library that built it: a slot's answer, which a slot that ignored the
     carrier built in its own, or a tree a caller handed over. Freed, and
     the refusal raised, when the move fails."""
-    if not _makes_local():
-        return
     status = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
     if status != _abi.Status.OK:
         _free_node(node)

@@ -420,10 +420,6 @@ void _free(Pointer<guatiao_value> node) {
   calloc.free(node);
 }
 
-/// Whether the core moves a tree home: a library older than
-/// `guatiao_value_make_local` leaves an answer as the slot built it.
-final bool _makesLocal = native.core().provides('guatiao_value_make_local');
-
 /// [node] moved into this binding's allocator so it outlives the library
 /// that built it: a tree a slot answered, which a slot that ignored the
 /// carrier built in its own, or one a caller handed over ([what] says
@@ -432,7 +428,6 @@ Pointer<guatiao_value> _homed(
   Pointer<guatiao_value> node, [
   String what = 'the answer',
 ]) {
-  if (!_makesLocal) return node;
   final status = native.core().bindings.guatiao_value_make_local(
     node,
     _binding,
@@ -449,18 +444,12 @@ Pointer<guatiao_value> _homed(
 /// with, or wrote over it, outlives the callee's library. A refusal leaves
 /// it whole, where it was, and is the status answered.
 int _settle(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) =>
-    _makesLocal
-    ? native.core().bindings.guatiao_value_make_local(node, home)
-    : Status.ok.code;
-
-final bool _checksKeys = native.core().provides('guatiao_map_settle_lent');
+    native.core().bindings.guatiao_value_make_local(node, home);
 
 /// [_settle] for a lent map, which also loses any key the callee wrote
 /// that is not UTF-8: `GUATIAO_ERR_BAD_VALUE` then.
 int _settleMap(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) =>
-    _checksKeys
-    ? native.core().bindings.guatiao_map_settle_lent(node, home)
-    : _settle(node, home);
+    native.core().bindings.guatiao_map_settle_lent(node, home);
 
 /// A new `calloc`ed root holding a copy of the struct at [arm]: a whole
 /// node when [tag] is null, else a map or list.
