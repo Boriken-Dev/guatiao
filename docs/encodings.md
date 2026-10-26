@@ -632,6 +632,7 @@ key_file = "lab-printer.key"     # the pre-shared key, relative to this file
 | `security` | text: `none`, `server-tls` or `mutual-tls` ([which a scheme runs](remote.md#security)); when absent, the source's configuration's, else `none` for `local://` and `shm://` and `mutual-tls` for a network transport; `trust`, its former name, is refused with what to write now |
 | `key_file` | text, relative to the manifest's directory: a file holding the pre-shared key (`none`, and server TLS when the server asks for it) |
 | `pins` | list of text: the fingerprints (`sha256:<hex>`) of the peer's certificate TLS trusts |
+| `roots` | text: `platform` (the operating system's certificate authorities), or a CA bundle relative to the manifest's directory: also trust the peer's certificate when one of them issued it for the host in `connect` |
 | `policy` | table: the TLS policy, coqui-peer-tls's text form version 1 ([the keys](remote.md#mutual-tls)) |
 | `identity_file`, `state_dir` | text, relative to the manifest's directory: the identity this host presents to the peer over TLS, a PEM file or a directory holding `identity.pem` |
 | `timeout_ms`, `max_frame`, `max_calls` | whole numbers: a call's wait (`0` for as long as the link lives) and the link's bounds |
@@ -643,8 +644,8 @@ holds, as is one naming `child` (a manifest describes a peer that
 listens; a child the host starts is the host's own configuration) and
 one naming a key not listed here. Keys the manifest leaves out are taken
 from the source's configuration. Its stamp is its content and the path
-and content of the key file and the identity file the peer uses: a change
-to any is a new peer.
+and content of the key file, the identity file and the CA bundle the
+peer uses: a change to any is a new peer.
 
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
