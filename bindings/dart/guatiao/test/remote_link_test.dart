@@ -59,6 +59,9 @@ final class _Pipe implements RemoteChannel {
   void send(Uint8List body) => _toPeer.add(body);
 
   @override
+  RemoteDatagrams? get datagrams => null;
+
+  @override
   Future<void> close() async {
     if (!_fromPeer.isClosed) await _fromPeer.close();
   }

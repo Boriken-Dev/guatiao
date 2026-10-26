@@ -58,4 +58,11 @@ export {
   RemoteTrust,
   Served,
 } from './link.js';
-export type { CallOptions, Handler, LinkOptions, RemoteChannel, RemoteSecurity } from './link.js';
+export type {
+  CallOptions,
+  Handler,
+  LinkOptions,
+  RemoteChannel,
+  RemoteDatagrams,
+  RemoteSecurity,
+} from './link.js';

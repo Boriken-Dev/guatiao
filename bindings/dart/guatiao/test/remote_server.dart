@@ -137,6 +137,36 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
     '--load',
     library.path,
   ]);
+  return _serving(process, dir);
+}
+
+/// Starts the WebTransport server that sends every datagram back
+/// (guatiao-source-remote's `datagram_echo` example, beside the server),
+/// at no security with the suite's key.
+Future<RemoteServer> startDatagramEcho() async {
+  final repo = _repo();
+  final named = Platform.environment['GUATIAO_REMOTE_SERVER'];
+  final exe = Platform.isWindows ? '.exe' : '';
+  final server = File(
+    named != null && named.isNotEmpty
+        ? named
+        : '${repo.path}/target/debug/guatiao-remote-server$exe',
+  );
+  final echo = File('${server.parent.path}/examples/datagram_echo$exe');
+  if (!echo.existsSync()) {
+    throw StateError(
+      'no ${echo.path}: build it with `cargo build -p guatiao-source-remote '
+      '--features webtransport --example datagram_echo`',
+    );
+  }
+  final dir = Directory.systemTemp.createTempSync('guatiao-remote-');
+  return _serving(await Process.start(echo.path, [remoteKey]), dir);
+}
+
+/// Waits for the address [process] says it serves (and over WebTransport
+/// the hashes it says next); a server that exits first, or says nothing
+/// in time, fails it.
+Future<RemoteServer> _serving(Process process, Directory dir) async {
   unawaited(process.stdout.drain<void>());
   final serving = Completer<(Uri, String?, List<String>)>();
   final said = <String>[];
@@ -182,20 +212,23 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
 
 /// For a browser suite: starts the server (at server TLS over `wss://`
 /// when [message] is `server-tls`, over WebTransport at a security when it
-/// is `https <security>`) and sends its URL and the hashes a page pins,
+/// is `https <security>`, the datagram echo when it is `datagram-echo`)
+/// and sends its URL and the hashes a page pins,
 /// space-separated; `stop` ends it and is answered `stopped`, since the
 /// isolate may be killed as soon as the suite is done with it.
 Future<void> hybridMain(StreamChannel<Object?> channel, Object? message) async {
   try {
-    final server = await startRemoteServer(
-      listen: switch (message) {
-        'server-tls' => serverTlsArguments,
-        String m when m.startsWith('https ') => webTransportArguments(
-          m.substring(6),
-        ),
-        _ => null,
-      },
-    );
+    final server = message == 'datagram-echo'
+        ? await startDatagramEcho()
+        : await startRemoteServer(
+            listen: switch (message) {
+              'server-tls' => serverTlsArguments,
+              String m when m.startsWith('https ') => webTransportArguments(
+                m.substring(6),
+              ),
+              _ => null,
+            },
+          );
     channel.sink.add([server.url.toString(), ...server.hashes].join(' '));
     channel.stream.listen((message) async {
       if (message == 'stop') {

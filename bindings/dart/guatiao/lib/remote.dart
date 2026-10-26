@@ -39,6 +39,7 @@ export 'src/remote/link.dart'
         RemoteCallee,
         RemoteCatalog,
         RemoteChannel,
+        RemoteDatagrams,
         RemoteLibrary,
         RemoteLink,
         RemoteObject,

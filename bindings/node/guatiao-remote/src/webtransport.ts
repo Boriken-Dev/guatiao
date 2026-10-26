@@ -5,16 +5,20 @@
 /**
  * WebTransport as a message transport: a browser's session to an
  * `https://` URL, one bidirectional stream carrying each frame's body behind
- * its `u32` little-endian length, as the server's `quic://` does.
+ * its `u32` little-endian length, as the server's `quic://` does, and the
+ * session's datagrams beside it.
  *
  * @module
  */
 
 import { BadValue, Gone, Unsupported } from './errors.js';
-import type { RemoteChannel } from './link.js';
+import type { RemoteChannel, RemoteDatagrams } from './link.js';
 
 /** How long closing waits for what was written to leave, in milliseconds. */
 const CLOSE_WAIT = 2_000;
+
+/** Datagrams handed to the session and not yet taken by it; past this a send is dropped. */
+const SENDING_AT_MOST = 64;
 
 /** A fingerprint's 32 bytes: what `serverCertificateHashes` names. */
 function hashOf(pin: string): Uint8Array<ArrayBuffer> {
@@ -108,10 +112,48 @@ export async function openWebTransport(
   let closed: ((why: string) => void) | undefined;
   let ended: string | undefined;
   const early: Uint8Array[] = [];
+  const incoming = transport.datagrams.readable.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+  const outgoing = transport.datagrams.writable.getWriter();
+  let sending = 0;
   const end = (why: string): void => {
     if (ended !== undefined) return;
     ended = why;
+    // A receive waiting reads the end.
+    incoming.cancel().catch(() => {});
     closed?.(why);
+  };
+  const datagrams: RemoteDatagrams = {
+    get maxSize(): number {
+      return transport.datagrams.maxDatagramSize;
+    },
+    send(payload: Uint8Array): void {
+      if (ended !== undefined) throw new Gone(ended);
+      const max = transport.datagrams.maxDatagramSize;
+      if (payload.length > max) {
+        throw new BadValue(`a datagram of ${payload.length} bytes is larger than the path takes now (${max})`);
+      }
+      // A datagram the session has no room for is dropped, as the network
+      // would, rather than queued without bound.
+      if (sending >= SENDING_AT_MOST) return;
+      sending += 1;
+      outgoing
+        .write(payload.slice())
+        .catch(() => {})
+        .finally(() => {
+          sending -= 1;
+        });
+    },
+    async receive(): Promise<Uint8Array> {
+      if (ended !== undefined) throw new Gone(ended);
+      let read: ReadableStreamReadResult<Uint8Array>;
+      try {
+        read = await incoming.read();
+      } catch (e) {
+        throw new Gone(ended ?? `the WebTransport session ended: ${String(e)}`);
+      }
+      if (read.done) throw new Gone(ended ?? 'the WebTransport session ended');
+      return read.value;
+    },
   };
   const shut = (why: string): void => {
     end(why);
@@ -155,6 +197,7 @@ export async function openWebTransport(
   );
 
   return {
+    datagrams,
     start(onMessage, onClosed) {
       message = onMessage;
       closed = onClosed;

@@ -105,3 +105,11 @@ Future<(Uri, List<String>, Future<void> Function())> webTransportServer(
   );
   return (server.url, server.hashes, server.stop);
 }
+
+/// The WebTransport server that sends every datagram back, at none: its
+/// URL, the certificate hashes a page pins, and what stops it.
+Future<(Uri, List<String>, Future<void> Function())>
+datagramEchoServer() async {
+  final server = await startDatagramEcho();
+  return (server.url, server.hashes, server.stop);
+}

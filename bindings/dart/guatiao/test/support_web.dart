@@ -118,6 +118,15 @@ Future<(Uri, List<String>, Future<void> Function())> webTransportServer(
   return (Uri.parse(words.first), words.sublist(1), stop);
 }
 
+/// The WebTransport server that sends every datagram back, at none: its
+/// URL, the certificate hashes a page pins, and what stops it.
+Future<(Uri, List<String>, Future<void> Function())>
+datagramEchoServer() async {
+  final (said, stop) = await _hybrid('datagram-echo');
+  final words = said.split(' ');
+  return (Uri.parse(words.first), words.sublist(1), stop);
+}
+
 Future<(Uri, Future<void> Function())> _hybridServer(String? message) async {
   final (said, stop) = await _hybrid(message);
   return (Uri.parse(said.split(' ').first), stop);

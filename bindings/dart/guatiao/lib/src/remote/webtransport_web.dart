@@ -16,6 +16,13 @@ extension type _WebTransport._(JSObject _) implements JSObject {
   external JSPromise<JSAny?> get closed;
   external JSPromise<_BidirectionalStream> createBidirectionalStream();
   external void close([JSObject info]);
+  external _DatagramDuplexStream get datagrams;
+}
+
+extension type _DatagramDuplexStream._(JSObject _) implements JSObject {
+  external _ReadableStream get readable;
+  external _WritableStream get writable;
+  external int get maxDatagramSize;
 }
 
 extension type _BidirectionalStream._(JSObject _) implements JSObject {
@@ -29,6 +36,7 @@ extension type _ReadableStream._(JSObject _) implements JSObject {
 
 extension type _Reader._(JSObject _) implements JSObject {
   external JSPromise<_ReadResult> read();
+  external JSPromise<JSAny?> cancel();
 }
 
 extension type _ReadResult._(JSObject _) implements JSObject {
@@ -164,12 +172,16 @@ void _quietly(void Function() f) {
 }
 
 final class _WtChannel implements RemoteChannel {
-  _WtChannel(this._transport, this._writer);
+  _WtChannel(this._transport, this._writer)
+    : datagrams = _WtDatagrams(_transport.datagrams);
 
   final _WebTransport _transport;
   final _Writer _writer;
   final _incoming = StreamController<Uint8List>();
   bool _closing = false;
+
+  @override
+  final _WtDatagrams datagrams;
 
   @override
   Stream<Uint8List> get messages => _incoming.stream;
@@ -178,6 +190,7 @@ final class _WtChannel implements RemoteChannel {
     if (_incoming.isClosed) return;
     if (error != null) _incoming.addError(error);
     _incoming.close();
+    datagrams._end();
   }
 
   /// Reads the stream, handing on each whole frame's body.
@@ -243,6 +256,7 @@ final class _WtChannel implements RemoteChannel {
   Future<void> close() async {
     if (_closing) return;
     _closing = true;
+    datagrams._end();
     // What was written leaves before the session ends, unless the peer
     // stops reading.
     try {
@@ -252,5 +266,100 @@ final class _WtChannel implements RemoteChannel {
     }
     _quietly(() => _transport.close(_CloseInfo(closeCode: 0, reason: '')));
     _end();
+  }
+}
+
+/// Datagrams handed to the session and not yet taken by it; past this a
+/// send is dropped.
+const int _sendingAtMost = 64;
+
+/// The session's datagrams: read only while [received] is listened to and
+/// not paused (the browser drops what its own queue cannot hold), and
+/// ended with the channel.
+final class _WtDatagrams implements RemoteDatagrams {
+  _WtDatagrams(this._duplex)
+    : _reader = _duplex.readable.getReader(),
+      _writer = _duplex.writable.getWriter() {
+    _received = StreamController<Uint8List>(
+      onListen: _pump,
+      onResume: _wake,
+      onCancel: () {
+        _cancelled = true;
+        _reader.cancel().toDart.ignore();
+        _wake();
+      },
+    );
+  }
+
+  final _DatagramDuplexStream _duplex;
+  final _Reader _reader;
+  final _Writer _writer;
+  late final StreamController<Uint8List> _received;
+  bool _ended = false;
+
+  /// The listener let go: nothing more is read, though sends go on.
+  bool _cancelled = false;
+  int _sending = 0;
+  Completer<void>? _resumed;
+
+  void _wake() {
+    final resumed = _resumed;
+    if (resumed != null && !resumed.isCompleted) resumed.complete();
+  }
+
+  @override
+  int get maxSize => _duplex.maxDatagramSize;
+
+  @override
+  Stream<Uint8List> get received => _received.stream;
+
+  @override
+  void send(Uint8List payload) {
+    if (_ended) {
+      throw Gone(Status.gone.code, 'the link has ended');
+    }
+    final max = _duplex.maxDatagramSize;
+    if (payload.length > max) {
+      throw BadValue(
+        Status.badValue.code,
+        'a datagram of ${payload.length} bytes is larger than the path '
+        'takes now ($max)',
+      );
+    }
+    // A datagram the session has no room for is dropped, as the network
+    // would, rather than queued without bound.
+    if (_sending >= _sendingAtMost) return;
+    _sending++;
+    _writer
+        .write(Uint8List.fromList(payload).toJS)
+        .toDart
+        .then((_) {}, onError: (Object _) {})
+        .whenComplete(() => _sending--);
+  }
+
+  Future<void> _pump() async {
+    try {
+      while (!_ended && !_cancelled) {
+        if (_received.isPaused) {
+          await (_resumed = Completer<void>()).future;
+          _resumed = null;
+          continue;
+        }
+        final read = await _reader.read().toDart;
+        if (read.done || _received.isClosed) break;
+        _received.add(read.value!.toDart);
+      }
+    } catch (_) {
+      // The session ended.
+    }
+    if (!_received.isClosed) await _received.close();
+  }
+
+  void _end() {
+    if (_ended) return;
+    _ended = true;
+    _reader.cancel().toDart.ignore();
+    _wake();
+    if (!_received.hasListener && !_received.isClosed) _received.close();
   }
 }
