@@ -145,7 +145,9 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
   (`FrameRead::encrypted()`), else it refuses `UNSUPPORTED`. A server
   with a key sends its proof in WELCOME, which asks the client for its
   PROOF; a WELCOME with no proof asks none. A server's token is checked
-  on HELLO.
+  on HELLO, a client presenting none refused. A token empty or only
+  white space is refused at either end: the client's before it sends,
+  the server's on every HELLO (`UNSUPPORTED`).
 - **Dropping a `Link` ends it.** Calls waiting answer `GONE`; objects held
   for the peer are dropped.
 - **Polling adapts.** A thread waiting for an answer, or an idle pool
@@ -387,7 +389,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 | `child` | list: the server program and its arguments |
 | `security` | `none`, `server-tls`, `mutual-tls` (`config::Security`); none on a child, `local://`, `shm://`, mutual-tls elsewhere unless named |
 | `key`, `key_file` | the pre-shared key (none; server TLS when asked) |
-| `token` | a client's token, for a server that requires one |
+| `token` | a client's token, for a server that requires one; empty or only white space refused |
 | `state_dir`, `identity_file` | TLS: this side's identity (and trust store), made when absent; one of them |
 | `pins` | TLS: list of the server fingerprints trusted |
 | `roots` | TLS: also trust a server an authority issued a certificate for the host dialled: `"platform"` (feature `platform-roots`, else `UNSUPPORTED`) or a PEM CA bundle's path, read when the source is built (`config::roots_of`) |

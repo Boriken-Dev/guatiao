@@ -1568,6 +1568,14 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: an empty token no longer admits a client that
+  presents none.** A server given `LinkOptions::token("")` read a
+  client's missing token as empty and let it in, at server TLS proving
+  nobody. A server requiring a token now refuses a client presenting
+  none, and a token empty or only white space is refused wherever it is
+  set: by a source's configuration (`token`), by `Link` setup at either
+  end (the server answering every HELLO `UNSUPPORTED`), as
+  `guatiao-remote-server --token-file` already did.
 - **TypeScript: the remote client (npm `guatiao-remote`) as the Rust
   one.** A call refused before it runs releases the peer's objects handed
   in it and drops the page's own given back, and a call refused while its
