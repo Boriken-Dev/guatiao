@@ -338,6 +338,15 @@ impl Reader {
 
 impl FrameRead for Reader {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
+        self.read_frame_in(buf, max, &mut |_| Vec::new())
+    }
+
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
         // A clean end is one between frames.
         if self.held()? == 0 && !self.fill()? {
             return Ok(false);
@@ -350,6 +359,9 @@ impl FrameRead for Reader {
                 io::ErrorKind::InvalidData,
                 format!("a frame of {n} bytes is over the {max} allowed"),
             ));
+        }
+        if buf.capacity() < n {
+            *buf = room(n);
         }
         buf.clear();
         buf.resize(n, 0);

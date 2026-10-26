@@ -198,6 +198,15 @@ impl WsReader {
 
 impl FrameRead for WsReader {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
+        self.read_frame_in(buf, max, &mut |_| Vec::new())
+    }
+
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
         let Some(ws) = self.ws()? else {
             return Ok(false);
         };
@@ -208,6 +217,9 @@ impl FrameRead for WsReader {
         loop {
             match ws.read() {
                 Ok(Message::Binary(body)) => {
+                    if buf.capacity() < body.len() {
+                        *buf = room(body.len());
+                    }
                     buf.clear();
                     buf.extend_from_slice(&body);
                     return Ok(true);

@@ -30,6 +30,15 @@ impl FrameRead for Sealed {
         self.inner.read_frame(buf, max)
     }
 
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
+        self.inner.read_frame_in(buf, max, room)
+    }
+
     fn set_timeout(&mut self, timeout: Option<core::time::Duration>) -> io::Result<()> {
         self.inner.set_timeout(timeout)
     }

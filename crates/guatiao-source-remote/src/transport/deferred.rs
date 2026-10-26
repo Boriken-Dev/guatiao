@@ -154,6 +154,15 @@ impl FrameRead for Reader {
         self.set_up()?.read_frame(buf, max)
     }
 
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
+        self.set_up()?.read_frame_in(buf, max, room)
+    }
+
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
         self.timeout = timeout;
         match &mut self.inner {

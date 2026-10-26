@@ -93,6 +93,9 @@ pub(crate) struct Pool {
     waiting: Waiting,
     /// How long an idle thread waits for work before it ends.
     idle: Duration,
+    /// Runs when the last thread ends for want of work: what the link
+    /// keeps for its calls can go.
+    when_idle: Option<Box<dyn Fn() + Send + Sync>>,
     spawn: Spawn,
     #[cfg(test)]
     hook: Option<Hook>,
@@ -117,10 +120,17 @@ impl Pool {
             name: name.to_string(),
             waiting: Waiting::new(spin),
             idle: IDLE,
+            when_idle: None,
             spawn,
             #[cfg(test)]
             hook: None,
         }
+    }
+
+    /// Runs `f` each time the last thread ends for want of work.
+    pub(crate) fn when_idle(mut self, f: impl Fn() + Send + Sync + 'static) -> Pool {
+        self.when_idle = Some(Box::new(f));
+        self
     }
 
     #[cfg(test)]
@@ -214,7 +224,11 @@ impl Pool {
                         continue;
                     }
                     state.threads -= 1;
+                    let last = state.threads == 0;
                     drop(state);
+                    if last && let Some(f) = &self.when_idle {
+                        f();
+                    }
                     #[cfg(test)]
                     self.at(Point::Leaving);
                     return;
@@ -417,6 +431,32 @@ mod tests {
         for _ in 0..2 {
             done_rx.recv_timeout(Duration::from_secs(10)).unwrap();
         }
+    }
+
+    #[test]
+    fn the_idle_hook_runs_once_the_last_thread_leaves_and_not_before() {
+        let (idle_tx, idle_rx) = mpsc::channel::<()>();
+        let idle_tx = Mutex::new(idle_tx);
+        let mut pool = Pool::new(2, "pool-test", Duration::ZERO)
+            .when_idle(move || lock(&idle_tx).send(()).unwrap());
+        pool.idle = Duration::from_millis(50);
+        let pool = Arc::new(pool);
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        pool.run(Box::new(move || go_rx.recv().unwrap())).unwrap();
+        pool.run(Box::new(|| {})).unwrap();
+        // One thread is idle and leaves; the other is still busy.
+        assert!(
+            idle_rx.recv_timeout(Duration::from_millis(500)).is_err(),
+            "ran while a thread was busy"
+        );
+        go_tx.send(()).unwrap();
+        idle_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("ran once the last thread left");
+        assert!(
+            idle_rx.recv_timeout(Duration::from_millis(200)).is_err(),
+            "once"
+        );
     }
 
     #[test]

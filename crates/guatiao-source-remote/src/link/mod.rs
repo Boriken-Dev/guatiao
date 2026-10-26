@@ -807,8 +807,14 @@ impl Link {
     ) -> Link {
         let peer_id = reader.peer_id();
         let datagrams = reader.datagrams();
+        let gate = Gate::new(writer);
+        let buffers = Arc::clone(gate.buffers());
+        // The peer's calls, and the large buffers they leave, are this
+        // side's: once its threads have all gone idle, so can the buffers.
+        let pool = Pool::new(options.max_calls, &setup.name, options.spin)
+            .when_idle(move || buffers.release());
         let inner = Arc::new(Inner {
-            gate: Gate::new(writer),
+            gate,
             closer,
             state: Mutex::new(State {
                 alive: true,
@@ -823,7 +829,7 @@ impl Link {
             send_max: theirs.max_frame,
             timeout: options.timeout,
             permits: Permits::new(theirs.max_calls),
-            pool: Arc::new(Pool::new(options.max_calls, &setup.name, options.spin)),
+            pool: Arc::new(pool),
             answers: Waiting::new(options.spin),
             handler: setup.handler,
             kinds: RwLock::new(setup.kinds),
@@ -957,8 +963,10 @@ impl Link {
 
 fn read_loop(inner: Arc<Inner>, mut reader: Box<dyn FrameRead>) {
     let mut buf = Vec::new();
+    let buffers = Arc::clone(inner.gate.buffers());
+    let mut room = |n| buffers.room(n);
     let why = loop {
-        match reader.read_frame(&mut buf, inner.read_max) {
+        match reader.read_frame_in(&mut buf, inner.read_max, &mut room) {
             Ok(true) => {
                 let frame = inner.gate.buffers().hand_over(&mut buf);
                 if let Err(why) = inner.route(frame) {

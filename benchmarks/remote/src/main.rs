@@ -343,6 +343,19 @@ impl FrameRead for CountRead {
         Ok(got)
     }
 
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
+        let got = self.0.read_frame_in(buf, max, room)?;
+        if got {
+            *self.1.bytes.lock().unwrap() += buf.len() as u64 + 4;
+        }
+        Ok(got)
+    }
+
     fn set_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
         self.0.set_timeout(t)
     }

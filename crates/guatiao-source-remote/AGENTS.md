@@ -171,7 +171,8 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 ## Transports (`transport`)
 
 ```rust
-trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn set_timeout(..); fn peer_id(&self) -> Option<String>; fn encrypted(&self) -> bool; fn datagrams(&self) -> Option<Arc<dyn Datagrams>> }
+trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn read_frame_in(&mut self, &mut Vec<u8>, max, room: &mut dyn FnMut(usize) -> Vec<u8>) -> io::Result<bool>; fn set_timeout(..); fn peer_id(&self) -> Option<String>; fn encrypted(&self) -> bool; fn datagrams(&self) -> Option<Arc<dyn Datagrams>> }
+// read_frame_in: room(n) gives the buffer for a frame of n bytes buf cannot hold (the link's kept one); a wrapper forwards it, as peer_id; default: read_frame
 trait Datagrams { fn send(&self, &[u8]) -> io::Result<()>; fn recv(&self, Option<Duration>) -> io::Result<Option<Vec<u8>>>; fn max_size(&self) -> Option<usize> }
 trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frames(&mut self, &[&[u8]]); fn write_frame_parts(&mut self, head, tail); fn set_timeout(..); fn shutdown(&mut self) }
 struct Connection { reader, writer, peer: String, closer: Option<Box<dyn Fn()>> }

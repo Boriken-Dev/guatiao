@@ -49,6 +49,22 @@ pub trait FrameRead: Send {
     /// over `max` bytes is an error, read no further.
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool>;
 
+    /// As [`read_frame`](FrameRead::read_frame), asking `room(n)` for the
+    /// buffer when a frame's `n` bytes do not fit `buf`'s capacity: a link
+    /// hands out a large buffer it kept rather than have one allocated, so
+    /// its reader holds none while it waits. A wrapper forwards it; a
+    /// transport that does not know a frame's length first reads as
+    /// `read_frame` does.
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
+        let _ = room;
+        self.read_frame(buf, max)
+    }
+
     /// Bounds how long a read waits, or lifts the bound. A transport that
     /// cannot bound a read ignores it.
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {

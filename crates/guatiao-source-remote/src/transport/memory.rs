@@ -27,6 +27,15 @@ struct Writer {
 
 impl FrameRead for Reader {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
+        self.read_frame_in(buf, max, &mut |_| Vec::new())
+    }
+
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
         let frame = match self.timeout {
             None => match self.from.recv() {
                 Ok(f) => f,
@@ -44,8 +53,12 @@ impl FrameRead for Reader {
                 "a frame over the limit",
             ));
         }
+        let body = &frame[4..];
+        if buf.capacity() < body.len() {
+            *buf = room(body.len());
+        }
         buf.clear();
-        buf.extend_from_slice(&frame[4..]);
+        buf.extend_from_slice(body);
         Ok(true)
     }
 
