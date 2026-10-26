@@ -635,7 +635,11 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   | `acl` | none (the server's access control list, above) |
 
   Every setting looser than strict is listed by `TlsConfig::weakened()`,
-  and the server prints each when it starts.
+  and the server prints each when it starts. A host's own are listed by
+  `RemoteSource::weakened()`: each setting its configuration or a peer
+  manifest names looser than strict, by peer (a manifest's after a
+  refresh has read it), for the host to show or log; nothing is printed
+  for it.
 - **From C, Python or any language** mutual TLS is the source file's
   configuration keys above. A peer in another language speaks the
   same protocol inside TLS 1.3 with the same files: OpenSSL presents the

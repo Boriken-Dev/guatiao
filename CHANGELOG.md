@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **guatiao-source-remote: a host sees the TLS settings its own
+  configuration weakens.** `RemoteSource::weakened()` (feature `tls`)
+  lists every setting looser than strict in the `policy` a source file's
+  configuration or a peer manifest names, by peer, as
+  `guatiao-remote-server` prints its own when it starts; a library prints
+  nothing, so showing or logging them is the host's.
 - **guatiao-source-remote: a client verifies its server by the web PKI.**
   `roots` beside `pins` in a source file's configuration and a peer
   manifest: `"platform"` (the operating system's certificate authorities
