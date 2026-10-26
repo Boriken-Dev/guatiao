@@ -59,7 +59,7 @@ table; each slot appended later is an interface of its own, as
 // greeter_kind.go
 package greeterkind
 
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
 
 import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 
@@ -88,9 +88,10 @@ type Counter interface {
 }
 ```
 
-`go generate` runs `guatiao-kind`, which reads the header (the slot
+`go generate` runs `guatiao-kind`, which reads the kinds' description,
+the `<crate>.kinds.json` a kind crate commits beside its header (the slot
 order, the floor hash, which argument is handed over, lent or borrowed,
-which slot can refuse) and the interfaces, pairs each slot with the Go
+which slot can refuse), and the interfaces, pairs each slot with the Go
 method of its name in CamelCase (`greet_into` is `GreetInto`), refuses a
 Go type that cannot carry the C one, and writes the rest:
 
@@ -100,8 +101,12 @@ Go type that cannot carry the C one, and writes the rest:
 - the cgo that calls each slot of a table and serves each slot over a Go
   value.
 
-Nothing is described twice: the header is the source, and
-`guatiao-kind -check` fails when the glue is not what it would write.
+Nothing is described twice: the description is the source (`-header`
+reads the same from the C header, for a kind with no description), and
+`guatiao-kind -check` fails when the glue is not what it would write. A
+kind with no header at all, such as one written in TypeScript, gets its
+glue from its description alone; the marker's C table name is then left
+out (`//guatiao:kind tally`).
 Every method returns an `error` last. A tree answered may be any Go type:
 the binding converts Go values and trees as `encoding/json` does, structs
 by their `guatiao` (or `json`) tags. The binding's
