@@ -860,27 +860,42 @@ function recordedAlloc(node: bigint): bigint {
   return binding();
 }
 
-/** An object of an object kind: handed over, lent, or answered. */
+/**
+ * An object of an object kind: handed over, lent, or answered. The kind may
+ * be given as a function answering it, for a kind that names itself (or
+ * one naming it back) through its slots: it is asked only once a call
+ * needs it, after both are made.
+ */
 class ObjectShape extends ShapeImpl {
   readonly name: string;
+  readonly kindName: string;
   override readonly cArg: string | undefined;
   override readonly answers: boolean;
   override readonly takes: boolean;
+  readonly #kind: KindImpl | (() => KindImpl);
 
   constructor(
-    readonly kind: KindImpl,
+    kind: KindImpl | (() => KindImpl),
     readonly mode: 'take' | 'lend' | 'answer',
+    kindName?: string,
   ) {
     super();
-    this.name = mode === 'answer' ? kind.name : `${mode === 'lend' ? 'lent' : 'taken'}(${kind.name})`;
+    this.#kind = kind;
+    this.kindName = typeof kind === 'function' ? kindName! : kind.name;
+    this.name = mode === 'answer' ? this.kindName : `${mode === 'lend' ? 'lent' : 'taken'}(${this.kindName})`;
     this.answers = mode === 'answer';
     this.takes = mode === 'take';
     this.cArg = mode === 'take' ? 'guatiao_object' : mode === 'lend' ? 'void *' : undefined;
   }
 
+  get kind(): KindImpl {
+    const kind = this.#kind;
+    return typeof kind === 'function' ? kind() : kind;
+  }
+
   override describe(): TypeDescription {
-    if (this.mode === 'answer') return { type: 'object', kind: this.kind.name };
-    return { type: 'object', kind: this.kind.name, pass: this.mode === 'take' ? 'taken' : 'lent' };
+    if (this.mode === 'answer') return { type: 'object', kind: this.kindName };
+    return { type: 'object', kind: this.kindName, pass: this.mode === 'take' ? 'taken' : 'lent' };
   }
 
   #raw(value: unknown, scope: Scope | undefined, lent: boolean): RawObject {
@@ -1329,11 +1344,14 @@ export function slotName(method: string): string {
 
 const SCALARS = new Set(['bool', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize', 'isize', 'f32', 'f64']);
 
+/** A kind a slot names: made, or, while it is being made, a way to reach it once it is. */
+type Referred = KindImpl | (() => KindImpl);
+
 function shapeOf(
   given: TypeDescription,
   where: string,
   answer: boolean,
-  kindNamed: (name: string) => KindImpl,
+  kindNamed: (name: string) => Referred,
 ): Shape<any, any, any, any> | Kind<any, true> {
   const type = given?.type;
   const shapes = t as unknown as Record<string, Shape<any, any, any, any>>;
@@ -1341,7 +1359,11 @@ function shapeOf(
   if (SCALARS.has(type)) return shapes[type]!;
   if (answer) {
     if (type === 'text' || type === 'value' || type === 'map' || type === 'list') return shapes[type]!;
-    if (type === 'object') return objectNamed(given, where, kindNamed) as unknown as Kind<any, true>;
+    if (type === 'object') {
+      const object = objectNamed(given, where, kindNamed);
+      if (typeof object === 'function') return new ObjectShape(object, 'answer', given.kind) as never;
+      return object as unknown as Kind<any, true>;
+    }
     throw new TypeError(`${where}: an answer cannot be ${type}`);
   }
   switch (type) {
@@ -1362,24 +1384,28 @@ function shapeOf(
       throw new TypeError(`${where}: a ${type} cannot be passed ${String(pass)}`);
     }
     case 'object': {
-      const object = objectNamed(given, where, kindNamed) as unknown as Kind<any, true>;
-      if (given.pass === 'taken') return taken(object);
-      if (given.pass === 'lent') return lent(object);
-      throw new TypeError(`${where}: an object is passed taken or lent, not ${String(given.pass)}`);
+      const object = objectNamed(given, where, kindNamed);
+      if (given.pass !== 'taken' && given.pass !== 'lent') {
+        throw new TypeError(`${where}: an object is passed taken or lent, not ${String(given.pass)}`);
+      }
+      if (typeof object === 'function') return new ObjectShape(object, given.pass === 'taken' ? 'take' : 'lend', given.kind) as never;
+      const kind = object as unknown as Kind<any, true>;
+      return given.pass === 'taken' ? taken(kind) : lent(kind);
     }
     default:
       throw new TypeError(`${where}: ${type} is not a type an argument can have`);
   }
 }
 
-function objectNamed(given: TypeDescription, where: string, kindNamed: (name: string) => KindImpl): KindImpl {
+function objectNamed(given: TypeDescription, where: string, kindNamed: (name: string) => Referred): Referred {
   if (typeof given.kind !== 'string') throw new TypeError(`${where}: an object names its kind`);
   const found = kindNamed(given.kind);
-  if (!found.isObject) throw new TypeError(`${where}: ${found.name} is not an object kind`);
+  // A kind still being made was checked against its description.
+  if (typeof found !== 'function' && !found.isObject) throw new TypeError(`${where}: ${found.name} is not an object kind`);
   return found;
 }
 
-function fromDescription(description: KindDescription, kindNamed: (name: string) => KindImpl): KindImpl {
+function fromDescription(description: KindDescription, kindNamed: (name: string) => Referred): KindImpl {
   const name = description?.name;
   if (typeof name !== 'string' || !name) throw new TypeError('a kind description has a name');
   if (!Array.isArray(description.slots)) throw new TypeError(`${name}: a kind description has slots`);
@@ -1444,12 +1470,18 @@ export function kindsOf(
       if (found === undefined) throw new TypeError(`no kind ${name} in the document or among the known kinds`);
       return found;
     }
-    if (making.has(name)) throw new TypeError(`${name} refers to itself through its slots, which a description cannot load`);
     making.add(name);
-    const impl = fromDescription(description, kindNamed);
+    const impl = fromDescription(description, referred);
     making.delete(name);
     made.set(name, impl);
     return impl;
+  };
+  // A kind named while it is being made, by itself or by a kind it names:
+  // reached once made. Only an object kind can be named so.
+  const referred = (name: string): Referred => {
+    if (!making.has(name)) return kindNamed(name);
+    if (descriptions.get(name)?.object !== true) throw new TypeError(`${name} is not an object kind`);
+    return () => made.get(name)!;
   };
   const out: Record<string, Kind> = {};
   for (const description of given.kinds) out[description.name] = kindNamed(description.name) as unknown as Kind;

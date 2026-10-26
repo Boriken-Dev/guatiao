@@ -6,8 +6,9 @@
 // one, and a kind defined in JavaScript as a class.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -69,13 +70,46 @@ describe('a kind loaded from its description', () => {
       /no kind nowhere/,
     );
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'object', kind: 'k', pass: 'lent' }] }]))).toThrow(
-      /refers to itself/,
+      /k is not an object kind/,
     );
     const provider = { name: 'p', floor_hash: 2, slots: [{ name: 'y' }] };
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'object', kind: 'p', pass: 'taken' }] }], [provider]))).toThrow(
       /p is not an object kind/,
     );
     expect(() => kindsOf(one([{ name: 'a_b' }, { name: 'aB' }]))).toThrow(/two slots are aB/);
+  });
+});
+
+describe('modules written from two documents', () => {
+  it('import the object kinds the other one describes', async () => {
+    const whole = document();
+    const objects: KindsDocument = { format: 1, kinds: whole.kinds.filter((k) => k.object) };
+    const greeters: KindsDocument = { format: 1, kinds: whole.kinds.filter((k) => !k.object) };
+    const imports = { listener: './objects.js', conversation: './objects.js' };
+    expect(() => generate(greeters)).toThrow(/the object kind listener is not in this document/);
+    // Beside this file, so the modules resolve `guatiao` as the suite does.
+    const dir = mkdtempSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'generated-'));
+    try {
+      const o = generate(objects);
+      const g = generate(greeters, { imports });
+      expect(g.js).toContain("import { Listener, Conversation } from './objects.js';");
+      expect(g.js).toContain('{ known: [Listener, Conversation] }');
+      expect(g.dts).toContain(
+        "import type { Listener, ListenerRemote, Conversation, ConversationRemote } from './objects.js';",
+      );
+      expect(g.dts).toContain('greetInto?(name: string, listener: ListenerRemote): void;');
+      writeFileSync(path.join(dir, 'objects.js'), o.js);
+      writeFileSync(path.join(dir, 'greeters.js'), g.js);
+      const loaded = (await import(pathToFileURL(path.join(dir, 'greeters.js')).href)) as Record<string, { tableSize: number; floorHash: number }>;
+      const imported = (await import(pathToFileURL(path.join(dir, 'objects.js')).href)) as Record<string, unknown>;
+      expect(loaded.Greeter!.tableSize).toBe(committed.Greeter.tableSize);
+      expect(loaded.Greeter!.floorHash).toBe(committed.Greeter.floorHash);
+      // One kind object, imported, not described again.
+      expect(describeKinds([loaded.Greeter as never]).kinds.map((k) => k.name)).toEqual(['greeter', 'listener', 'conversation']);
+      expect(imported.Listener).toBeDefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -118,6 +152,94 @@ describe('the module guatiao-kind writes', () => {
     expect(() => generate({ format: 1, kinds: [{ name: 'a', floor_hash: 1, slots: [] }, { name: 'A', floor_hash: 2, slots: [] }] })).toThrow(
       /two kinds are A/,
     );
+  });
+});
+
+// ---- kinds that name themselves --------------------------------------------------------
+
+/** A node answers its children, nodes too, and is lent another; a forest answers a root. */
+const TREES: KindsDocument = {
+  format: 1,
+  kinds: [
+    {
+      name: 'forest',
+      floor_hash: 6,
+      object: false,
+      slots: [{ name: 'root', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'node' } }],
+    },
+    {
+      name: 'node',
+      floor_hash: 5,
+      object: true,
+      slots: [
+        { name: 'label', required: true, fallible: false, args: [], answer: { type: 'text' } },
+        {
+          name: 'child',
+          required: true,
+          fallible: true,
+          args: [{ name: 'label', type: 'str' }],
+          answer: { type: 'object', kind: 'node' },
+        },
+        {
+          name: 'size_of',
+          required: false,
+          fallible: false,
+          args: [{ name: 'other', type: 'object', kind: 'node', pass: 'lent' }],
+          answer: { type: 'u32' },
+        },
+      ],
+    },
+  ],
+};
+
+class Leaf {
+  constructor(readonly name: string) {}
+  label(): string {
+    return this.name;
+  }
+  child(label: string): Leaf {
+    return new Leaf(`${this.name}/${label}`);
+  }
+  sizeOf(other: { label(): string }): number {
+    return other.label().length;
+  }
+}
+
+describe('a kind that names itself through its slots', () => {
+  it('loads, is described as given, and its objects answer objects of itself', () => {
+    const { forest, node } = kindsOf(TREES);
+    expect(describeKinds([forest!, node!])).toEqual(TREES);
+    class Woods extends Provider {
+      static override readonly kinds = [forest as never];
+      root(): Leaf {
+        return new Leaf('root');
+      }
+    }
+    using reg = new Registry('trees', '0.1');
+    reg.registerLibrary(library('woods', '1.0', { providers: [Woods] }));
+    const woods = reg.bind('woods_woods', forest!) as unknown as {
+      root(): { label(): string; child(l: string): { label(): string; close(): void }; sizeOf(o: unknown): number; close(): void };
+    };
+    const root = woods.root();
+    const twig = root.child('a');
+    expect(twig.label()).toBe('root/a');
+    // An object of the kind lent to an object of the same kind.
+    expect(root.sizeOf(new Leaf('four'))).toBe(4);
+    expect(root.sizeOf(twig)).toBe(6);
+    twig.close();
+    root.close();
+  });
+
+  it('or names one that names it back', () => {
+    const cycle: KindsDocument = {
+      format: 1,
+      kinds: [
+        { name: 'ping', floor_hash: 1, object: true, slots: [{ name: 'pong', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'pong' } }] },
+        { name: 'pong', floor_hash: 2, object: true, slots: [{ name: 'ping', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'ping' } }] },
+      ],
+    };
+    const loaded = kindsOf(cycle);
+    expect(describeKinds([loaded.ping!])).toEqual(cycle);
   });
 });
 

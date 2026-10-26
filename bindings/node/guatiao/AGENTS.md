@@ -171,7 +171,7 @@ commits its kinds' description beside their C header
 slots: [{ name, required, fallible, args, answer }] }] }`, the format on
 the docs site's encodings page). Two ways to load it:
 
-- **`guatiao-kind DOCUMENT [--out BASE] [--from MODULE] [--check]`**
+- **`guatiao-kind DOCUMENT [--out BASE] [--from MODULE] [--import KIND=MODULE]... [--check]`**
   writes `BASE.js` (it calls `kindsOf` on the document, embedded) and
   `BASE.d.ts`, both committed. For each kind the declarations hold an
   interface of the kind's name in PascalCase (`greeter` is `Greeter`; its
@@ -183,7 +183,10 @@ the docs site's encodings page). Two ways to load it:
   without `.kinds.json`; `--from` is the guatiao package's specifier
   (default `guatiao`); `--check` writes nothing and exits 1 when the files
   are not what it would write. A slot naming an object kind outside the
-  document is refused.
+  document is refused unless `--import kind=./other_kind.js` names the
+  module written for the document that describes it (repeated per kind;
+  `generate(document, { imports })` from code): the module loads it as a
+  known kind and the declarations import its interfaces.
 - **`guatiao-kind FILE.ts... --out BASE [--document FILE] [--project
   TSCONFIG] [--from MODULE] [--check]`** reads the kinds from TypeScript
   interfaces (below) instead, writes the document (`BASE.kinds.json`, or
@@ -194,9 +197,11 @@ the docs site's encodings page). Two ways to load it:
 - **`kindsOf(document, { known? })`** (the object, or its JSON text)
   answers each kind by its name; **`kindOf(description, { known? })`** one
   kind. An object kind a slot names is found in the document, else among
-  `known`. `TypeError` naming the kind, the slot and the argument for a
-  document that is not one, a `type` it does not know, or kinds that refer
-  to each other in a cycle.
+  `known`. An object kind may name itself (a node answering nodes), or a
+  kind that names it back; such a kind is reached once both are made.
+  `TypeError` naming the kind, the slot and the argument for a document
+  that is not one, a `type` it does not know, or a kind that is no object
+  kind named by itself through its slots.
 
 ```ts
 import { Greeter } from './greeter_kind.js';   // written by guatiao-kind

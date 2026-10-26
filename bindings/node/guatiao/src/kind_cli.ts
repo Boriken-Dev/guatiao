@@ -9,8 +9,10 @@
  * `<crate>.kinds.json` a kind crate commits beside its C header). `BASE`
  * defaults to the document's own path without `.kinds.json`; `--from`
  * names the guatiao package as the module imports it (default
- * `guatiao`); `--check` writes nothing and fails when the files are not
- * what it would write.
+ * `guatiao`); `--import KIND=MODULE` (repeated) names an object kind a slot
+ * takes or answers that another document describes, with the module
+ * `guatiao-kind` wrote for it; `--check` writes nothing and fails when the
+ * files are not what it would write.
  *
  * `guatiao-kind FILE.ts... --out BASE [--document FILE] [--project TSCONFIG]`
  * reads the kinds from TypeScript interfaces instead (the `typescript`
@@ -30,7 +32,7 @@ import { generate } from './generate.js';
 import type { KindsDocument } from './kinds.js';
 
 const USAGE =
-  'usage: guatiao-kind DOCUMENT [--out BASE] [--from MODULE] [--check]\n' +
+  'usage: guatiao-kind DOCUMENT [--out BASE] [--from MODULE] [--import KIND=MODULE]... [--check]\n' +
   '       guatiao-kind FILE.ts... --out BASE [--document FILE] [--project TSCONFIG] [--from MODULE] [--check]';
 
 async function main(argv: string[]): Promise<number> {
@@ -42,6 +44,7 @@ async function main(argv: string[]): Promise<number> {
       from: { type: 'string' },
       project: { type: 'string' },
       document: { type: 'string' },
+      import: { type: 'string', multiple: true },
       check: { type: 'boolean', default: false },
     },
   });
@@ -58,6 +61,15 @@ async function main(argv: string[]): Promise<number> {
     console.error(`guatiao-kind: --project and --document are for reading TypeScript\n${USAGE}`);
     return 2;
   }
+  const imports: Record<string, string> = {};
+  for (const one of values.import ?? []) {
+    const at = one.indexOf('=');
+    if (at <= 0 || at === one.length - 1) {
+      console.error(`guatiao-kind: --import is KIND=MODULE, not ${one}\n${USAGE}`);
+      return 2;
+    }
+    imports[one.slice(0, at)] = one.slice(at + 1);
+  }
   const given = positionals.map((p) => path.resolve(p));
   const base = path.resolve(values.out ?? given[0]!.replace(/(\.kinds)?\.json$/i, ''));
   const relative = (to: string): string => path.relative(path.dirname(base), to).split(path.sep).join('/') || '.';
@@ -71,6 +83,7 @@ async function main(argv: string[]): Promise<number> {
     ...(values.document !== undefined ? ['--document', relative(documentFile)] : []),
     ...(values.project !== undefined ? ['--project', relative(path.resolve(values.project))] : []),
     ...(values.from !== undefined ? ['--from', values.from] : []),
+    ...Object.entries(imports).flatMap(([kind, module]) => ['--import', `${kind}=${module}`]),
   ].join(' ');
   let generated;
   let documentText: string | undefined;
@@ -86,6 +99,7 @@ async function main(argv: string[]): Promise<number> {
       source: sources ? source : relative(documentFile),
       command,
       ...(values.from !== undefined ? { from: values.from } : {}),
+      imports,
     });
   } catch (e) {
     console.error(`guatiao-kind: ${e instanceof DescribeError ? '' : `${documentFile}: `}${(e as Error).message}`);
