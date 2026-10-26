@@ -182,6 +182,100 @@ void main() {
     expect(text, contains("'Homepage': 'https://example.org',"));
   });
 
+  test('a kind imports the object kinds another document describes, '
+      'and a kind may name itself', () {
+    final whole = _document();
+    final kinds = (whole['kinds']! as List).cast<Map<String, Object?>>();
+    final objects = {
+      'format': 1,
+      'kinds': [
+        for (final k in kinds)
+          if (k['object'] == true) k,
+      ],
+    };
+    final greeters = {
+      'format': 1,
+      'kinds': [
+        for (final k in kinds)
+          if (k['object'] != true) k,
+      ],
+    };
+    expect(() => generateKinds(greeters), throwsA(isA<FormatException>()));
+    final imported = generateKinds(
+      greeters,
+      imports: {'listener': 'objects.dart', 'conversation': 'objects.dart'},
+    );
+    expect(imported, contains("import 'objects.dart';"));
+    expect(imported, isNot(contains('abstract interface class Listener ')));
+    final trees = {
+      'format': 1,
+      'kinds': [
+        {
+          'name': 'node',
+          'floor_hash': 5,
+          'object': true,
+          'slots': [
+            {
+              'name': 'child',
+              'required': true,
+              'fallible': true,
+              'args': [
+                {'name': 'label', 'type': 'str'},
+              ],
+              'answer': {'type': 'object', 'kind': 'node'},
+            },
+            {
+              'name': 'size_of',
+              'required': false,
+              'fallible': false,
+              'args': [
+                {
+                  'name': 'other',
+                  'type': 'object',
+                  'kind': 'node',
+                  'pass': 'lent',
+                },
+              ],
+              'answer': {'type': 'u32'},
+            },
+          ],
+        },
+      ],
+    };
+    final dir = Directory.systemTemp.createTempSync('guatiao-imports-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    String posix(String path) => path.replaceAll(r'\', '/');
+    File('${dir.path}/pubspec.yaml').writeAsStringSync(
+      'name: split\npublish_to: none\nenvironment:\n  sdk: ^3.10.0\n'
+      'dependencies:\n'
+      '  guatiao:\n    path: ${posix(repoPath(['bindings', 'dart', 'guatiao']))}\n',
+    );
+    Directory('${dir.path}/lib').createSync();
+    File(
+      '${dir.path}/lib/objects.dart',
+    ).writeAsStringSync(generateKinds(objects));
+    File('${dir.path}/lib/greeters.dart').writeAsStringSync(imported);
+    File('${dir.path}/lib/trees.dart').writeAsStringSync(generateKinds(trees));
+    final dart = Platform.resolvedExecutable;
+    final get = Process.runSync(dart, [
+      'pub',
+      'get',
+      '--offline',
+    ], workingDirectory: dir.path);
+    expect(get.exitCode, 0, reason: '${get.stdout}${get.stderr}');
+    final analyze = Process.runSync(dart, [
+      'analyze',
+      '--format=machine',
+    ], workingDirectory: dir.path);
+    final errors = [
+      for (final line in LineSplitter.split(
+        '${analyze.stdout}${analyze.stderr}',
+      ))
+        if (line.startsWith('ERROR|')) line,
+    ];
+    expect(errors, isEmpty, reason: errors.join('\n'));
+  });
+
   test('the analyzer refuses a provider lacking or mistyping a slot', () {
     final dir = Directory.systemTemp.createTempSync('guatiao-analyzer-');
     addTearDown(() => dir.deleteSync(recursive: true));

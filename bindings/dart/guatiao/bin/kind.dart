@@ -2,9 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// `dart run guatiao:kind DOCUMENT -o FILE [--check]` writes the Dart for
-/// a document of kinds, the `<crate>.kinds.json` a kind crate commits
-/// beside its C header.
+/// `dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]`
+/// writes the Dart for a document of kinds, the `<crate>.kinds.json` a kind
+/// crate commits beside its C header; `--import` names an object kind a slot
+/// takes or answers that another document describes, with the library
+/// written for that document.
 ///
 /// `dart run guatiao:kind identity [-o FILE] [--pubspec FILE] [--check]`
 /// writes this package's library identity from its `pubspec.yaml`
@@ -20,7 +22,7 @@ import 'dart:io';
 import 'package:guatiao/src/kind_generator.dart';
 
 const _usage =
-    'usage: dart run guatiao:kind DOCUMENT -o FILE [--check]\n'
+    'usage: dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]\n'
     '       dart run guatiao:kind identity [-o FILE] [--pubspec FILE] [--check]';
 
 List<String> _segments(String path) =>
@@ -64,6 +66,15 @@ void main(List<String> argv) {
   }
 
   final check = args.remove('--check');
+  final kindImports = <String, String>{};
+  for (String? one; (one = option('--import')) != null;) {
+    final at = one!.indexOf('=');
+    if (at <= 0 || at == one.length - 1) {
+      stderr.writeln('guatiao:kind: --import is KIND=URI, not $one\n$_usage');
+      exit(2);
+    }
+    kindImports[one.substring(0, at)] = one.substring(at + 1);
+  }
   final out = option('-o') ?? option('--out');
   final pubspec = option('--pubspec');
   if (args.length != 1) {
@@ -99,9 +110,13 @@ void main(List<String> argv) {
       text = generateKinds(
         (document as Map).cast<String, Object?>(),
         source: _relative(here, args.single),
-        command:
-            'dart run guatiao:kind ${_relative(root, args.single)} '
-            '-o ${_relative(root, target)}',
+        command: [
+          'dart run guatiao:kind ${_relative(root, args.single)}',
+          '-o ${_relative(root, target)}',
+          for (final MapEntry(:key, :value) in kindImports.entries)
+            '--import $key=$value',
+        ].join(' '),
+        imports: kindImports,
       );
     }
   } on Object catch (e) {
