@@ -141,7 +141,7 @@ void main() {
     addTearDown(reg.close);
     final document = reg.kindDescriptions('derived_greeter_hello');
     expect(document, isNotNull);
-    expect(document!['format'], 1);
+    expect(document!.keys, ['kinds']);
     expect(
       [for (final k in document['kinds']! as List) (k as Map)['name']],
       ['greeter', 'listener', 'conversation', 'counter', 'wide'],

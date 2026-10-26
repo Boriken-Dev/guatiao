@@ -33,7 +33,7 @@ pub trait ProviderDecl {
 pub type Describe = fn(&mut Vec<&'static str>, &mut Vec<String>);
 
 /// The document a provider carries in [`ProviderInfo::kind_descriptions`]:
-/// `{"format":1,"kinds":[...]}` holding what each of `kinds` describes,
+/// `{"kinds":[...]}` holding what each of `kinds` describes,
 /// in order, every kind once. Empty when nothing is described, as for a
 /// kind implemented by hand.
 ///
@@ -41,7 +41,7 @@ pub type Describe = fn(&mut Vec<&'static str>, &mut Vec<String>);
 /// # use guatiao::library::Kind;
 /// # use greeter_kind::Greeter;
 /// let document = guatiao::library::kind::kind_document(&[<dyn Greeter as Kind>::describe]);
-/// assert!(document.starts_with(r#"{"format":1,"kinds":[{"name":"greeter""#));
+/// assert!(document.starts_with(r#"{"kinds":[{"name":"greeter""#));
 /// ```
 pub fn kind_document(kinds: &[Describe]) -> String {
     let mut seen = Vec::new();
@@ -52,7 +52,7 @@ pub fn kind_document(kinds: &[Describe]) -> String {
     if described.is_empty() {
         return String::new();
     }
-    let mut out = String::from(r#"{"format":1,"kinds":["#);
+    let mut out = String::from(r#"{"kinds":["#);
     out.push_str(&described.join(","));
     out.push_str("]}");
     out

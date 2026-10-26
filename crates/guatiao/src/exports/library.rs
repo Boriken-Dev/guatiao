@@ -1823,12 +1823,11 @@ pub unsafe extern "C" fn guatiao_registry_provider_meta(
 /// The descriptions of the kinds one provider serves, and of every object
 /// kind their slots take or answer, each once, copied into `alloc` as the
 /// document `docs/encodings.md` states ("A kind, described"): a map
-/// `{"format": 1, "kinds": [...]}`. What a host binds a kind from when it
+/// `{"kinds": [...]}`. What a host binds a kind from when it
 /// has no `.kinds.json` for it.
 ///
 /// `out` holds the document, or stays ABSENT when the provider carries
-/// none (a provider written by hand, or a library built before
-/// descriptors carried them); both answer `GUATIAO_OK`.
+/// none (a provider written by hand); both answer `GUATIAO_OK`.
 /// `GUATIAO_ERR_NOT_FOUND` when nothing answers to `key`;
 /// `GUATIAO_ERR_BAD_VALUE` when what the provider carries is not a
 /// description. The caller frees the document with `guatiao_value_free`

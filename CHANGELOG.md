@@ -1407,6 +1407,12 @@ write now.
   null: the proxy runs the trait's default body, and a binding's remote
   answers Unsupported. The generated `<method>_end()` functions are gone,
   as is Fortran's `guatiao_kind%floor_size`.
+- **A kinds document is `{"kinds": [...]}`.** No writer puts `"format": 1`
+  in it any more (the derive, guatiao-bridge, guatiao-source-remote, and
+  the Node, Python, Dart and Go describers), and every reader tells a
+  document from one kind by its `kinds` key, skipping any other key; one
+  without `kinds` is refused. The committed `.kinds.json` files and what
+  is generated from them are rewritten.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate

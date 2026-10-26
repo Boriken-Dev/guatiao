@@ -449,10 +449,8 @@ final class _Generator {
   }
 
   String generate({String? source, String? command}) {
-    if (document['format'] != 1 || document['kinds'] is! List) {
-      throw const FormatException(
-        'a kinds document is {"format": 1, "kinds": [...]}',
-      );
+    if (document['kinds'] is! List) {
+      throw const FormatException('a kinds document is {"kinds": [...]}');
     }
     for (final kind in kinds) {
       final name = kind['name'];

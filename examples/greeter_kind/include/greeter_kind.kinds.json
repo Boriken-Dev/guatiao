@@ -1,5 +1,4 @@
 {
-  "format": 1,
   "kinds": [
     {
       "name": "greeter",
@@ -35,7 +34,7 @@
           "answer": {
             "type": "text"
           },
-          "doc": "Appended after `greet`: a library built before it existed makes\nthe proxy run this body instead."
+          "doc": "Optional: a provider that leaves it out has the proxy run this\nbody instead."
         },
         {
           "name": "start",
@@ -53,7 +52,7 @@
             "type": "object",
             "kind": "conversation"
           },
-          "doc": "Appended: a conversation the caller then drives, told to the\nlistener the caller handed in. A greeter built before this slot\nexisted, or one that holds no conversations, answers the default."
+          "doc": "Optional: a conversation the caller then drives, told to the\nlistener the caller handed in. A greeter that leaves it out, or\none that holds no conversations, answers the default."
         },
         {
           "name": "greet_into",
@@ -71,7 +70,7 @@
               "pass": "lent"
             }
           ],
-          "doc": "Appended: the greeting, told to a listener the caller LENDS for\nthis call alone. It stays on the caller's side: nothing is\nallocated to pass it and nothing is destroyed after. A greeter\nbuilt before this slot existed greets through `greet`."
+          "doc": "Optional: the greeting, told to a listener the caller LENDS for\nthis call alone. It stays on the caller's side: nothing is\nallocated to pass it and nothing is destroyed after. A greeter\nleaving it out greets through `greet`."
         },
         {
           "name": "greet_from",
@@ -87,7 +86,7 @@
           "answer": {
             "type": "map"
           },
-          "doc": "Appended: the greeting for a configuration the caller HANDS OVER\n(`{\"name\": \"..\"}`). The greeter owns the map from the call on,\nwhatever it answers, and may keep it; nothing is copied to pass\nit. A greeter built before this slot existed greets the name\nthrough `greet`."
+          "doc": "Optional: the greeting for a configuration the caller HANDS OVER\n(`{\"name\": \"..\"}`). The greeter owns the map from the call on,\nwhatever it answers, and may keep it; nothing is copied to pass\nit. A greeter leaving it out greets the name\nthrough `greet`."
         },
         {
           "name": "check",
@@ -103,7 +102,7 @@
           "answer": {
             "type": "bool"
           },
-          "doc": "Appended: completes a configuration for `greet_from` that the\ncaller LENDS for this call, in the caller's own map: fills in what\nit leaves out and adds what follows from it. Answers whether it can\nbe greeted. A greeter built before this slot existed changes\nnothing."
+          "doc": "Optional: completes a configuration for `greet_from` that the\ncaller LENDS for this call, in the caller's own map: fills in what\nit leaves out and adds what follows from it. Answers whether it can\nbe greeted. A greeter leaving it out changes\nnothing."
         }
       ]
     },

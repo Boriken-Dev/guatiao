@@ -48,10 +48,10 @@ impl Kinds {
     }
 
     /// Adds every kind a value describes: a document
-    /// (`{"format": 1, "kinds": [..]}`) or one kind. Answers how many.
+    /// (`{"kinds": [..]}`) or one kind. Answers how many.
     pub fn add_value(&mut self, value: &Value) -> Result<usize, BridgeError> {
         let is_document =
-            TryAsRef::<Map>::try_as_ref(value).is_some_and(|m| m.get("format").is_some());
+            TryAsRef::<Map>::try_as_ref(value).is_some_and(|m| m.get("kinds").is_some());
         let kinds = if is_document {
             KindDescription::document(value)
         } else {
@@ -99,7 +99,7 @@ impl Kinds {
     }
 
     /// The document a provider serving `served` carries
-    /// (`ProviderPartsBuilder::kind_descriptions`): `{"format":1,"kinds":[..]}`
+    /// (`ProviderPartsBuilder::kind_descriptions`): `{"kinds":[..]}`
     /// as compact JSON, each kind served followed by the object kinds its
     /// slots take or answer, in slot order and transitively, every kind
     /// once, as `#[derive(Provider)]` writes it. A kind not known here is
@@ -123,7 +123,6 @@ impl Kinds {
             kinds.push(kind.to_value().map_err(written)?);
         }
         let mut document = Map::new();
-        document.set("format", 1u32);
         document.set("kinds", kinds);
         guatiao_serde::text::json::to_string(
             &Value::from(document),

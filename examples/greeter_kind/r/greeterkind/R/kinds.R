@@ -18,8 +18,8 @@ Conversation <- kind("conversation", floor_hash = 2769624503, object = TRUE,
   read = method(dst = lent("bytes"), returns = "int64", required = TRUE),
   turns = method(returns = "int64", required = TRUE))
 
-# greeter_vtable: greets by name. greet is the one slot every table has;
-# the rest were appended, and an older table may lack them.
+# greeter_vtable: greets by name. greet is the one slot every provider
+# fills; the rest are optional, which a provider may leave out.
 Greeter <- kind("greeter", floor_hash = 2695856491,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"),

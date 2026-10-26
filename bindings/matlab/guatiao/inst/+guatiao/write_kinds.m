@@ -34,8 +34,8 @@ function files = write_kinds(document, folder, varargin)
   [~, base, ext] = fileparts(document);
   source = [base ext];
   doc = jsondecode(read_utf8(document));
-  if ~isstruct(doc) || ~isfield(doc, 'format') || ~isequal(doc.format, 1) || ~isfield(doc, 'kinds')
-    error('guatiao:BadValue', '%s: a kinds document is {"format": 1, "kinds": [...]}', source);
+  if ~isstruct(doc) || ~isfield(doc, 'kinds')
+    error('guatiao:BadValue', '%s: a kinds document is {"kinds": [...]}', source);
   end
   pkg = package_of(folder);
   kinds = items(doc.kinds);

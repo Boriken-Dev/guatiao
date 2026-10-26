@@ -42,8 +42,8 @@ _TREES = {"value": shapes.VALUE, "map": shapes.MAP, "list": shapes.LIST}
 
 def _document(document: Document) -> "list[Mapping[str, Any]]":
     given = json.loads(document) if isinstance(document, str) else document
-    if not isinstance(given, Mapping) or given.get("format") != 1:
-        raise TypeError("a kinds document is {\"format\": 1, \"kinds\": [...]}")
+    if not isinstance(given, Mapping) or "kinds" not in given:
+        raise TypeError("a kinds document is {\"kinds\": [...]}")
     found = given.get("kinds")
     if not isinstance(found, list) or not all(isinstance(k, Mapping) for k in found):
         raise TypeError("a kinds document's `kinds` is a list of kinds")
@@ -296,7 +296,7 @@ def floor_hash_of(is_object: bool, slots: "list[dict[str, Any]]") -> int:
 def describe_kinds(*kinds: Any) -> "dict[str, Any]":
     """The kinds given (kind classes or `Kind`s), each followed by the object
     kinds its slots take or answer, each once, as the description document a
-    kind crate commits beside its header (`{"format": 1, "kinds": [...]}`):
+    kind crate commits beside its header (`{"kinds": [...]}`):
     what `kinds_of`, `python -m guatiao.kinds`, Node's `kindsOf` and Dart's
     `dart run guatiao:kind` read. A kind class's docstrings are the docs."""
     out: "list[dict[str, Any]]" = []
@@ -318,7 +318,7 @@ def describe_kinds(*kinds: Any) -> "dict[str, Any]":
 
     for one in kinds:
         describe(kind_of(one))
-    return {"format": 1, "kinds": out}
+    return {"kinds": out}
 
 
 # --- written out as classes -------------------------------------------------

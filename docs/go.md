@@ -145,7 +145,7 @@ type Tally interface {
 	Total(name string) (int64, error)
 }
 
-// Appended: tells `watcher` each count, for this call alone.
+// Optional: tells `watcher` each count, for this call alone.
 type Reporter interface {
 	//guatiao:lent watcher
 	Report(watcher Watcher) error

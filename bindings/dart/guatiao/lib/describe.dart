@@ -28,12 +28,12 @@
 ///   @fallible
 ///   I64 add(String name, U32 by);
 ///
-///   /// Appended: tells `watcher` each count, for this call alone.
+///   /// Optional: tells `watcher` each count, for this call alone.
 ///   @appended
 ///   @fallible
 ///   void report(Lent<Watcher> watcher);
 ///
-///   /// Appended: adds the counts handed over.
+///   /// Optional: adds the counts handed over.
 ///   @appended
 ///   @fallible
 ///   U32 load(Taken<MapRef> counts);

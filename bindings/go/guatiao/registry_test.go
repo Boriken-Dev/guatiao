@@ -160,8 +160,7 @@ func TestAProviderCarriesItsKindsDescriptions(t *testing.T) {
 	}
 	defer document.Close()
 	var read struct {
-		Format int `guatiao:"format"`
-		Kinds  []struct {
+		Kinds []struct {
 			Name      string `guatiao:"name"`
 			FloorHash uint32 `guatiao:"floor_hash"`
 		} `guatiao:"kinds"`
@@ -173,7 +172,7 @@ func TestAProviderCarriesItsKindsDescriptions(t *testing.T) {
 	for _, k := range read.Kinds {
 		names = append(names, k.Name)
 	}
-	if read.Format != 1 || strings.Join(names, ",") != "greeter,listener,conversation,counter,wide" {
+	if strings.Join(names, ",") != "greeter,listener,conversation,counter,wide" {
 		t.Fatalf("%+v", read)
 	}
 	if _, ok, err := reg.KindDescriptions("hello_library_greeter"); ok || err != nil {

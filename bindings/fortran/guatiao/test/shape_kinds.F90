@@ -521,7 +521,7 @@ contains
 
   ! ---- appended slots a provider does not override ---------------------
 
-  !> Appended: what was said last.
+  !> Optional: what was said last.
   recursive subroutine note_last(self, answer, error)
     class(note), intent(inout) :: self
     character(:), allocatable, intent(out) :: answer
@@ -530,7 +530,7 @@ contains
     call guatiao_fail(error, GUATIAO_ERR_UNSUPPORTED, 'no last here')
   end subroutine
 
-  !> Appended: `s` twice.
+  !> Optional: `s` twice.
   recursive subroutine shapes_echo(self, s, answer, error)
     class(shapes), intent(inout) :: self
     character(*), intent(in) :: s
@@ -540,7 +540,7 @@ contains
     call guatiao_fail(error, GUATIAO_ERR_UNSUPPORTED, 'no echo here')
   end subroutine
 
-  !> Appended, and served by nobody.
+  !> Optional, and served by nobody.
   recursive subroutine shapes_quiet(self, s, error)
     class(shapes), intent(inout) :: self
     character(*), intent(in) :: s

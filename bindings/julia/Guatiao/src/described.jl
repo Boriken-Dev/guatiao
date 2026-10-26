@@ -13,8 +13,8 @@
     kind_descriptions(reg, key) -> Union{Value,Nothing}
 
 The document of the kinds the provider filed under `key` serves and of
-every object kind their slots take or answer (`{"format": 1, "kinds":
-[...]}`), as a `Value` the caller owns, or `nothing` when it carries none:
+every object kind their slots take or answer (`{"kinds": [...]}`), as a
+`Value` the caller owns, or `nothing` when it carries none:
 what `kinds_of` loads a kind from when no file of it is at hand.
 `NotFound` when nothing answers to `key`, `BadValue` when what it carries
 is not a description.
@@ -136,7 +136,7 @@ document does not hold.
 """
 function kind_declarations(document; known = ())
     doc = document_data(document)
-    get(doc, "format", nothing) == 1 || throw(ArgumentError("a kinds document is {\"format\": 1, \"kinds\": [...]}"))
+    haskey(doc, "kinds") || throw(ArgumentError("a kinds document is {\"kinds\": [...]}"))
     kinds = doc["kinds"]
     types = Dict{String,Any}(kind(k).name => k for k in known)
     for k in kinds

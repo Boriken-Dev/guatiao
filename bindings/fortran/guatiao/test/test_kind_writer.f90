@@ -43,7 +43,7 @@ contains
   end subroutine
 
   subroutine refusals()
-    character(*), parameter :: HEAD = '{"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": false, ' // &
+    character(*), parameter :: HEAD = '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, ' // &
                                       '"slots": [{"name": "f", "required": true, "fallible": false, "args": ['
     call refused(HEAD // '{"name": "l", "type": "list", "pass": "borrowed"}]}]}]}', 'k.f(l): a list is not borrowed')
     call refused(HEAD // '{"name": "b", "type": "bytes_mut"}]}]}]}', 'on an object kind only')
@@ -57,16 +57,16 @@ contains
     call refused(HEAD // ']}, {"name": "close", "required": true, "fallible": false, "args": []}]}]}', &
                  'close names no method')
     call refused(HEAD // '], "answer": {"type": "bytes"}}]}]}', 'which no answer is')
-    call refused('{"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
+    call refused('{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
                  '{"name": "f", "required": false, "fallible": false, "args": []}, ' // &
                  '{"name": "g", "required": true, "fallible": false, "args": []}]}]}', 'the required slots come first')
     call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "A", "type": "i8"}]}]}]}', 'which ignores case')
     call refused(HEAD // ']}, {"name": "kind", "required": true, "fallible": false, "args": []}]}]}', &
                  'two things in the module would be named k_kind')
-    call refused('{"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
+    call refused('{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
                  '{"name": "k", "required": true, "fallible": false, "args": []}]}]}', 'k names no method')
-    call refused('{"format": 1, "kinds": [', 'not a value')
-    call refused('{"format": 2, "kinds": []}', 'format')
+    call refused('{"kinds": [', 'not a value')
+    call refused('{"kinds": 3}', 'kinds')
   end subroutine
 
   subroutine refused(document, says)

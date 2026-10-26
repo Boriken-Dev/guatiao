@@ -499,7 +499,7 @@ mod tests {
     use super::*;
     use guatiao::library::kind::KindDescription;
 
-    const KIND: &str = r#"{"format": 1, "kinds": [{"name": "t", "floor_hash": 1, "object": false,
+    const KIND: &str = r#"{"kinds": [{"name": "t", "floor_hash": 1, "object": false,
       "slots": [
         {"name": "text", "required": true, "fallible": false,
          "args": [{"name": "n", "type": "i64"}, {"name": "s", "type": "str"}]},
@@ -543,7 +543,7 @@ mod tests {
 
     /// A slot of each argument type, each answering a map; those named
     /// `back_` write back.
-    const WRITES: &str = r#"{"format": 1, "kinds": [{"name": "w", "floor_hash": 1, "object": false,
+    const WRITES: &str = r#"{"kinds": [{"name": "w", "floor_hash": 1, "object": false,
       "slots": [
         {"name": "back_lent_map", "args": [{"name": "a", "type": "map", "pass": "lent"}]},
         {"name": "back_lent_list", "args": [{"name": "a", "type": "list", "pass": "lent"}]},

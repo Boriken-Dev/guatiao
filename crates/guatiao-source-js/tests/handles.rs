@@ -24,7 +24,7 @@ use guatiao_bridge::BridgeSource;
 use guatiao_libffi::Libffi;
 use guatiao_source_js::JsEngine;
 
-const KINDS: &str = r#"{"format": 1, "kinds": [
+const KINDS: &str = r#"{"kinds": [
   {"name": "sink", "floor_hash": 7001, "object": true, "slots": [
     {"name": "put", "required": true, "fallible": true,
      "args": [{"name": "tree", "type": "map", "pass": "borrowed"}]},

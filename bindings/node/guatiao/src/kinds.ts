@@ -1394,7 +1394,6 @@ export interface TypeDescription {
 
 /** A document of kinds: what a kind crate commits beside its header. */
 export interface KindsDocument {
-  readonly format: 1;
   readonly kinds: readonly KindDescription[];
 }
 
@@ -1502,8 +1501,8 @@ function fromDescription(description: KindDescription, kindNamed: (name: string)
 
 function documentOf(given: KindsDocument | string): KindsDocument {
   const document = typeof given === 'string' ? (JSON.parse(given) as KindsDocument) : given;
-  if (document === null || typeof document !== 'object' || document.format !== 1 || !Array.isArray(document.kinds)) {
-    throw new TypeError('a kinds document is { format: 1, kinds: [...] }');
+  if (document === null || typeof document !== 'object' || !Array.isArray(document.kinds)) {
+    throw new TypeError('a kinds document is { kinds: [...] }');
   }
   return document;
 }
@@ -1556,7 +1555,7 @@ export function kindsOf(
 
 /** One kind's description as a kind; the object kinds it names come from `known`. */
 export function kindOf(description: KindDescription, options: { readonly known?: Iterable<KindLike> } = {}): Kind {
-  return kindsOf({ format: 1, kinds: [description] }, options)[description.name]!;
+  return kindsOf({ kinds: [description] }, options)[description.name]!;
 }
 
 /**
@@ -1610,7 +1609,7 @@ export function describeKinds(kinds: Iterable<KindLike>): KindsDocument {
       slots,
     });
   }
-  return { format: 1, kinds: described };
+  return { kinds: described };
 }
 
 // ---- calling a table ----------------------------------------------------------------

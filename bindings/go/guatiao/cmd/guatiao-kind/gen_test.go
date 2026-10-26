@@ -94,7 +94,7 @@ func TestReadsATableAsTheHeaderGeneratorRendersIt(t *testing.T) {
 }
 
 // The probe kinds of the header above, as their description.
-const document = `{"format": 1, "kinds": [
+const document = `{"kinds": [
   {"name": "probe", "floor_hash": 42, "object": false, "slots": [
     {"name": "greet", "required": true, "fallible": true, "args": [{"name": "name", "type": "str"}], "answer": {"type": "map"}},
     {"name": "fill", "required": false, "fallible": true, "args": [{"name": "config", "type": "map", "pass": "lent"}], "answer": {"type": "bool"}},
@@ -163,7 +163,7 @@ func TestWritesTheSameGlueFromADescription(t *testing.T) {
 
 func TestRefusesADescriptionItCannotRead(t *testing.T) {
 	cases := map[string]struct{ from, to, says string }{
-		"another format":    {`"format": 1`, `"format": 2`, "format 1"},
+		"no kinds":          {`{"kinds": [`, `{"kindz": [`, "a kinds document is"},
 		"an unknown type":   {`"type": "i64"`, `"type": "u128"`, "an answer cannot be"},
 		"a borrowed list":   {`"type": "map", "pass": "taken"`, `"type": "list", "pass": "borrowed"`, "a list cannot be passed borrowed"},
 		"a kind not in it":  {`"name": "ear"`, `"name": "lug"`, "describes no kind ear"},

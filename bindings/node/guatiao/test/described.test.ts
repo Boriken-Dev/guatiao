@@ -62,8 +62,8 @@ describe('a kind loaded from its description', () => {
 
   it('refuses a document it cannot read, naming where', () => {
     const one = (slots: unknown, extra: unknown[] = []): KindsDocument =>
-      ({ format: 1, kinds: [{ name: 'k', floor_hash: 1, slots }, ...extra] }) as never;
-    expect(() => kindsOf({ format: 2, kinds: [] } as never)).toThrow(/format: 1/);
+      ({ kinds: [{ name: 'k', floor_hash: 1, slots }, ...extra] }) as never;
+    expect(() => kindsOf({ name: 'k' } as never)).toThrow(/\{ kinds: \[\.\.\.\] \}/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'u128' }] }]))).toThrow(/k\.x argument 0: u128/);
     expect(() => kindsOf(one([{ name: 'x', answer: { type: 'str' } }]))).toThrow(/k\.x answer: an answer cannot be str/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'list' }] }]))).toThrow(/a list cannot be passed borrowed/);
@@ -84,8 +84,8 @@ describe('a kind loaded from its description', () => {
 describe('modules written from two documents', () => {
   it('import the object kinds the other one describes', async () => {
     const whole = document();
-    const objects: KindsDocument = { format: 1, kinds: whole.kinds.filter((k) => k.object) };
-    const greeters: KindsDocument = { format: 1, kinds: whole.kinds.filter((k) => !k.object) };
+    const objects: KindsDocument = { kinds: whole.kinds.filter((k) => k.object) };
+    const greeters: KindsDocument = { kinds: whole.kinds.filter((k) => !k.object) };
     const imports = { listener: './objects.js', conversation: './objects.js' };
     expect(() => generate(greeters)).toThrow(/the object kind listener is not in this document/);
     // Beside this file, so the modules resolve `guatiao` as the suite does.
@@ -145,12 +145,11 @@ describe('the module guatiao-kind writes', () => {
 
   it('names its types after the kinds and keeps its own names apart', () => {
     const { dts } = generate({
-      format: 1,
       kinds: [{ name: 'session.backend_v2', floor_hash: 3, object: false, slots: [{ name: 'open', required: true, args: [{ name: 'default', type: 'u8' }] }] }],
     });
     expect(dts).toContain('export interface SessionBackendV2 {');
     expect(dts).toContain('  open(default_: number): void;');
-    expect(() => generate({ format: 1, kinds: [{ name: 'a', floor_hash: 1, slots: [] }, { name: 'A', floor_hash: 2, slots: [] }] })).toThrow(
+    expect(() => generate({ kinds: [{ name: 'a', floor_hash: 1, slots: [] }, { name: 'A', floor_hash: 2, slots: [] }] })).toThrow(
       /two kinds are A/,
     );
   });
@@ -160,7 +159,6 @@ describe('the module guatiao-kind writes', () => {
 
 /** A node answers its children, nodes too, and is lent another; a forest answers a root. */
 const TREES: KindsDocument = {
-  format: 1,
   kinds: [
     {
       name: 'forest',
@@ -233,7 +231,6 @@ describe('a kind that names itself through its slots', () => {
 
   it('or names one that names it back', () => {
     const cycle: KindsDocument = {
-      format: 1,
       kinds: [
         { name: 'ping', floor_hash: 1, object: true, slots: [{ name: 'pong', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'pong' } }] },
         { name: 'pong', floor_hash: 2, object: true, slots: [{ name: 'ping', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'ping' } }] },
@@ -382,7 +379,6 @@ class Relay extends Kind {
 
 describe('a kind described again', () => {
   const expected: KindsDocument = {
-    format: 1,
     kinds: [
       {
         name: 'relay',

@@ -3305,7 +3305,7 @@ mod tests {
             /// Second paragraph.
             pub trait Codec: Send + Sync {
                 fn open(&self, config: Option<&Value>, tags: List, into: &mut Value, cb: Object<dyn Sink>) -> Result<(), ProviderError>;
-                /// Appended.
+                /// Optional.
                 fn close(&self) -> u32 { 0 }
             }
             "#,
@@ -3321,7 +3321,7 @@ mod tests {
             r#"{\"name\":\"into\",\"type\":\"value\",\"pass\":\"lent\"}"#,
             r#"{\"name\":\"cb\",\"type\":\"object\",\"kind\":"#,
             "<dyn Sink as ::guatiao::library::Kind>::NAME",
-            r#"{\"name\":\"close\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"u32\"},\"doc\":\"Appended.\"}"#,
+            r#"{\"name\":\"close\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"u32\"},\"doc\":\"Optional.\"}"#,
         ] {
             assert!(pretty.contains(expected), "missing {expected} in {pretty}");
         }

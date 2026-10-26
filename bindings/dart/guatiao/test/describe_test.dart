@@ -92,7 +92,6 @@ abstract interface class Store {
 }
 ''');
     expect(doc, {
-      'format': 1,
       'kinds': [
         {
           'name': 'store.v2',

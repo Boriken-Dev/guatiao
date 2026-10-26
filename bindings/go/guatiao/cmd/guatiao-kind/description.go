@@ -12,8 +12,7 @@ import (
 // The kinds document a kind crate commits beside its header
 // (<crate>.kinds.json), or a provider carries: what a kind is, as data.
 type kindsDocument struct {
-	Format int               `json:"format"`
-	Kinds  []kindDescription `json:"kinds"`
+	Kinds []kindDescription `json:"kinds"`
 }
 
 type kindDescription struct {
@@ -52,8 +51,8 @@ func readDocument(text []byte) (*kindsDocument, error) {
 	if err := json.Unmarshal(text, &doc); err != nil {
 		return nil, fmt.Errorf("not a kinds document: %w", err)
 	}
-	if doc.Format != 1 {
-		return nil, fmt.Errorf("a kinds document is format 1, not %d", doc.Format)
+	if doc.Kinds == nil {
+		return nil, fmt.Errorf(`a kinds document is {"kinds": [...]}`)
 	}
 	return &doc, nil
 }

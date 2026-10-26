@@ -31,8 +31,8 @@ end
 end
 
 """
-`greeter_vtable`: greets by name. `greet` is the one slot every table has;
-the rest were appended, and an older table may lack them.
+`greeter_vtable`: greets by name. `greet` is the one slot every provider
+fills; the rest are optional, which a provider may leave out.
 """
 @kind Greeter floor_hash = 2695856491 begin
     @required @fallible greet(name::String)::MapRef

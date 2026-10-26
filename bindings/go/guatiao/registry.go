@@ -334,7 +334,7 @@ func (r *Registry) ProviderMeta(key string) (*Value, bool, error) {
 
 // KindDescriptions is the document of the kinds the provider under key
 // serves and of every object kind their slots take or answer
-// ({"format": 1, "kinds": [...]}, the <crate>.kinds.json a kind crate
+// ({"kinds": [...]}, the <crate>.kinds.json a kind crate
 // commits), as a Value the caller owns and closes, and false when the
 // provider carries none: what guatiao-kind writes a kind's glue from when
 // no file of it is at hand. ErrNotFound when nothing answers to key,

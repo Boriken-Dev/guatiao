@@ -79,9 +79,9 @@ same_spec(a, b) = (a.name, a.floor_hash, a.object, a.size, a.floor) == (b.name, 
         @test same_spec(Guatiao.kind(loaded[name]), Guatiao.kind(K))
     end
     # The text is read by the library, and refused naming where.
-    e = try Guatiao.kinds_of("{\"format\": 2, \"kinds\": []}") catch e; e end
-    @test e isa GuatiaoError && e.status == Guatiao.BadValue && occursin("format", e.message)
-    bad = Dict("format" => 1, "kinds" => [Dict("name" => "k", "floor_hash" => 1, "object" => false,
+    e = try Guatiao.kinds_of("{\"kinds\": 3}") catch e; e end
+    @test e isa GuatiaoError && e.status == Guatiao.BadValue && occursin("kinds", e.message)
+    bad = Dict("kinds" => [Dict("name" => "k", "floor_hash" => 1, "object" => false,
         "slots" => [Dict("name" => "x", "required" => true, "fallible" => false,
                          "args" => [Dict("name" => "a", "type" => "list", "pass" => "borrowed")])])])
     e = try Guatiao.kinds_of(bad) catch e; e end

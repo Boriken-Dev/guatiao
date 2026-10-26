@@ -55,7 +55,6 @@ impl Described {
     pub fn add_value(&mut self, value: &Value) -> Result<usize, ProviderError> {
         let n = self.kinds.add_value(value).map_err(ProviderError::from)?;
         let kinds = TryAsRef::<Map>::try_as_ref(value)
-            .filter(|m| m.get("format").is_some())
             .and_then(|m| m.get("kinds"))
             .and_then(TryAsRef::<List>::try_as_ref);
         let one = [value.clone()];

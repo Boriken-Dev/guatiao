@@ -33,8 +33,7 @@ import (
 //	//guatiao:mut dst                     these bytes are written in place
 
 type outDocument struct {
-	Format int       `json:"format"`
-	Kinds  []outKind `json:"kinds"`
+	Kinds []outKind `json:"kinds"`
 }
 
 type outKind struct {
@@ -74,7 +73,7 @@ var describeScalars = map[string]string{
 // interfaces, in the order the package declares them (files by name, then
 // as written). Every object kind a slot reaches is one of them.
 func (p *pkgInfo) describe() ([]byte, error) {
-	doc := outDocument{Format: 1}
+	doc := outDocument{Kinds: []outKind{}}
 	named := map[string]string{}
 	for _, k := range p.kinds {
 		if other, twice := named[k.kind]; twice {

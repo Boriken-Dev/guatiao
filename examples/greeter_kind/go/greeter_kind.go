@@ -27,8 +27,8 @@ type Named struct {
 	Name string `guatiao:"name"`
 }
 
-// Greeter greets by name: greeter_vtable. Greet is the slot every table
-// has; the others were appended, and an older table may lack them.
+// Greeter greets by name: greeter_vtable. Greet is the slot every
+// provider fills; the others are optional, which a provider may leave out.
 //
 //guatiao:kind greeter greeter_vtable
 type Greeter interface {
