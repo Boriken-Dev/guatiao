@@ -1253,6 +1253,13 @@ write now.
   first in its place. `guatiao_map_set` stays a scan per call, and its
   documentation now says so.
 
+- **Layering two long lists with `MergeMode::Deep` is linear in their
+  items.** The union compared each later item with every item already
+  held, so two lists of 100 000 items took many minutes in a debug build
+  (`mergelists` on or off, and `guatiao_merge` through it). Past 16 items
+  a held item is found through a hash of its structure; which items are
+  kept, and their order, is unchanged.
+
 - **On Windows a library's own directory is searched for what it imports.**
   A plugin linking `guatiao.dll` shipped beside it, in a directory of its
   own, failed to load: Windows looked beside the host and on `PATH` only.

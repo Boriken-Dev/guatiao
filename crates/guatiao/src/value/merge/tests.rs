@@ -1377,3 +1377,60 @@ fn an_error_path_quotes_a_key_holding_a_dot() {
     };
     assert_eq!(path, "a.b");
 }
+
+/// Past the length where held items are found by a hash of their
+/// structure, uniqueness is still equality: a number is its text, a map's
+/// keys count in order, a string is not a number, and a repeat within the
+/// later list is dropped too. The same items unioned into a short list,
+/// where every held item is compared, give the same tail.
+#[test]
+fn a_long_union_finds_repeats_by_the_same_equality() {
+    use crate::value::types::Number;
+    let num = |text: &str| Value::from(Number::new(text).unwrap());
+    let shared = [
+        num("1.10"),
+        l([m([("a", n(1)), ("b", n(2))])]),
+        Value::from(Buffer::new(&[1, 2])),
+        b(true),
+        null(),
+    ];
+    let later = l([
+        num("1.1"),
+        num("1.10"),
+        l([m([("b", n(2)), ("a", n(1))])]),
+        l([m([("a", n(1)), ("b", n(2))])]),
+        Value::from(Buffer::new(&[1, 2])),
+        Value::from(Buffer::new(&[1, 2, 3])),
+        b(false),
+        b(true),
+        null(),
+        s("1.1"),
+        s("1.1"),
+    ]);
+    let added = [
+        num("1.1"),
+        l([m([("b", n(2)), ("a", n(1))])]),
+        Value::from(Buffer::new(&[1, 2, 3])),
+        b(false),
+        s("1.1"),
+    ];
+
+    let filler: Vec<Value> = (0..SCAN as i64 * 2).map(n).collect();
+    let long: Vec<Value> = filler
+        .iter()
+        .cloned()
+        .chain(shared.iter().cloned())
+        .collect();
+    let short: Vec<Value> = shared.to_vec();
+    assert!(long.len() > SCAN && short.len() + added.len() <= SCAN);
+    for earlier in [long, short] {
+        let expected = l(earlier.iter().cloned().chain(added.iter().cloned()));
+        for mergelists in [false, true] {
+            let options = MergeOptions::new().with_mergelists(mergelists);
+            assert_merges_to!(
+                merge_with(MergeMode::Deep, &l(earlier.clone()), &later, options, None),
+                expected.clone(),
+            );
+        }
+    }
+}

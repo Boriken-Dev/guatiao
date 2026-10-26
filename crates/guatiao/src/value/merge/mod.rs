@@ -85,12 +85,16 @@
 pub(crate) mod path;
 
 use alloc::collections::BTreeMap;
+use core::hash::{BuildHasher, Hasher};
+use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
 
 use crate::value::alloc::Alloc;
 use crate::value::convert::{ToValue, TryAsRef, describe};
 use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::types::map::{Filling, Lookup};
 use crate::value::types::{List, Map, Tag, Value};
+use crate::value::walk;
 
 /// Which strategy combines two values.
 ///
@@ -1057,6 +1061,7 @@ fn union_lists(
     {
         result.push(clone_into(item, alloc)?);
     }
+    let mut held = Held::new();
 
     if ctx.options.mergelists {
         // Map elements of the later list, by the position they sat at --
@@ -1077,7 +1082,7 @@ fn union_lists(
             .unwrap_or(&[])
             .iter()
         {
-            if !is_map(item) && !contains(&result, item) {
+            if !is_map(item) && !held.contains(&result, item) {
                 result.push(clone_into(item, alloc)?);
             }
         }
@@ -1128,7 +1133,7 @@ fn union_lists(
             .unwrap_or(&[])
             .iter()
         {
-            if !is_map(item) && !contains(&result, item) {
+            if !is_map(item) && !held.contains(&result, item) {
                 result.push(clone_into(item, alloc)?);
             }
         }
@@ -1150,9 +1155,55 @@ fn union_lists(
     Ok(out.into())
 }
 
-/// Whether `built` already holds a value equal to `item`.
-fn contains(built: &[Value], item: &Value) -> bool {
-    built.iter().any(|held| held == item)
+/// Up to this many items, a later item is looked for by comparing it with
+/// every one held.
+const SCAN: usize = 16;
+
+/// Finds whether a list being built already holds a value equal to an
+/// item, by a seeded hash of the item's structure past [`SCAN`] items, so
+/// a union of N and M items is linear in them rather than N*M
+/// comparisons. The list may only grow between lookups.
+struct Held {
+    hasher: RandomState,
+    /// The first position of each hash among the items indexed so far.
+    first: HashMap<u64, usize>,
+    /// How many items of the list are indexed.
+    indexed: usize,
+}
+
+impl Held {
+    fn new() -> Held {
+        Held {
+            hasher: RandomState::new(),
+            first: HashMap::new(),
+            indexed: 0,
+        }
+    }
+
+    fn hash(&self, value: &Value) -> u64 {
+        let mut state = self.hasher.build_hasher();
+        walk::hash(value, &mut state);
+        state.finish()
+    }
+
+    /// Whether `built` holds a value equal to `item`.
+    fn contains(&mut self, built: &[Value], item: &Value) -> bool {
+        if built.len() <= SCAN {
+            return built.iter().any(|held| held == item);
+        }
+        for (at, held) in built.iter().enumerate().skip(self.indexed) {
+            let hash = self.hash(held);
+            self.first.entry(hash).or_insert(at);
+        }
+        self.indexed = built.len();
+        match self.first.get(&self.hash(item)) {
+            None => false,
+            Some(&at) if built[at] == *item => true,
+            // Another value with the same seeded hash: rare enough that
+            // the scan stays off the common path.
+            Some(_) => built.iter().any(|held| held == item),
+        }
+    }
 }
 
 #[cfg(test)]
