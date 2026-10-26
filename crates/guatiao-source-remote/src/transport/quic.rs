@@ -332,8 +332,9 @@ impl ClientCertVerifier for Sourced {
 }
 
 /// A client's server verifier, keeping the refusal of the connection being
-/// made for the words. One for every connection of a [`QuicConnect`]:
-/// rustls resumes a session only under the verifier that made it.
+/// made for the words: one per connection, or one for every connection of
+/// a [`QuicConnect`] whose policy keeps resumption, since rustls resumes a
+/// session only under the verifier that made it.
 #[derive(Debug)]
 pub(super) struct Watched {
     pub(super) inner: Arc<dyn ServerCertVerifier>,
@@ -907,29 +908,66 @@ fn connection(
     }
 }
 
+/// How long a connect waits on one address before it tries the next as
+/// well (RFC 8305's connection attempt delay).
+const NEXT_ADDRESS: Duration = Duration::from_millis(250);
+
 /// Connects to a server at `host:port` over QUIC: the handshake runs in
 /// [`connect`](Connect::connect), so a server this side does not trust
-/// fails it there.
+/// fails it there. A name with several addresses has them tried at once,
+/// each started a moment after the one before (QUIC hears nothing back
+/// from an address nobody listens at, so one at a time would wait out the
+/// timeout on each).
 pub struct QuicConnect {
     address: String,
-    crypto: Arc<QuicClientConfig>,
-    watched: Arc<Watched>,
-    /// Held while connecting, so a refusal kept is that connection's.
-    connecting: Mutex<()>,
+    timeout: Duration,
+    dial: Arc<Dial>,
+}
+
+/// What every connection of a [`QuicConnect`] is made with, shared by the
+/// threads trying its addresses.
+struct Dial {
+    /// The client configuration, its server verifier set per connection.
+    client: Arc<ClientConfig>,
+    verifier: Arc<dyn ServerCertVerifier>,
+    /// When the policy keeps resumption: the one configuration and verifier
+    /// every connection uses, and the turn connects take so that a refusal
+    /// kept is that connection's.
+    resuming: Option<Resuming>,
     me: String,
     /// Whether the server's certificate is checked: false at no security.
     proves: bool,
-    timeout: Duration,
     rt: Arc<Rt>,
+}
+
+struct Resuming {
+    crypto: Arc<QuicClientConfig>,
+    watched: Arc<Watched>,
+    turn: Mutex<()>,
+}
+
+/// One connection's configuration and the verifier keeping its refusal,
+/// and the turn it holds while connecting when the policy keeps
+/// resumption.
+struct Attempt<'a> {
+    crypto: Arc<QuicClientConfig>,
+    watched: Arc<Watched>,
+    _turn: Option<MutexGuard<'a, ()>>,
 }
 
 impl core::fmt::Debug for QuicConnect {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("QuicConnect")
             .field("address", &self.address)
-            .field("as", &self.me)
+            .field("as", &self.dial.me)
             .finish()
     }
+}
+
+fn quic_client(tls: ClientConfig) -> io::Result<Arc<QuicClientConfig>> {
+    QuicClientConfig::try_from(Arc::new(tls))
+        .map(Arc::new)
+        .map_err(|e| invalid(format!("the TLS policy does not fit QUIC: {e}")))
 }
 
 impl QuicConnect {
@@ -937,28 +975,43 @@ impl QuicConnect {
     /// [`TlsConnect`](super::tls::TlsConnect)), within [`CONNECT_TIMEOUT`]
     /// for each address tried.
     pub fn new(address: &str, config: &TlsConfig) -> io::Result<QuicConnect> {
-        let verifier = config
+        let verifier: Arc<dyn ServerCertVerifier> = config
             .trust()?
             .server_cert_verifier_with(config.tls_policy())
             .map_err(|e| invalid(super::tls::words(&e)))?;
-        let watched = Arc::new(Watched {
-            inner: verifier,
-            refusal: Mutex::new(None),
-        });
-        let mut tls: ClientConfig = (*config.client()?).clone();
-        tls.dangerous()
-            .set_certificate_verifier(Arc::clone(&watched) as Arc<dyn ServerCertVerifier>);
-        let crypto = QuicClientConfig::try_from(Arc::new(tls))
-            .map_err(|e| invalid(format!("the TLS policy does not fit QUIC: {e}")))?;
+        let client = config.client()?;
+        // Only a policy keeping resumption needs one verifier for every
+        // connection; with none, connects need not take turns.
+        let resuming = if config.tls_policy().allow_resumption {
+            let watched = Arc::new(Watched {
+                inner: Arc::clone(&verifier),
+                refusal: Mutex::new(None),
+            });
+            let mut tls: ClientConfig = (*client).clone();
+            tls.dangerous()
+                .set_certificate_verifier(Arc::clone(&watched) as Arc<dyn ServerCertVerifier>);
+            Some(Resuming {
+                crypto: quic_client(tls)?,
+                watched,
+                turn: Mutex::new(()),
+            })
+        } else {
+            // Checked here, as the shared configuration is: a policy QUIC
+            // cannot run fails `new`, not a connect.
+            quic_client((*client).clone())?;
+            None
+        };
         Ok(QuicConnect {
             address: address.to_string(),
-            crypto: Arc::new(crypto),
-            watched,
-            connecting: Mutex::new(()),
-            me: config.me(),
-            proves: config.proves_peers(),
             timeout: CONNECT_TIMEOUT,
-            rt: Rt::new()?,
+            dial: Arc::new(Dial {
+                client,
+                verifier,
+                resuming,
+                me: config.me(),
+                proves: config.proves_peers(),
+                rt: Rt::new()?,
+            }),
         })
     }
 
@@ -976,10 +1029,111 @@ impl QuicConnect {
         self
     }
 
-    fn connect_to(&self, addr: SocketAddr) -> io::Result<Connection> {
-        let _one = lock(&self.connecting);
-        *lock(&self.watched.refusal) = None;
-        let mut config = quinn::ClientConfig::new(Arc::clone(&self.crypto) as Arc<_>);
+    /// Tries every address at once, each started [`NEXT_ADDRESS`] after the
+    /// one before or as soon as it failed; the first link wins, and a
+    /// refusal is the answer. The others are let go as they finish.
+    fn race(&self, addrs: Vec<SocketAddr>) -> io::Result<Connection> {
+        /// Stops every attempt still in its handshake when the race is over.
+        struct Over(Arc<Ending>);
+        impl Drop for Over {
+            fn drop(&mut self) {
+                self.0.end();
+            }
+        }
+        let over = Over(Arc::new(Ending::default()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let start = |addr: SocketAddr| {
+            let (dial, tx, timeout) = (Arc::clone(&self.dial), tx.clone(), self.timeout);
+            let over = Arc::clone(&over.0);
+            let started = thread::Builder::new()
+                .name("guatiao-remote quic connect".to_string())
+                .spawn(move || {
+                    let _ = tx.send(dial.connect_to(addr, timeout, Some(&over)));
+                });
+            started.map(drop)
+        };
+        let mut left = addrs.into_iter();
+        let mut running = 0usize;
+        let mut last = io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!(
+                "no address of {} answered within {:?}",
+                self.address, self.timeout
+            ),
+        );
+        loop {
+            if running == 0 || left.len() > 0 {
+                // Start the next now: none is running, or it is time.
+                if let Some(addr) = left.next() {
+                    match start(addr) {
+                        Ok(()) => running += 1,
+                        Err(e) => last = e,
+                    }
+                    if running == 0 {
+                        continue;
+                    }
+                } else if running == 0 {
+                    return Err(last);
+                }
+            }
+            let got = if left.len() > 0 {
+                match rx.recv_timeout(NEXT_ADDRESS) {
+                    Ok(got) => got,
+                    Err(_) => continue,
+                }
+            } else {
+                // Each attempt answers within its handshake and its stream's
+                // opening, each bounded by the timeout.
+                let bound = self.timeout.saturating_mul(2).saturating_add(NEXT_ADDRESS);
+                rx.recv_timeout(bound)
+                    .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, last.to_string()))?
+            };
+            running -= 1;
+            match got {
+                Ok(conn) => return Ok(conn),
+                Err(e) if e.kind() == io::ErrorKind::PermissionDenied => return Err(e),
+                Err(e) => last = e,
+            }
+        }
+    }
+}
+
+impl Dial {
+    /// What a connection is made with.
+    fn crypto(&self) -> io::Result<Attempt<'_>> {
+        if let Some(r) = &self.resuming {
+            let turn = lock(&r.turn);
+            *lock(&r.watched.refusal) = None;
+            return Ok(Attempt {
+                crypto: Arc::clone(&r.crypto),
+                watched: Arc::clone(&r.watched),
+                _turn: Some(turn),
+            });
+        }
+        let watched = Arc::new(Watched {
+            inner: Arc::clone(&self.verifier),
+            refusal: Mutex::new(None),
+        });
+        let mut tls: ClientConfig = (*self.client).clone();
+        tls.dangerous()
+            .set_certificate_verifier(Arc::clone(&watched) as Arc<dyn ServerCertVerifier>);
+        Ok(Attempt {
+            crypto: quic_client(tls)?,
+            watched,
+            _turn: None,
+        })
+    }
+
+    /// A connection to `addr`, its handshake given up once `over` ends.
+    fn connect_to(
+        &self,
+        addr: SocketAddr,
+        timeout: Duration,
+        over: Option<&Ending>,
+    ) -> io::Result<Connection> {
+        let attempt = self.crypto()?;
+        let watched = &attempt.watched;
+        let mut config = quinn::ClientConfig::new(Arc::clone(&attempt.crypto) as Arc<_>);
         config.transport_config(transport());
         let handle = self.rt.handle();
         let bind: SocketAddr = if addr.is_ipv4() {
@@ -996,8 +1150,21 @@ impl QuicConnect {
                 .map_err(invalid)?;
             (endpoint, connecting)
         };
-        let conn = wait_at_most(handle, Some(self.timeout), connecting)?.map_err(|e| {
-            if let Some(r) = *lock(&self.watched.refusal) {
+        let handshake = async move {
+            match over {
+                Some(over) => over.or_ended(connecting).await,
+                None => Some(connecting.await),
+            }
+        };
+        let conn = wait_at_most(handle, Some(timeout), handshake)?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    "another address of the name linked first",
+                )
+            })?
+            .map_err(|e| {
+            if let Some(r) = *lock(&watched.refusal) {
                 return untrusted_server(r, addr);
             }
             if certificate_refused(&e) {
@@ -1040,8 +1207,8 @@ impl QuicConnect {
         check_alpn(&conn)?;
         let peer = fingerprint(&conn)?;
         let opening = conn.open_bi();
-        let (send, recv) = wait_at_most(handle, Some(self.timeout), opening)?
-            .map_err(|e| gone(e, Some(&self.me)))?;
+        let (send, recv) =
+            wait_at_most(handle, Some(timeout), opening)?.map_err(|e| gone(e, Some(&self.me)))?;
         let shared = Shared {
             conn: OnceLock::new(),
             send: Mutex::new(None),
@@ -1060,9 +1227,14 @@ impl QuicConnect {
 
 impl Connect for QuicConnect {
     fn connect(&self) -> io::Result<Connection> {
+        let addrs: Vec<SocketAddr> = self.address.to_socket_addrs()?.collect();
+        // Connects taking turns try one address at a time.
+        if addrs.len() > 1 && self.dial.resuming.is_none() {
+            return self.race(addrs);
+        }
         let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
-        for addr in self.address.to_socket_addrs()? {
-            match self.connect_to(addr) {
+        for addr in addrs {
+            match self.dial.connect_to(addr, self.timeout, None) {
                 Ok(conn) => return Ok(conn),
                 // A refusal is the answer; another address will not change it.
                 Err(e) if e.kind() == io::ErrorKind::PermissionDenied => return Err(e),
@@ -1480,7 +1652,8 @@ mod tests {
         let (endpoint, connecting) = {
             let _inside = h.enter();
             let endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
-            let mut config = quinn::ClientConfig::new(Arc::clone(&connect.crypto) as Arc<_>);
+            let crypto = connect.dial.crypto().unwrap().crypto;
+            let mut config = quinn::ClientConfig::new(crypto as Arc<_>);
             config.transport_config(transport());
             let connecting = endpoint
                 .connect_with(config, addr, coqui_peer_tls::SERVER_NAME)
@@ -1520,6 +1693,80 @@ mod tests {
             server.reader.read_frame(&mut buf, 1 << 10).is_err(),
             "a frame from the new address arrived"
         );
+    }
+
+    #[test]
+    fn connects_through_one_client_do_not_wait_for_each_other() {
+        let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+        let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+        let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+        let listen = QuicListen::bind("127.0.0.1:0", &server).unwrap();
+        let connect = Arc::new(
+            QuicConnect::new(&listen.local_addr().unwrap().to_string(), &client)
+                .unwrap()
+                .timeout(Duration::from_secs(5)),
+        );
+        let dial = |connect: &Arc<QuicConnect>| {
+            let connect = Arc::clone(connect);
+            thread::spawn(move || {
+                let started = Instant::now();
+                let linked = connect.connect().map(drop);
+                (linked.map_err(|e| e.kind()), started.elapsed())
+            })
+        };
+        // The first connection's handshake waits for the server to read it,
+        // which it does only once the second has linked.
+        let first = dial(&connect);
+        let Accepted::Connection(mut held) = listen.accept().unwrap() else {
+            panic!("every source proceeds");
+        };
+        let second = dial(&connect);
+        let Accepted::Connection(mut served) = listen.accept().unwrap() else {
+            panic!("every source proceeds");
+        };
+        let reading = thread::spawn(move || {
+            served
+                .reader
+                .set_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let _ = served.reader.read_frame(&mut Vec::new(), 64);
+        });
+        let (linked, took) = second.join().unwrap();
+        assert_eq!(linked, Ok(()));
+        assert!(took < Duration::from_secs(2), "{took:?}");
+        held.reader
+            .set_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let _ = held.reader.read_frame(&mut Vec::new(), 64);
+        assert_eq!(first.join().unwrap().0, Ok(()));
+        reading.join().unwrap();
+    }
+
+    #[test]
+    fn an_address_nobody_answers_does_not_hold_up_the_next() {
+        let id = Identity::generate().unwrap();
+        let config = TlsConfig::new(id.clone()).pins([id.fingerprint()]);
+        let listen = QuicListen::bind("127.0.0.1:0", &config).unwrap();
+        // Bound and silent: QUIC hears nothing back from it.
+        let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let addrs = vec![silent.local_addr().unwrap(), listen.local_addr().unwrap()];
+        let connect = QuicConnect::new("unused:0", &config).unwrap();
+        let serving = thread::spawn(move || {
+            let Accepted::Connection(mut server) = listen.accept().unwrap() else {
+                panic!("every source proceeds");
+            };
+            server
+                .reader
+                .set_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let _ = server.reader.read_frame(&mut Vec::new(), 64);
+        });
+        let started = Instant::now();
+        let linked = connect.race(addrs).map(drop);
+        assert!(linked.is_ok(), "{linked:?}");
+        let took = started.elapsed();
+        assert!(took < Duration::from_secs(2), "{took:?}");
+        serving.join().unwrap();
     }
 
     #[test]

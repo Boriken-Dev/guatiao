@@ -277,7 +277,11 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   server refusing after the handshake closes with code 2; any TLS alert
   is a refusal (`PermissionDenied`, so `BAD_VALUE`), never `GONE`. The
   `closer` (or `shutdown`) before a server's handshake is through ends it
-  at once (`ConnectionAborted`).
+  at once (`ConnectionAborted`). A name's addresses are tried at once,
+  each 250 ms after the one before (the first link wins, a refusal is
+  the answer); connects through one `QuicConnect` run side by side
+  unless the policy keeps resumption, when they take turns and try one
+  address at a time.
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it. `write_frames` gets frames queued while another
   thread wrote: by default one `write_frame` each, a stream writes them
