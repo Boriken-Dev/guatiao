@@ -71,6 +71,12 @@ def build_c_source(into: Path, name: str = "c_shelf") -> "Path | None":
     return _build("source_in_c.c", into, name)
 
 
+def build_layout(into: Path) -> "Path | None":
+    """`layout.c`, the header's structs as this platform's C compiler lays
+    them out, as a file; `None` without a compiler."""
+    return _build("layout.c", into, "c_layout")
+
+
 def library_dir() -> str:
     """The directory the suite's libraries are in: `GUATIAO_LIBRARY`, or
     the directory of the file it names (an application's own library

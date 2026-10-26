@@ -9,8 +9,10 @@ header's own order. No `_pack_`: the header is natural alignment, which
 is what a C compiler also gives these structs, so ctypes' default
 layout already matches.
 
-This binding targets 64-bit platforms only (size_t and every pointer are
-8 bytes) -- the same assumption the sizes below pin.
+Every size and offset follows the pointer width, as the header's do: a
+view is two words, an owned container four, a value 8 bytes and four
+words. A 64-bit integer is 8-aligned, as on every platform the library
+builds for (64-bit, and 32-bit ARM).
 """
 
 from __future__ import annotations
@@ -380,26 +382,33 @@ def _offset(struct: type, field: str) -> int:
     return offset
 
 
-# Sizes and offsets are the ABI: pinned by `value/types/mod.rs` and
-# asserted again there with `_Static_assert`-equivalent Rust `const`
-# checks. A mismatch here means this binding was built for the wrong
-# pointer width, not that the crate changed.
-assert ctypes.sizeof(Str) == 16
-assert ctypes.sizeof(Bytes) == 16
-assert ctypes.sizeof(Values) == 16
-assert ctypes.sizeof(Entries) == 16
-assert ctypes.sizeof(String) == 32
-assert ctypes.sizeof(Buffer) == 32
-assert ctypes.sizeof(List) == 32
-assert ctypes.sizeof(Map) == 32
-assert ctypes.sizeof(Payload) == 32
-assert ctypes.sizeof(Value) == 40
-assert ctypes.sizeof(Entry) == 72
+#: The width of a pointer and of `size_t`, in bytes: 8 on a 64-bit
+#: platform, 4 on a 32-bit one.
+WORD = ctypes.sizeof(c_void_p)
+
+# Sizes and offsets are the ABI, written in words as
+# `value/types/mod.rs` states them. A failure here means the ctypes mirror
+# and the C header disagree on this platform.
+_W = WORD
+assert ctypes.sizeof(c_size_t) == _W
+assert ctypes.alignment(ctypes.c_uint64) == 8
+assert ctypes.sizeof(Str) == 2 * _W
+assert ctypes.sizeof(Bytes) == 2 * _W
+assert ctypes.sizeof(Values) == 2 * _W
+assert ctypes.sizeof(Entries) == 2 * _W
+assert ctypes.sizeof(String) == 4 * _W
+assert ctypes.sizeof(Buffer) == 4 * _W
+assert ctypes.sizeof(List) == 4 * _W
+assert ctypes.sizeof(Map) == 4 * _W
+assert ctypes.sizeof(Payload) == 4 * _W
+assert ctypes.sizeof(Value) == 8 + 4 * _W
+assert ctypes.sizeof(Entry) == 4 * _W + ctypes.sizeof(Value)
 assert _offset(Value, "tag") == 0
 assert _offset(Value, "_pad") == 4
 assert _offset(Value, "payload") == 8
 assert _offset(Entry, "key") == 0
-assert _offset(Entry, "value") == 32
+assert _offset(Entry, "value") == 4 * _W
+assert ctypes.sizeof(Alloc) == 5 * _W
 assert ctypes.sizeof(DateFields) == 8
 assert ctypes.sizeof(TimeFields) == 8
 assert _offset(TimeFields, "nanosecond") == 4
@@ -407,15 +416,15 @@ assert ctypes.sizeof(DateTimeFields) == 16
 assert ctypes.sizeof(TimestampFields) == 16
 assert ctypes.sizeof(SpanFields) == 64
 assert _offset(SpanFields, "nanoseconds") == 56
-assert ctypes.sizeof(TextError) == 48
-assert ctypes.sizeof(Kinds) == 16
-assert ctypes.sizeof(KindTable) == 32
-assert ctypes.sizeof(KindTables) == 24
-assert ctypes.sizeof(Providers) == 24
-assert ctypes.sizeof(ProviderInfo) == 168
-assert _offset(ProviderInfo, "tables") == 112
-assert _offset(ProviderInfo, "destroy") == 144
-assert _offset(ProviderInfo, "kind_descriptions") == 152
-assert ctypes.sizeof(LibraryInfo) == 80
-assert _offset(LibraryInfo, "unload") == 72
-assert ctypes.sizeof(HostInfo) == 64
+assert ctypes.sizeof(TextError) == _W + ctypes.sizeof(Value)
+assert ctypes.sizeof(Kinds) == 2 * _W
+assert ctypes.sizeof(KindTable) == 8 + 3 * _W
+assert ctypes.sizeof(KindTables) == 3 * _W
+assert ctypes.sizeof(Providers) == 3 * _W
+assert ctypes.sizeof(ProviderInfo) == 8 + 20 * _W
+assert _offset(ProviderInfo, "tables") == 8 + 13 * _W
+assert _offset(ProviderInfo, "destroy") == 8 + 17 * _W
+assert _offset(ProviderInfo, "kind_descriptions") == 8 + 18 * _W
+assert ctypes.sizeof(LibraryInfo) == 8 + 9 * _W
+assert _offset(LibraryInfo, "unload") == 8 + 8 * _W
+assert ctypes.sizeof(HostInfo) == 8 + 7 * _W
