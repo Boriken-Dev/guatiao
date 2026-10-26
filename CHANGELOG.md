@@ -1114,6 +1114,16 @@ write now.
   refused on the wire at the byte where it starts, and where a format
   allows one it still replaces the first in its place.
 
+- **Building, copying and layering a wide map is linear in its keys.**
+  Collecting or extending a `Map` from pairs, converting a `BTreeMap` or
+  `HashMap` to a value, `Map::copy_from` (and `guatiao_map_copy`), and
+  layering two maps with `MergeMode` (the merged map and its provenance)
+  each looked every key up by scanning, so 100 000 keys took minutes in
+  a debug build. They find keys through a hash past 16 now; a repeated
+  key, or two keys of a std map writing one text, still replaces the
+  first in its place. `guatiao_map_set` stays a scan per call, and its
+  documentation now says so.
+
 - **On Windows a library's own directory is searched for what it imports.**
   A plugin linking `guatiao.dll` shipped beside it, in a directory of its
   own, failed to load: Windows looked beside the host and on `PATH` only.
