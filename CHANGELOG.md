@@ -14,6 +14,16 @@ write now.
 
 ### Added
 
+- **Julia and R declare a kind from its description at run time.**
+  `Guatiao.kinds_of(document)` (Julia) evaluates the `@kind` declarations
+  of a kinds document into a module of its own, and `kinds_of(document)`
+  (R) declares each kind as `kind()` would; both take the JSON text of a
+  `<crate>.kinds.json` or the document a library carries
+  (`Guatiao.kind_descriptions(reg, key)`, `reg$kind_descriptions(key)`).
+  The text is read by the library itself:
+  `guatiao_kind_document_read(text, alloc, out, why)` answers the checked
+  document as a value for any C caller, and names the byte or the place
+  where text that is not one goes wrong.
 - **Go: `guatiao-kind` reads a kind's description.** `guatiao-kind
   -description <crate>.kinds.json` writes the same glue `-header` writes
   from the C header, so a kind with no header (one written in
