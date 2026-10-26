@@ -77,10 +77,6 @@ contains
     text = ''
     msg = ''
     call gt_need(GT_CORE, st, msg)
-    if (st == GUATIAO_OK .and. .not. associated(gt_kind_document_read)) then
-      st = GUATIAO_STAT_MISSING_SYMBOL
-      msg = 'guatiao: the loaded library reads no kinds document (guatiao_kind_document_read): use a newer one'
-    end if
     if (st == GUATIAO_OK) then
       call gt_new_owned(doc, gt_default_alloc(), root)
       call gt_new_owned(why, gt_default_alloc(), why_root)

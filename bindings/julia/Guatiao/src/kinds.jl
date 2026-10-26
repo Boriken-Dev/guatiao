@@ -130,7 +130,7 @@ move is refused is left whole, where it stands.
 function settle_lent!(s::Scope)
     status = UInt32(0)
     for (node, home, is_map) in s.lent
-        moved = is_map && checks_keys() ? guatiao_map_settle_lent(node, home) : guatiao_value_make_local(node, home)
+        moved = is_map ? guatiao_map_settle_lent(node, home) : guatiao_value_make_local(node, home)
         moved != 0 && status == 0 && (status = UInt32(moved))
     end
     empty!(s.lent)
@@ -356,7 +356,7 @@ function pass_lent(x, scope::Scope, kind::Symbol)
     # What the callee grew it with may be in its library's allocator: moved
     # into the one the tree records now, which a callee writing a fresh
     # tree over it would change.
-    makes_local() && push!(scope.lent, (node, recorded_alloc(node), kind === :map))
+    push!(scope.lent, (node, recorded_alloc(node), kind === :map))
     return arm_ptr(node, kind, "a lent argument")
 end
 
@@ -399,38 +399,14 @@ function carrier(kind::Symbol)
     return Ref(node_of(TAG_ABSENT, GMap(C_NULL, 0, 0, alloc)))
 end
 
-"Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it."
-function makes_local()
-    found = MAKES_LOCAL[]
-    found >> 1 == GENERATION[] && return isodd(found)
-    answer = exports("guatiao", "guatiao_value_make_local")
-    MAKES_LOCAL[] = GENERATION[] << 1 | Int(answer)
-    return answer
-end
-"`makes_local()`'s answer in the low bit, above the `GENERATION` it was found in: one word, read whole."
-const MAKES_LOCAL = Ref(-2)
-
-"Whether the core settles a lent map, removing a key the callee wrote that is not UTF-8."
-function checks_keys()
-    found = CHECKS_KEYS[]
-    found >> 1 == GENERATION[] && return isodd(found)
-    answer = exports("guatiao", "guatiao_map_settle_lent")
-    CHECKS_KEYS[] = GENERATION[] << 1 | Int(answer)
-    return answer
-end
-"`checks_keys()`'s answer, kept as `MAKES_LOCAL` keeps its own."
-const CHECKS_KEYS = Ref(-2)
-
 function answer_tree(out::Ref, kind::Symbol)
     root = new_root()
     unsafe_store!(root, kind === :value ? out[] : node_of(TREE_TAG[kind], out[]))
-    if makes_local()
-        # A slot that ignored the carrier built it in its own allocator; moved home, it outlives the library.
-        status = guatiao_value_make_local(root, binding_alloc())
-        if status != 0
-            free_root(root)
-            throw(GuatiaoError(status, "moving the answer into this binding's allocator"))
-        end
+    # A slot that ignored the carrier built it in its own allocator; moved home, it outlives the library.
+    status = guatiao_value_make_local(root, binding_alloc())
+    if status != 0
+        free_root(root)
+        throw(GuatiaoError(status, "moving the answer into this binding's allocator"))
     end
     return adopt(root)
 end
@@ -535,12 +511,10 @@ function receive_taken(p::Ptr, kind::Symbol, scope::Scope)
     unsafe_store!(root, kind === :value ? unsafe_load(Ptr{GValue}(p)) : node_of(TREE_TAG[kind], unsafe_load(Ptr{T}(p))))
     # The method owns it and may keep it: moved out of the caller's
     # allocators, which may go with the caller's library.
-    if makes_local()
-        status = guatiao_value_make_local(root, binding_alloc())
-        if status != 0
-            free_root(root)
-            throw(GuatiaoError(status, "moving the handed-over $kind into this binding's allocator"))
-        end
+    status = guatiao_value_make_local(root, binding_alloc())
+    if status != 0
+        free_root(root)
+        throw(GuatiaoError(status, "moving the handed-over $kind into this binding's allocator"))
     end
     v = adopt(root)
     push!(scope.taken, v)

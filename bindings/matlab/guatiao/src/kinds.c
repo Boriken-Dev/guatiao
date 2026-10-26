@@ -481,28 +481,9 @@ static void *tree_pointer(int shape, guatiao_value *v, const char **why) {
 
 /* A tree answered by a slot, moved into the binding's allocator so it
  * outlives the library: a slot that ignored the carrier built it in its
- * own, wholly or in part. A core older than guatiao_value_make_local
- * copies a tree whose top container records another allocator. */
+ * own, wholly or in part. */
 static guatiao_status into_binding(guatiao_value *v) {
-  if (gt_core.guatiao_value_make_local) return gt_core.guatiao_value_make_local(v, &gt_binding_alloc);
-  const guatiao_alloc *a = NULL;
-  switch (v->tag) {
-  case GUATIAO_MAP: a = v->payload.map.alloc; break;
-  case GUATIAO_LIST: a = v->payload.list.alloc; break;
-  case GUATIAO_STRING:
-  case GUATIAO_NUMBER: a = v->payload.text.alloc; break;
-  case GUATIAO_BYTES: a = v->payload.bytes.alloc; break;
-  default: return GUATIAO_OK;
-  }
-  if (!a || a == &gt_binding_alloc) return GUATIAO_OK;
-  guatiao_value copy;
-  set_absent(&copy);
-  guatiao_status st = gt_core.guatiao_value_clone(&gt_binding_alloc, v, &copy);
-  if (st == GUATIAO_OK) {
-    gt_free(v);
-    *v = copy;
-  }
-  return st;
+  return gt_core.guatiao_value_make_local(v, &gt_binding_alloc);
 }
 
 /* The allocator a container node records when it can build, else `fallback`. */
@@ -817,15 +798,13 @@ int cmd_remote_call(gt_call *c) {
    * allocator: moved into the one each recorded when it was lent. The
    * first refusal is the error of a call that answered. */
   guatiao_status settled = GUATIAO_OK;
-  if (gt_core.guatiao_value_make_local)
-    for (int j = 0; j < sl->nargs; j++)
-      if (lent[j]) {
-        /* A lent map also loses a key the callee wrote that is not UTF-8. */
-        guatiao_status moved = sl->args[j] == S_LENT_MAP && gt_core.guatiao_map_settle_lent
-                                   ? gt_core.guatiao_map_settle_lent(lent[j], lent_home[j])
-                                   : gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
-        if (moved != GUATIAO_OK && settled == GUATIAO_OK) settled = moved;
-      }
+  for (int j = 0; j < sl->nargs; j++)
+    if (lent[j]) {
+      /* A lent map also loses a key the callee wrote that is not UTF-8. */
+      guatiao_status moved = sl->args[j] == S_LENT_MAP ? gt_core.guatiao_map_settle_lent(lent[j], lent_home[j])
+                                                       : gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
+      if (moved != GUATIAO_OK && settled == GUATIAO_OK) settled = moved;
+    }
   for (int j = 0; j < sl->nargs; j++) {
     int s = sl->args[j];
     if (s < S_TAKEN_VALUE && built[j]) gt_free(&tmp[j]); /* what was handed over is the callee's */

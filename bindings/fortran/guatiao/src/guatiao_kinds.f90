@@ -857,29 +857,16 @@ contains
 
   !> Moves an answer into this tree's allocator, so it outlives the
   !> library: a slot that ignored the carrier built it in its own, wholly
-  !> or in part. A core older than `guatiao_value_make_local` copies an
-  !> answer whose top container records another allocator. A refusal
-  !> leaves the answer as it came, and is `stat` when given: the caller
-  !> then frees the answer while the library is loaded.
+  !> or in part. A refusal leaves the answer as it came, and is `stat`
+  !> when given: the caller then frees the answer while the library is
+  !> loaded.
   recursive subroutine guatiao_settle_home(answer, stat)
     type(guatiao_value), intent(inout) :: answer
     integer, intent(out), optional :: stat
-    type(gt_value), pointer :: root
-    type(guatiao_value) :: home
     integer :: st
     if (present(stat)) stat = GUATIAO_OK
     if (.not. c_associated(gt_root(answer))) return
-    if (associated(gt_value_make_local)) then
-      st = int(gt_value_make_local(gt_root(answer), gt_box_alloc(answer)))
-      if (present(stat)) stat = st
-      return
-    end if
-    call c_f_pointer(gt_root(answer), root)
-    if (.not. c_associated(root%payload%alloc)) return
-    if (c_associated(root%payload%alloc, gt_box_alloc(answer))) return
-    if (root%tag /= GUATIAO_TAG_MAP .and. root%tag /= GUATIAO_TAG_LIST) return
-    home = answer%clone(stat=st)
-    if (st == GUATIAO_OK) answer = home
+    st = int(gt_value_make_local(gt_root(answer), gt_box_alloc(answer)))
     if (present(stat)) stat = st
   end subroutine
 
@@ -902,11 +889,10 @@ contains
     integer(c_int32_t) :: moved
     character(:), allocatable :: msg
     if (present(stat)) stat = GUATIAO_OK
-    if (.not. associated(gt_value_make_local)) return
     call gt_writable_node(v, tag, node, alloc, st, msg)
     if (st /= GUATIAO_OK) return
     if (c_associated(home)) alloc = home
-    if (tag == GUATIAO_TAG_MAP .and. associated(gt_map_settle_lent)) then
+    if (tag == GUATIAO_TAG_MAP) then
       moved = gt_map_settle_lent(node, alloc)
     else
       moved = gt_value_make_local(node, alloc)
