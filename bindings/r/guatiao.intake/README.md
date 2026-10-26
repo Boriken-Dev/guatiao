@@ -45,7 +45,8 @@ platform's search. `guatiao::use_library(path, library = "guatiao_intake")` name
 it from code instead. Nothing is loaded until the first call, which
 signals `guatiao_library_not_found` naming every place it looked.
 
-R 4.2 or later, on a 64-bit platform, and a library built for the R
+R 4.2 or later, on a 64-bit platform or 32-bit ARM Linux, and a library
+built for the R
 process's architecture.
 
 ## Quick start
@@ -64,7 +65,7 @@ intake_flatten(schema, "auth", value)            # named character vector
 
 - What `intake_at` and `intake_resolve` answer borrows from a value it
   was found in, and is refused once that value is closed.
-- 64-bit platforms only.
+- 64-bit platforms and 32-bit ARM Linux, as `guatiao`.
 
 ## API overview
 

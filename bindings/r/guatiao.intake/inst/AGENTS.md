@@ -4,8 +4,8 @@ Over the `guatiao_intake` C ABI: https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships in the package, so it names no
 repository path.
 
-Package `guatiao.intake`, R 4.2 or later, 64-bit platforms. A source package: its
-C glue is compiled when it installs (Rtools on Windows), against the C
+Package `guatiao.intake`, R 4.2 or later, 64-bit platforms and 32-bit ARM. A
+source package: its C glue is compiled when it installs (Rtools on Windows), against the C
 interface the `guatiao` package registers (`LinkingTo: guatiao`). It
 depends on `guatiao`, which `library(guatiao.intake)` attaches too, at the same
 version. It carries no guatiao library: one is opened at run time.

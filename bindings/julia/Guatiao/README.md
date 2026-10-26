@@ -193,7 +193,9 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
 - A C call that may call back into Julia from another thread must be made
   in a GC-safe region, as every call of this package is; a `ccall` of
   your own that does so wraps itself (see `AGENTS.md`, "Threads").
-- 64-bit platforms only. There is no Julia for Windows on ARM64; an x64
+- 64-bit platforms only. The struct mirrors follow the pointer width, but
+  no Julia 1.10 or later is built for 32-bit ARM, and the library does not
+  build for 32-bit x86. There is no Julia for Windows on ARM64; an x64
   Julia there needs an x64 build of the library.
 
 ## API overview

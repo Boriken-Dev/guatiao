@@ -5,7 +5,8 @@ https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships in the package, so it names no
 repository path.
 
-Package `Guatiao`, Julia 1.10 or later, 64-bit platforms. No dependency
+Package `Guatiao`, Julia 1.10 or later, 64-bit platforms (no supported
+Julia runs on 32-bit ARM). No dependency
 outside the standard library (`Libdl`, `Dates`, `TOML`), no native
 library of its own and nothing compiled: guatiao is loaded at run time
 and called with `ccall`.

@@ -55,7 +55,7 @@ platform's library search. Nothing is loaded until the first call, which
 then answers a `*guatiao.LibraryNotFound` naming every place it looked.
 `serde.UseLibrary(path)` names the library from code instead.
 
-Go 1.26 or later, on a 64-bit platform.
+Go 1.26 or later, on a 64-bit platform or 32-bit ARM Linux.
 
 ## Quick start
 
@@ -84,7 +84,8 @@ err = serde.Unmarshal(`{"port": 5900, "tags": ["a"]}`, serde.JSON, &cfg)
   Everything else about a number's text survives a round trip.
 - The last element of the import path, `guatiao-serde`, is not the
   package's name, `serde`: an import names it.
-- 64-bit platforms only, and cgo is required, as for `guatiao`.
+- 64-bit platforms and 32-bit ARM Linux, and cgo is required, as for
+  `guatiao`.
 
 ## API overview
 

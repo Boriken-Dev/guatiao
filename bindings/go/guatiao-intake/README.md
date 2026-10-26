@@ -53,7 +53,7 @@ platform's library search. Nothing is loaded until the first call, which
 then answers a `*guatiao.LibraryNotFound` naming every place it looked.
 `intake.UseLibrary(path)` names the library from code instead.
 
-Go 1.26 or later, on a 64-bit platform.
+Go 1.26 or later, on a 64-bit platform or 32-bit ARM Linux.
 
 ## Quick start
 
@@ -79,7 +79,8 @@ back, err := intake.Unflatten(schema, "auth", store)      // a Value to close, o
   out.
 - The last element of the import path, `guatiao-intake`, is not the
   package's name, `intake`: an import names it.
-- 64-bit platforms only, and cgo is required, as for `guatiao`.
+- 64-bit platforms and 32-bit ARM Linux, and cgo is required, as for
+  `guatiao`.
 
 ## API overview
 

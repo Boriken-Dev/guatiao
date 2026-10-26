@@ -7,7 +7,8 @@ repository path.
 
 fpm package `guatiao` (and a CMake target, `guatiao::fortran`), Fortran
 2008 with `iso_c_binding` and `ieee_arithmetic`, tested with gfortran,
-LLVM flang and Intel ifx, 64-bit platforms. No dependencies and no native
+LLVM flang and Intel ifx, 64-bit platforms and 32-bit ARM (gfortran). No
+dependencies and no native
 library of its own: guatiao is opened at run time, so a program links
 nothing of it. The sources are pure Fortran (one `.F90` file chooses
 `LoadLibraryW` or `dlopen` with the preprocessor).
