@@ -817,7 +817,10 @@ int cmd_remote_call(gt_call *c) {
   if (gt_core.guatiao_value_make_local)
     for (int j = 0; j < sl->nargs; j++)
       if (lent[j]) {
-        guatiao_status moved = gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
+        /* A lent map also loses a key the callee wrote that is not UTF-8. */
+        guatiao_status moved = sl->args[j] == S_LENT_MAP && gt_core.guatiao_map_settle_lent
+                                   ? gt_core.guatiao_map_settle_lent(lent[j], lent_home[j])
+                                   : gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
         if (moved != GUATIAO_OK && settled == GUATIAO_OK) settled = moved;
       }
   for (int j = 0; j < sl->nargs; j++) {
@@ -832,6 +835,9 @@ int cmd_remote_call(gt_call *c) {
   gt_err_free(&err);
   if (settled) {
     drop_answer(sl, &out);
+    if (settled == GUATIAO_ERR_BAD_VALUE)
+      return gt_fail(c, settled, "slot %d of %s wrote a key that is not UTF-8 into the map it was lent; the entry was removed",
+                     sl->index_m, sl->kind->name);
     return gt_fail(c, settled, "moving what slot %d of %s put into a lent tree into that tree's allocator",
                    sl->index_m, sl->kind->name);
   }

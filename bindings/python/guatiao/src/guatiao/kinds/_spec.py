@@ -269,6 +269,11 @@ class Remote:
             if settled != _abi.Status.OK:
                 if method.returns is not None:
                     method.returns.drop(out)
+                if settled == _abi.Status.ERR_BAD_VALUE:
+                    raise_for_status(
+                        settled,
+                        f"`{method.name}` wrote a key that is not UTF-8 into the map it was lent; the entry was removed",
+                    )
                 raise_for_status(settled, f"moving what `{method.name}` put into a lent tree into that tree's allocator")
             return method.returns.answer(out, scope) if method.returns is not None else None
         finally:

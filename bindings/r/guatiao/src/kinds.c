@@ -759,7 +759,10 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   if (gt_core.guatiao_value_make_local)
     for (int j = 0; j < sl->nargs; j++)
       if (lent[j]) {
-        guatiao_status moved = gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
+        /* A lent map also loses a key the callee wrote that is not UTF-8. */
+        guatiao_status moved = sl->args[j] == S_LENT_MAP && gt_core.guatiao_map_settle_lent
+                                   ? gt_core.guatiao_map_settle_lent(lent[j], lent_home[j])
+                                   : gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
         if (moved != GUATIAO_OK && settled == GUATIAO_OK) settled = moved;
       }
   for (int j = 0; j < sl->nargs; j++) {
@@ -777,6 +780,9 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   if (settled) {
     drop_answer(sl, &out);
     UNPROTECT(1);
+    if (settled == GUATIAO_ERR_BAD_VALUE)
+      gt_raise(settled, "%s.%s wrote a key that is not UTF-8 into the map it was lent; the entry was removed",
+               sl->kind->name, sl->name);
     gt_raise(settled, "moving what %s.%s put into a lent tree into that tree's allocator", sl->kind->name, sl->name);
   }
   SEXP result = PROTECT(remote_answer(sl, &out, Rf_asInteger(int64)));

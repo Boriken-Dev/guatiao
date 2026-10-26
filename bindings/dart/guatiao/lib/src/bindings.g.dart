@@ -483,6 +483,27 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_map_settle_lent(
+    ffi.Pointer<guatiao_value> node,
+    ffi.Pointer<guatiao_alloc> home,
+  ) {
+    return _guatiao_map_settle_lent(node, home);
+  }
+
+  late final _guatiao_map_settle_lentPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+          )
+        >
+      >('guatiao_map_settle_lent');
+  late final _guatiao_map_settle_lent = _guatiao_map_settle_lentPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_alloc>)
+      >();
+
   ffi.Pointer<ffi.Void> guatiao_memory_alloc(int size, int align) {
     return _guatiao_memory_alloc(size, align);
   }

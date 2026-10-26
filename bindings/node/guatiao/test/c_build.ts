@@ -59,6 +59,8 @@ export interface CLibraries {
   carelessGreeterDir: string;
   /** The careless greeter again, in a directory of its own: a test unloads it, so nothing else may keep it mapped. Its `check` rebuilds a lent map in its own allocator. */
   lentGreeterDir: string;
+  /** The greeter built so that its `check` adds a key that is not UTF-8 to the map it was lent. */
+  badKeyGreeterDir: string;
   /** Two builds of the source written in C (a shelf of counters), one per test that changes its state. */
   shelfA: string;
   shelfB: string;
@@ -80,10 +82,13 @@ export function buildCLibraries(): CLibraries | null {
   buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), carelessGreeterDir, 'c_greeter', ['GREETER_IGNORES_CARRIER']);
   const lentGreeterDir = path.join(root, 'lent');
   buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), lentGreeterDir, 'c_greeter', ['GREETER_IGNORES_CARRIER']);
+  const badKeyGreeterDir = path.join(root, 'bad_key');
+  buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), badKeyGreeterDir, 'c_greeter', ['GREETER_WRITES_BAD_KEY']);
   return {
     greeterDir,
     carelessGreeterDir,
     lentGreeterDir,
+    badKeyGreeterDir,
     shelfA: buildC(cc, path.join(C_CONSUMER, 'source_in_c.c'), path.join(root, 'shelf_a'), 'node_shelf_a'),
     shelfB: buildC(cc, path.join(C_CONSUMER, 'source_in_c.c'), path.join(root, 'shelf_b'), 'node_shelf_b'),
     foreignThread: buildC(

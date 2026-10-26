@@ -401,6 +401,35 @@ func TestARefusedMoveOfALentTreeIsTheCallsError(t *testing.T) {
 	}
 }
 
+func TestAKeyASlotWroteIntoALentMapThatIsNotUTF8IsRemoved(t *testing.T) {
+	// This greeter's `check` adds a key that is not UTF-8 to the lent map:
+	// removed and freed when the call returns, and the call's error.
+	own, g := ownGreeter(t, "GREETER_WRITES_BAD_KEY")
+	alloc := refusing.New()
+	defer alloc.Close()
+	config, err := guatiao.NewValue(map[string]any{"name": "ivy"}, guatiao.InAllocator(alloc.Ptr()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := config.Map()
+	_, err = g.Check(m)
+	var got map[string]any
+	read := config.Decode(&got)
+	config.Close()
+	if err := own.UnloadUnchecked("c_greeter_library"); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(err, guatiao.ErrBadValue) || !strings.Contains(err.Error(), "not UTF-8") {
+		t.Fatalf("want the removed key as the call's error, got %v", err)
+	}
+	if read != nil || !reflect.DeepEqual(got, map[string]any{"name": "ivy"}) {
+		t.Fatalf("%v %v", got, read)
+	}
+	if live := alloc.Live(); live != 0 {
+		t.Fatalf("%d blocks still out", live)
+	}
+}
+
 func TestEveryGreeterGreetsFromAMapHandedOver(t *testing.T) {
 	each(t, func(t *testing.T, which string, g *greeterkind.GreeterRemote) {
 		answer, err := g.GreetFrom(greeterkind.Named{Name: "ana"})

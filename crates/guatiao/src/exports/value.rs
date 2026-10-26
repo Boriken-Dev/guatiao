@@ -122,6 +122,53 @@ pub unsafe extern "C" fn guatiao_value_make_local(
     })
 }
 
+/// Settles a map a kind slot was lent, once the slot has returned, as a
+/// kind's Rust proxy does: moves it into `home` (as
+/// [`guatiao_value_make_local`] does), then removes and frees every
+/// top-level entry whose key the slot wrote that is not UTF-8 (one nested
+/// deeper is kept, as the proxy keeps it).
+///
+/// What a caller of a kind table calls on a lent map instead of
+/// `guatiao_value_make_local`, with `home` the allocator the map recorded
+/// when it was lent, while the library is loaded. `node` is a value
+/// tagged `GUATIAO_MAP` holding the map: copy its `payload.map` back over
+/// the struct the slot was lent.
+///
+/// `GUATIAO_ERR_BAD_VALUE` when an entry was removed, whatever the move
+/// answered: report it as the call's error. Otherwise the move's status:
+/// `GUATIAO_ERR_ALLOC` when `home` refused, the map whole. A null or
+/// unusable `home` is `GUATIAO_ERR_ALLOC` and leaves the map untouched; a
+/// `node` that is not a map is `GUATIAO_ERR_WRONG_KIND`.
+///
+/// # Safety
+///
+/// The pointers are null or valid, and `node` addresses a well-formed
+/// value nothing else is reading or freeing.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_map_settle_lent(
+    node: *mut Value,
+    home: *const Allocator,
+) -> Status {
+    entry!(node => {
+        // SAFETY: checked non-null; well-formed and unaliased by contract.
+        let node = unsafe { &mut *node };
+        if node.tag() != Ok(Tag::GUATIAO_MAP) {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(home) = (unsafe { Alloc::from_raw(home) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: the tag says the map arm is live. Its keys are not
+        // checked here: removing those that are not UTF-8 is the point.
+        let map = unsafe { &mut *node.payload.map };
+        match map.settle_lent(home) {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(e) => e.into(),
+        }
+    })
+}
+
 // --- constructors -----------------------------------------------------
 //
 // Written out one by one rather than through a macro, and the reason is

@@ -40,8 +40,9 @@ class Scope:
         # by `close()` unless `called()` says the callee took them.
         self._given: "list[Callable[[], Any]]" = []
         # Trees lent for the call, each with the allocator it recorded
-        # when it was lent: settled once the call returns.
-        self._lent: "list[tuple[_abi.Value, Any]]" = []
+        # when it was lent and whether it is a map: settled once the call
+        # returns.
+        self._lent: "list[tuple[_abi.Value, Any, bool]]" = []
 
     def keep(self, obj: Any) -> Any:
         self._keep.append(obj)
@@ -56,19 +57,23 @@ class Scope:
     def called(self) -> None:
         self._given.clear()
 
-    def lend(self, node: "_abi.Value", home: Any) -> None:
-        self._lent.append((node, home))
+    def lend(self, node: "_abi.Value", home: Any, is_map: bool = False) -> None:
+        self._lent.append((node, home, is_map))
 
     def settle(self) -> int:
         """Moves every tree lent for the call into the allocator it
         recorded when it was lent, so what the callee grew it with, or
-        wrote over it, outlives the callee's library. The first refusal's
-        status, else OK; a refused tree is left whole, where it stands."""
+        wrote over it, outlives the callee's library; a lent map also
+        loses any key the callee wrote that is not UTF-8
+        (`GUATIAO_ERR_BAD_VALUE`). The first refusal's status, else OK; a
+        tree whose move is refused is left whole, where it stands."""
         status = int(_abi.Status.OK)
         lent, self._lent = self._lent, []
         if lent and _makes_local():
-            for node, home in lent:
-                moved = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(home))
+            core = _lib.core()
+            for node, home, is_map in lent:
+                settle = core.guatiao_map_settle_lent if is_map and _checks_keys() else core.guatiao_value_make_local
+                moved = settle(ctypes.byref(node), ctypes.byref(home))
                 if moved != _abi.Status.OK and status == _abi.Status.OK:
                     status = int(moved)
         return status
@@ -177,6 +182,18 @@ def _makes_local() -> bool:
 
 
 _MAKES_LOCAL: "bool | None" = None
+
+
+def _checks_keys() -> bool:
+    """Whether the core settles a lent map, removing a key the callee
+    wrote that is not UTF-8."""
+    global _CHECKS_KEYS
+    if _CHECKS_KEYS is None:
+        _CHECKS_KEYS = "guatiao_map_settle_lent" not in _lib.core().symbols_missing()
+    return _CHECKS_KEYS
+
+
+_CHECKS_KEYS: "bool | None" = None
 
 
 def _make_local(node: "_abi.Value", what: str = "the answer") -> None:
@@ -442,7 +459,7 @@ class _Tree(Shape):
             # What the callee grew it with may be in its library's
             # allocator: moved into the one the tree records now, which a
             # callee writing a fresh tree over it would change.
-            scope.lend(node, _recorded_alloc(node))
+            scope.lend(node, _recorded_alloc(node), self.tag == _abi.Tag.MAP)
             return ctypes.byref(self._arm(node))
         # Handed over: given up now, and freed by `close()` if the call
         # never happens.

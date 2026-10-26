@@ -457,6 +457,15 @@ int _settle(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) =>
     ? native.core().bindings.guatiao_value_make_local(node, home)
     : Status.ok.code;
 
+final bool _checksKeys = native.core().provides('guatiao_map_settle_lent');
+
+/// [_settle] for a lent map, which also loses any key the callee wrote
+/// that is not UTF-8: `GUATIAO_ERR_BAD_VALUE` then.
+int _settleMap(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) =>
+    _checksKeys
+    ? native.core().bindings.guatiao_map_settle_lent(node, home)
+    : _settle(node, home);
+
 /// A new `calloc`ed root holding a copy of the struct at [arm]: a whole
 /// node when [tag] is null, else a map or list.
 Pointer<guatiao_value> _nodeOver(Pointer<NativeType> arm, Tag? tag) {
@@ -668,9 +677,9 @@ final class CallScope extends SlotCall {
   bool _called = false;
 
   /// Trees lent for the call, each with the allocator it recorded when it
-  /// was lent: settled once the call returns.
-  final List<(Pointer<guatiao_value>, Pointer<guatiao_alloc>)> _lentTrees =
-      <(Pointer<guatiao_value>, Pointer<guatiao_alloc>)>[];
+  /// was lent and whether it is a map: settled once the call returns.
+  final List<(Pointer<guatiao_value>, Pointer<guatiao_alloc>, bool)>
+  _lentTrees = <(Pointer<guatiao_value>, Pointer<guatiao_alloc>, bool)>[];
 
   /// The answer's out slot and what it holds once the call returns: a
   /// [Tag] for a tree (null for a value), `'text'` or `'object'`.
@@ -680,8 +689,8 @@ final class CallScope extends SlotCall {
   /// Settles every lent tree; the first refusal's status, else OK.
   int _settleLent() {
     var status = Status.ok.code;
-    for (final (node, home) in _lentTrees) {
-      final moved = _settle(node, home);
+    for (final (node, home, isMap) in _lentTrees) {
+      final moved = isMap ? _settleMap(node, home) : _settle(node, home);
       if (moved != Status.ok.code && status == Status.ok.code) status = moved;
     }
     _lentTrees.clear();
@@ -780,7 +789,7 @@ final class CallScope extends SlotCall {
     // What the callee grew it with may be in its library's allocator:
     // moved into the one the tree records now, which a callee writing a
     // fresh tree over it would change.
-    _lentTrees.add((node, _recorded(node)));
+    _lentTrees.add((node, _recorded(node), tag == Tag.map));
     return node;
   }
 
@@ -893,7 +902,11 @@ final class CallScope extends SlotCall {
       _dropAnswer();
       throw statusException(
         settled,
-        "moving what $slot put into a lent tree into that tree's allocator",
+        settled == Status.badValue.code
+            ? '$slot wrote a key that is not UTF-8 into the map it was lent; '
+                  'the entry was removed'
+            : "moving what $slot put into a lent tree into that tree's "
+                  'allocator',
       );
     }
     if (err != null) checkProviderStatus(native.core().bindings, status, err);

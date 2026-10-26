@@ -1573,7 +1573,9 @@ typedef struct guatiao_entries {
  Value`): read it, change it, grow it, never free it or keep the
  pointer. Build what goes into it through the allocator it records; a
  Rust caller moves anything built elsewhere there once the call returns,
- and a C caller calls `guatiao_value_make_local` on it.
+ and removes a top-level key the slot wrote into a lent map that is not
+ UTF-8; a C caller calls `guatiao_map_settle_lent` on a lent map, which
+ does both, and `guatiao_value_make_local` on a lent value or list.
  */
 typedef struct guatiao_kind_header {
   /*
@@ -2931,6 +2933,33 @@ guatiao_status guatiao_value_clone(const struct guatiao_alloc *alloc,
  nothing else is reading or freeing.
  */
 guatiao_status guatiao_value_make_local(struct guatiao_value *v, const struct guatiao_alloc *alloc);
+
+/*
+ Settles a map a kind slot was lent, once the slot has returned, as a
+ kind's Rust proxy does: moves it into `home` (as
+ [`guatiao_value_make_local`] does), then removes and frees every
+ top-level entry whose key the slot wrote that is not UTF-8 (one nested
+ deeper is kept, as the proxy keeps it).
+
+ What a caller of a kind table calls on a lent map instead of
+ `guatiao_value_make_local`, with `home` the allocator the map recorded
+ when it was lent, while the library is loaded. `node` is a value
+ tagged `GUATIAO_MAP` holding the map: copy its `payload.map` back over
+ the struct the slot was lent.
+
+ `GUATIAO_ERR_BAD_VALUE` when an entry was removed, whatever the move
+ answered: report it as the call's error. Otherwise the move's status:
+ `GUATIAO_ERR_ALLOC` when `home` refused, the map whole. A null or
+ unusable `home` is `GUATIAO_ERR_ALLOC` and leaves the map untouched; a
+ `node` that is not a map is `GUATIAO_ERR_WRONG_KIND`.
+
+ # Safety
+
+ The pointers are null or valid, and `node` addresses a well-formed
+ value nothing else is reading or freeing.
+ */
+guatiao_status guatiao_map_settle_lent(struct guatiao_value *node,
+                                       const struct guatiao_alloc *home);
 
 /*
  Writes the stored nothing through `out`.

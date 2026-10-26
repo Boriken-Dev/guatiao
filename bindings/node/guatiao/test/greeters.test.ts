@@ -212,6 +212,27 @@ describe('a tree built in the library\'s allocator outlives the unload', () => {
     }
     expect(counting.live).toBe(0);
   });
+
+  it("removed when the slot wrote a key that is not UTF-8 into a lent map, as the call's error", (ctx) => {
+    const dir = cLibraries()?.badKeyGreeterDir;
+    if (dir === undefined) return ctx.skip('no C compiler: the greeter written in C is not built');
+    using counting = new Counting();
+    using own = new Registry('node-bad-key', '0.1');
+    own.scanDir(dir, { rules: 'kind=greeter' });
+    {
+      using config = new Value({ name: 'ivy' }, { alloc: counting.alloc });
+      let refused: unknown;
+      try {
+        own.bind('c_greeter', Greeter).check(config);
+      } catch (e) {
+        refused = e;
+      }
+      expect(refused).toBeInstanceOf(BadValue);
+      expect((refused as Error).message).toMatch(/not UTF-8/);
+      expect(config.toJS()).toEqual({ name: 'ivy' });
+    }
+    expect(counting.live).toBe(0);
+  });
 });
 
 describe('a Rust caller calls every greeter through its proxy', () => {

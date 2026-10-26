@@ -46,6 +46,8 @@ files:
         name: guatiao_map_discard
       c:@F@guatiao_map_set:
         name: guatiao_map_set
+      c:@F@guatiao_map_settle_lent:
+        name: guatiao_map_settle_lent
       c:@F@guatiao_memory_alloc:
         name: guatiao_memory_alloc
       c:@F@guatiao_memory_free:

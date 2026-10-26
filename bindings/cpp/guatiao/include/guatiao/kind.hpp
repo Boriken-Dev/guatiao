@@ -554,7 +554,14 @@ struct send<map_ref> {
     if (n) lent_in = recorded(*n);
     return n && n->tag == GUATIAO_MAP ? &n->payload.map : nullptr;
   }
-  guatiao_status after(const guatiao_alloc* home) noexcept { return send<node>{v.as_node(), lent_in}.after(home); }
+  // Moved home, and any key the callee wrote that is not UTF-8 removed:
+  // GUATIAO_ERR_BAD_VALUE then.
+  guatiao_status after(const guatiao_alloc* home) noexcept {
+    guatiao_value* n = v.as_node().raw();
+    const guatiao_alloc* to = lent_in ? lent_in : home;
+    if (!n || !to) return GUATIAO_OK;
+    return guatiao_map_settle_lent(n, to);
+  }
 };
 template <>
 struct send<list_ref> {
@@ -719,6 +726,9 @@ result<R> call_with(const Self& self, sig_tag<R(P...)>, Args&&... args) {
       ~drop_guard() { o.drop(); }
     } dropped{out};
     if (s != GUATIAO_OK) return error_of(s, std::string(text(err.message)));
+    if (settled == GUATIAO_ERR_BAD_VALUE)
+      return error_of(settled, std::string(Slot::name) +
+                                   " wrote a key that is not UTF-8 into the map it was lent; the entry was removed");
     return error_of(settled, std::string("moving what ") + Slot::name + " put into a lent tree into that tree's allocator");
   }
   return out.take(home);

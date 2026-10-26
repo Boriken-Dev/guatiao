@@ -45,6 +45,7 @@ program test_greeters
   call an_answer_built_in_the_librarys_allocator_outlives_the_unload()
   call what_a_slot_grew_a_lent_map_with_outlives_the_unload()
   call a_refused_move_of_a_lent_tree_is_the_calls_error()
+  call a_key_a_slot_wrote_into_a_lent_map_that_is_not_utf8_is_removed()
   call a_map_handed_over_and_kept_is_the_providers_own()
   call a_table_that_is_not_the_kinds_is_refused()
   call a_configured_provider_builds_instances()
@@ -304,6 +305,42 @@ contains
     call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map stands whole')
     call config%close()
     call check(r%live == 0, 'every block of the refusing allocator is back')
+    call own%close()
+  end subroutine
+
+  subroutine a_key_a_slot_wrote_into_a_lent_map_that_is_not_utf8_is_removed()
+    type(guatiao_registry) :: own
+    type(greeter_remote) :: g
+    type(guatiao_value) :: config
+    type(guatiao_error), allocatable :: error
+    type(refusing), pointer :: r
+    character(:), allocatable :: text
+    logical :: usable
+    integer :: st
+    ! check adds a key that is not UTF-8 to the lent map: removed and freed
+    ! when the call returns, and the call's error.
+    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-bad-key', 'c_greeter', &
+                    'GREETER_WRITES_BAD_KEY')) == 0) then
+      call skip('no C compiler: the greeter written in C is not built')
+      return
+    end if
+    own = guatiao_open_registry('fortran-bad-key', '0.1')
+    call own%scan_dir('build/c-bad-key', rules=['kind=greeter'])
+    call greeter_bind(own, 'c_greeter', g, st)
+    call check(st == GUATIAO_OK, 'the greeter binds')
+    r => refusing_new()
+    config = guatiao_map(refusing_allocator(r))
+    call config%set('name', 'ivy')
+    call g%check(config, usable, error)
+    call check(allocated(error), 'the removed key is the call''s error')
+    if (allocated(error)) then
+      call check(error%status == GUATIAO_ERR_BAD_VALUE, 'as BAD_VALUE')
+      call check(index(error%message, 'not UTF-8') > 0, 'saying why')
+    end if
+    call guatiao_emit(config, GUATIAO_FORMAT_JSON, text)
+    call check_text(text, '{"name":"ivy"}', 'the lent map without the key')
+    call config%close()
+    call check(r%live == 0, 'every block of the allocator is back')
     call own%close()
   end subroutine
 

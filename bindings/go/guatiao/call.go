@@ -26,7 +26,7 @@ type Call struct {
 	called bool
 	err    unsafe.Pointer
 	// Trees lent for the call, each with the allocator it recorded when
-	// it was lent: settled once the call returns.
+	// it was lent and whether it is a map: settled once the call returns.
 	lent []lentTree
 	// The answer's out slot, and what it holds once the call returns.
 	out      unsafe.Pointer
@@ -34,7 +34,10 @@ type Call struct {
 	outClass TreeClass
 }
 
-type lentTree struct{ node, home unsafe.Pointer }
+type lentTree struct {
+	node, home unsafe.Pointer
+	isMap      bool
+}
 
 type outShape int
 
@@ -48,12 +51,17 @@ const (
 
 // settle moves every lent tree into the allocator it recorded when it
 // was lent, so what the callee grew it with, or wrote over it, outlives
-// the callee's library: the first refusal's status, else OK, a refused
-// tree left whole where it stands.
+// the callee's library, and a lent map loses any key the callee wrote
+// that is not UTF-8 (BadValue): the first refusal's status, else OK, a
+// tree whose move is refused left whole where it stands.
 func (c *Call) settle() uint32 {
 	st := uint32(native.OK)
 	for _, t := range c.lent {
-		if moved := native.ValueMakeLocal(t.node, t.home); moved != native.OK && st == native.OK {
+		settle := native.ValueMakeLocal
+		if t.isMap {
+			settle = native.MapSettleLent
+		}
+		if moved := settle(t.node, t.home); moved != native.OK && st == native.OK {
 			st = moved
 		}
 	}
@@ -185,7 +193,7 @@ func (c *Call) Lend(x any, class TreeClass) (unsafe.Pointer, error) {
 		home = alloc
 	}
 	c.keep(r.o) // the owner outlives the settle, which Status or End runs
-	c.lent = append(c.lent, lentTree{node, home})
+	c.lent = append(c.lent, lentTree{node, home, class == MapClass})
 	return arm(node, class)
 }
 
@@ -327,6 +335,9 @@ func (c *Call) Status(st uint32) error {
 			return nil
 		}
 		c.dropAnswer()
+		if Status(settled) == BadValue {
+			return &Error{Status: BadValue, Message: c.slot.Name + " wrote a key that is not UTF-8 into the map it was lent; the entry was removed"}
+		}
 		return &Error{Status: Status(settled), Message: "moving what " + c.slot.Name + " put into a lent tree into that tree's allocator"}
 	}
 	if c.err != nil {

@@ -538,6 +538,18 @@ impl Map {
         true
     }
 
+    /// A map lent to a kind slot, once the slot returns: moved into
+    /// `home`, then every top-level entry whose key is not UTF-8 removed
+    /// and freed. `ValueError::NotUtf8` when one was removed, whatever the
+    /// move answered; else the move's own answer.
+    pub(crate) fn settle_lent(&mut self, home: Alloc) -> Result<(), ValueError> {
+        let moved = self.make_local_in(home);
+        if self.drop_keys_not_text() > 0 {
+            return Err(ValueError::NotUtf8);
+        }
+        moved
+    }
+
     /// Removes and frees every entry whose key is not UTF-8, keeping the
     /// order of the rest, and answers how many. Only a foreign writer can
     /// leave one.

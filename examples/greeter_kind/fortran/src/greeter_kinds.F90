@@ -1241,7 +1241,7 @@ contains
     call guatiao_call_error(gk_st, gk_err, error)
     if (gk_st /= GUATIAO_OK) return
     if (gk_s1 /= GUATIAO_OK) then
-      call guatiao_fail(error, gk_s1, "moving what check put into the lent tree config into that tree's allocator")
+      call guatiao_fail(error, gk_s1, guatiao_lent_refusal(gk_s1, "check", "config"))
       return
     end if
     answer = gk_out /= GUATIAO_C_FALSE

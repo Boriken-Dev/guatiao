@@ -91,11 +91,13 @@ scratch(name) = mktempdir(; prefix = "guatiao-julia-$name-", cleanup = false)
 """
 The greeter written in C, in a directory of its own; `nothing` without a
 compiler. With `ignores_carrier`, one whose answers are built in its own
-allocator.
+allocator; with `writes_bad_key`, one whose `check` adds a key that is not
+UTF-8.
 """
-function build_c_greeter(; ignores_carrier::Bool = false)
+function build_c_greeter(; ignores_carrier::Bool = false, writes_bad_key::Bool = false)
     dir = scratch("c-greeter")
     defines = ignores_carrier ? ["GREETER_IGNORES_CARRIER"] : String[]
+    writes_bad_key && push!(defines, "GREETER_WRITES_BAD_KEY")
     return build_c(joinpath(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter"; defines) === nothing ? nothing : dir
 end
 
