@@ -2,3 +2,11 @@
 # library for all of it: a concurrent suite calling into that library
 # would be reading a freed mapping.
 concurrency: 1
+
+# The remote suite's server-TLS test serves `wss://` with a certificate it
+# made itself, which no certificate authority issued: the test browser
+# takes it. A page in use needs a certificate its browser trusts.
+override_platforms:
+  chrome:
+    settings:
+      arguments: --ignore-certificate-errors

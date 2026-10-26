@@ -13,7 +13,7 @@ import { type RemoteProvider, RemoteLink, RemoteObject, Served } from '../src/li
 const url = inject('remoteUrl');
 const key = inject('remoteKey');
 
-const connect = (withKey: string = key): Promise<RemoteLink> => RemoteLink.connect(url, { key: withKey });
+const connect = (withKey: string = key): Promise<RemoteLink> => RemoteLink.connect(url, { security: 'none', key: withKey });
 
 /** A link with `derived_greeter` opened, and its `Hello` provider. */
 async function hello(): Promise<[RemoteLink, RemoteProvider]> {
@@ -128,5 +128,5 @@ test('a closed link answers Gone', async () => {
 
 test('a server that is not there rejects Gone', async () => {
   // A port nothing listens on: the server's own, once it is closed, would race; 9 is discard.
-  await expect(RemoteLink.connect('ws://127.0.0.1:9/', { key, handshakeTimeout: 5_000 })).rejects.toBeInstanceOf(Gone);
+  await expect(RemoteLink.connect('ws://127.0.0.1:9/', { security: 'none', key, handshakeTimeout: 5_000 })).rejects.toBeInstanceOf(Gone);
 });

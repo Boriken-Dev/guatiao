@@ -74,7 +74,7 @@ Object? _tree(List<Object?> tree) {
   }
 }
 
-const _trust = {'local': 0, 'trusted': 1, 'secure': 2};
+const _trust = {'local': 0, 'trusted': 1, 'secure': 2, 'server-tls': 3};
 
 Frame _frameOf(Map<String, Object?> f) {
   switch (f['type']) {
@@ -198,7 +198,7 @@ void main() {
 
   test('every frame decodes to its fields and encodes to its bytes', () {
     final cases = _list('frames');
-    expect(cases, hasLength(17));
+    expect(cases, hasLength(20));
     for (final c in cases) {
       final name = c['name'] as String;
       final whole = _hex(c['hex'] as String);

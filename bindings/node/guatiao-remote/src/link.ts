@@ -46,10 +46,36 @@ export const RemoteTrust = {
   LOCAL: 0,
   /** A network the owner isolates: a pre-shared key proved both ways. No encryption. */
   TRUSTED: 1,
-  /** Any network, encrypted. No transport here runs it. */
+  /** Any network, mutual TLS: both sides proven by certificate. */
   SECURE: 2,
+  /** Any network, server TLS: the server proven by its certificate, the client by the key (when asked) or a token. */
+  SERVER_TLS: 3,
 } as const;
 export type RemoteTrust = (typeof RemoteTrust)[keyof typeof RemoteTrust];
+
+/**
+ * A link's security, the same choice on every transport and client: `none`
+ * (`ws://`: the key proved both ways, no encryption), `server-tls`
+ * (`wss://`: TLS proves the server; this side proves the key when asked, or a
+ * token) or `mutual-tls` (`wss://`: in a page, with a client certificate the
+ * user installed in the browser).
+ */
+export type RemoteSecurity = 'none' | 'server-tls' | 'mutual-tls';
+
+const TRUST_OF: Record<RemoteSecurity, RemoteTrust> = {
+  none: RemoteTrust.TRUSTED,
+  'server-tls': RemoteTrust.SERVER_TLS,
+  'mutual-tls': RemoteTrust.SECURE,
+};
+
+/** Refuses, before anything is sent, a link with nothing to prove itself with at `trust`. */
+function checkProof(trust: RemoteTrust, key: Uint8Array | undefined, token: string | undefined): void {
+  const hasKey = key !== undefined && key.length > 0;
+  if (trust === RemoteTrust.TRUSTED && !hasKey) throw new TypeError('the trusted level needs a pre-shared key');
+  if (trust === RemoteTrust.SERVER_TLS && !hasKey && token === undefined) {
+    throw new TypeError('at server TLS the client proves itself by a key or a token: name one');
+  }
+}
 
 /**
  * A message transport: one frame's body per message. A WebSocket is one;
@@ -341,9 +367,11 @@ class Inbox {
 
 /** How a link is set up. Times are in milliseconds. */
 export interface LinkOptions {
-  /** The trusted level's pre-shared key. */
+  /** The link's security: `mutual-tls` unless told; `ws://` runs `none` alone, `wss://` the TLS modes. */
+  security?: RemoteSecurity;
+  /** The pre-shared key: proved both ways with `none`, and at server TLS when the server asks for it. */
   key?: Uint8Array | string;
-  /** What a secure server may ask for. */
+  /** What this side presents when the server requires a token (server TLS or mutual TLS). */
   token?: string;
   /** How long a call waits for its answer; `null` waits as long as the link lives. Default 30 000. */
   timeout?: number | null;
@@ -393,15 +421,35 @@ export class RemoteLink {
   }
 
   /**
-   * Connects to a server's WebSocket URL (`ws://host:port/path`) at the
-   * trusted level, proving `options.key`.
+   * Connects to a server's WebSocket URL at `options.security`, mutual TLS
+   * unless told: `ws://host:port/path` runs `none` alone, `wss://` the TLS
+   * modes, whose certificates the browser (or Node) checks as it checks any.
    */
-  static async connect(url: string | URL, options: LinkOptions): Promise<RemoteLink> {
-    const channel = await openWebSocket(String(url), options.handshakeTimeout ?? 10_000);
-    return RemoteLink.over(channel, { ...options, trust: RemoteTrust.TRUSTED });
+  static async connect(url: string | URL, options: LinkOptions = {}): Promise<RemoteLink> {
+    const text = String(url);
+    const scheme = text.slice(0, text.indexOf(':')).toLowerCase();
+    if (scheme !== 'ws' && scheme !== 'wss') throw new TypeError(`\`${text}\` is not a ws:// or wss:// URL`);
+    const security = options.security ?? 'mutual-tls';
+    if (!(security in TRUST_OF)) throw new TypeError(`\`${String(security)}\` is not none, server-tls or mutual-tls`);
+    if ((scheme === 'wss') !== (security !== 'none')) {
+      throw new TypeError(
+        scheme === 'wss'
+          ? "wss:// runs TLS: pass security 'server-tls' or 'mutual-tls'"
+          : `ws:// carries no TLS, and the link is ${security}: pass security 'none', or connect to wss://`,
+      );
+    }
+    const trust = TRUST_OF[security];
+    const key = typeof options.key === 'string' ? new TextEncoder().encode(options.key) : options.key;
+    checkProof(trust, key, options.token);
+    const channel = await openWebSocket(text, options.handshakeTimeout ?? 10_000);
+    return RemoteLink.over(channel, { ...options, trust });
   }
 
-  /** Runs the handshake over `channel` and answers the link. The trusted level needs `key`. */
+  /**
+   * Runs the handshake over `channel` at `trust` and answers the link. The
+   * trusted level needs `key`; server TLS needs `key` or `token`, and the
+   * channel's own TLS must have proved the server.
+   */
   static async over(channel: RemoteChannel, options: LinkOptions & { trust?: RemoteTrust }): Promise<RemoteLink> {
     const trust = options.trust ?? RemoteTrust.TRUSTED;
     const key = typeof options.key === 'string' ? new TextEncoder().encode(options.key) : options.key;
@@ -409,9 +457,11 @@ export class RemoteLink {
     const handshakeTimeout = options.handshakeTimeout ?? 10_000;
     const maxFrame = options.maxFrame ?? 64 << 20;
     const maxCalls = options.maxCalls ?? 64;
-    if (trust === RemoteTrust.TRUSTED && (key === undefined || key.length === 0)) {
+    try {
+      checkProof(trust, key, options.token);
+    } catch (e) {
       channel.close();
-      throw new TypeError('the trusted level needs a pre-shared key');
+      throw e;
     }
     const inbox = new Inbox();
     channel.start(
@@ -433,11 +483,16 @@ export class RemoteLink {
       const answer = Frame.decode(await next());
       if (answer instanceof Goodbye) throw errorFor(answer.status, answer.message);
       if (!(answer instanceof Welcome)) throw new MalformedFrame('field', 'the server sent no WELCOME');
-      if (trust === RemoteTrust.TRUSTED) {
-        if (!proof.proves(key!, proof.SERVER_LABEL, mine, answer.nonce, answer.proof)) {
+      // At server TLS a WELCOME with a proof asks for the key; one without asks none.
+      const asked = trust === RemoteTrust.TRUSTED || (trust === RemoteTrust.SERVER_TLS && answer.proof.length > 0);
+      if (asked) {
+        if (key === undefined || key.length === 0) {
+          throw new BadValue('the server proves clients by a pre-shared key, and this client has none');
+        }
+        if (!proof.proves(key, proof.SERVER_LABEL, mine, answer.nonce, answer.proof)) {
           throw new BadValue("the server does not hold this link's key");
         }
-        channel.send(new Proof(proof.proofOf(key!, proof.CLIENT_LABEL, mine, answer.nonce)).encode());
+        channel.send(new Proof(proof.proofOf(key, proof.CLIENT_LABEL, mine, answer.nonce)).encode());
       }
       const offered = answer.options;
       const number = (name: string, fallback: number): number => {

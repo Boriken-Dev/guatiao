@@ -394,7 +394,7 @@ sealed class Frame {
         if (type == FrameType.hello) {
           final at = r.at;
           final trust = r.byte();
-          if (trust > 2) {
+          if (trust > 3) {
             throw MalformedFrame(
               FrameFault.field,
               'the field at $at is not a trust level',
@@ -465,7 +465,8 @@ sealed class Frame {
   }
 }
 
-/// The client's first frame: `trust` 0 local, 1 trusted, 2 secure.
+/// The client's first frame: `trust` 0 local, 1 trusted, 2 secure (mutual
+/// TLS), 3 server TLS.
 final class Hello extends Frame {
   const Hello(this.trust, this.nonce, this.options);
   final int trust;

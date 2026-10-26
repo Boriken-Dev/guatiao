@@ -17,6 +17,7 @@ import 'package:guatiao/guatiao.dart'
 import 'package:guatiao/remote.dart';
 import 'package:guatiao/src/remote/args.dart';
 import 'package:guatiao/src/remote/codec.dart';
+import 'package:guatiao/src/remote/proof.dart' as proof;
 import 'package:test/test.dart';
 
 import 'remote_key.dart';
@@ -25,8 +26,11 @@ import 'support.dart';
 late final Uri _url;
 Future<void> Function()? _stop;
 
-Future<RemoteLink> _connect({String key = remoteKey}) =>
-    RemoteLink.connect(_url, key: utf8.encode(key));
+Future<RemoteLink> _connect({String key = remoteKey}) => RemoteLink.connect(
+  _url,
+  security: RemoteSecurity.none,
+  key: utf8.encode(key),
+);
 
 /// A link with `derived_greeter` opened, and its `Hello` provider.
 Future<(RemoteLink, RemoteProvider)> _hello() async {
@@ -311,6 +315,159 @@ void main() {
       hello.table('greeter')!.call('greet', ['late']),
       throwsA(isA<Gone>()),
     );
+  });
+
+  group('security', () {
+    test(
+      'server TLS over wss: the server by its certificate, this side by the key',
+      () async {
+        final (url, fingerprint, stop) = await serverTlsServer();
+        try {
+          final link = await RemoteLink.connect(
+            url,
+            security: RemoteSecurity.serverTls,
+            key: utf8.encode(remoteKey),
+            tls: fingerprint == null ? null : RemoteTls(pins: [fingerprint]),
+          );
+          expect(link.trust, RemoteTrust.serverTls);
+          final catalog = await link.list();
+          final library = catalog.libraries.singleWhere(
+            (l) => l.id == 'derived_greeter',
+          );
+          await link.open(library);
+          final greeter = library.providers.first.table('greeter')!;
+          expect(await greeter.call('greet', ['tls']), {
+            'greeting': 'hello, tls',
+          });
+          await link.close();
+          await expectLater(
+            RemoteLink.connect(
+              url,
+              security: RemoteSecurity.serverTls,
+              key: utf8.encode('not the key'),
+              tls: fingerprint == null ? null : RemoteTls(pins: [fingerprint]),
+            ),
+            throwsA(isA<BadValue>()),
+          );
+        } finally {
+          await stop();
+        }
+      },
+    );
+
+    test('a URL must agree with the security asked', () async {
+      final key = utf8.encode(remoteKey);
+      await expectLater(
+        RemoteLink.connect(Uri.parse('ws://127.0.0.1:9/'), key: key),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('security: RemoteSecurity.none'),
+          ),
+        ),
+        reason: 'mutual TLS unless told, and ws:// carries no TLS',
+      );
+      await expectLater(
+        RemoteLink.connect(
+          Uri.parse('wss://127.0.0.1:9/'),
+          security: RemoteSecurity.none,
+          key: key,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        RemoteLink.connect(
+          Uri.parse('wss://127.0.0.1:9/'),
+          security: RemoteSecurity.serverTls,
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('a key or a token'),
+          ),
+        ),
+      );
+    });
+
+    test('server TLS proves the key when the WELCOME asks for it', () async {
+      final key = utf8.encode('k');
+      final pipe = _Pipe();
+      final linking = RemoteLink.over(
+        pipe,
+        trust: RemoteTrust.serverTls,
+        key: key,
+        timeout: null,
+      );
+      final hello = await pipe.next() as Hello;
+      expect(hello.trust, 3);
+      final server = Uint8List.fromList(List.filled(16, 7));
+      pipe.reply(
+        Welcome(
+          server,
+          proof.proofOf(key, proof.serverLabel, hello.nonce, server),
+          const {},
+        ),
+      );
+      final answered = await pipe.next() as Proof;
+      expect(
+        answered.proof,
+        proof.proofOf(key, proof.clientLabel, hello.nonce, server),
+      );
+      final link = await linking;
+      expect(link.trust, RemoteTrust.serverTls);
+      await link.close();
+    });
+
+    test('server TLS with a token sends no proof when none is asked', () async {
+      final pipe = _Pipe();
+      final linking = RemoteLink.over(
+        pipe,
+        trust: RemoteTrust.serverTls,
+        token: 't0k',
+        timeout: null,
+      );
+      final hello = await pipe.next() as Hello;
+      expect((hello.options as Map)['token'], 't0k');
+      pipe.reply(Welcome(Uint8List(16), Uint8List(0), const {}));
+      final link = await linking;
+      expect(link.alive, isTrue);
+      await link.close();
+    });
+
+    test('a server asking for a key this client lacks is refused', () async {
+      final pipe = _Pipe();
+      final linking = RemoteLink.over(
+        pipe,
+        trust: RemoteTrust.serverTls,
+        token: 't0k',
+      );
+      final hello = await pipe.next() as Hello;
+      final server = Uint8List(16);
+      pipe.reply(
+        Welcome(
+          server,
+          proof.proofOf(
+            utf8.encode('k'),
+            proof.serverLabel,
+            hello.nonce,
+            server,
+          ),
+          const {},
+        ),
+      );
+      await expectLater(
+        linking,
+        throwsA(
+          isA<BadValue>().having(
+            (e) => e.message,
+            'message',
+            contains('has none'),
+          ),
+        ),
+      );
+    });
   });
 
   group('against a scripted peer', () {

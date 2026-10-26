@@ -26,8 +26,23 @@ extension type _MessageEvent._(JSObject _) implements JSObject {
   external JSAny? get data;
 }
 
-/// Opens the browser's WebSocket to [url] within [timeout].
-Future<RemoteChannel> openWebSocket(Uri url, Duration timeout) {
+/// Opens the browser's WebSocket to [url] within [timeout]. A page's TLS is
+/// the browser's: [tls] is refused.
+Future<RemoteChannel> openWebSocket(
+  Uri url,
+  Duration timeout, [
+  RemoteTls? tls,
+]) {
+  if (tls != null) {
+    return Future.error(
+      ArgumentError.value(
+        tls,
+        'tls',
+        "a page's TLS is the browser's: it trusts the web's certificate "
+            'authorities and presents a certificate the user installed',
+      ),
+    );
+  }
   final opened = Completer<RemoteChannel>();
   final _WebSocket ws;
   try {

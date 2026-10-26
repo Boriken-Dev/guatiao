@@ -75,7 +75,7 @@ function tree(t: unknown[]): unknown {
   }
 }
 
-const TRUST: Record<string, number> = { local: 0, trusted: 1, secure: 2 };
+const TRUST: Record<string, number> = { local: 0, trusted: 1, secure: 2, 'server-tls': 3 };
 
 function frameOf(f: Case): Frame {
   switch (f['type']) {
@@ -152,7 +152,7 @@ function same(got: unknown, want: unknown, name: string): void {
 describe('the shared vectors', () => {
   test('every frame decodes to its fields and encodes to its bytes', () => {
     const cases = list('frames');
-    expect(cases).toHaveLength(17);
+    expect(cases).toHaveLength(20);
     for (const c of cases) {
       const name = c['name'] as string;
       const whole = hex(c['hex'] as string);

@@ -5,7 +5,10 @@
 /**
  * guatiao-remote-server on loopback over WebSocket, serving
  * `derived_greeter` for the greeter kinds, for the live suite in Node and
- * in Chrome alike: started once in Node, its URL provided to both.
+ * in Chrome alike: started once in Node, its URL provided to both. A
+ * second one serves `wss://` at server TLS, with a certificate it made
+ * itself, for the page alone (the test browser takes it; Node's WebSocket
+ * would not).
  *
  * The server is `GUATIAO_REMOTE_SERVER`, else the checkout's debug build;
  * the library is the one beside it. Missing, the run fails naming the
@@ -27,6 +30,7 @@ declare module 'vitest' {
   export interface ProvidedContext {
     remoteUrl: string;
     remoteKey: string;
+    serverTlsUrl: string;
   }
 }
 
@@ -38,8 +42,37 @@ function library(dir: string): string {
   return path.join(dir, 'libderived_greeter.so');
 }
 
-let child: ChildProcess | undefined;
+const children: ChildProcess[] = [];
 let keyDir: string | undefined;
+
+/** Starts the server with `args` and answers the URL it says it serves. */
+async function start(server: string, args: string[]): Promise<string> {
+  const proc = spawn(server, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  children.push(proc);
+  const said: string[] = [];
+  return new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`the server said no address in time: ${said.join('\n')}`)), 30_000);
+    let buffered = '';
+    proc.stderr!.setEncoding('utf8');
+    proc.stderr!.on('data', (chunk: string) => {
+      buffered += chunk;
+      const lines = buffered.split('\n');
+      buffered = lines.pop()!;
+      for (const line of lines) {
+        said.push(line);
+        const m = /serving (wss?:\/\/\S+)/.exec(line);
+        if (m !== null) {
+          clearTimeout(timer);
+          resolve(`${m[1]}/`);
+        }
+      }
+    });
+    proc.on('exit', (code) => {
+      clearTimeout(timer);
+      reject(new Error(`the server exited (${code}): ${said.join('\n')}`));
+    });
+  });
+}
 
 export async function setup(project: TestProject): Promise<void> {
   const named = process.env['GUATIAO_REMOTE_SERVER'];
@@ -57,55 +90,41 @@ export async function setup(project: TestProject): Promise<void> {
   keyDir = mkdtempSync(path.join(tmpdir(), 'guatiao-remote-'));
   const keyFile = path.join(keyDir, 'link.key');
   writeFileSync(keyFile, REMOTE_KEY);
-  const proc = spawn(
-    server,
-    [
-      '--listen',
-      'ws://127.0.0.1:0',
-      '--trust',
-      'trusted',
-      '--range',
-      '127.0.0.1',
-      '--key-file',
-      keyFile,
-      '--kinds',
-      path.join(repo, 'examples', 'greeter_kind', 'include', 'greeter_kind.kinds.json'),
-      '--load',
-      greeter,
-    ],
-    { stdio: ['ignore', 'ignore', 'pipe'] },
-  );
-  child = proc;
-  const said: string[] = [];
-  const url = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`the server said no address in time: ${said.join('\n')}`)), 30_000);
-    let buffered = '';
-    proc.stderr!.setEncoding('utf8');
-    proc.stderr!.on('data', (chunk: string) => {
-      buffered += chunk;
-      const lines = buffered.split('\n');
-      buffered = lines.pop()!;
-      for (const line of lines) {
-        said.push(line);
-        const m = /serving (ws:\/\/\S+)/.exec(line);
-        if (m !== null) {
-          clearTimeout(timer);
-          resolve(`${m[1]}/`);
-        }
-      }
-    });
-    proc.on('exit', (code) => {
-      clearTimeout(timer);
-      reject(new Error(`the server exited (${code}): ${said.join('\n')}`));
-    });
-  });
+  const serving = [
+    '--kinds',
+    path.join(repo, 'examples', 'greeter_kind', 'include', 'greeter_kind.kinds.json'),
+    '--load',
+    greeter,
+  ];
+  const url = await start(server, [
+    '--listen',
+    'ws://127.0.0.1:0',
+    '--security',
+    'none',
+    '--range',
+    '127.0.0.1',
+    '--key-file',
+    keyFile,
+    ...serving,
+  ]);
+  const serverTlsUrl = await start(server, [
+    '--listen',
+    'wss://127.0.0.1:0',
+    '--security',
+    'server-tls',
+    '--identity',
+    path.join(keyDir, 'server.pem'),
+    '--key-file',
+    keyFile,
+    ...serving,
+  ]);
   project.provide('remoteUrl', url);
   project.provide('remoteKey', REMOTE_KEY);
+  project.provide('serverTlsUrl', serverTlsUrl);
 }
 
 export function teardown(): void {
-  child?.kill();
-  child = undefined;
+  for (const child of children.splice(0)) child.kill();
   if (keyDir !== undefined) rmSync(keyDir, { recursive: true, force: true });
   keyDir = undefined;
 }

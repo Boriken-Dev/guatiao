@@ -86,3 +86,10 @@ Future<(Uri, Future<void> Function())> remoteServer() async {
   final server = await startRemoteServer();
   return (server.url, server.stop);
 }
+
+/// The same at server TLS over `wss://`: its URL, the fingerprint the VM
+/// pins, and what stops it.
+Future<(Uri, String?, Future<void> Function())> serverTlsServer() async {
+  final server = await startRemoteServer(listen: serverTlsArguments);
+  return (server.url, server.fingerprint, server.stop);
+}

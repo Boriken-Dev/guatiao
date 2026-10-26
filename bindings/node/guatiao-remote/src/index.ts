@@ -10,7 +10,7 @@
  * ```ts
  * import { RemoteLink } from 'guatiao-remote';
  *
- * const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { key });
+ * const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { security: 'none', key });
  * const catalog = await link.list();
  * const library = catalog.libraries[0]!;
  * await link.open(library);
@@ -19,10 +19,11 @@
  * link.close();
  * ```
  *
- * The server listens with `guatiao-remote-server --listen ws://...` at the
- * trusted level: a pre-shared key proved both ways, peers admitted by an
- * access control list, no encryption. Calls are typed by the kinds'
- * descriptions the catalog carries.
+ * The server listens with `guatiao-remote-server --listen ws://...
+ * --security none`: a pre-shared key proved both ways, peers admitted by an
+ * access control list, no encryption. Over `wss://` the link runs server
+ * TLS or mutual TLS (the default), the TLS being the browser's. Calls are
+ * typed by the kinds' descriptions the catalog carries.
  *
  * @module
  */
@@ -57,4 +58,4 @@ export {
   RemoteTrust,
   Served,
 } from './link.js';
-export type { CallOptions, Handler, LinkOptions, RemoteChannel } from './link.js';
+export type { CallOptions, Handler, LinkOptions, RemoteChannel, RemoteSecurity } from './link.js';

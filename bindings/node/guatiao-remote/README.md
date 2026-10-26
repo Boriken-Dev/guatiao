@@ -40,7 +40,7 @@ ESM only. Any current browser, or Node 22 and later (its own WebSocket).
 ```ts
 import { RemoteLink, Served } from 'guatiao-remote';
 
-const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { key });
+const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { security: 'none', key });
 const catalog = await link.list();
 const library = catalog.libraries.find((l) => l.id === 'derived_greeter')!;
 await link.open(library);
@@ -54,13 +54,16 @@ link.close();
 ```
 
 The server listens with `guatiao-remote-server --listen ws://ADDRESS:PORT
---trust trusted` and a key file: the key is proved both ways, there is no
+--security none` and a key file: the key is proved both ways, there is no
 encryption, and whoever reads the page holds the key. Serve the page only
-to those who may call the device.
+to those who may call the device. Over `wss://` the link runs server TLS
+(`security: 'server-tls'`: the browser checks the server's certificate,
+the page proves the key or a token inside TLS) or mutual TLS, the
+default (with a client certificate the browser's user installed).
 
 ## Documentation
 
-The protocol, the trust levels and the server are in
+The protocol, the security choices and the server are in
 [`docs/remote.md`](https://boriken-dev.github.io/guatiao/remote/); this
 package's API is in its `AGENTS.md`.
 
