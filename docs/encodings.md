@@ -569,8 +569,10 @@ the hash check themselves against it.
 A provider carries the same document in its descriptor
 (`guatiao_provider_info.kind_descriptions`, JSON text): the kinds it
 serves and every object kind their slots take or answer, each once, so a
-host binds them with no file. `#[derive(Provider)]` writes it; a provider
-written by hand may leave it empty. A host reads it parsed with
+host binds them with no file. `#[derive(Provider)]` writes it, as do
+guatiao-bridge for the providers a language bridge declares and
+guatiao-source-remote for a peer's providers (from the descriptions its
+catalog lists); a provider written by hand may leave it empty. A host reads it parsed with
 `guatiao_registry_kind_descriptions` (ABSENT when the provider carries
 none), `Provider::kind_descriptions` in Rust, `kindDescriptions` in Node
 and Dart and `kind_descriptions` in Python.

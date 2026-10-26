@@ -14,6 +14,18 @@ write now.
 
 ### Added
 
+- **Providers a language bridge or a remote peer serves carry their
+  kinds' descriptions.** A provider guatiao-bridge builds from an
+  engine's declaration (the Lua, Rhai, JavaScript and WebAssembly
+  sources), and a peer's provider guatiao-source-remote serves, now fill
+  `guatiao_provider_info.kind_descriptions` as `#[derive(Provider)]` does:
+  `Provider::kind_descriptions()` (and every binding's reader) answers the
+  kinds it serves and every object kind they reach, so a host binds them
+  with no `.kinds.json`. Written by guatiao-bridge's new
+  `Kinds::document(served)`, over core's new `ToValue for
+  KindDescription` (a description written back as the value it reads,
+  key for key). Nothing changes on the wire: a peer's catalog already
+  describes its kinds.
 - **Kind generators import an object kind another document describes,
   and a kind may name itself.** `guatiao-kind DOC --import
   listener=./listener_kind.js` (Node) and `dart run guatiao:kind DOC -o
