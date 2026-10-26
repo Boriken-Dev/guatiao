@@ -104,7 +104,11 @@ Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries
 writing through it raises `TypeError`, and it is never `.close()`d),
 `provider_meta(key)` (a copy of the provider's `meta` as a `Value` you
 close, `None` when it declares none, `NotFound` for an unknown key; its
-form is under the key `"form"`, `guatiao_intake.PROVIDER_FORM_KEY`), `host()` (the raw `host_info` pointer, for driving
+form is under the key `"form"`, `guatiao_intake.PROVIDER_FORM_KEY`),
+`kind_descriptions(key)` (the document of the kinds the provider serves
+and the object kinds they reach, as a plain `dict`, so no `.kinds.json`
+is needed; `None` when it carries none, `NotFound` for an unknown key,
+`BadValue` for one that is not a description), `host()` (the raw `host_info` pointer, for driving
 a `guatiao_library_entry` by hand). Every answer that is data comes back
 as a plain `dict`/`list`, already freed.
 

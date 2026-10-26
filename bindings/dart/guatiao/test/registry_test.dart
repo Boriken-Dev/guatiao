@@ -136,6 +136,20 @@ void main() {
     expect(() => reg.providerMeta('nobody'), throwsA(isA<NotFound>()));
   });
 
+  test('a provider carries its kinds\' descriptions', () {
+    final reg = scanned();
+    addTearDown(reg.close);
+    final document = reg.kindDescriptions('derived_greeter_hello');
+    expect(document, isNotNull);
+    expect(document!['format'], 1);
+    expect(
+      [for (final k in document['kinds']! as List) (k as Map)['name']],
+      ['greeter', 'listener', 'conversation', 'counter', 'wide'],
+    );
+    expect(reg.kindDescriptions('hello_library_greeter'), isNull);
+    expect(() => reg.kindDescriptions('nobody'), throwsA(isA<NotFound>()));
+  });
+
   test('retire frees the key and leaves the other library alone', () {
     final reg = scanned();
     addTearDown(reg.close);

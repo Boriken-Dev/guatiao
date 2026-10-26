@@ -267,7 +267,11 @@ Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 schema — writing through it throws), `providerMeta(key)` (a copy of the
 provider's `meta` as a `Value` to close, `null` when it declares none,
 `NotFound` for an unknown key; its form is under `'form'`,
-`providerFormKey` of package:guatiao_intake),
+`providerFormKey` of package:guatiao_intake), `kindDescriptions(key)`
+(the document of the kinds the provider serves and the object kinds they
+reach, as a plain `Map`, what `dart run guatiao:kind` writes Dart from;
+`null` when it carries none, `NotFound` for an unknown key, `BadValue`
+for one that is not a description),
 `retire`, `collect`, `unload`. Every answer that is data comes back as a
 plain `Map`/`List`, already freed.
 

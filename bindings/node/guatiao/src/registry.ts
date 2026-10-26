@@ -11,7 +11,7 @@
 
 import { SIZE } from './abi.js';
 import { NotFound, raiseForStatus } from './errors.js';
-import { type KindLike, type Remote, asKind } from './kinds.js';
+import { type KindLike, type KindsDocument, type Remote, asKind } from './kinds.js';
 import * as n from './native.js';
 import { Borrowed, Ref, Value, adopt } from './value.js';
 
@@ -293,6 +293,24 @@ export class Registry implements Disposable {
     };
     if (find() === null) return undefined;
     return new Ref(new Borrowed(find), []);
+  }
+
+  /**
+   * The descriptions of the kinds the provider filed under `key` serves,
+   * and of every object kind their slots take or answer, as the document
+   * `kindsOf` loads: how a host binds a kind it has no `.kinds.json` for.
+   * `undefined` when the provider carries none (one written by hand, or a
+   * library built before descriptors carried them). `NotFound` when
+   * nothing answers to `key`; `BadValue` when what it carries is not a
+   * description.
+   *
+   * ```ts
+   * const { greeter } = kindsOf(reg.kindDescriptions('derived_greeter_hello')!);
+   * ```
+   */
+  kindDescriptions(key: string): KindsDocument | undefined {
+    const document = this.#answer('guatiao_registry_kind_descriptions', n.str(key));
+    return document === undefined ? undefined : (document as KindsDocument);
   }
 
   /**
