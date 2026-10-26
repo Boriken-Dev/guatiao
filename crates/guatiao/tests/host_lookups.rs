@@ -35,6 +35,7 @@ fn short_provider(id: &'static str, declared: usize) -> *const ProviderInfo<'sta
         tables: KindTables::empty(),
         create: None,
         destroy: None,
+        kind_descriptions: Str::new(""),
     };
     // `u64`s for the alignment; exactly the declared bytes are copied, and
     // the allocation is no larger than the words those bytes need.

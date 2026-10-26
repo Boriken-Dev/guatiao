@@ -108,6 +108,13 @@ pub trait Kind: 'static {
         0
     }
 
+    /// Pushes this kind's description, then those of the object kinds
+    /// its slots take or answer, onto `out`, each once: `seen` holds the
+    /// names already pushed. What [`kind_document`] gathers for a
+    /// provider's descriptor; a hand-written kind describes nothing.
+    #[doc(hidden)]
+    fn describe(_seen: &mut Vec<&'static str>, _out: &mut Vec<String>) {}
+
     /// The trait object over a proxy. The macro writes `remote`, because
     /// only it knows the trait.
     fn as_dyn(remote: &Remote<Self>) -> &Self;

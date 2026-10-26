@@ -183,6 +183,7 @@ struct GProviderInfo
     tables::GKindTables
     create::Ptr{Cvoid}
     destroy::Ptr{Cvoid}
+    kind_descriptions::GStr
 end
 
 struct GProviders
@@ -231,7 +232,7 @@ for (T, n) in ((GAlloc, 40), (GStr, 16), (GBytes, 16), (GBytesMut, 16), (GString
     (GBuffer, 32), (GValue, 40), (GList, 32), (GEntry, 72), (GMap, 32),
     (GProviderError, 40), (GDate, 8), (GTime, 8), (GDateTime, 16),
     (GTimestamp, 16), (GSpan, 64), (GTextError, 48), (GKindHeader, 8), (GObject, 24),
-    (GKinds, 16), (GKindTable, 32), (GKindTables, 24), (GProviderInfo, 152),
+    (GKinds, 16), (GKindTable, 32), (GKindTables, 24), (GProviderInfo, 168),
     (GProviders, 24), (GLibraryInfo, 80), (GHostInfo, 64), (GWireEvent, 144))
     sizeof(T) == n || error("$(T) is $(sizeof(T)) bytes, the header's is $n: a 64-bit platform is required")
 end

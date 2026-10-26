@@ -219,6 +219,19 @@ int main(int argc, char **argv) {
         "an unserved kind should be an empty list");
   guatiao_value_free(&answer);
 
+  /* A provider written by hand carries no kind descriptions: the answer
+     stays ABSENT. A key nothing answers to is NOT_FOUND. */
+  st = guatiao_registry_kind_descriptions(reg, s("hello_library_greeter"),
+                                          &alloc, &answer);
+  CHECK(st == GUATIAO_OK && answer.tag == GUATIAO_ABSENT,
+        "kind_descriptions of a hand-written provider: %d, tag %d", (int)st,
+        (int)answer.tag);
+  guatiao_value_free(&answer);
+  st = guatiao_registry_kind_descriptions(reg, s("nobody"), &alloc, &answer);
+  CHECK(st == GUATIAO_ERR_NOT_FOUND, "kind_descriptions of nobody: %d",
+        (int)st);
+  guatiao_value_free(&answer);
+
   /* ---- ranking: the host's priority decides the order ---------------- */
 
   /* Unranked, the key decides: almanac, greeter, sundial. */

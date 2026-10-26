@@ -404,6 +404,46 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
     );
 }
 
+/// A derived provider carries the description of every kind it serves
+/// and of every object kind their slots reach, each once and each the one
+/// its kind crate commits, so a host binds them with no file; the
+/// provider whose envelope is written by hand carries none.
+#[test]
+fn a_derived_provider_carries_its_kinds_descriptions() {
+    use guatiao::library::kind::KindDescription;
+
+    let registry = loaded();
+    let carried = registry
+        .provider("derived_greeter_hello")
+        .expect("the derived greeter is registered")
+        .kind_descriptions()
+        .expect("a description");
+    let names: Vec<&str> = carried.iter().map(KindDescription::name).collect();
+    // Served in `#[provider(..)]` order, each followed by the object
+    // kinds its slots reach, in slot order.
+    assert_eq!(
+        names,
+        ["greeter", "listener", "conversation", "counter", "wide"]
+    );
+    let committed = KindDescription::document_json(include_str!(
+        "../../../examples/greeter_kind/include/greeter_kind.kinds.json"
+    ))
+    .expect("the committed document reads");
+    for kind in &carried {
+        assert_eq!(
+            Some(kind),
+            committed.iter().find(|c| c.name() == kind.name()),
+            "{}",
+            kind.name()
+        );
+    }
+
+    let by_hand = registry
+        .provider("hello_library_greeter")
+        .expect("the hand-written greeter is registered");
+    assert_eq!(by_hand.kind_descriptions(), Ok(Vec::new()));
+}
+
 /// A C host reaches a derived provider's table by kind, and it is the
 /// table the typed path validates.
 #[test]

@@ -70,7 +70,7 @@ export const SIZE = {
   kinds: 16,
   kindTable: 32,
   kindTables: 24,
-  providerInfo: 152,
+  providerInfo: 168,
   providers: 24,
   libraryInfo: 80,
   hostInfo: 64,
@@ -149,6 +149,7 @@ export const PROVIDER_INFO = {
   tables: 112,
   create: 136,
   destroy: 144,
+  kindDescriptions: 152,
 } as const;
 
 /** `guatiao_library_info`. */

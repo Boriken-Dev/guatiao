@@ -36,6 +36,7 @@ pub struct ProviderView {
     pub(crate) tables: Vec<(String, *const c_void, usize)>,
     pub(crate) create: Option<CreateFn>,
     pub(crate) destroy: Option<DestroyFn>,
+    pub(crate) kind_descriptions: Option<String>,
     pub(crate) hold: Hold,
 }
 
@@ -117,6 +118,13 @@ impl ProviderView {
     /// Releases an instance `create` built. See [`ProviderInfo::destroy`].
     pub fn destroy(&self) -> Option<DestroyFn> {
         self.destroy
+    }
+
+    /// The descriptions of the kinds it serves, as the JSON document it
+    /// carries, or `None` when it carries none. A copy in this process's
+    /// own heap. See [`ProviderInfo::kind_descriptions`].
+    pub fn kind_descriptions(&self) -> Option<&str> {
+        self.kind_descriptions.as_deref()
     }
 
     /// Whether it builds instances from a configuration.
@@ -619,6 +627,19 @@ pub(super) unsafe fn read_provider(
                     bounds,
                     "a provider's `destroy` slot",
                 )?
+            } else {
+                None
+            },
+            kind_descriptions: if declared >= ProviderInfo::kind_descriptions_end() {
+                // SAFETY: the guard established the field is present.
+                // Empty and a descriptor older than the field both mean
+                // none.
+                Some(text(
+                    core::ptr::addr_of!((*raw).kind_descriptions).read(),
+                    bounds,
+                    "a provider's kind descriptions",
+                )?)
+                .filter(|d| !d.is_empty())
             } else {
                 None
             },
@@ -1410,6 +1431,7 @@ mod tests {
             tables: crate::library::desc::KindTables::empty(),
             create: None,
             destroy: None,
+            kind_descriptions: Str::new(""),
         }
     }
 

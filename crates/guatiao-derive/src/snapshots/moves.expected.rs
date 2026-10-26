@@ -179,6 +179,18 @@ impl ::guatiao::library::Kind for dyn Moves {
         seen.push("moves");
         0usize
     }
+    fn describe(
+        seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>,
+        out: &mut ::guatiao::__private::alloc::vec::Vec<
+            ::guatiao::__private::alloc::string::String,
+        >,
+    ) {
+        if seen.contains(&"moves") {
+            return;
+        }
+        seen.push("moves");
+        out.push(MovesVtable::description());
+    }
     fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
         remote
     }

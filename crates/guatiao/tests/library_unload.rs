@@ -516,6 +516,7 @@ unsafe extern "C" fn entry(_host: *const guatiao::library::HostInfo) -> *const L
             tables: guatiao::library::KindTables::empty(),
             create: None,
             destroy: None,
+            kind_descriptions: Str::new(""),
         }];
         let desc = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,

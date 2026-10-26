@@ -602,6 +602,17 @@ pub struct ProviderInfo<'a> {
     >,
     /// Releases an instance `create` built. Null when `create` is null.
     pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
+    /// The descriptions of the kinds this provider serves, and of every
+    /// object kind their slots take or answer, each once: one document
+    /// `{"format":1,"kinds":[...]}` as JSON text, the format
+    /// `docs/encodings.md` states ("A kind, described"). **Empty when
+    /// the provider carries none**, which a host reads the same as a
+    /// descriptor older than this field.
+    ///
+    /// What lets a host bind a kind it has no file for. `#[derive(Provider)]`
+    /// writes it; a provider written by hand may leave it empty. The text
+    /// outlives every reader, as `id` does.
+    pub kind_descriptions: Str<'a>,
 }
 
 /// One kind's function table, on a provider that serves several kinds
@@ -711,6 +722,12 @@ impl ProviderInfo<'_> {
     /// Where the `destroy` field ends, for the guard that reads it.
     pub const fn destroy_end() -> usize {
         offset_of!(ProviderInfo, destroy) + size_of::<*const c_void>()
+    }
+
+    /// Where the `kind_descriptions` field ends, for the guard that reads
+    /// it.
+    pub const fn kind_descriptions_end() -> usize {
+        offset_of!(ProviderInfo, kind_descriptions) + size_of::<Str>()
     }
 }
 
@@ -828,7 +845,11 @@ mod tests {
         assert!(ProviderInfo::available_end() < ProviderInfo::tables_end());
         assert!(ProviderInfo::tables_end() < ProviderInfo::create_end());
         assert!(ProviderInfo::create_end() < ProviderInfo::destroy_end());
-        assert_eq!(ProviderInfo::destroy_end(), size_of::<ProviderInfo>());
+        assert!(ProviderInfo::destroy_end() < ProviderInfo::kind_descriptions_end());
+        assert_eq!(
+            ProviderInfo::kind_descriptions_end(),
+            size_of::<ProviderInfo>()
+        );
         assert!(HostServices::floor() < HostServices::pinned_end());
         assert_eq!(HostServices::pinned_end(), size_of::<HostServices>());
         assert_eq!(KindTable::floor(), size_of::<KindTable>());

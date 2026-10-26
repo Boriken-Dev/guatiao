@@ -155,6 +155,18 @@ impl ::guatiao::library::Kind for dyn Greeter {
         seen.push("greeter");
         0usize
     }
+    fn describe(
+        seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>,
+        out: &mut ::guatiao::__private::alloc::vec::Vec<
+            ::guatiao::__private::alloc::string::String,
+        >,
+    ) {
+        if seen.contains(&"greeter") {
+            return;
+        }
+        seen.push("greeter");
+        out.push(GreeterVtable::description());
+    }
     fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
         remote
     }

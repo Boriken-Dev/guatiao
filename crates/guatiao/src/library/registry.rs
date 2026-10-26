@@ -374,6 +374,25 @@ impl Provider {
         self.view.meta.as_ref()
     }
 
+    /// The descriptions of the kinds this provider serves and of every
+    /// object kind their slots reach: what a host binds a kind from when
+    /// it has no file for it. Empty when the provider carries none, as a
+    /// provider written by hand or built before descriptors carried them.
+    ///
+    /// # Errors
+    ///
+    /// [`DescriptionError`](crate::library::kind::DescriptionError) when
+    /// what it carries is not a description, naming where.
+    pub fn kind_descriptions(
+        &self,
+    ) -> Result<Vec<crate::library::kind::KindDescription>, crate::library::kind::DescriptionError>
+    {
+        match self.view.kind_descriptions() {
+            Some(text) => crate::library::kind::KindDescription::document_json(text),
+            None => Ok(Vec::new()),
+        }
+    }
+
     /// The function table and the size the library compiled it at.
     ///
     /// **Deliberately raw, and deliberately not generic.** Whoever
@@ -1526,6 +1545,7 @@ mod tests {
             tables: Vec::new(),
             create: None,
             destroy: None,
+            kind_descriptions: None,
             hold: Hold::None,
         }
     }

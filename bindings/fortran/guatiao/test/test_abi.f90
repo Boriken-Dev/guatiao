@@ -322,7 +322,7 @@ contains
     call size_is(c_sizeof(k), 16, 'guatiao_kinds')
     call size_is(c_sizeof(kt), 32, 'guatiao_kind_table')
     call size_is(c_sizeof(kts), 24, 'guatiao_kind_tables')
-    call size_is(c_sizeof(pi), 152, 'guatiao_provider_info')
+    call size_is(c_sizeof(pi), 168, 'guatiao_provider_info')
     call size_is(c_sizeof(hs), 72, 'guatiao_host_services')
     call size_is(c_sizeof(hi), 64, 'guatiao_host_info')
     call size_is(c_sizeof(ps), 24, 'guatiao_providers')

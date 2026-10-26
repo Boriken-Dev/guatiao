@@ -100,7 +100,7 @@ module guatiao_c
     integer(c_size_t) :: stride = 0
   end type
 
-  !> `guatiao_provider_info`: 152 bytes.
+  !> `guatiao_provider_info`: 168 bytes.
   type, bind(c) :: gt_provider_info
     integer(c_int32_t) :: struct_size = 0
     integer(c_int32_t) :: vtable_size = 0
@@ -116,6 +116,7 @@ module guatiao_c
     type(gt_kind_tables) :: tables
     type(c_funptr) :: create = c_null_funptr
     type(c_funptr) :: destroy = c_null_funptr
+    type(gt_str) :: kind_descriptions
   end type
 
   !> `guatiao_host_services`: 72 bytes.

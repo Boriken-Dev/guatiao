@@ -308,7 +308,8 @@ function describe!(lib::Library)
             ctext!(keep, p.display_name), schema, C_NULL, ctx, meta_map!(keep, p.meta), ctext!(keep, p.version),
             p.available === nothing ? C_NULL : AVAILABLE_POINTERS[j](),
             GKindTables(tables, length(p.kinds), sizeof(GKindTable)),
-            configured ? CREATE_POINTERS[j]() : C_NULL, configured ? destroy_instance_pointer() : C_NULL)
+            configured ? CREATE_POINTERS[j]() : C_NULL, configured ? destroy_instance_pointer() : C_NULL,
+            GStr(C_NULL, 0))
         unsafe_store!(infos, info, at)
     end
     info = Ptr{GLibraryInfo}(cmalloc!(keep, sizeof(GLibraryInfo)))

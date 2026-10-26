@@ -1154,6 +1154,27 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
         }
     }
+    // Every object kind a slot takes or answers, each once: what a
+    // provider's document describes beside this kind.
+    let mut reached: Vec<Type> = Vec::new();
+    for m in methods.iter() {
+        let answered = match &m.ret {
+            RetKind::Object(inner) => Some(inner),
+            _ => None,
+        };
+        let taken = m.args.iter().filter_map(|arg| match &arg.kind {
+            ArgKind::Object(inner) | ArgKind::BorrowMut(inner) | ArgKind::Borrow(inner) => {
+                Some(inner)
+            }
+            _ => None,
+        });
+        for inner in taken.chain(answered) {
+            let spelled = quote!(#inner).to_string();
+            if !reached.iter().any(|t| quote!(#t).to_string() == spelled) {
+                reached.push(inner.clone());
+            }
+        }
+    }
 
     // What pairs an object cell's table with its value by type: the table
     // for `__T` is `of::<__T>()`, and only for a `__T` of this kind.
@@ -1375,6 +1396,18 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 }
                 seen.push(#name);
                 #own_live #(+ <#returned as ::guatiao::library::Kind>::live_objects(seen))*
+            }
+
+            fn describe(
+                seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>,
+                out: &mut ::guatiao::__private::alloc::vec::Vec<::guatiao::__private::alloc::string::String>,
+            ) {
+                if seen.contains(&#name) {
+                    return;
+                }
+                seen.push(#name);
+                out.push(#table::description());
+                #(<#reached as ::guatiao::library::Kind>::describe(seen, out);)*
             }
 
             fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {

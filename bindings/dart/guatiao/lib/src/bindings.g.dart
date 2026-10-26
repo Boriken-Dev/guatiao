@@ -724,6 +724,37 @@ class GuatiaoBindings {
   late final _guatiao_registry_keyed_by = _guatiao_registry_keyed_byPtr
       .asFunction<int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
 
+  int guatiao_registry_kind_descriptions(
+    ffi.Pointer<guatiao_registry> reg,
+    guatiao_str key,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_registry_kind_descriptions(reg, key, alloc, out);
+  }
+
+  late final _guatiao_registry_kind_descriptionsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_kind_descriptions');
+  late final _guatiao_registry_kind_descriptions =
+      _guatiao_registry_kind_descriptionsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<guatiao_registry>,
+              guatiao_str,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>,
+            )
+          >();
+
   int guatiao_registry_libraries(
     ffi.Pointer<guatiao_registry> reg,
     ffi.Pointer<guatiao_alloc> alloc,
@@ -3037,6 +3068,8 @@ final class guatiao_provider_info extends ffi.Struct {
     >
   >
   destroy;
+
+  external guatiao_str kind_descriptions;
 }
 
 final class guatiao_providers extends ffi.Struct {

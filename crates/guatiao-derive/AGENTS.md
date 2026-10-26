@@ -222,7 +222,7 @@ proxy copies the answer once. Then:
 | `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
 | `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`; `<method>_end()` per slot; `FLOOR_HASH` as a **literal** the attribute computed, so a C header generator renders it as `#define <table>_FLOOR_HASH n` |
 | `<Trait>Vtable::description() -> String` | the kind as data, compact JSON: name, floor hash, `object`, each slot in table order with its arguments (`type`, and `pass` for a tree or an object), answer, `required`, `fallible` and doc text. The format is in the docs' encodings page; a kind crate commits a document of its kinds beside its header, which bindings load instead of declaring the kind again |
-| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut` |
+| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut`, and the hidden `describe(seen, out)`: pushes `description()`, then the object kinds a slot takes or answers, each once |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
 | `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |
 | `impl Trait for Instance<dyn Trait>`, `impl From<Instance<dyn Trait>> for Box<dyn Trait>` | provider kinds only: an instance built from a configuration is the trait, so `Arc::new(instance)` coerces to `Arc<dyn Trait>` and `destroy` runs when the last owner goes |
@@ -340,7 +340,10 @@ implementation fills the same table and hands `{table, size, ctx}` as a
 Emits, inside a `const _` block: one `static` table per kind
 (`<dyn K as Kind>::Vtable::of::<T>()`, reached through the trait so only
 the trait need be in scope), a `OnceLock<T>` holding the instance, and
-`impl ProviderDecl for T` building a `ProviderParts`. Refused: a generic
+`impl ProviderDecl for T` building a `ProviderParts`, whose descriptor
+carries the description of every kind served and of every object kind
+they reach (`kind_descriptions`, through `kind_document`), so a host
+binds them with no file. Refused: a generic
 type, no kinds, a kind named twice (by its spelling, a leading `::`
 aside), an unknown key, a key given twice, both `new` and
 `new_with_host`. `guatiao::providers!(A, B)` (in the core crate) then

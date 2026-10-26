@@ -390,6 +390,7 @@ fn an_unreadable_descriptor_says_why() {
         tables: KindTables::empty(),
         create: None,
         destroy: None,
+        kind_descriptions: Str::new(""),
     }));
     assert!(info.view().is_none());
     let Err(KindMismatch::Unreadable(why)) = info.as_kind::<dyn Greeter>() else {
@@ -428,6 +429,7 @@ fn a_zero_hash_is_accepted_only_at_the_raw_door() {
         available: None,
         create: None,
         destroy: None,
+        kind_descriptions: None,
         hold: Hold::None,
         tables: vec![(
             "greeter".to_string(),
@@ -490,6 +492,7 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
         available,
         create: None,
         destroy: None,
+        kind_descriptions: None,
         hold: Hold::None,
         tables: vec![("greeter".to_string(), table, size)],
     };

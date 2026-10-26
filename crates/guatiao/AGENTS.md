@@ -1273,6 +1273,7 @@ let provider = ProviderParts::builder("acme_hello")   // id; then any of:
     .table(KindTable::new("greeter", &TABLE as *const _ as *const c_void,
                           size_of::<GreeterVtable>()))
     .ctx(ctx)                            // .config(schema) .meta(map) .available(f) .create(f) .destroy(f)
+    .kind_descriptions(kind_document(&[<dyn Greeter as Kind>::describe]))   // the kinds as data; "" = none
     .build();                            // safe: what it was given is the builder's contract
 let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)
 // keep it for the process (a OnceLock of the library's own), then:
@@ -1329,8 +1330,21 @@ provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size
 provider.view()                            // &ProviderView: getters id(), kinds(), config(), ctx(),
                                            // tables(), create(), destroy(); no public fields
 provider.meta()                            // Option<&Map>, the registry's copy
+provider.kind_descriptions()               // Result<Vec<KindDescription>, DescriptionError>: what it
+                                           // carries in `kind_descriptions`; empty for none
 loaded.meta                                // Option<Map>, the registry's copy
 ```
+
+**A provider carries its kinds' descriptions** (`ProviderInfo::kind_descriptions`,
+appended after `destroy`; `kind_descriptions_end()` is its guard): one
+JSON document `{"format":1,"kinds":[...]}` holding every kind it serves
+and every object kind their slots take or answer, each once, so a host
+binds a kind it has no `.kinds.json` for. `#[derive(Provider)]` writes it
+through `kind_document(&[<dyn K as Kind>::describe, ..])` (each
+`#[guatiao::kind]` describes itself and what it reaches; a hand-written
+`impl Kind` describes nothing); empty text, or a descriptor whose
+`struct_size` ends before the field, reads as none. Read lazily: a
+malformed document refuses at `kind_descriptions()`, never at load.
 
 **Loading or registering a library is the trust decision.** A
 descriptor's fields are its producer's contract — a loaded library, the
@@ -1911,6 +1925,8 @@ learns at run time, and call one -- is a `Mechanism`'s, and
 
 ```rust
 KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"format": 1, "kinds": [..]}
+KindDescription::document_json(text)?               // the same from JSON text; an error at "byte N"
+                                                    // where it stops being JSON
 kind.name() .floor_hash() .object() .slots() .slot("greet") -> Option<(usize, &SlotDescription)>
      .size() .floor() .word_of(slot)
 slot.name() .required() .fallible() .args() .answer() .doc()
@@ -2270,6 +2286,8 @@ const void *one = guatiao_registry_provider_vtable(reg, key, &size);            
 void *ctx = guatiao_registry_provider_ctx(reg, key);
 const guatiao_value *schema = guatiao_registry_provider_config(reg, key);   // borrowed
 guatiao_registry_provider_meta(reg, key, &alloc, &answer);      // a copy; ABSENT when it declares none
+guatiao_registry_kind_descriptions(reg, key, &alloc, &answer);  // its kinds' document, a copy; ABSENT for
+                                                                // none, BAD_VALUE for text that is not one
 guatiao_registry_free(reg);
 ```
 
