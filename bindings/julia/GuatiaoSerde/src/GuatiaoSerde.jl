@@ -7,15 +7,18 @@
 
 A guatiao value as JSON, TOML or YAML, through the `guatiao_serde`
 library: `GuatiaoSerde.parse(text; format = :json)` and
-`GuatiaoSerde.emit(x; format = :json, pretty = false)`. TOML and YAML need
+`GuatiaoSerde.emit(x; format = :json, pretty = false)`;
+`GuatiaoSerde.parse(Any, text)` reads plain Julia data with no `Value` in
+between. TOML and YAML need
 a `guatiao_serde` built with them. Built on Guatiao, whose `Value` it
 answers and takes.
 """
 module GuatiaoSerde
 
 using Guatiao: Guatiao, Value, GuatiaoException, BadValue
-using Guatiao.FFI: FFI, @cdef, Node, GValue, GString, GStr, GAlloc, ZERO_VALUE, TAG_STRING, load_tag, payload_ptr,
-    text_of, gstr, binding_alloc, new_root, free_root, adopt, require_node, owner_of, check, guatiao_value_free
+using Guatiao.FFI: FFI, @cdef, Node, GValue, GString, GStr, GBytes, GAlloc, ZERO_VALUE, TAG_STRING, load_tag,
+    payload_ptr, text_of, gstr, binding_alloc, new_root, free_root, adopt, require_node, owner_of, check,
+    guatiao_value_free, read_plain, julia_to_wire
 
 export ParseError
 
@@ -62,6 +65,12 @@ const PA = Ptr{GAlloc}
 @cdef "guatiao_serde" "toml" :plain guatiao_toml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
 @cdef "guatiao_serde" "yaml" :plain guatiao_yaml_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
 @cdef "guatiao_serde" "yaml" :plain guatiao_yaml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "" :plain guatiao_json_visit(text::GStr, how::UInt32, a::PA, v::Ptr{Cvoid}, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "toml" :plain guatiao_toml_visit(text::GStr, how::UInt32, a::PA, v::Ptr{Cvoid}, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_visit(text::GStr, how::UInt32, a::PA, v::Ptr{Cvoid}, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "" :plain guatiao_json_from_wire(b::GBytes, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "toml" :plain guatiao_toml_from_wire(b::GBytes, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_from_wire(b::GBytes, how::UInt32, a::PA, out::PV)::UInt32
 
 """
     use_library(path)
@@ -107,29 +116,61 @@ function parse(text::AbstractString; format::Symbol = :json, how::Integer = 0, a
     root = new_root()
     err = Ref(GParseError(0, 0, 0, ZERO_VALUE))
     status = GC.@preserve s err f(gstr(s), UInt32(how), alloc, root, err)
+    status == 0 || free_root(root)
+    parse_failed(status, err, format)
+    return adopt(root, alloc)
+end
+
+"Frees the parse error's message, and throws for a refused `status`."
+function parse_failed(status::UInt32, err::Ref{GParseError}, format::Symbol)
     message = GC.@preserve err begin
         p = Ptr{GValue}(Base.unsafe_convert(Ptr{GParseError}, err) + fieldoffset(GParseError, 4))
         m = load_tag(p) == TAG_STRING ? text_of(unsafe_load(payload_ptr(GString, p))) : ""
         guatiao_value_free(p)
         m
     end
-    if status != 0
-        free_root(root)
-        if status == UInt32(BadValue)
-            e = err[]
-            name = 1 <= e.format + 1 <= 3 ? FORMAT_NAMES[e.format+1] : format
-            throw(ParseError(name, Int(e.line), Int(e.column), message))
-        end
-        check(status, message)
+    status == 0 && return nothing
+    if status == UInt32(BadValue)
+        e = err[]
+        name = 1 <= e.format + 1 <= 3 ? FORMAT_NAMES[e.format+1] : format
+        throw(ParseError(name, Int(e.line), Int(e.column), message))
     end
-    return adopt(root, alloc)
+    check(status, message)
+end
+
+function visitor_call(format::Symbol)
+    format === :json && return guatiao_json_visit
+    format === :toml && return guatiao_toml_visit
+    format === :yaml && return guatiao_yaml_visit
+    throw(ArgumentError("unknown format: $format"))
+end
+
+"""
+    parse(Any, text; format = :json, how = 0)
+
+`text` read as `format` straight into plain Julia data, as
+`parse(text)[]` answers it (`nothing`, `Bool`, numbers, `String`,
+`Vector{UInt8}`, `Vector{Any}`, `Dict{String,Any}`), with no `Value`
+built: the library hands each event to Julia as it reads. Errors as
+`parse`.
+"""
+function parse(::Type{Any}, text::AbstractString; format::Symbol = :json, how::Integer = 0)
+    f = visitor_call(format)
+    s = String(text)
+    err = Ref(GParseError(0, 0, 0, ZERO_VALUE))
+    data, status = read_plain() do visitor
+        GC.@preserve s err f(gstr(s), UInt32(how), binding_alloc(), visitor, err)
+    end
+    parse_failed(status, err, format)
+    return data
 end
 
 """
     emit(x; format = :json, pretty = false, how = 0) -> String
 
 `x` (a `Value`, a view, or plain data) written as `format`. A TOML
-document must be a map (`WrongKind`).
+document must be a map (`WrongKind`). Plain data is written as wire
+bytes in Julia and crosses once, with no `Value` built.
 """
 function emit(x; format::Symbol = :json, pretty::Bool = false, how::Integer = 0, alloc = binding_alloc())
     h = UInt32(how)
@@ -143,10 +184,10 @@ function emit(x; format::Symbol = :json, pretty::Bool = false, how::Integer = 0,
         throw(ArgumentError("unknown format: $format"))
     end
     format !== :json && pretty && (h |= PRETTY)
-    owned = x isa Node ? nothing : Value(x; alloc)
-    keep = x isa Node ? owner_of(x) : owned
-    GC.@preserve keep try
-        src = require_node(owned === nothing ? x : owned)
+    x isa Node || return emit_data(x, format, h | (pretty ? PRETTY : UInt32(0)))
+    keep = owner_of(x)
+    GC.@preserve keep begin
+        src = require_node(x)
         out = new_root()
         try
             check(f(src, h, alloc, out))
@@ -155,8 +196,21 @@ function emit(x; format::Symbol = :json, pretty::Bool = false, how::Integer = 0,
         finally
             free_root(out)
         end
+    end
+end
+
+# Plain data written as wire bytes in Julia, crossing once, with no tree.
+function emit_data(x, format::Symbol, how::UInt32)
+    f = format === :json ? guatiao_json_from_wire : format === :toml ? guatiao_toml_from_wire : guatiao_yaml_from_wire
+    data = julia_to_wire(x)
+    out = new_root()
+    try
+        check(GC.@preserve data f(GBytes(isempty(data) ? Ptr{UInt8}(C_NULL) : pointer(data), length(data)), how,
+            binding_alloc(), out))
+        load_tag(out) == TAG_STRING || return ""
+        return text_of(unsafe_load(payload_ptr(GString, out)))
     finally
-        owned === nothing || close(owned)
+        free_root(out)
     end
 end
 
