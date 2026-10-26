@@ -387,6 +387,7 @@ words when it gave any.
 | `package:guatiao/wasm.dart` | the same on the web: `WasmModule`, `Address`, `withScratch`, `openSurface`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 | `package:guatiao/wire.dart` | channel frames (`announce`, `send`, `close`), `Receiver`, `Event`, the refusals |
+| `package:guatiao/remote.dart` | a server's providers over WebSocket, in plain Dart (a browser page included): `RemoteLink`, `RemoteTable`, `RemoteObject`, `Served` |
 | `package:guatiao/hook.dart` | for a package's build hook: `buildHook`, `buildLibrary`, `rustTarget`, `HookFailure` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/AGENTS.md)

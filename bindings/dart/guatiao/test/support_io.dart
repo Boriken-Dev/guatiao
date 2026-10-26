@@ -10,6 +10,8 @@ import 'dart:io';
 
 import 'package:guatiao/guatiao.dart' as guatiao;
 
+import 'remote_server.dart';
+
 String? _libraryDir;
 
 /// The directory of the libraries the suite loads: `GUATIAO_LIBRARY` when
@@ -77,3 +79,10 @@ Future<void> setUpLibrary() async => libraryDir();
 /// The repository's file at [parts], as text.
 Future<String> readRepoText(List<String> parts) async =>
     File(repoPath(parts)).readAsStringSync();
+
+/// guatiao-remote-server on loopback over WebSocket (`remote_server.dart`):
+/// the URL it serves, and what stops it.
+Future<(Uri, Future<void> Function())> remoteServer() async {
+  final server = await startRemoteServer();
+  return (server.url, server.stop);
+}

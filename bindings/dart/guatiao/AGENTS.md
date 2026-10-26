@@ -4,8 +4,8 @@
 Self-contained — this file ships with the package, so it names no repo path.
 
 A plain Dart package, Dart 3.10 or newer. Its dependencies are
-`package:ffi`, and `package:hooks` and `package:code_assets` for its build
-hook (below). It does **not** depend on Flutter: a plain Dart package
+`package:ffi`, `package:hooks` and `package:code_assets` for its build
+hook (below), and `package:crypto` for the remote protocol's key proof. It does **not** depend on Flutter: a plain Dart package
 works inside a Flutter app, and the reverse is not true. 32- and 64-bit
 native platforms (`armeabi-v7a` included), and the web: there the same
 API runs over the WebAssembly module a page loads (below).
@@ -539,6 +539,83 @@ receiver.close();
   `Invalid` (`BadValue`; `key` the field, `expected` or `known`). It
   changes nothing the receiver keeps and quotes nothing it was given.
 
+## remote: a server's providers, from plain Dart
+
+`package:guatiao/remote.dart` speaks guatiao's remote protocol over a
+WebSocket in plain Dart: no native library, no module, the same code on
+the VM, under dart2js and under dart2wasm. The server is
+`guatiao-remote-server --listen ws://ADDRESS:PORT --trust trusted --range
+CIDR --key-file PATH ...` (the Rust crate `guatiao-source-remote`, feature
+`ws`).
+
+```dart
+final link = await RemoteLink.connect(Uri.parse('ws://192.0.2.21:7000/'), key: keyBytes);
+final catalog = await link.list();                 // RemoteCatalog
+final library = catalog.libraries.first;
+await link.open(library);                          // its providers answer from now on
+final greeter = library.providers.first.table('greeter')!;   // RemoteTable
+await greeter.call('greet', ['web']);              // {greeting: hello, web}
+final chat = await greeter.call('start', [Served('listener', {'heard': (a) => print(a[0])})]);
+await (chat as RemoteObject).call('say', ['hi']);  // the listener hears 'hi' during the call
+chat.release();
+await link.close();
+```
+
+- `RemoteLink.connect(Uri url, {required List<int> key, Duration? timeout
+  = 30 s, Duration handshakeTimeout = 10 s, int maxFrame = 64 MiB, int
+  maxCalls = 64}) -> Future<RemoteLink>`: the trusted level (HMAC-SHA256
+  over a pre-shared key, both ways). `RemoteLink.over(RemoteChannel,
+  {RemoteTrust trust = trusted, List<int>? key, String? token, ...})` runs
+  the handshake over any message transport: `RemoteChannel` is `messages`
+  (a `Stream<Uint8List>`, one frame body each), `send(Uint8List)`,
+  `close()`. `timeout: null` waits as long as the link lives.
+- A server that does not prove the key fails the connect with
+  `BadValue` ("the server does not hold this link's key"); a server that
+  refuses the client's proof ends the link, and the first call answers
+  `Gone` with its words. A handshake past its bound, or a WebSocket that
+  does not open, is `Gone`.
+- `link.list() -> Future<RemoteCatalog>` (`kinds`: `RemoteKind` by name,
+  `libraries`: `RemoteLibrary` (`id`, `version`, `stamp`, `providers`),
+  `providers`); `link.open(RemoteLibrary)`, `link.closeLibrary(..)`;
+  `link.ping() -> Future<Duration>`; `link.close()`; `link.alive`,
+  `link.why`, `link.done` (a `Future<String>`: why it ended),
+  `link.objectsHeld` (this side's objects the peer holds).
+- `RemoteProvider`: `id`, `name`, `meta`, `tables` by kind,
+  `table(kind) -> RemoteTable?`. `RemoteTable`: `kind` (`RemoteKind`),
+  `id`, `slots` (what the far table fills), `has(slot)`, `call(slot,
+  [args]) -> Future<Object?>`. A slot the table does not fill is
+  `Unsupported`, sending nothing: a description carries no default body.
+- **Arguments and answers** follow the slot's description: `bool`;
+  integers as `int`, or `BigInt` past what an `int` holds exactly (2^53
+  under dart2js, 64 bits elsewhere), checked against the type's range
+  (`ArgumentError`); `f32`/`f64` as `num`; `str`/`text` as `String`;
+  `bytes` as `List<int>`; `bytes_mut` as a `Uint8List` written back in
+  place; `value`/`map`/`list` as plain Dart (`absent` is ABSENT, `null` is
+  null), a lent map or list written back in place (it must be
+  modifiable); `object` as a `Served` (this side's) or a `RemoteObject`
+  (the peer's, handed back to it). An answered object of the peer's is a
+  `RemoteObject`, one of this side's comes back as its `Served`.
+- `Served(String kind, Map<String, FutureOr<Object?> Function(List<Object?>
+  args)> slots)`: an object this side serves. A lent one is the peer's to
+  call until the call returns; a handed one until the peer releases it.
+  A slot it does not fill is refused `Unsupported`; a handler that throws
+  a `GuatiaoException` refuses with its status and words, anything else
+  `InternalError`. The peer's calls run on the event loop as they
+  arrive; a call a handler makes names the call it runs in as its parent.
+- `RemoteObject`: `kind`, `id`, `alive`, `call`, `release()`
+  (idempotent; a `Finalizer` is the backstop). A handle lent for one call
+  answers `Gone` once it returns.
+- A call past its timeout sends CANCEL and answers `Gone`; an object its
+  late answer carries is released. A lost link answers `Gone` for every
+  open call. A refusal is the status's exception. A malformed frame from
+  the peer ends the link (GOODBYE) and throws `MalformedFrame` (a
+  `BadValue`, `fault` a `FrameFault`, `at` the byte) where a caller reads
+  it.
+- `RemoteKind` (`name`, `object`, `slots`, `slot(name)`), `RemoteSlot`
+  (`name`, `index`, `required`, `fallible`, `args`, `answer`),
+  `RemoteArg` (`name`, `type`, `kind`, `pass`, `nullable`),
+  `RemoteAnswer` (`type`, `kind`): a kind as the catalog describes it.
+
 ## Secrets
 
 ```dart
@@ -643,7 +720,9 @@ A process whose pointers are not four or eight bytes wide gets
 
 ## Not offered
 
-- Kinds and providers on the web: a kind table is native code's.
+- Kinds and providers on the web: a kind table is native code's (a
+  page calls a server's providers through `remote.dart`).
+- `wss://`, WebTransport and the secure level in `remote.dart`.
 - Serving Dart to a host that is not this Dart process (a bridge, as
   guatiao-source-py is for Python).
 
