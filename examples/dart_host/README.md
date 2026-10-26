@@ -41,7 +41,7 @@ build/host/bundle/bin/host ../../target/debug --caller ../../target/debug/libgre
 - **One set of classes serves every language.** The Rust, C, Python and
   Dart greeters are called through `GreeterRemote`; a table whose floor
   hash is not the kind's is refused before anything in it runs.
-- **A table may be older than the kind.** The C greeter fills four of six
+- **A provider may leave optional slots out.** The C greeter fills four of six
   slots; `has('shout')` asks before calling, and calling a missing slot
   throws `Unsupported`.
 - **Dart objects cross both ways**: the listener is a plain class

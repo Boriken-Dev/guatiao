@@ -84,10 +84,9 @@
 //! # Rules a reader must follow
 //!
 //! **An unrecognised `"type"` means skip that one field**, not reject the
-//! schema. Refusing the whole document because one field came from a
-//! newer producer hides every field that would have rendered fine. This
-//! is the same rule as an unknown value tag, and it is the whole
-//! forward-compatibility story.
+//! schema. Refusing the whole document because one field names a type
+//! this build does not know hides every field that would have rendered
+//! fine. This is the same rule as an unknown value tag.
 //!
 //! **An optional value reads as the value it holds.** `type: [T, "null"]`
 //! and `anyOf: [X, null]` are what serde-based generators write for an
@@ -351,14 +350,6 @@ pub const X_SENSITIVE: &str = "x-sensitive";
 ///
 /// Keyed rather than parallel, so a label cannot come adrift from the value
 /// it belongs to. A value with no entry shows as itself.
-///
-/// **A map, where the earlier emitter in this family wrote a parallel
-/// array** under the same name. That emitter's own documentation called
-/// the array form out as one that "cannot mispair an enum value with its
-/// label, which this text form structurally can" — so the shape is the
-/// fix and the name is kept. An old reader meets a map where it wanted an
-/// array, which fails loudly or yields no labels; it never yields the
-/// wrong ones.
 pub const X_ENUM_LABELS: &str = "x-enum-labels";
 /// The key a variant's discriminant is stored under.
 ///

@@ -415,11 +415,11 @@ fn a_union_and_a_variant_are_different_features() {
     });
 }
 
-/// The whole forward-compatibility story: a kind from a newer producer
-/// leaves its field readable, and every other field untouched.
+/// A kind this build does not know leaves its field readable, and every
+/// other field untouched.
 ///
-/// Built by hand rather than through the builder, because that is what a
-/// newer producer's document looks like arriving here.
+/// Built by hand rather than through the builder, because the builder
+/// writes no kind this build does not know.
 #[test]
 fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
     with_alloc(|alloc| {

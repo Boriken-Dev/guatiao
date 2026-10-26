@@ -222,8 +222,8 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 - Octave cannot index the result of a package function call in place:
   `x = guatiao.intake.at(v, 'a'); x.data()`, not
   `guatiao.intake.at(v, 'a').data()`.
-- A remote cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: `has_slot` asks, and the call raises
+- A remote cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: `has_slot` asks, and the call raises
   `Unsupported`.
 - An M library is registered in a host in the same session; there is no
   library file a foreign host's scan loads, since that would need MATLAB

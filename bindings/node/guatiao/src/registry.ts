@@ -299,8 +299,8 @@ export class Registry implements Disposable {
    * The descriptions of the kinds the provider filed under `key` serves,
    * and of every object kind their slots take or answer, as the document
    * `kindsOf` loads: how a host binds a kind it has no `.kinds.json` for.
-   * `undefined` when the provider carries none (one written by hand, or a
-   * library built before descriptors carried them). `NotFound` when
+   * `undefined` when the provider carries none (one written by hand).
+   * `NotFound` when
    * nothing answers to `key`; `BadValue` when what it carries is not a
    * description.
    *

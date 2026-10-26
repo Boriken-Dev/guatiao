@@ -90,9 +90,8 @@ fn the_mergelists_suffix_parses_and_only_applies_to_deep_in_practice() {
 
 /// An unrecognised spelling is "not declared", never an error.
 ///
-/// A schema written against a newer vocabulary must stay readable by an
-/// older consumer, and the fallback — the call-site mode — is a defined
-/// answer.
+/// A schema naming a mode this build does not know stays readable, and
+/// the fallback — the call-site mode — is a defined answer.
 #[test]
 fn an_unrecognised_spelling_falls_back_rather_than_failing() {
     assert_eq!(parse_mode("recursive-ish"), None);

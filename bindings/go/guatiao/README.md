@@ -227,8 +227,8 @@ later.String() // "2026-02-28"
 - A kind's glue is written by `go generate` from its C header: Go cannot
   make a C function pointer at run time, so a kind is not described while
   the program runs, as the Python and Node bindings allow.
-- A remote cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: it answers `ErrUnsupported`.
+- A remote cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: it answers `ErrUnsupported`.
 - A process builds at most 64 libraries and 256 providers in Go: a
   library's and a provider's descriptor slots come from fixed pools.
 - A library built with `-buildmode=c-shared` is never unmapped: the Go

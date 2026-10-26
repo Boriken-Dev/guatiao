@@ -1007,9 +1007,9 @@ fn a_bool_byte_a_producer_should_not_have_written_is_still_defined() {
 
 // --- forward compatibility ---------------------------------------------
 
-/// A tag from a newer producer is skipped, not fatal. Refusing to free a
-/// tree because one node came from the future would leak the whole tree to
-/// punish the one node.
+/// A tag this build does not know is skipped, not fatal. Refusing to free
+/// a tree because of one such node would leak the whole tree to punish
+/// the one node.
 #[test]
 fn an_unknown_tag_is_skippable_rather_than_fatal() {
     with_alloc(|alloc, _| {

@@ -351,7 +351,7 @@ impl Drop for Pin {
 ///
 /// `None` for a handle with no library behind it: a table from
 /// [`Remote::from_raw`](crate::library::Remote::from_raw), a lent object,
-/// an object the host built, or a view an older host answered.
+/// an object the host built, or a view a host answered unpinned.
 #[derive(Debug, Clone, Default)]
 pub(crate) enum Hold {
     #[default]

@@ -274,8 +274,8 @@ provider's own words when it gave any.
 - A `Registry` is used from one thread at a time, and a `Value` is not
   shared between threads without a lock of your own. A library may call a
   Python object it was handed from any thread; each call takes the GIL.
-- A `Remote` cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: it raises `guatiao.Unsupported`.
+- A `Remote` cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: it raises `guatiao.Unsupported`.
 - `Registry.unload` unmaps a library once its own `unload` function
   agrees, and `collect` a retired one; neither can see a table or `ctx`
   you took with `provider_table`. Let those go first: they are valid

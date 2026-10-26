@@ -236,7 +236,7 @@ provider's procedures that a slot reaches need the same (or ifx's
 - **Hold an object by reference.** An object handed to another side is
   moved into what serves it, never copied; state that must be seen from
   outside lives behind a pointer component.
-- **Run a kind's default body** for a slot an older table lacks, as a
+- **Run a kind's default body** for a slot a provider leaves out, as a
   Rust caller does: a remote answers `GUATIAO_ERR_UNSUPPORTED`.
 - **Be unloaded.** A Fortran library file stays mapped once loaded.
 - **Version a pre-release in fpm.** fpm takes three numbers: a

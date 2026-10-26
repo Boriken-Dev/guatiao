@@ -78,11 +78,10 @@ pub struct DeclaredMerge {
 /// Parses an `x-merge` string.
 ///
 /// `None` for anything unrecognised. Unrecognised is treated as *not
-/// declared* rather than as an error, deliberately: a schema written
-/// against a newer vocabulary must still be readable by an older
-/// consumer, and the fallback — the call-site mode — is a defined,
-/// sensible answer rather than a failure. Same forward-compatibility
-/// contract the schema reader carries for a kind it has never heard of.
+/// declared* rather than as an error, deliberately: a schema naming a mode
+/// this build does not know must still be readable, and the fallback —
+/// the call-site mode — is a defined, sensible answer rather than a
+/// failure. The schema reader treats a kind it does not know the same way.
 ///
 /// Case-insensitive, and surrounding whitespace is ignored, because these
 /// are hand-written in declarations and in config files.

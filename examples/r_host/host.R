@@ -45,9 +45,9 @@ exercise <- function(g, tell) {
   tell("greet: ", value_data(answer$greeting))
   close(answer)
   tryCatch(close(greet(g, "")), guatiao_error = function(e) tell("greet(\"\") refused: ", e$status, ": ", e$message))
-  # The other slots were appended to the kind: an older table may lack them.
+  # The other slots are optional: a provider may leave them out.
   missing <- Filter(function(s) !has_slot(g, s), c("shout", "check", "greet_from", "greet_into", "start"))
-  if (length(missing)) tell("an older table, with no ", paste(missing, collapse = ", "))
+  if (length(missing)) tell("a table leaving out ", paste(missing, collapse = ", "))
   if (has_slot(g, "shout")) tell("shout: ", shout(g, "ana"))
   if (has_slot(g, "check")) {
     config <- value(list(name = "bo"))

@@ -197,7 +197,7 @@ shouter, _ := greeterkind.GreeterKind.BindInstance(inst)
 ```
 
 `Bind` checks the table against the kind (its size and its floor hash)
-before anything in it runs. A slot an older table lacks answers
+before anything in it runs. A slot the provider leaves out answers
 `guatiao.ErrUnsupported`, and `Has(name)` asks first. A refusal is a
 `*guatiao.Error` whose status `errors.Is` matches against `ErrBadValue`,
 `ErrNotFound` and the rest, with the provider's own words. A tree answered
@@ -344,7 +344,7 @@ goroutine, as its provider allows. What C holds of a Go value is a
   `destroy` and `available` take no context naming them, so each comes
   from a fixed pool: 64 libraries and 256 providers per process.
 - **Be unloaded.** A Go library file stays mapped once loaded.
-- **Run a kind's default body** for a slot an older table lacks, as a
+- **Run a kind's default body** for a slot a provider leaves out, as a
   Rust caller does: a remote answers `ErrUnsupported`, as in Python and
   Node.
 

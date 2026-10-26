@@ -309,8 +309,8 @@ this side owns, once; nothing for a provider's table or a lent object) and
 refusal is the status's `*Error` with the provider's words; a slot that
 cannot fail and fails answers its status. Valid while the library is.
 `Kind.BindTable(table, size, ctx)` makes one over any table, a
-`*FloorMismatch` when the table is smaller than the kind's required slots
-or has another floor hash. An object this side owns and drops unclosed is
+`*FloorMismatch` when the table is smaller than the kind's or has another
+floor hash. An object this side owns and drops unclosed is
 destroyed when the collector finds it.
 
 **A Go value as an object of a kind**: any value implementing the object

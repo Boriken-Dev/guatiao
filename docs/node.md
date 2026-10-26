@@ -265,7 +265,7 @@ instance.bind(Greeter).greet('cy').close();
 ```
 
 `bind` checks the table against the kind (its size and its floor hash)
-before anything in it runs. A slot an older table lacks throws
+before anything in it runs. A slot the provider leaves out throws
 `Unsupported`, and `has(name)` asks first. A refusal throws the error its
 status names (`BadValue`, `NotFound`, ...) with the provider's own words.
 A tree answered is a `Value` the caller closes; an object answered is an

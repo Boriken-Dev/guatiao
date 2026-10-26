@@ -539,10 +539,17 @@ Four workflows:
   (every gate, build and dry run; nothing released, nothing published).
 - `cla.yaml` gates pull requests.
 
-**Versions.** While every release is a pre-release (`0.0.0-alpha.N`), a
-change that breaks the documented API ships as the next alpha, with its
-migration under `[Unreleased]` in `CHANGELOG.md`; work lands there and the
-version moves only when a release is cut.
+**Versions.** While every release is a pre-release (`0.0.0-alpha.N`),
+each is built as if it were the first: the code keeps no compatibility
+with an earlier build (no format numbers, legacy readers, fallbacks for an
+older library or old names), and a change that breaks the documented API
+ships as the next alpha with a line under `[Unreleased]` in
+`CHANGELOG.md`. Each boundary keeps one number, matched exactly
+(`ABI_VERSION`, the remote protocol's version byte, the RDMA set-up's,
+the wasm guest ABI's); a descriptor's `struct_size` refuses a struct
+smaller than this build's and reads a larger one up to the fields it
+knows. Work lands under `[Unreleased]` and the version moves only when a
+release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`; the `pubspec.yaml` of `bindings/dart/guatiao`,
