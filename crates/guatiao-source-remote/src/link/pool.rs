@@ -4,7 +4,9 @@
 
 //! The threads a link's calls run on, and the bound on calls in flight.
 
+use alloc::sync::Arc;
 use core::time::Duration;
+use std::io;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
@@ -17,6 +19,28 @@ pub(crate) type Job = Box<dyn FnOnce() + Send>;
 
 /// How long an idle pool thread waits for work before it ends.
 const IDLE: Duration = Duration::from_secs(30);
+
+/// Starts a thread; a test swaps in one that fails.
+type Spawn = fn(thread::Builder, Box<dyn FnOnce() + Send>) -> io::Result<()>;
+
+fn spawn(builder: thread::Builder, f: Box<dyn FnOnce() + Send>) -> io::Result<()> {
+    builder.spawn(f).map(drop)
+}
+
+/// Why the pool did not take a job, which the caller then refuses as BUSY.
+#[derive(Debug)]
+pub(crate) struct Busy(Option<io::Error>);
+
+impl Busy {
+    /// The refusal's words: `full` when every thread is busy and no more
+    /// may start, else why a thread would not start.
+    pub(crate) fn words(&self, full: &str) -> String {
+        match &self.0 {
+            None => full.to_string(),
+            Some(e) => format!("the peer could not start a thread for it: {e}"),
+        }
+    }
+}
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -52,6 +76,7 @@ pub(crate) struct Pool {
     name: String,
     /// How long an idle thread polls for its next job.
     waiting: Waiting,
+    spawn: Spawn,
 }
 
 struct PoolState {
@@ -72,12 +97,14 @@ impl Pool {
             max: max.max(1),
             name: name.to_string(),
             waiting: Waiting::new(spin),
+            spawn,
         }
     }
 
-    /// Runs `job` on an idle thread or a new one; hands it back when
-    /// every thread is busy and no more may start.
-    pub(crate) fn run(self: &alloc::sync::Arc<Self>, job: Job) -> Result<(), Job> {
+    /// Runs `job` on an idle thread or a new one. Refuses it, dropping
+    /// it, when every thread is busy and no more may start, or when a new
+    /// thread will not start.
+    pub(crate) fn run(self: &Arc<Self>, job: Job) -> Result<(), Busy> {
         let mut job = job;
         loop {
             let mut state = lock(&self.state);
@@ -93,29 +120,30 @@ impl Pool {
                 }
             }
             if state.threads >= self.max {
-                return Err(job);
+                return Err(Busy(None));
             }
             state.threads += 1;
             state.next += 1;
             let me = state.next;
             drop(state);
-            let pool = alloc::sync::Arc::clone(self);
-            let started = thread::Builder::new()
-                .name(self.name.clone())
-                .spawn(move || pool.work(me, job));
-            if let Err(e) = started {
+            // The job follows the spawn through the thread's channel, so a
+            // thread that will not start leaves it here to refuse.
+            let (tx, rx) = mpsc::channel::<Job>();
+            let pool = Arc::clone(self);
+            let theirs = tx.clone();
+            let builder = thread::Builder::new().name(self.name.clone());
+            if let Err(e) = (self.spawn)(builder, Box::new(move || pool.work(me, theirs, rx))) {
                 lock(&self.state).threads -= 1;
-                // A thread that will not start is no place for the job.
-                let _ = e;
-                return Ok(());
+                return Err(Busy(Some(e)));
             }
+            // The new thread keeps its receiver until it has had this job.
+            let _ = tx.send(job);
             return Ok(());
         }
     }
 
-    fn work(self: alloc::sync::Arc<Self>, me: u64, first: Job) {
-        let (tx, rx) = mpsc::channel::<Job>();
-        let mut job = Some(first);
+    fn work(self: Arc<Self>, me: u64, tx: Sender<Job>, rx: Receiver<Job>) {
+        let mut job = rx.recv().ok();
         loop {
             if let Some(j) = job.take() {
                 j();
@@ -206,5 +234,56 @@ impl Permits {
     /// Wakes every waiter, so a link that ended answers them.
     pub(crate) fn wake_all(&self) {
         self.freed.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn no_threads(_: thread::Builder, _: Box<dyn FnOnce() + Send>) -> io::Result<()> {
+        Err(io::Error::other("no threads left"))
+    }
+
+    #[test]
+    fn a_job_whose_thread_will_not_start_is_refused_and_the_count_restored() {
+        let mut pool = Pool::new(2, "pool-test", Duration::ZERO);
+        pool.spawn = no_threads;
+        let pool = Arc::new(pool);
+        for _ in 0..3 {
+            let busy = pool.run(Box::new(|| {})).expect_err("no thread ran it");
+            assert!(busy.words("full").contains("no threads left"), "{busy:?}");
+        }
+        assert_eq!(lock(&pool.state).threads, 0);
+    }
+
+    #[test]
+    fn jobs_run_and_a_full_pool_refuses_in_its_callers_words() {
+        let pool = Arc::new(Pool::new(1, "pool-test", Duration::ZERO));
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        let (done_tx, done_rx) = mpsc::channel::<u32>();
+        let done = done_tx.clone();
+        pool.run(Box::new(move || {
+            go_rx.recv().unwrap();
+            done.send(1).unwrap();
+        }))
+        .unwrap();
+        let busy = pool
+            .run(Box::new(|| {}))
+            .expect_err("its one thread is busy");
+        assert_eq!(busy.words("full"), "full");
+        go_tx.send(()).unwrap();
+        assert_eq!(done_rx.recv_timeout(Duration::from_secs(10)), Ok(1));
+        // The thread, idle again, takes the next job.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let done = done_tx.clone();
+            match pool.run(Box::new(move || done.send(2).unwrap())) {
+                Ok(()) => break,
+                Err(_) if Instant::now() < deadline => thread::yield_now(),
+                Err(e) => panic!("{e:?}"),
+            }
+        }
+        assert_eq!(done_rx.recv_timeout(Duration::from_secs(10)), Ok(2));
     }
 }

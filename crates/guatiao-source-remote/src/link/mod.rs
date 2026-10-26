@@ -1285,30 +1285,31 @@ impl Inner {
             }
             Frame::Call { call, .. } => {
                 let inner = Arc::clone(self);
-                if self
-                    .pool
-                    .run(Box::new(move || inner.run_inbound(frame)))
-                    .is_err()
-                {
-                    self.refuse(
-                        call,
-                        Status::GUATIAO_ERR_BUSY,
-                        "the peer is running as many calls as it allows",
-                    );
+                if let Err(busy) = self.pool.run(Box::new(move || inner.run_inbound(frame))) {
+                    let why = busy.words("the peer is running as many calls as it allows");
+                    self.refuse(call, Status::GUATIAO_ERR_BUSY, &why);
                 }
             }
             Frame::List { call } => {
                 let inner = Arc::clone(self);
                 let job = Box::new(move || inner.answer_list(call));
-                if self.pool.run(job).is_err() {
-                    self.refuse(call, Status::GUATIAO_ERR_BUSY, "the peer is busy");
+                if let Err(busy) = self.pool.run(job) {
+                    self.refuse(
+                        call,
+                        Status::GUATIAO_ERR_BUSY,
+                        &busy.words("the peer is busy"),
+                    );
                 }
             }
             Frame::Open { call, .. } => {
                 let inner = Arc::clone(self);
                 let job = Box::new(move || inner.answer_open(call, &frame));
-                if self.pool.run(job).is_err() {
-                    self.refuse(call, Status::GUATIAO_ERR_BUSY, "the peer is busy");
+                if let Err(busy) = self.pool.run(job) {
+                    self.refuse(
+                        call,
+                        Status::GUATIAO_ERR_BUSY,
+                        &busy.words("the peer is busy"),
+                    );
                 }
             }
             Frame::Close { library, stamp } => self.handler.close(self, library, stamp),
