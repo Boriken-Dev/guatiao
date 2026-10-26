@@ -670,10 +670,22 @@ local and provisional (`benchmarks/results/remote-quic-*.jsonl`):
 
 On Windows a small call over QUIC costs about twice its time over TLS
 and three times its CPU, and 32 threads calling at once go faster. In
-WSL it costs three to four times its time and twice its CPU, its p99
-runs to milliseconds and a 4 MiB round trip moved 40 to 374 MB/s from
-run to run. The causes are not measured. Prefer `tls://` unless
-datagrams are wanted. Not measured: across a real network.
+WSL it costs four times its time and twice its CPU, most likely
+because quinn runs on threads of its own and hands each datagram to the
+link's: a call wakes threads several times over, and waking one is slow
+in a virtual machine. Larger socket buffers stop the datagrams WSL drops but not the
+gap (`benchmarks/README.md`). Prefer `tls://` unless datagrams are
+wanted. Not measured: across a real network.
+
+A name with several addresses (`localhost` is `::1` and `127.0.0.1`)
+has them tried at once, each a quarter of a second after the one before
+or as soon as that one failed: QUIC hears nothing back from an address
+nobody listens at, so trying one at a time would wait out the timeout on
+each. The first to link wins, and a refusal from whichever answers first
+is the answer. Connects through one
+`QuicConnect` run side by side, unless the policy keeps resumption: then
+one verifier serves them all, so they take turns and try one address at
+a time.
 
 ### Over WebTransport
 
