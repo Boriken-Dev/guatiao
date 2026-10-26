@@ -355,30 +355,41 @@ static void wire_body(wire_sink *w, const void *p, size_t n) {
   w->len += n;
 }
 
-/* Whether `p` is UTF-8 (RFC 3629: no overlongs, no surrogates, at most U+10FFFF). */
+/* Whether `p` is UTF-8 (RFC 3629: no overlongs, no surrogates, at most U+10FFFF), by the
+   table of well-formed byte sequences in Unicode's chapter 3 (Table 3-7). ASCII is passed
+   over eight bytes at a time, several times faster on long text than a byte at a time. */
 static int utf8_valid(const uint8_t *p, size_t n) {
   size_t i = 0;
   while (i < n) {
     uint8_t c = p[i];
     if (c < 0x80) {
       i++;
+      while (n - i >= 8) {
+        uint64_t word;
+        memcpy(&word, p + i, 8);
+        if (word & UINT64_C(0x8080808080808080)) break;
+        i += 8;
+      }
       continue;
     }
-    size_t k;
-    uint32_t cp;
-    if ((c & 0xE0) == 0xC0) k = 1, cp = c & 0x1F;
-    else if ((c & 0xF0) == 0xE0) k = 2, cp = c & 0x0F;
-    else if ((c & 0xF8) == 0xF0) k = 3, cp = c & 0x07;
-    else return 0;
-    if (i + k >= n) return 0;
-    for (size_t j = 1; j <= k; j++) {
-      if ((p[i + j] & 0xC0) != 0x80) return 0;
-      cp = (cp << 6) | (p[i + j] & 0x3F);
-    }
-    if ((k == 1 && cp < 0x80) || (k == 2 && cp < 0x800) || (k == 3 && cp < 0x10000) || cp > 0x10FFFF ||
-        (cp >= 0xD800 && cp <= 0xDFFF))
+    if (c >= 0xC2 && c <= 0xDF) {
+      if (n - i < 2 || (p[i + 1] & 0xC0) != 0x80) return 0;
+      i += 2;
+    } else if ((c & 0xF0) == 0xE0) {
+      if (n - i < 3) return 0;
+      uint8_t c1 = p[i + 1];
+      if ((c1 & 0xC0) != 0x80 || (p[i + 2] & 0xC0) != 0x80) return 0;
+      if ((c == 0xE0 && c1 < 0xA0) || (c == 0xED && c1 >= 0xA0)) return 0; /* overlong, surrogate */
+      i += 3;
+    } else if (c >= 0xF0 && c <= 0xF4) {
+      if (n - i < 4) return 0;
+      uint8_t c1 = p[i + 1];
+      if ((c1 & 0xC0) != 0x80 || (p[i + 2] & 0xC0) != 0x80 || (p[i + 3] & 0xC0) != 0x80) return 0;
+      if ((c == 0xF0 && c1 < 0x90) || (c == 0xF4 && c1 >= 0x90)) return 0; /* overlong, past U+10FFFF */
+      i += 4;
+    } else {
       return 0;
-    i += k + 1;
+    }
   }
   return 1;
 }
