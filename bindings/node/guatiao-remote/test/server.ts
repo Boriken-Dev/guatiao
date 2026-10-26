@@ -8,7 +8,9 @@
  * in Chrome alike: started once in Node, its URL provided to both. A
  * second one serves `wss://` at server TLS, with a certificate it made
  * itself, for the page alone (the test browser takes it; Node's WebSocket
- * would not).
+ * would not). Three more serve WebTransport (`https://`), for the page alone
+ * too (Node has no WebTransport): at server TLS, at none and at mutual TLS,
+ * each presenting a certificate it made, which the page pins by its hash.
  *
  * The server is `GUATIAO_REMOTE_SERVER`, else the checkout's debug build;
  * the library is the one beside it. Missing, the run fails naming the
@@ -31,6 +33,10 @@ declare module 'vitest' {
     remoteUrl: string;
     remoteKey: string;
     serverTlsUrl: string;
+    /** WebTransport servers, each with the hashes a page pins. */
+    wtServerTls: Served;
+    wtNone: Served;
+    wtMutual: Served;
   }
 }
 
@@ -45,14 +51,24 @@ function library(dir: string): string {
 const children: ChildProcess[] = [];
 let keyDir: string | undefined;
 
-/** Starts the server with `args` and answers the URL it says it serves. */
-async function start(server: string, args: string[]): Promise<string> {
+/** A server's URL and the certificate hashes it says (WebTransport's alone). */
+export interface Served {
+  url: string;
+  hashes: string[];
+}
+
+/**
+ * Starts the server with `args` and answers the URL it says it serves, and
+ * for WebTransport the certificate hashes it says next.
+ */
+async function serve(server: string, args: string[]): Promise<Served> {
   const proc = spawn(server, args, { stdio: ['ignore', 'ignore', 'pipe'] });
   children.push(proc);
   const said: string[] = [];
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<Served>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`the server said no address in time: ${said.join('\n')}`)), 30_000);
     let buffered = '';
+    let url: string | undefined;
     proc.stderr!.setEncoding('utf8');
     proc.stderr!.on('data', (chunk: string) => {
       buffered += chunk;
@@ -60,10 +76,12 @@ async function start(server: string, args: string[]): Promise<string> {
       buffered = lines.pop()!;
       for (const line of lines) {
         said.push(line);
-        const m = /serving (wss?:\/\/\S+)/.exec(line);
-        if (m !== null) {
+        const m = /serving ((?:wss?|https):\/\/[^\s/]+)/.exec(line);
+        if (m !== null) url = `${m[1]}/`;
+        const h = /certificate hashes (.+)$/.exec(line.trim());
+        if (url !== undefined && (h !== null || !url.startsWith('https'))) {
           clearTimeout(timer);
-          resolve(`${m[1]}/`);
+          resolve({ url, hashes: h === null ? [] : h[1]!.split(' ') });
         }
       }
     });
@@ -83,7 +101,7 @@ export async function setup(project: TestProject): Promise<void> {
   if (!existsSync(server) || !existsSync(greeter)) {
     throw new Error(
       `no ${server} beside ${greeter}: build them with ` +
-        '`cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls` ' +
+        '`cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls,guatiao-source-remote/webtransport` ' +
         '(or name the server in GUATIAO_REMOTE_SERVER)',
     );
   }
@@ -96,7 +114,8 @@ export async function setup(project: TestProject): Promise<void> {
     '--load',
     greeter,
   ];
-  const url = await start(server, [
+  const start = async (args: string[]): Promise<string> => (await serve(server, args)).url;
+  const url = await start([
     '--listen',
     'ws://127.0.0.1:0',
     '--security',
@@ -107,7 +126,7 @@ export async function setup(project: TestProject): Promise<void> {
     keyFile,
     ...serving,
   ]);
-  const serverTlsUrl = await start(server, [
+  const serverTlsUrl = await start([
     '--listen',
     'wss://127.0.0.1:0',
     '--security',
@@ -121,6 +140,21 @@ export async function setup(project: TestProject): Promise<void> {
   project.provide('remoteUrl', url);
   project.provide('remoteKey', REMOTE_KEY);
   project.provide('serverTlsUrl', serverTlsUrl);
+  const at = ['--listen', 'https://127.0.0.1:0'];
+  project.provide(
+    'wtServerTls',
+    await serve(server, [...at, '--security', 'server-tls', '--key-file', keyFile, ...serving]),
+  );
+  project.provide(
+    'wtNone',
+    await serve(server, [...at, '--security', 'none', '--range', '127.0.0.1', '--key-file', keyFile, ...serving]),
+  );
+  project.provide(
+    'wtMutual',
+    // A client pinned, rotating certificates the page takes: Chrome then
+    // refuses the link for want of a client certificate alone.
+    await serve(server, [...at, '--security', 'mutual-tls', '--pin', `sha256:${'cd'.repeat(32)}`, ...serving]),
+  );
 }
 
 export function teardown(): void {
