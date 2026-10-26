@@ -3,8 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Tables built at run time through libffi: a slot called as a plain C
-//! function pointer, every argument shape through `ffi_call`, and an
-//! object's `destroy` reached through its closure.
+//! function pointer, every argument shape through `ffi_call`, an object's
+//! `destroy` reached through its closure, and a provider's own `create`,
+//! `destroy` and `available` called as the C slots they are.
 
 extern crate alloc;
 
@@ -14,8 +15,8 @@ use std::sync::Mutex;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
-    Answer, Arg, Caller, Carrier, KindDescription, KindHeader, LentObject, Serve, ServedTable,
-    TableError,
+    Answer, Arg, CSignature, Caller, Carrier, KindDescription, KindHeader, LentObject, Mechanism,
+    Serve, ServedProvider, ServedTable, TableError,
 };
 use guatiao::value::convert::TryAsRef;
 use guatiao::value::types::Str;
@@ -296,4 +297,104 @@ fn a_lent_object_is_called_from_another_thread_while_lent_and_refused_after() {
         "the late call never reached it"
     );
     drop(object);
+}
+
+/// A provider whose instances count up from 40 and whose `available`
+/// answers what it is told.
+#[derive(Default)]
+struct Factory {
+    made: Mutex<Vec<(usize, String)>>,
+    gone: Mutex<Vec<(usize, usize)>>,
+    down: Mutex<Option<String>>,
+}
+
+impl Serve for Factory {
+    fn call(
+        &self,
+        _: usize,
+        _: &KindDescription,
+        _: usize,
+        _: Vec<Arg<'_>>,
+    ) -> Result<Answer, ProviderError> {
+        Ok(Answer::Nothing)
+    }
+
+    fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError> {
+        let word = TryAsRef::<Map>::try_as_ref(config)
+            .and_then(|m| m.get("word"))
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "no word"))?;
+        let mut made = self.made.lock().unwrap();
+        made.push((provider, word.to_string()));
+        Ok(39 + made.len())
+    }
+
+    fn destroy_instance(&self, provider: usize, instance: usize) {
+        self.gone.lock().unwrap().push((provider, instance));
+    }
+
+    fn available(&self, _: usize) -> Result<(), String> {
+        self.down.lock().unwrap().clone().map_or(Ok(()), Err)
+    }
+}
+
+#[test]
+fn a_providers_own_slots_are_called_as_c_functions() {
+    let serve = Arc::new(Factory::default());
+    let slots = ServedProvider::new(9, true, true, serve.clone(), &Libffi).expect("built");
+    let (create, destroy, available) = (
+        slots.create_slot().expect("create"),
+        slots.destroy_slot().expect("destroy"),
+        slots.available_slot().expect("available"),
+    );
+
+    let mut config = Map::new();
+    config.set("word", "hi");
+    let config = Value::from(config);
+    let mut out = core::ptr::null_mut::<c_void>();
+    let mut err = ProviderError::none();
+    // SAFETY: the slot's own signature, every pointer valid for the call.
+    let status = unsafe { create(core::ptr::null_mut(), &config, &mut out, &mut err) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(out.addr(), 40);
+    assert_eq!(*serve.made.lock().unwrap(), [(9, "hi".to_string())]);
+
+    let empty = Value::from(Map::new());
+    // SAFETY: as above.
+    let status = unsafe { create(core::ptr::null_mut(), &empty, &mut out, &mut err) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(err.message(), "no word");
+
+    // SAFETY: as above; 40 is the instance `create` answered.
+    unsafe { destroy(core::ptr::null_mut(), core::ptr::without_provenance_mut(40)) };
+    assert_eq!(*serve.gone.lock().unwrap(), [(9, 40)]);
+
+    let mut reason = Str::empty();
+    // SAFETY: as above.
+    assert!(unsafe { available(core::ptr::null_mut(), &mut reason) });
+    *serve.down.lock().unwrap() = Some("unplugged".to_string());
+    // SAFETY: as above.
+    assert!(!unsafe { available(core::ptr::null_mut(), &mut reason) });
+    assert_eq!(<&[u8]>::from(reason), b"unplugged");
+
+    // The same slot through `ffi_call`, as a caller of a `bool` signature.
+    let prepared = Libffi.prepare(&CSignature::available()).expect("prepared");
+    let mut c = core::ptr::null_mut::<c_void>();
+    let mut reason_p: *mut Str = &mut reason;
+    let args = [
+        (&mut c as *mut *mut c_void).cast::<c_void>(),
+        (&mut reason_p as *mut *mut Str).cast::<c_void>(),
+    ];
+    // SAFETY: the code of a closure prepared with this signature.
+    let code = unsafe {
+        core::mem::transmute::<
+            unsafe extern "C" fn(*mut c_void, *mut Str) -> bool,
+            unsafe extern "C" fn(),
+        >(available)
+    };
+    // SAFETY: `code` has the signature; each argument addresses its value.
+    assert_eq!(unsafe { prepared.call(code, &args) }, 0);
+    *serve.down.lock().unwrap() = None;
+    // SAFETY: as above.
+    assert_eq!(unsafe { prepared.call(code, &args) }, 1);
 }

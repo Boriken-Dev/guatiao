@@ -1942,11 +1942,30 @@ pub trait Serve: Send + Sync + 'static {
     fn call(&self, ctx: usize, kind: &KindDescription, slot: usize, args: Vec<Arg<'_>>)
         -> Result<Answer, ProviderError>;
     fn destroy(&self, ctx: usize) {}                 // an object kind's destroy
+    // A provider's own slots (ServedProvider), the provider by the number it was built with:
+    fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError>; // UNSUPPORTED
+    fn destroy_instance(&self, provider: usize, instance: usize) {}
+    fn available(&self, provider: usize) -> Result<(), String> { Ok(()) }
 }
 let table = ServedTable::new(kind, |slot| implemented, serve, &Libffi)?;  // Result<_, TableError>
 table.as_ptr() .size() .kind() .kind_table()     // kind_table() -> ProviderPartsBuilder::table
 table.object(ctx) -> Option<RawObject>           // an object of this kind, for an answer
 // Keep the table as long as anything may call it: ProviderPartsBuilder::keep(table).
+let slots = ServedProvider::new(provider, create: bool, available: bool, serve, &Libffi)?;
+builder = slots.slots(builder);                  // sets create + destroy and/or available, keeps them
+slots.create_slot() .destroy_slot() .available_slot()   // Option<the C slot>
+```
+
+**A provider's own slots built at run time** (`ServedProvider`): `create`
+answers the instance's `ctx` (never 0: refused `GUATIAO_ERR_INTERNAL`),
+written through `out` as a pointer-sized number every table slot then
+gets; null `config` is `GUATIAO_ERR_NULL`. `available` writes the
+handler's words as the reason, and keeps every distinct reason until the
+slots drop (with the provider's parts), so a reader may hold one for as
+long as the library lives; past 64 distinct reasons a fixed sentence
+stands for a new one. A handler's panic answers unavailable, saying so.
+
+```rust
 
 // Calling: any table of the kind.
 let caller = Caller::new(kind, &Libffi)?;
@@ -1977,15 +1996,19 @@ them to the slot's width, refusing one that does not fit
 trait Prepared { fn closure(self: Arc<Self>, SlotHandler) ->
 Result<Closure, TableError>; unsafe fn call(&self, f, args: &[*mut
 c_void]) -> u32 }`. A `CSignature` (`CSignature::of_slot(kind, slot)`,
-`::destroy()`) is `args() -> &[CType]` (`ctx` first, then the slot's
-arguments, `out`, `err`) and `returns_status()` (a `u32`, or nothing for
-`destroy`); `CType` is the fixed-width integers, `F32`, `F64`, `Pointer`
-and `Struct(fields)` by value (a `Str` is `{Pointer, Usize}`). The
-contract: a closure's code is callable with exactly the signature, from
-any thread, until the `Closure` (`unsafe Closure::new(code, owner)`)
-drops, and each call runs `SlotHandler::call(args)` once with one address
-per argument, returning its status; `call` calls `f` with the signature
-and returns its status.
+`::destroy()`, and a provider's `::create()`, `::destroy_instance()`,
+`::available()`) is `args() -> &[CType]` (`ctx` first, then the slot's
+arguments, `out`, `err`) and `returns() -> CReturn` (`Status`, a `u32`;
+`Bool`, a one-byte C `bool`, 0 or 1; `Nothing`; `#[non_exhaustive]`,
+so a mechanism refuses one it does not know); `CType` is the fixed-width
+integers, `F32`, `F64`, `Pointer` and `Struct(fields)` by value (a `Str`
+is `{Pointer, Usize}`). The contract: a closure's code is callable with
+exactly the signature, from any thread, until the `Closure` (`unsafe
+Closure::new(code, owner)`) drops, and each call runs
+`SlotHandler::call(args)` once with one address per argument, returning
+what it answers as `returns()` says; `call` calls `f` with the signature
+and returns what it returned. A mechanism refuses a `CReturn` it does not
+know.
 
 ### Ordering is `(priority DESC, key ASC)`
 

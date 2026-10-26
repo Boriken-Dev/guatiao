@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 use core::ffi::c_void;
 
 use guatiao::library::kind::{
-    CSignature, CType, Closure, Mechanism, Prepared, SlotHandler, TableError,
+    CReturn, CSignature, CType, Closure, Mechanism, Prepared, SlotHandler, TableError,
 };
 use libffi::middle::{Cif, Type};
 use libffi::raw as ffi;
@@ -80,14 +80,21 @@ unsafe impl Mechanism for Libffi {
             .iter()
             .map(type_of)
             .collect::<Result<Vec<_>, _>>()?;
-        let returns = if signature.returns_status() {
-            Type::u32()
-        } else {
-            Type::void()
+        // Every return kind it knows; a newer one is refused, never guessed.
+        let (returns, answers) = match signature.returns() {
+            CReturn::Status => (Type::u32(), true),
+            // C `bool` is one byte, 0 or 1.
+            CReturn::Bool => (Type::u8(), true),
+            CReturn::Nothing => (Type::void(), false),
+            other => {
+                return Err(TableError::Mechanism(format!(
+                    "libffi has no return type here for {other:?}"
+                )));
+            }
         };
         Ok(Arc::new(Signature {
             cif: Cif::new(args, returns),
-            returns_status: signature.returns_status(),
+            answers,
         }))
     }
 }
@@ -95,7 +102,8 @@ unsafe impl Mechanism for Libffi {
 /// A call interface libffi prepared, with the types it points into.
 struct Signature {
     cif: Cif,
-    returns_status: bool,
+    /// Whether it returns an integer (a status or a `bool`).
+    answers: bool,
 }
 
 // SAFETY: prepared once and only read after, by libffi, from any thread.
@@ -106,7 +114,7 @@ unsafe impl Sync for Signature {}
 /// What one closure is prepared with.
 struct Data {
     handler: SlotHandler,
-    returns_status: bool,
+    answers: bool,
 }
 
 /// One libffi closure, with what it reads: freed before them.
@@ -133,7 +141,7 @@ impl Drop for Made {
 // SAFETY: as `Libffi`.
 unsafe impl Prepared for Signature {
     fn closure(self: Arc<Self>, handler: SlotHandler) -> Result<Closure, TableError> {
-        let returns_status = self.returns_status;
+        let answers = self.answers;
         let mut code: *mut c_void = core::ptr::null_mut();
         // SAFETY: allocates a closure and its code address, or answers
         // null.
@@ -145,10 +153,7 @@ unsafe impl Prepared for Signature {
         }
         let made = Made {
             raw,
-            _data: Box::new(Data {
-                handler,
-                returns_status,
-            }),
+            _data: Box::new(Data { handler, answers }),
             _signature: self,
         };
         // SAFETY: a closure just allocated; the interface and the data are
@@ -203,9 +208,10 @@ unsafe extern "C" fn on_call(
     let data = unsafe { &*data.cast::<Data>() };
     // SAFETY: libffi's argument array for the slot's signature.
     let status = unsafe { data.handler.call(args.cast_const()) };
-    if data.returns_status {
+    if data.answers {
         // SAFETY: libffi's return buffer, at least `ffi_arg` wide; an
-        // integer answer is written widened to it.
+        // integer answer (a status, or a `bool` as 0 or 1) is written
+        // widened to it.
         unsafe { ret.cast::<usize>().write(status as usize) };
     }
 }

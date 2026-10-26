@@ -22,7 +22,8 @@ BridgeSource::pinned(config, "lua")?.with_mechanism(Arc::new(Libffi)); // guatia
 ```
 
 What it does with each `CSignature`: one libffi call interface, `u32`
-back (a status) or `void` (an object kind's `destroy`); `CType::Struct`
+back (a status), `uint8_t` (a provider's `available`, a C `bool`) or
+`void` (an object kind's or a provider's `destroy`); `CType::Struct`
 becomes a libffi struct type, passed by value as the platform's C ABI
 passes it. A `CType` it does not know is refused with
 `TableError::Mechanism`.
