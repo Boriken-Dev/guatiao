@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use greeter_kind::Greeter;
 use guatiao::library::{Refreshed, Registry};
 use guatiao::{List, Map, Status};
-use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpListen};
+use guatiao_source_remote::transport::tcp::{Accepted, TcpListen};
 use guatiao_source_remote::{LinkOptions, RemoteSource, Trust};
 
 const KEY: &str = "a key every device here holds";
@@ -31,7 +31,7 @@ const KEY: &str = "a key every device here holds";
 /// `down` is set it closes every connection unanswered.
 fn device_with(key: &str, down: Arc<AtomicBool>) -> u16 {
     let server = common::server(LinkOptions::new(Trust::Trusted).key(key.as_bytes()));
-    let listener = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.1").unwrap()]).unwrap();
+    let listener = TcpListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
         while let Ok(accepted) = listener.accept() {

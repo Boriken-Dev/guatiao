@@ -28,6 +28,11 @@ pub mod protocol;
 pub mod server;
 pub mod transport;
 
+/// The access control lists network listeners admit peers by
+/// (`coqui-net-acl`).
+#[cfg(feature = "tcp")]
+pub use coqui_net_acl as acl;
+
 pub use client::RemoteSource;
 pub use link::{Link, LinkError, LinkOptions};
 pub use protocol::Trust;

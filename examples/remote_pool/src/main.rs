@@ -28,7 +28,8 @@ use greeter_kind::Greeter;
 use guatiao::library::{ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
-use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpConnect, TcpListen};
+use guatiao_source_remote::acl::{Acl, Action, Rule};
+use guatiao_source_remote::transport::tcp::{Accepted, TcpConnect, TcpListen};
 use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
 
 /// The pre-shared key every link here proves. A real deployment reads
@@ -73,8 +74,12 @@ fn device() -> Result<SocketAddr, String> {
         .add_json(&greeter_kind::GreeterVtable::description())
         .map_err(|e| e.message().to_string())?;
     let server = Server::new(registry, described, options());
-    let listener = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.0/8")?])
-        .map_err(|e| e.to_string())?;
+    let mut acl = Acl::default();
+    acl.push(Rule::new(
+        Action::Permit,
+        "127.0.0.0/8".parse().map_err(|e| format!("{e}"))?,
+    ));
+    let listener = TcpListen::bind("127.0.0.1:0", acl).map_err(|e| e.to_string())?;
     let address = listener.local_addr().map_err(|e| e.to_string())?;
     std::thread::spawn(move || {
         while let Ok(accepted) = listener.accept() {

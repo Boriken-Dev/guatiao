@@ -26,6 +26,20 @@ use guatiao::{Map, Status};
 use guatiao_source_remote::transport::{Connect, Connection, memory};
 use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
 
+/// An access control list permitting `sources` alone.
+#[cfg(feature = "tcp")]
+pub fn permit(sources: &[&str]) -> guatiao_source_remote::acl::Acl {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    let mut acl = Acl::default();
+    for s in sources {
+        acl.push(Rule::new(
+            Action::Permit,
+            s.parse().expect("an address range"),
+        ));
+    }
+    acl
+}
+
 /// Conversations alive on the server, in every test of a binary.
 pub static CHATS: AtomicIsize = AtomicIsize::new(0);
 

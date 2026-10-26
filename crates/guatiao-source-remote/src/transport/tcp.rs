@@ -3,82 +3,23 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! TCP: Nagle off, a bounded connect, and for the trusted level the
-//! address ranges a listener accepts peers from.
+//! access control list a listener admits peers by.
 
 #![forbid(unsafe_code)]
 
 use alloc::sync::Arc;
-use core::net::{IpAddr, SocketAddr};
+use core::net::SocketAddr;
 use core::time::Duration;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+
+use coqui_net_acl::{Acl, Outcome};
 
 use super::stream::{StreamReader, StreamWriter};
 use super::{Connect, Connection};
 
 /// How long a connect may take unless told otherwise.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// An address range, `192.0.2.0/24` or `fd00::/8`; a bare address is a
-/// range of one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Range {
-    base: IpAddr,
-    bits: u8,
-}
-
-impl Range {
-    /// Reads `address[/bits]`.
-    pub fn parse(text: &str) -> Result<Range, String> {
-        let (addr, bits) = match text.split_once('/') {
-            Some((a, b)) => (a, Some(b)),
-            None => (text, None),
-        };
-        let base: IpAddr = addr
-            .trim()
-            .parse()
-            .map_err(|_| format!("`{text}` is not an address range"))?;
-        let max = if base.is_ipv4() { 32 } else { 128 };
-        let bits = match bits {
-            None => max,
-            Some(b) => b
-                .trim()
-                .parse::<u8>()
-                .ok()
-                .filter(|&b| b <= max)
-                .ok_or_else(|| format!("`{text}`: the prefix length is not 0 to {max}"))?,
-        };
-        Ok(Range { base, bits })
-    }
-
-    /// Whether `addr` lies in the range. An IPv4 address mapped into IPv6
-    /// is read as the IPv4 address it is.
-    pub fn contains(&self, addr: IpAddr) -> bool {
-        let addr = match addr {
-            IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(addr, IpAddr::V4),
-            v4 => v4,
-        };
-        match (self.base, addr) {
-            (IpAddr::V4(b), IpAddr::V4(a)) => {
-                let mask = u32::MAX.checked_shl(32 - u32::from(self.bits)).unwrap_or(0);
-                u32::from(b) & mask == u32::from(a) & mask
-            }
-            (IpAddr::V6(b), IpAddr::V6(a)) => {
-                let mask = u128::MAX
-                    .checked_shl(128 - u32::from(self.bits))
-                    .unwrap_or(0);
-                u128::from(b) & mask == u128::from(a) & mask
-            }
-            _ => false,
-        }
-    }
-}
-
-impl core::fmt::Display for Range {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}/{}", self.base, self.bits)
-    }
-}
 
 /// One socket, read on one thread and written and shut down on others.
 /// Never a `try_clone`: on Windows a duplicated handle's `shutdown` or
@@ -171,35 +112,40 @@ impl Connect for TcpConnect {
     }
 }
 
-/// A TCP listener that accepts only peers inside its ranges: the trusted
-/// level's gate. Where it listens is the caller's choice.
+/// A TCP listener that admits peers by an access control list: the
+/// trusted level's gate. Where it listens is the caller's choice.
 #[derive(Debug)]
 pub struct TcpListen {
     listener: TcpListener,
-    ranges: Vec<Range>,
+    acl: Acl,
 }
 
-/// A peer [`TcpListen::accept`] turned away.
+/// What [`TcpListen::accept`] took in.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Accepted {
-    /// A connection from inside the ranges.
+    /// A connection the access control list admits.
     Connection(Connection),
-    /// One from outside them, closed unread.
+    /// One it denies, closed unread.
     Refused(SocketAddr),
+}
+
+/// Whether `acl` admits a peer at `source` that proves no identity, before
+/// anything is read. A rule naming a fingerprint cannot match such a peer,
+/// so a decision deferred to one is finished without it.
+pub(crate) fn admits_plain(acl: &Acl, source: SocketAddr, local: SocketAddr) -> bool {
+    match acl.decide(source, local).outcome {
+        Outcome::Permit => true,
+        Outcome::Deny => false,
+        Outcome::Deferred => acl.decide_peer(source, local, "").outcome == Outcome::Permit,
+    }
 }
 
 impl TcpListen {
     /// Binds `address`, any address a wildcard (`0.0.0.0`, `::`)
-    /// included, accepting peers inside `ranges`. An empty list is
-    /// refused: it would turn every peer away.
-    pub fn bind(address: &str, ranges: &[Range]) -> io::Result<TcpListen> {
-        if ranges.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "no address range: every peer would be turned away",
-            ));
-        }
+    /// included, admitting the peers `acl` permits. Nothing about the
+    /// address or the list is refused: an empty list denies every peer.
+    pub fn bind(address: &str, acl: Acl) -> io::Result<TcpListen> {
         let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
         let addr = addrs
             .first()
@@ -207,24 +153,15 @@ impl TcpListen {
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))?;
         Ok(TcpListen {
             listener: TcpListener::bind(addr)?,
-            ranges: ranges.to_vec(),
+            acl,
         })
     }
 
     /// A listener the caller bound itself (with socket options of its
-    /// own, or handed over by a service manager), accepting peers inside
-    /// `ranges` as [`bind`](TcpListen::bind) does.
-    pub fn from_listener(listener: TcpListener, ranges: &[Range]) -> io::Result<TcpListen> {
-        if ranges.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "no address range: every peer would be turned away",
-            ));
-        }
-        Ok(TcpListen {
-            listener,
-            ranges: ranges.to_vec(),
-        })
+    /// own, or handed over by a service manager), admitting peers by
+    /// `acl` as [`bind`](TcpListen::bind) does.
+    pub fn from_listener(listener: TcpListener, acl: Acl) -> TcpListen {
+        TcpListen { listener, acl }
     }
 
     /// Where it listens.
@@ -232,7 +169,12 @@ impl TcpListen {
         self.listener.local_addr()
     }
 
-    /// The next connection, or a peer from outside the ranges turned away.
+    /// The access control list it admits peers by.
+    pub fn acl(&self) -> &Acl {
+        &self.acl
+    }
+
+    /// The next connection, or a peer the list denies, turned away.
     pub fn accept(&self) -> io::Result<Accepted> {
         Ok(match self.accept_stream()? {
             Ok((stream, peer)) => Accepted::Connection(connection(stream, format!("tcp {peer}"))?),
@@ -240,13 +182,14 @@ impl TcpListen {
         })
     }
 
-    /// The next stream from inside the ranges, or the address of a peer
-    /// from outside them, closed unread: what a transport set up over TCP
-    /// (RDMA, WebSocket) accepts through.
+    /// The next stream the list admits, or the address of a peer it
+    /// denies, closed unread: what a transport set up over TCP (RDMA,
+    /// WebSocket) accepts through.
     #[cfg_attr(not(any(feature = "rdma", feature = "ws")), allow(dead_code))]
     pub(crate) fn accept_stream(&self) -> io::Result<Result<(TcpStream, SocketAddr), SocketAddr>> {
         let (stream, peer) = self.listener.accept()?;
-        if !self.ranges.iter().any(|r| r.contains(peer.ip())) {
+        let local = stream.local_addr()?;
+        if !admits_plain(&self.acl, peer, local) {
             let _ = stream.shutdown(Shutdown::Both);
             return Ok(Err(peer));
         }
@@ -257,61 +200,80 @@ impl TcpListen {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use coqui_net_acl::{Action, Rule};
 
-    #[test]
-    fn a_range_holds_what_its_prefix_says() {
-        let r = Range::parse("192.0.2.0/24").unwrap();
-        assert!(r.contains("192.0.2.21".parse().unwrap()));
-        assert!(!r.contains("198.51.100.1".parse().unwrap()));
-        assert!(r.contains("::ffff:192.0.2.5".parse().unwrap()));
-        let one = Range::parse("127.0.0.1").unwrap();
-        assert!(one.contains("127.0.0.1".parse().unwrap()));
-        assert!(!one.contains("127.0.0.2".parse().unwrap()));
-        let all = Range::parse("0.0.0.0/0").unwrap();
-        assert!(all.contains("8.8.8.8".parse().unwrap()));
-        let v6 = Range::parse("fd00::/8").unwrap();
-        assert!(v6.contains("fd12::1".parse().unwrap()));
-        assert!(!v6.contains("fe80::1".parse().unwrap()));
-        assert!(Range::parse("10.0.0.0/33").is_err());
-        assert!(Range::parse("nowhere").is_err());
+    fn permit(sources: &[&str]) -> Acl {
+        let mut acl = Acl::default();
+        for s in sources {
+            acl.push(Rule::new(Action::Permit, s.parse().unwrap()));
+        }
+        acl
     }
 
     #[test]
-    fn a_listener_binds_where_it_is_told_and_admits_by_its_ranges() {
-        let local = [Range::parse("127.0.0.0/8").unwrap()];
-        // Every interface: the peer at 127.0.0.1 is inside the range.
-        let any = TcpListen::bind("0.0.0.0:0", &local).expect("a wildcard binds");
+    fn a_listener_binds_where_it_is_told_and_admits_by_its_list() {
+        // Every interface: the peer at 127.0.0.1 is permitted.
+        let any = TcpListen::bind("0.0.0.0:0", permit(&["127.0.0.0/8"])).expect("a wildcard binds");
         let port = any.local_addr().unwrap().port();
         let _c = TcpStream::connect(("127.0.0.1", port)).unwrap();
         assert!(matches!(any.accept().unwrap(), Accepted::Connection(_)));
 
-        // Its own address outside the ranges, as when peers route to it.
-        let elsewhere = [Range::parse("10.0.0.0/8").unwrap()];
-        let routed = TcpListen::bind("127.0.0.1:0", &elsewhere).expect("any address binds");
+        // Its own address outside the rules, as when peers route to it.
+        let routed =
+            TcpListen::bind("127.0.0.1:0", permit(&["10.0.0.0/8"])).expect("any address binds");
         let _c = TcpStream::connect(routed.local_addr().unwrap()).unwrap();
         assert!(matches!(routed.accept().unwrap(), Accepted::Refused(_)));
 
-        assert_eq!(
-            TcpListen::bind("127.0.0.1:0", &[]).unwrap_err().kind(),
-            io::ErrorKind::InvalidInput
+        // An empty list binds, and denies every peer.
+        let none = TcpListen::bind("127.0.0.1:0", Acl::default()).expect("an empty list binds");
+        let _c = TcpStream::connect(none.local_addr().unwrap()).unwrap();
+        assert!(matches!(none.accept().unwrap(), Accepted::Refused(_)));
+    }
+
+    #[test]
+    fn the_first_matching_rule_decides_and_a_fingerprint_rule_never_admits_a_plain_peer() {
+        let source: SocketAddr = "127.0.0.1:5000".parse().unwrap();
+        let local: SocketAddr = "127.0.0.1:7000".parse().unwrap();
+        let mut acl = permit(&["127.0.0.0/8"]);
+        acl.prepend(Rule::new(Action::Deny, "127.0.0.1".parse().unwrap()));
+        assert!(!admits_plain(&acl, source, local));
+        let mut named = Rule::new(Action::Permit, "any".parse().unwrap());
+        named.fingerprint = Some(format!("sha256:{}", "ab".repeat(32)));
+        let mut acl = Acl::default();
+        acl.push(named);
+        assert!(
+            !admits_plain(&acl, source, local),
+            "no fingerprint, no match: the default denies"
         );
+        acl.push(Rule::new(Action::Permit, "127.0.0.1".parse().unwrap()));
+        assert!(
+            admits_plain(&acl, source, local),
+            "a later rule without one decides"
+        );
+        let mut by_port = Rule::new(Action::Permit, "any".parse().unwrap());
+        by_port.port = Some("7000".parse().unwrap());
+        let acl = Acl {
+            rules: vec![by_port],
+            default: Action::Deny,
+        };
+        assert!(admits_plain(&acl, source, local));
+        assert!(!admits_plain(
+            &acl,
+            source,
+            "127.0.0.1:7001".parse().unwrap()
+        ));
     }
 
     #[test]
     fn sockets_the_caller_set_up_carry_frames_under_the_same_gate() {
-        let local = [Range::parse("127.0.0.0/8").unwrap()];
-        assert_eq!(
-            TcpListen::from_listener(TcpListener::bind("127.0.0.1:0").unwrap(), &[])
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::InvalidInput
+        let l = TcpListen::from_listener(
+            TcpListener::bind("127.0.0.1:0").unwrap(),
+            permit(&["127.0.0.0/8"]),
         );
-        let l =
-            TcpListen::from_listener(TcpListener::bind("127.0.0.1:0").unwrap(), &local).unwrap();
         let mut client = from_stream(TcpStream::connect(l.local_addr().unwrap()).unwrap()).unwrap();
         assert!(client.peer.starts_with("tcp 127.0.0.1:"));
         let Accepted::Connection(mut server) = l.accept().unwrap() else {
-            panic!("a peer inside the range is accepted");
+            panic!("a permitted peer is accepted");
         };
         client.writer.write_frame(&[3, 0, 0, 0, 1, 2, 3]).unwrap();
         let mut frame = Vec::new();
@@ -344,9 +306,9 @@ mod tests {
     #[test]
     fn a_peer_outside_the_ranges_is_turned_away_unread() {
         use std::io::Read as _;
-        // Accepting only 127.0.0.2: the loopback client at 127.0.0.1 is
-        // outside, and finds the connection closed before anything is read.
-        let l = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.2").unwrap()]).unwrap();
+        // Permitting only 127.0.0.2: the loopback client at 127.0.0.1 is
+        // denied, and finds the connection closed before anything is read.
+        let l = TcpListen::bind("127.0.0.1:0", permit(&["127.0.0.2"])).unwrap();
         let mut c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
         assert!(matches!(l.accept().unwrap(), Accepted::Refused(_)));
         c.set_read_timeout(Some(Duration::from_secs(5))).unwrap();

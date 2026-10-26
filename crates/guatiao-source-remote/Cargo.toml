@@ -30,9 +30,10 @@ path = "src/bin/guatiao-remote-server.rs"
 [features]
 default = []
 
-# Trusted TCP: no encryption, a configured address range, and a
-# pre-shared key proved both ways in the handshake (HMAC-SHA256).
-tcp = ["dep:hmac", "dep:sha2", "dep:getrandom"]
+# Trusted TCP: no encryption, peers admitted by an access control list
+# (coqui-net-acl), and a pre-shared key proved both ways in the handshake
+# (HMAC-SHA256).
+tcp = ["dep:hmac", "dep:sha2", "dep:getrandom", "dep:coqui-net-acl"]
 
 # The same machine by name, at the local level: a Unix socket (std) on
 # Unix, a named pipe on Windows.
@@ -58,12 +59,15 @@ guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"]
 guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
 # Kind descriptions read from their JSON documents.
 guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
-guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json"] }
+guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json", "toml"] }
 # The trusted level's handshake proof. RustCrypto, pure Rust.
 hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 # The handshake's nonces.
 getrandom = { version = "0.3", optional = true }
+# Admission by ordered permit/deny rules, before anything is read. A git
+# dependency: crates.io refuses this crate while it is one.
+coqui-net-acl = { git = "https://github.com/Boriken-Dev/coqui-net-acl", rev = "ef48f2564ab3193d5204f52b8607f25bea1050c5", optional = true, features = ["serde"] }
 # The shared rings' file, mapped.
 memmap2 = { version = "0.9", optional = true }
 # WebSocket framing and its HTTP upgrade; no TLS.

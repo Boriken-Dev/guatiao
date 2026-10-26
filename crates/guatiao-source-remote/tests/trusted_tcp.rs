@@ -16,14 +16,14 @@ use std::time::Instant;
 
 use greeter_kind::Greeter;
 use guatiao::library::Registry;
-use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpConnect, TcpListen};
+use guatiao_source_remote::transport::tcp::{Accepted, TcpConnect, TcpListen};
 use guatiao_source_remote::{LinkOptions, RemoteSource, Server, Trust};
 
 const KEY: &[u8] = b"test-key";
 
 /// A trusted server on loopback, accepting every link; answers its port.
 fn listen(server: Server) -> u16 {
-    let listener = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.1").unwrap()]).unwrap();
+    let listener = TcpListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
         while let Ok(accepted) = listener.accept() {

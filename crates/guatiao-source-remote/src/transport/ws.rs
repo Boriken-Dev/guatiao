@@ -4,7 +4,7 @@
 
 //! WebSocket (RFC 6455) over TCP, at the trusted level: what a browser
 //! can open. Each frame's body is one binary message, with no length in
-//! front; the listener admits peers by address range as
+//! front; the listener admits peers by an access control list as
 //! [`TcpListen`] does.
 
 #![forbid(unsafe_code)]
@@ -20,7 +20,9 @@ use std::sync::{Mutex, TryLockError};
 use tungstenite::protocol::{Role, WebSocketConfig};
 use tungstenite::{Message, WebSocket};
 
-use super::tcp::{Accepted, CONNECT_TIMEOUT, Range, TcpListen};
+use coqui_net_acl::Acl;
+
+use super::tcp::{Accepted, CONNECT_TIMEOUT, TcpListen};
 use super::{Connect, Connection, FrameRead, FrameWrite};
 
 /// The socket both halves use. Every write goes out whole under one lock:
@@ -369,7 +371,7 @@ impl Connect for WsConnect {
     }
 }
 
-/// A WebSocket listener that accepts only peers inside its ranges, as
+/// A WebSocket listener that admits peers by an access control list, as
 /// [`TcpListen`] does. A connection upgrades on its first read, on the
 /// thread serving it, so a client that connects and stalls holds only
 /// that thread; a write before then is refused.
@@ -379,19 +381,19 @@ pub struct WsListen {
 }
 
 impl WsListen {
-    /// Binds `address` (a wildcard included), accepting peers inside
-    /// `ranges`; an empty list is refused.
-    pub fn bind(address: &str, ranges: &[Range]) -> io::Result<WsListen> {
+    /// Binds `address` (a wildcard included), admitting the peers `acl`
+    /// permits.
+    pub fn bind(address: &str, acl: Acl) -> io::Result<WsListen> {
         Ok(WsListen {
-            tcp: TcpListen::bind(address, ranges)?,
+            tcp: TcpListen::bind(address, acl)?,
         })
     }
 
     /// A listener the caller bound itself, under the same gate.
-    pub fn from_listener(listener: TcpListener, ranges: &[Range]) -> io::Result<WsListen> {
-        Ok(WsListen {
-            tcp: TcpListen::from_listener(listener, ranges)?,
-        })
+    pub fn from_listener(listener: TcpListener, acl: Acl) -> WsListen {
+        WsListen {
+            tcp: TcpListen::from_listener(listener, acl),
+        }
     }
 
     /// Where it listens.
@@ -399,8 +401,7 @@ impl WsListen {
         self.tcp.local_addr()
     }
 
-    /// The next connection, or a peer from outside the ranges, closed
-    /// unread.
+    /// The next connection, or a peer the list denies, closed unread.
     pub fn accept(&self) -> io::Result<Accepted> {
         Ok(match self.tcp.accept_stream()? {
             Ok((stream, peer)) => Accepted::Connection(connection(
@@ -419,7 +420,12 @@ mod tests {
     use super::*;
 
     fn listener() -> WsListen {
-        WsListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.1").unwrap()]).unwrap()
+        let mut acl = Acl::default();
+        acl.push(coqui_net_acl::Rule::new(
+            coqui_net_acl::Action::Permit,
+            "127.0.0.1".parse().unwrap(),
+        ));
+        WsListen::bind("127.0.0.1:0", acl).unwrap()
     }
 
     fn accepted(l: &WsListen) -> Connection {
