@@ -341,22 +341,39 @@ impl Build for ValueBuild {
 
     fn map<M: MapWalker>(self, mut entries: M) -> Result<Value, MapError> {
         let alloc = Alloc::rust();
-        let mut map = Filling::new(Map::new_in(alloc));
-        let mut key = String::new();
-        while entries
-            .next_key(|text| {
-                key.clear();
-                key.push_str(text);
-            })?
-            .is_some()
-        {
-            let value = entries.value::<Value>()?;
-            // A repeated key replaces, as a map's `set` does; a walker
-            // whose grammar forbids one refuses it itself.
-            copied(map.set_in(&key, value, alloc))?;
+        if entries.keys_checked().is_some() {
+            // The walker refused every repeated key itself: each is new.
+            let mut map = Map::new_in(alloc);
+            each_entry(&mut entries, |key, value| {
+                map.insert_node(key, value, alloc)
+            })?;
+            return Ok(map.into());
         }
+        // A repeated key replaces, as a map's `set` does.
+        let mut map = Filling::new(Map::new_in(alloc));
+        each_entry(&mut entries, |key, value| map.set_in(key, value, alloc))?;
         Ok(map.into_map().into())
     }
+}
+
+/// Reads each entry of `entries` as a value in Rust's allocator and hands
+/// it to `store` with its key.
+fn each_entry<M: MapWalker>(
+    entries: &mut M,
+    mut store: impl FnMut(&str, Value) -> Result<(), ValueError>,
+) -> Result<(), MapError> {
+    let mut key = String::new();
+    while entries
+        .next_key(|text| {
+            key.clear();
+            key.push_str(text);
+        })?
+        .is_some()
+    {
+        let value = entries.value::<Value>()?;
+        copied(store(&key, value))?;
+    }
+    Ok(())
 }
 
 /// A copy in Rust's allocator of the value the walk holds, as

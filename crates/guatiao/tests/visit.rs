@@ -12,7 +12,8 @@ extern crate alloc;
 use alloc::collections::{BTreeMap, BTreeSet};
 
 use guatiao::value::visit::{
-    Build, Flat, FromWalk, ListWalker, MapVisitor, MapWalker, Sink, TreeSink, Visitor, Walk, Walker,
+    Build, Flat, FromWalk, ListWalker, MapVisitor, MapWalker, Seed, Sink, TreeSink, Visitor, Walk,
+    Walker,
 };
 use guatiao::value::wire::{
     Decoder, Encoded, Encoder, WireError, decode, decode_as, to_bytes, to_bytes_of,
@@ -248,6 +249,62 @@ fn a_sink_builds_a_wide_map_in_linear_time_and_a_repeat_replaces_in_place() {
         );
     }
     assert_eq!(map["k000001"], Value::from(Number::new("1").unwrap()));
+}
+
+/// A map read into a value from a walker other than the wire reader, as a
+/// text format or a C walker may hand one, keeps "a repeat replaces the
+/// first where it stands" on either side of the width where the builder
+/// looks keys up by hash; the wire reader alone, which refuses repeats
+/// itself, skips that lookup.
+#[test]
+fn a_value_read_from_another_walker_replaces_a_repeat_in_place() {
+    /// Hands on whatever keys it was given, repeats among them.
+    struct Pairs<I> {
+        pairs: I,
+        pending: Option<Value>,
+    }
+    impl<I: Iterator<Item = (String, i64)>> MapWalker for Pairs<I> {
+        fn len_hint(&self) -> Option<usize> {
+            None
+        }
+        fn next_key<R>(&mut self, read: impl FnOnce(&str) -> R) -> Result<Option<R>, MapError> {
+            Ok(self.pairs.next().map(|(key, n)| {
+                self.pending = Some(Value::from(n));
+                read(&key)
+            }))
+        }
+        fn value_seed<S: Seed>(&mut self, seed: S) -> Result<S::Out, MapError> {
+            seed.read(&self.pending.take().expect("a key came first"))
+        }
+    }
+    struct MapOf<I>(I);
+    impl<I: Iterator<Item = (String, i64)>> Walker for MapOf<I> {
+        fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+            build.map(Pairs {
+                pairs: self.0,
+                pending: None,
+            })
+        }
+    }
+
+    for n in [4, 16, 17, 40] {
+        let repeats = [0, 3, n / 2, n - 1];
+        let pairs = (0..n)
+            .map(|i| (format!("k{i}"), i as i64))
+            .chain(repeats.iter().map(|&i| (format!("k{i}"), -(i as i64) - 1)));
+        let value = Value::from_walk(MapOf(pairs)).unwrap();
+        let map: &Map = TryAsRef::try_as_ref(&value).expect("a map");
+        assert_eq!(map.len(), n, "{n} keys");
+        for (i, entry) in map.iter().enumerate() {
+            let expected = if repeats.contains(&i) {
+                -(i as i64) - 1
+            } else {
+                i as i64
+            };
+            assert_eq!(entry.key(), format!("k{i}"), "{n}: the first one's place");
+            assert_eq!(*entry.value(), Value::from(expected), "{n}: k{i}");
+        }
+    }
 }
 
 // --- a type that walks: derived, and written by hand -------------------------------

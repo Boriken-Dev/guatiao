@@ -17,8 +17,8 @@ use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::types::Tag;
 use crate::value::types::number::validate_json_number;
 use crate::value::visit::{
-    Build, Flat, FromWalk, ListVisitor, ListWalker, MapVisitor, MapWalker, Seed, Sink, Visitor,
-    Walk, Walker,
+    Build, Flat, FromWalk, KeysChecked, ListVisitor, ListWalker, MapVisitor, MapWalker, Seed, Sink,
+    Visitor, Walk, Walker,
 };
 
 /// The keys of every map open while reading, innermost last, each map's
@@ -579,6 +579,11 @@ impl MapWalker for Entries<'_, '_> {
         self.frame.pending = false;
         self.decoder.skip()
     }
+
+    /// `next_key` refuses a key its map already had, through `OpenKeys`.
+    fn keys_checked(&self) -> Option<KeysChecked> {
+        Some(KeysChecked::new())
+    }
 }
 
 /// Reads wire bytes into any [`FromWalk`] type with no tree built.
@@ -755,9 +760,34 @@ impl Walk for Encoded<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Encoder, OpenKeys, Seeded};
+    use super::{Decoder, Encoder, OpenKeys, Seeded};
+    use crate::value::convert::{Kinds, MapError};
     use crate::value::error::ValueError;
-    use crate::value::visit::Sink;
+    use crate::value::types::{Map, Value};
+    use crate::value::visit::{Build, MapWalker, Sink, Walker};
+
+    /// The decoder's maps are the ones a builder may append to without
+    /// looking each key up, since it refused every repeat itself; a
+    /// tree's are not, since a map a C caller built may hold one.
+    #[test]
+    fn only_the_wire_reader_says_its_keys_were_checked() {
+        struct Says;
+        impl Build for Says {
+            type Out = bool;
+            fn kinds(&self) -> Kinds {
+                Kinds::MAP
+            }
+            fn map<M: MapWalker>(self, entries: M) -> Result<bool, MapError> {
+                Ok(entries.keys_checked().is_some())
+            }
+        }
+        let mut map = Map::new();
+        map.set("a", 1);
+        let tree = Value::from(map);
+        let bytes = crate::value::wire::to_bytes(&tree).unwrap();
+        assert_eq!((&mut Decoder::new(&bytes)).build(Says), Ok(true));
+        assert_eq!((&tree).build(Says), Ok(false));
+    }
 
     /// Seeds that send every key shorter than eight bytes to one hash: the
     /// set then says "seen" for each, and only the bytes tell them apart.
