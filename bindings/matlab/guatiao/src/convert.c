@@ -25,7 +25,10 @@ static void double_text(double d, char *buf, size_t n) {
     if (d == 0 && signbit(d)) snprintf(buf, n, "-0");
     return;
   }
-  for (int p = 1; p <= 17; p++) {
+  /* A normal double is within half a unit of the 15th digit of its shortest
+     text, so 15 digits with `%g`'s trailing zeros dropped is that text whenever
+     it reads back; a subnormal has fewer digits and is searched from one. */
+  for (int p = fabs(d) >= DBL_MIN ? 15 : 1; p <= 17; p++) {
     snprintf(buf, n, "%.*g", p, d);
     if (strtod(buf, NULL) == d) return;
   }
