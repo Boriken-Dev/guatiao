@@ -27,9 +27,12 @@ module guatiao_kinds
             guatiao_take_object, guatiao_lend_object, guatiao_end_lent_object, guatiao_failed, guatiao_warn, &
             guatiao_text_in, guatiao_map_carrier, guatiao_value_carrier, guatiao_settle_map, &
             guatiao_settle_value, guatiao_lent_map, guatiao_end_lent_map, guatiao_taken_map, &
-            guatiao_borrowed_map, guatiao_borrowed_value, guatiao_string_out, guatiao_bytes_in
+            guatiao_borrowed_map, guatiao_borrowed_value, guatiao_string_out, guatiao_bytes_in, &
+            guatiao_list_carrier, guatiao_settle_list, guatiao_lent_list, guatiao_end_lent_list, &
+            guatiao_taken_list
   public :: guatiao_call_error, guatiao_map_out, guatiao_settle_home, guatiao_string_in, &
-            guatiao_lend_tree, guatiao_settle_lent, guatiao_hand_over, guatiao_object_arg
+            guatiao_lend_tree, guatiao_settle_lent, guatiao_hand_over, guatiao_object_arg, &
+            guatiao_list_out, guatiao_value_out, guatiao_borrow_tree
 
   !> What every kind's abstract type extends. `close` runs when the side
   !> holding the object last lets it go (an instance its host destroys,
@@ -454,10 +457,24 @@ contains
   recursive function guatiao_map_carrier(out) result(answer)
     type(c_ptr), intent(in) :: out
     type(guatiao_value) :: answer
+    answer = tree_carrier(out, GUATIAO_TAG_MAP)
+  end function
+
+  !> The same for a slot's `guatiao_list *out`: an empty list.
+  recursive function guatiao_list_carrier(out) result(answer)
+    type(c_ptr), intent(in) :: out
+    type(guatiao_value) :: answer
+    answer = tree_carrier(out, GUATIAO_TAG_LIST)
+  end function
+
+  recursive function tree_carrier(out, tag) result(answer)
+    type(c_ptr), intent(in) :: out
+    integer(c_int32_t), intent(in) :: tag
+    type(guatiao_value) :: answer
     type(gt_owned), pointer :: carrier
     type(gt_value) :: node
     call c_f_pointer(out, carrier)
-    node%tag = GUATIAO_TAG_MAP
+    node%tag = tag
     node%payload = carrier
     node%payload%alloc = carrier_alloc(carrier%alloc)
     answer = gt_wrap(node, .false., .false., node%payload%alloc)
@@ -470,6 +487,26 @@ contains
   !> carrier left as it came.
   recursive subroutine guatiao_settle_map(carrier, answer, out, stat, failed)
     type(guatiao_value), intent(inout) :: carrier
+    type(guatiao_value), intent(in) :: answer
+    type(c_ptr), intent(in) :: out
+    integer, intent(out) :: stat
+    logical, intent(in), optional :: failed
+    call settle_tree(carrier, answer, out, GUATIAO_TAG_MAP, stat, failed)
+  end subroutine
+
+  !> The same for a list answer (GUATIAO_ERR_WRONG_KIND unless a list).
+  recursive subroutine guatiao_settle_list(carrier, answer, out, stat, failed)
+    type(guatiao_value), intent(inout) :: carrier
+    type(guatiao_value), intent(in) :: answer
+    type(c_ptr), intent(in) :: out
+    integer, intent(out) :: stat
+    logical, intent(in), optional :: failed
+    call settle_tree(carrier, answer, out, GUATIAO_TAG_LIST, stat, failed)
+  end subroutine
+
+  recursive subroutine settle_tree(carrier, answer, out, tag, stat, failed)
+    type(guatiao_value), intent(inout) :: carrier
+    integer(c_int32_t), intent(in) :: tag
     type(guatiao_value), intent(in) :: answer
     type(c_ptr), intent(in) :: out
     integer, intent(out) :: stat
@@ -505,7 +542,7 @@ contains
     end if
     stat = gt_value_clone(a, p, c_loc(copy))
     if (stat /= GUATIAO_OK) return
-    if (copy%tag /= GUATIAO_TAG_MAP) then
+    if (copy%tag /= tag) then
       ignored = gt_value_free(c_loc(copy))
       stat = GUATIAO_ERR_WRONG_KIND
       return
@@ -550,6 +587,21 @@ contains
   recursive function guatiao_lent_map(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_value) :: v
+    v = lent_tree(ptr, GUATIAO_TAG_MAP)
+  end function
+
+  !> A list the caller lent for the call; guatiao_end_lent_list writes
+  !> it back.
+  recursive function guatiao_lent_list(ptr) result(v)
+    type(c_ptr), intent(in) :: ptr
+    type(guatiao_value) :: v
+    v = lent_tree(ptr, GUATIAO_TAG_LIST)
+  end function
+
+  recursive function lent_tree(ptr, tag) result(v)
+    type(c_ptr), intent(in) :: ptr
+    integer(c_int32_t), intent(in) :: tag
+    type(guatiao_value) :: v
     type(gt_owned), pointer :: map
     type(gt_value) :: node
     if (.not. c_associated(ptr)) then
@@ -557,7 +609,7 @@ contains
       return
     end if
     call c_f_pointer(ptr, map)
-    node%tag = GUATIAO_TAG_MAP
+    node%tag = tag
     node%payload = map
     v = gt_wrap(node, .false., .false., carrier_alloc(map%alloc))
   end function
@@ -577,6 +629,13 @@ contains
     call gt_end_borrow(v)
   end subroutine
 
+  !> The call that lent the list returned (guatiao_end_lent_map's twin).
+  recursive subroutine guatiao_end_lent_list(v, ptr)
+    type(guatiao_value), intent(inout) :: v
+    type(c_ptr), intent(in) :: ptr
+    call guatiao_end_lent_map(v, ptr)
+  end subroutine
+
   !> A map handed over (`guatiao_map *` neither const nor lent): the
   !> method owns it and may keep it, so it is moved out of the caller's
   !> allocators (which may go with the caller's library) into this
@@ -584,6 +643,22 @@ contains
   !> move frees it and is `stat` when given (absent comes back).
   recursive function guatiao_taken_map(ptr, stat) result(v)
     type(c_ptr), intent(in) :: ptr
+    integer, intent(out), optional :: stat
+    type(guatiao_value) :: v
+    v = taken_tree(ptr, GUATIAO_TAG_MAP, stat)
+  end function
+
+  !> A list handed over, moved as guatiao_taken_map moves a map.
+  recursive function guatiao_taken_list(ptr, stat) result(v)
+    type(c_ptr), intent(in) :: ptr
+    integer, intent(out), optional :: stat
+    type(guatiao_value) :: v
+    v = taken_tree(ptr, GUATIAO_TAG_LIST, stat)
+  end function
+
+  recursive function taken_tree(ptr, tag, stat) result(v)
+    type(c_ptr), intent(in) :: ptr
+    integer(c_int32_t), intent(in) :: tag
     integer, intent(out), optional :: stat
     type(guatiao_value) :: v
     type(gt_owned), pointer :: map
@@ -595,7 +670,7 @@ contains
       return
     end if
     call c_f_pointer(ptr, map)
-    node%tag = GUATIAO_TAG_MAP
+    node%tag = tag
     node%payload = map
     if (associated(gt_value_make_local)) then
       st = gt_value_make_local(c_loc(node), gt_default_alloc())
@@ -715,6 +790,63 @@ contains
     answer = guatiao_map(a)
     call c_f_pointer(gt_root(answer), root)
     out = c_loc(root%payload)
+  end subroutine
+
+  !> The same for a remote slot's `guatiao_list *out`: an empty list.
+  recursive subroutine guatiao_list_out(answer, out, alloc)
+    type(guatiao_value), intent(inout) :: answer
+    type(c_ptr), intent(out) :: out
+    type(c_ptr), intent(in) :: alloc
+    type(gt_value), pointer :: root
+    type(guatiao_allocator) :: a
+    a%ptr = alloc
+    answer = guatiao_list(a)
+    call c_f_pointer(gt_root(answer), root)
+    out = c_loc(root%payload)
+  end subroutine
+
+  !> The same for a remote slot's `guatiao_value *out`: an absent value
+  !> naming `alloc` (else guatiao's heap), the address of its node.
+  recursive subroutine guatiao_value_out(answer, out, alloc)
+    type(guatiao_value), intent(inout) :: answer
+    type(c_ptr), intent(out) :: out
+    type(c_ptr), intent(in) :: alloc
+    type(gt_value), pointer :: root
+    call gt_new_owned(answer, carrier_alloc(alloc), out)
+    call c_f_pointer(out, root)
+    root%payload%alloc = carrier_alloc(alloc)
+  end subroutine
+
+  !> A tree a remote slot borrows (`const guatiao_value *` or `const
+  !> guatiao_map *`): for GUATIAO_TAG_MAP the map arm of the node `v`
+  !> names, for GUATIAO_TAG_ABSENT the node itself, whatever it holds.
+  !> GUATIAO_ERR_NULL for nothing there (a value that may be null passes
+  !> a null `ptr` instead), GUATIAO_ERR_WRONG_KIND for another kind.
+  recursive subroutine guatiao_borrow_tree(v, tag, ptr, stat)
+    type(guatiao_value), intent(in) :: v
+    integer(c_int32_t), intent(in) :: tag
+    type(c_ptr), intent(out) :: ptr
+    integer, intent(out) :: stat
+    type(gt_value), pointer :: n
+    ptr = gt_node(v)
+    stat = GUATIAO_OK
+    if (.not. c_associated(ptr)) then
+      stat = GUATIAO_ERR_NULL
+      return
+    end if
+    call c_f_pointer(ptr, n)
+    if (n%tag == GUATIAO_TAG_ABSENT) then
+      ptr = c_null_ptr
+      stat = GUATIAO_ERR_NULL
+      return
+    end if
+    if (tag == GUATIAO_TAG_ABSENT) return
+    if (n%tag /= tag) then
+      ptr = c_null_ptr
+      stat = GUATIAO_ERR_WRONG_KIND
+      return
+    end if
+    ptr = c_loc(n%payload)
   end subroutine
 
   !> Moves an answer into this tree's allocator, so it outlives the

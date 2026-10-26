@@ -18,6 +18,7 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 | --- | --- |
 | `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; the wire encoding and channels (`guatiao_wire`); `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
 | `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
+| `guatiao_kind_writer` | `guatiao_write_kinds(document, path, module, check, stat, errmsg)` and `guatiao_kinds_source(document_text, module, source, text, stat, errmsg)`: a kind module written from a kinds document (what `guatiao-kind` runs) |
 | `guatiao_serde` | over the `guatiao_serde` library: `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML; `guatiao_serde_use_library` |
 | `guatiao_intake` | over the `guatiao_intake` library: forms, paths, the flat store; `guatiao_intake_use_library` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths |
@@ -458,7 +459,34 @@ search).
 
 ## Writing a kind module
 
-One module per kind header, written once by the kind's author: a
+**It is written from the kinds' description**, never by hand:
+
+```text
+fpm run guatiao-kind -- DOCUMENT -o FILE.F90 [-m MODULE] [--check]
+```
+
+(the package's executable, from its directory or after `fpm install`; a
+CMake build makes the same `guatiao-kind`). DOCUMENT is a kinds document
+(`<crate>.kinds.json`, or one another language wrote), read by the
+guatiao library (`guatiao_kind_document_read`, so a library new enough to
+export it must be found: `GUATIAO_LIBRARY`); MODULE defaults to the
+document's name without `.kinds.json` plus `s` (`greeter_kinds`);
+`--check` writes nothing and exits 1 when FILE differs. One module holds
+every kind of the document, each named as the description names it
+(non-alphanumerics as `_`): the public `<kind>`, `<kind>_remote`,
+`<kind>_kind()`, `<KIND>_FLOOR_HASH`, and for a provider kind
+`<kind>_serving(impl, <appended slot>=.true., ...)`, `<kind>_bind(reg,
+key, g, stat, errmsg)` and `<kind>_bind_instance(inst, g, stat,
+errmsg)`; each remote has `has(slot)`, an object kind's remote `close()`.
+A slot method's arguments are named as the description names them, plus
+`_in` where the module already uses the name (`listener_in`), then
+`answer`, then `error`. Not carried, and refused naming the slot: a
+`value` lent or handed over (borrow it, or pass a map or a list), more
+than 12 appended slots on a provider kind, a slot named `r`, `has`,
+`close`, `destroy` or `impl`. The rest of this section is what the
+written module does.
+
+A module per document: a
 `bind(c)` mirror of each table; per kind an abstract type extending
 `guatiao_impl` (a deferred procedure per required slot, an ordinary one
 answering `GUATIAO_ERR_UNSUPPORTED` per optional slot), a `guatiao_kind`
@@ -470,12 +498,14 @@ component and a method per slot calling the slot through
 optional slots, and a `bind(c)` module procedure per slot: it finds its
 object with `guatiao_impl_at(ctx, kind)`, converts the arguments with the
 `guatiao_kinds` helpers (`guatiao_text_in`, `guatiao_bytes_in`,
-`guatiao_map_carrier` and `guatiao_settle_map`, `guatiao_value_carrier`
+`guatiao_map_carrier` and `guatiao_settle_map`, `guatiao_list_carrier`
+and `guatiao_settle_list`, `guatiao_value_carrier`
 and `guatiao_settle_value`, `guatiao_lent_map` and
-`guatiao_end_lent_map`, `guatiao_taken_map` (the map moved into the
+`guatiao_end_lent_map`, `guatiao_lent_list` and `guatiao_end_lent_list`,
+`guatiao_taken_map` and `guatiao_taken_list` (the tree moved into the
 binding's default allocator, so the method may keep it; pass `stat` and
 refuse the call on a non-zero one: without it a refused move answers an
-absent map), `guatiao_borrowed_map`,
+absent tree), `guatiao_borrowed_map`,
 `guatiao_borrowed_value`, `guatiao_take_object`, `guatiao_lend_object`
 and `guatiao_end_lent_object`, `guatiao_serve_object`,
 `guatiao_lend_impl`, `guatiao_string_out`), calls the method in a
@@ -496,6 +526,8 @@ its answer with the remote-side helpers:
 | `guatiao_hand_over(v, tag, node, stat)` | a tree handed over: moved out of `v` (or copied), `node`'s arm passed |
 | `guatiao_object_arg(impl, remote, kind, obj, stat)` | an object handed to the other side: a remote this side owns given, any other object served |
 | `guatiao_map_out(answer, out, alloc)` | a tree answer's carrier: an empty map naming `alloc` (the remote's `self%r%alloc`) |
+| `guatiao_list_out(answer, out, alloc)`, `guatiao_value_out(answer, out, alloc)` | the same for a list answer, and for a value answer (an absent node naming `alloc`) |
+| `guatiao_borrow_tree(v, tag, ptr, stat)` | a borrowed tree: the map arm for `GUATIAO_TAG_MAP`, the node itself for `GUATIAO_TAG_ABSENT`; `GUATIAO_ERR_NULL` for nothing there, `GUATIAO_ERR_WRONG_KIND` for another kind |
 | `guatiao_settle_home(answer, stat)` | once the call answered: the answer moved into the carrier's allocator; a non-zero `stat` (optional) is an error to report |
 | `guatiao_call_error(status, err, error)` | the slot's status and words as `error`, its string freed |
 
