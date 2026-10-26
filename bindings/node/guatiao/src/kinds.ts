@@ -1844,11 +1844,18 @@ function shim(kind: KindImpl, slot: ResolvedSlot): (...args: unknown[]) => numbe
     const received: [ShapeImpl, unknown][] = [];
     let ran = false;
     try {
-      // What was handed over is taken first, so a refusal below still
-      // owns it, and frees it, rather than leaking it.
+      // What was handed over is taken first, every argument of it even
+      // past a refusal, so the call owns, and frees, all of it.
+      let refused: { error: unknown } | undefined;
       slot.args.forEach((shape, i) => {
-        if (shape.takes) received.push([shape, (values[i] = shape.receive(rest[i], scope))]);
+        if (!shape.takes) return;
+        try {
+          received.push([shape, (values[i] = shape.receive(rest[i], scope))]);
+        } catch (e) {
+          refused ??= { error: e };
+        }
       });
+      if (refused !== undefined) throw refused.error;
       const target = held(ctx) as Record<string, (...a: unknown[]) => unknown>;
       slot.args.forEach((shape, i) => {
         if (!shape.takes) values[i] = shape.receive(rest[i], scope);

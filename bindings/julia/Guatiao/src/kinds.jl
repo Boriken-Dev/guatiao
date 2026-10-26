@@ -1069,10 +1069,22 @@ macro kind(name::Symbol, args...)
                       sh[2] === :borrow ? :($G.receive_borrowed($p, $scope_, $(QuoteNode(sh[1])))) :
                       sh[2] === :lend ? :($G.receive_lent($p, $scope_, $(QuoteNode(sh[1])))) :
                       :($G.receive_taken($p, $(QuoteNode(sh[1])), $scope_))
-                push!(recv, :($(vals[j]) = $rhs))
+                # Every handed-over argument is taken, even past a refusal, so the call owns all of it.
+                push!(recv, take_first ?
+                    :($(vals[j]) = try
+                        $rhs
+                    catch __gq_e
+                        __gq_refused === nothing && (__gq_refused = __gq_e)
+                        nothing
+                    end) :
+                    :($(vals[j]) = $rhs))
             end
             # What was handed over is taken first, so a refusal below still owns it and frees it.
-            take_first && push!(recv, :($target_ = $G.served_value($G.held($ctx_))))
+            if take_first
+                pushfirst!(recv, :(__gq_refused = nothing))
+                push!(recv, :(__gq_refused === nothing || throw(__gq_refused)))
+                push!(recv, :($target_ = $G.served_value($G.held($ctx_))))
+            end
         end
         write_expr = ans === nothing ? :(nothing) :
             ans[1] === :text ? :($G.write_text($out_, $result_)) :

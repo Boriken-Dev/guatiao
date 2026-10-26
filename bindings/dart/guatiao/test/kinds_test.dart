@@ -16,8 +16,19 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/ffi.dart'
-    show checkStatus, guatiao_host_info, guatiao_str, guatiao_value, strOf;
+    show
+        checkStatus,
+        freeNode,
+        guatiao_host_info,
+        guatiao_map,
+        guatiao_object,
+        guatiao_provider_error,
+        guatiao_str,
+        guatiao_string,
+        guatiao_value,
+        strOf;
 import 'package:guatiao/guatiao.dart';
+import 'package:guatiao/kind_glue.dart' show ServeScope;
 import 'package:guatiao/kinds.dart';
 import 'package:test/test.dart';
 
@@ -521,6 +532,81 @@ void main() {
       // An i64 carries the same bits as a signed number.
       expect(wide.echoI64(-1), -1);
     });
+  });
+
+  test('a call refused at one argument handed over still takes the others', () {
+    // As the generated glue receives two arguments handed over, the first
+    // refused (a null map, an object with no table): the map after it is
+    // the callee's all the same, and freed.
+    final alloc = _refusingAlloc();
+    final size = sizeOf<guatiao_value>();
+    final nodes = <Pointer<guatiao_value>>[];
+    final err = calloc<guatiao_provider_error>();
+    final noObject = calloc<guatiao_object>();
+    addTearDown(() {
+      nodes.forEach(calloc.free);
+      calloc.free(err);
+      calloc.free(noObject);
+      calloc.free(alloc);
+    });
+    Pointer<guatiao_map> handOver() {
+      final handed = Value.fromDart({'b': 2}, alloc: alloc);
+      final node = calloc<guatiao_value>();
+      nodes.add(node);
+      node
+          .cast<Uint8>()
+          .asTypedList(size)
+          .setAll(0, handed.pointer.cast<Uint8>().asTypedList(size));
+      handed.pointer.cast<Uint8>().asTypedList(size).fillRange(0, size, 0);
+      handed.close();
+      return (node.cast<Uint8>() + size - sizeOf<guatiao_map>()).cast();
+    }
+
+    int serve(void Function(ServeScope s) receive) {
+      final s = ServeScope('pair.both', err);
+      try {
+        receive(s);
+        s.held<Object>(nullptr);
+        s.running();
+      } on Object catch (e) {
+        s.fail(e);
+      }
+      final status = s.close();
+      final message = calloc<guatiao_value>();
+      message.ref.tag = Tag.string.code;
+      final offset =
+          sizeOf<guatiao_provider_error>() - sizeOf<guatiao_string>();
+      message
+          .cast<Uint8>()
+          .asTypedList(size)
+          .setAll(
+            size - sizeOf<guatiao_string>(),
+            (err.cast<Uint8>() + offset).asTypedList(sizeOf<guatiao_string>()),
+          );
+      freeNode(message);
+      calloc.free(message);
+      return status;
+    }
+
+    // Each map is handed over before the call, as a caller does.
+    final afterNull = handOver();
+    expect(
+      serve((s) {
+        s.takenMap(nullptr);
+        s.takenMap(afterNull);
+      }),
+      Status.nullArgument.code,
+    );
+    expect(_refusingLive, 0, reason: 'the map after the null one is freed');
+    final afterObject = handOver();
+    expect(
+      serve((s) {
+        s.takenObject(Listener.kind, noObject.ref);
+        s.takenMap(afterObject);
+      }),
+      isNot(Status.ok.code),
+    );
+    expect(_refusingLive, 0, reason: 'the map after the object is freed');
   });
 
   test('a tree handed over to a Dart provider, and kept, is all its own', () {

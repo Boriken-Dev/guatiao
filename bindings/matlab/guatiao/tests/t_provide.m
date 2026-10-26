@@ -16,6 +16,7 @@ function cases = t_provide()
     'a map handed over is freed, whatever the provider answers', @handed_over
     'a map handed over and kept is all the provider''s own', @kept_handed_over
     'nothing crosses when an argument is refused before the call', @refused_before
+    'a call refused at one handed-over argument still takes the others', @refused_handed
     'an instance per configuration, closed when its host destroys it', @configured
     'create builds nothing when it has nowhere to put the instance', @create_null_out
     'a provider says why it cannot run here', @availability
@@ -172,6 +173,38 @@ function refused_before()
   expect_equal(p.both(first, struct('b', 2, 'c', 3)), 3);
   expect_true(first.isabsent(), 'handed over');
   expect_equal(c.live(), 0);
+end
+
+function refused_handed()
+  if ~gt_env('fixture')
+    skip_case('no compiler built the gtfixture MEX file');
+  end
+  reg = preg();
+  c = guatiao.Allocator.counting();
+  reg.register_library(guatiao.Library('m_pair_refused', '0.1.0', {'gtt.Sizes'}));
+  t = reg.provider_table('m_pair_refused_sizes', 'pair');
+  owners = guatiao_mex('handles', 1);
+  handed = guatiao.Value(struct('b', 2), 'Alloc', c);
+  st = guatiao.serving(@() gtfixture('both', t.table, t.ctx, 0, ...
+                                     guatiao_mex('node_pointer', handed.owner_id(), {})));
+  expect_equal(st, 11, 'refused as the null argument');
+  expect_equal(c.live(), 0, 'the map handed over after the null one is freed');
+  handed.close();
+  % Refused after one was taken: what it was filed under goes too.
+  handed = guatiao.Value(struct('a', 1), 'Alloc', c);
+  st = guatiao.serving(@() gtfixture('both', t.table, t.ctx, ...
+                                     guatiao_mex('node_pointer', handed.owner_id(), {}), 0));
+  expect_equal(st, 11, 'refused as the null argument');
+  handed.close();
+  expect_equal(c.live(), 0);
+  expect_equal(guatiao_mex('handles', 1), owners, 'no owner left filed');
+  % An object handed over after an argument the gateway refuses is let go.
+  reg.register_library(guatiao.Library('m_pocket', '0.1.0', {'gtt.Pockets'}));
+  t = reg.provider_table('m_pocket_pockets', 'pocket');
+  gone = gtfixture('listeners_destroyed');
+  st = guatiao.serving(@() gtfixture('put_refused', t.table, t.ctx));
+  expect_equal(st, 7, 'refused as text that is not UTF-8');
+  expect_equal(gtfixture('listeners_destroyed'), gone + 1, 'the listener destroyed');
 end
 
 function configured()

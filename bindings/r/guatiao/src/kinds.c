@@ -888,39 +888,103 @@ typedef struct served_job {
   SEXP keep; /* preserved: what the call lent R, cleared once it returns */
 } served_job;
 
+/* An object as a remote R holds, destroyed when R collects it if `owned`. */
+static SEXP served_remote(const gt_slot *sl, int k, guatiao_object o, int owned) {
+  gt_remote *r = (gt_remote *)calloc(1, sizeof(gt_remote));
+  if (!r) return NULL;
+  r->kind = sl->arg_kind[k];
+  r->table = o.table;
+  r->size = o.size;
+  r->ctx = o.ctx;
+  r->owned = owned;
+  r->live = 1;
+  SEXP x = PROTECT(R_MakeExternalPtr(r, R_NilValue, R_NilValue));
+  R_RegisterCFinalizerEx(x, gt_remote_finalizer(), TRUE);
+  UNPROTECT(1);
+  return x;
+}
+
+/* What the handed-over argument k holds, as a node: absent for none. */
+static guatiao_value handed_tree(const gt_slot *sl, void **args, int k) {
+  int s = sl->args[k];
+  void *p = *(void **)args[1 + k];
+  guatiao_value v;
+  set_absent(&v);
+  if (!p) return v;
+  if (tree_tag(s) < 0) {
+    v = *(guatiao_value *)p;
+  } else if (tree_tag(s) == GUATIAO_MAP) {
+    v.tag = GUATIAO_MAP;
+    v.payload.map = *(guatiao_map *)p;
+  } else {
+    v.tag = GUATIAO_LIST;
+    v.payload.list = *(guatiao_list *)p;
+  }
+  return v;
+}
+
+/* The arguments as the dispatcher reads them, or R_NilValue for a call
+ * refused while receiving what was handed over (j->status and j->msg say
+ * why: answered without an R error, which would end the call as INTERNAL). */
 static SEXP served_args(served_job *j) {
   gt_slot *sl = j->slot;
   SEXP args = PROTECT(Rf_allocVector(VECSXP, sl->nargs));
-  /* Handed-over trees first, so nothing below leaves one without an owner. */
+  /* Every handed-over argument first, trees and objects, and every one of
+   * them past a refusal too: the call owns all of it, and nothing below
+   * can leave one without an owner. */
+  guatiao_status refused = GUATIAO_OK;
   for (int k = 0; k < sl->nargs; k++) {
     int s = sl->args[k];
-    if (s < S_TAKEN_VALUE || s > S_TAKEN_LIST) continue;
-    void *p = *(void **)j->args[1 + k];
-    guatiao_value v;
-    set_absent(&v);
-    if (p) {
-      if (tree_tag(s) < 0) {
-        v = *(guatiao_value *)p;
-      } else if (tree_tag(s) == GUATIAO_MAP) {
-        v.tag = GUATIAO_MAP;
-        v.payload.map = *(guatiao_map *)p;
-      } else {
-        v.tag = GUATIAO_LIST;
-        v.payload.list = *(guatiao_list *)p;
+    if (s == S_TAKEN_OBJECT) {
+      guatiao_object o = *(guatiao_object *)j->args[1 + k];
+      SEXP x = refused ? NULL : served_remote(sl, k, o, 1);
+      if (!x) {
+        destroy_object(o.table, o.size, o.ctx);
+        if (!refused) {
+          refused = GUATIAO_ERR_ALLOC;
+          snprintf(j->msg, sizeof j->msg, "out of memory");
+        }
+        continue;
       }
+      SET_VECTOR_ELT(args, k, x);
+      continue;
+    }
+    if (s < S_TAKEN_VALUE || s > S_TAKEN_LIST) continue;
+    if (!*(void **)j->args[1 + k]) {
+      if (!refused) {
+        refused = GUATIAO_ERR_NULL;
+        snprintf(j->msg, sizeof j->msg, "the handed-over %s is null",
+                 tree_tag(s) == GUATIAO_MAP ? "map" : tree_tag(s) == GUATIAO_LIST ? "list" : "value");
+      }
+      continue;
+    }
+    guatiao_value v = handed_tree(sl, j->args, k);
+    if (refused) {
+      gt_free(&v);
+      continue;
     }
     /* The method owns it and may keep it: moved out of the caller's
      * allocators, which may go with the caller's library. */
-    if (into_binding(&v) != GUATIAO_OK) {
+    guatiao_status moved = into_binding(&v);
+    if (moved != GUATIAO_OK) {
       gt_free(&v);
-      Rf_error("a handed-over tree could not be moved into this binding's allocator");
+      refused = moved;
+      snprintf(j->msg, sizeof j->msg, "a handed-over tree could not be moved into this binding's allocator");
+      continue;
     }
     SEXP owner = gt_owner_new(&v, &gt_binding_alloc, R_NilValue);
     if (!owner) {
       gt_free(&v);
-      Rf_error("out of memory");
+      refused = GUATIAO_ERR_ALLOC;
+      snprintf(j->msg, sizeof j->msg, "out of memory");
+      continue;
     }
     SET_VECTOR_ELT(args, k, owner);
+  }
+  if (refused) {
+    j->status = refused;
+    UNPROTECT(1);
+    return R_NilValue;
   }
   for (int k = 0; k < sl->nargs; k++) {
     int s = sl->args[k];
@@ -930,7 +994,12 @@ static SEXP served_args(served_job *j) {
       guatiao_str t = *(guatiao_str *)a;
       if (s == S_STRING) {
         SEXP ch = gt_mkchar(t);
-        if (!ch) Rf_error("text holding a NUL cannot be an R string");
+        if (!ch) {
+          j->status = GUATIAO_ERR_BAD_VALUE;
+          snprintf(j->msg, sizeof j->msg, "text holding a NUL cannot be an R string");
+          UNPROTECT(1);
+          return R_NilValue;
+        }
         x = Rf_ScalarString(ch);
       } else {
         x = Rf_allocVector(RAWSXP, (R_xlen_t)t.len);
@@ -965,22 +1034,12 @@ static SEXP served_args(served_job *j) {
       }
       x = gt_owner_borrow(node, &gt_binding_alloc, !lent, R_NilValue);
       SET_VECTOR_ELT(j->keep, k, x);
-    } else if (s >= S_TAKEN_VALUE && s <= S_TAKEN_LIST) {
+    } else if ((s >= S_TAKEN_VALUE && s <= S_TAKEN_LIST) || s == S_TAKEN_OBJECT) {
       continue;
-    } else if (s == S_TAKEN_OBJECT || s == S_LENT_OBJECT) {
-      guatiao_object o = s == S_TAKEN_OBJECT ? *(guatiao_object *)a : **(guatiao_object **)a;
-      gt_remote *r = (gt_remote *)calloc(1, sizeof(gt_remote));
-      if (!r) Rf_error("out of memory");
-      r->kind = sl->arg_kind[k];
-      r->table = o.table;
-      r->size = o.size;
-      r->ctx = o.ctx;
-      r->owned = s == S_TAKEN_OBJECT;
-      r->live = 1;
-      x = PROTECT(R_MakeExternalPtr(r, R_NilValue, R_NilValue));
-      R_RegisterCFinalizerEx(x, gt_remote_finalizer(), TRUE);
-      UNPROTECT(1);
-      if (s == S_LENT_OBJECT) SET_VECTOR_ELT(j->keep, k, x);
+    } else if (s == S_LENT_OBJECT) {
+      x = served_remote(sl, k, **(guatiao_object **)a, 0);
+      if (!x) Rf_error("out of memory");
+      SET_VECTOR_ELT(j->keep, k, x);
     }
     SET_VECTOR_ELT(args, k, x);
   }
@@ -995,9 +1054,11 @@ static void served_body(void *p) {
   R_PreserveObject(keep);
   j->keep = keep;
   UNPROTECT(1);
-  SEXP args = PROTECT(served_args(j));
   SEXP out = R_MakeExternalPtr(&j->answer, R_NilValue, R_NilValue);
   SET_VECTOR_ELT(keep, sl->nargs, out);
+  SEXP args = served_args(j);
+  if (args == R_NilValue) return;
+  PROTECT(args);
   SEXP f = PROTECT(Rf_install(".gt_dispatch"));
   SEXP ctx = PROTECT(Rf_ScalarReal(gt_id_of_ctx(j->ctx) < 0 ? -1 : (double)(uintptr_t)j->ctx));
   SEXP idx = PROTECT(Rf_ScalarInteger(sl->index_r));

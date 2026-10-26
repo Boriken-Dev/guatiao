@@ -84,6 +84,15 @@ abstract class Kind<R extends KindRemote> {
   /// The offset of slot [index] in the table.
   int offsetOf(int index) => _first + _word * index;
 
+  /// A table of this kind whose every slot is null, made once: what a
+  /// stand-in remote is over, for a call refused before its method runs.
+  late final Pointer<Void> _standIn = () {
+    final table = calloc<Uint8>(tableSize).cast<guatiao_kind_header>();
+    table.ref.struct_size = tableSize;
+    table.ref.floor_hash = floorHash;
+    return table.cast<Void>();
+  }();
+
   /// The smallest table this kind accepts: up to its last required slot.
   int get floor {
     var end = isObject ? _first : _header;
@@ -948,8 +957,12 @@ final class ServeScope extends SlotCall {
   bool _ran = false;
   int _status = Status.ok.code;
 
-  /// The object [ctx] names: [Gone] once it was released.
+  /// The object [ctx] names: [Gone] once it was released. Called once
+  /// every handed-over argument is taken, it first raises a refusal met
+  /// while taking one.
   T held<T>(Pointer<Void> ctx) {
+    final refused = _refused;
+    if (refused != null) throw refused;
     if (ctx == nullptr) {
       throw NullArgument(Status.nullArgument.code, 'the call names no object');
     }
@@ -1001,19 +1014,37 @@ final class ServeScope extends SlotCall {
 
   /// A tree handed over, which the method owns and may keep: moved out of
   /// the caller's allocators, which may go with the caller's library.
-  Value takenValue(Pointer<guatiao_value> p) => _keep(
-    Value.adopt(_homed(_nodeOver(_nonNull(p, 'value'), null), _handedOver)),
+  Value takenValue(Pointer<guatiao_value> p) => _taking(
+    () =>
+        Value.adopt(_homed(_nodeOver(_nonNull(p, 'value'), null), _handedOver)),
   );
 
-  Value takenMap(Pointer<guatiao_map> p) => _keep(
-    Value.adopt(_homed(_nodeOver(_nonNull(p, 'map'), Tag.map), _handedOver)),
+  Value takenMap(Pointer<guatiao_map> p) => _taking(
+    () => Value.adopt(
+      _homed(_nodeOver(_nonNull(p, 'map'), Tag.map), _handedOver),
+    ),
   );
 
-  Value takenList(Pointer<guatiao_list> p) => _keep(
-    Value.adopt(_homed(_nodeOver(_nonNull(p, 'list'), Tag.list), _handedOver)),
+  Value takenList(Pointer<guatiao_list> p) => _taking(
+    () => Value.adopt(
+      _homed(_nodeOver(_nonNull(p, 'list'), Tag.list), _handedOver),
+    ),
   );
 
   static const _handedOver = 'a tree handed over';
+
+  /// The first refusal met while taking a handed-over tree, kept until
+  /// [held] so the trees handed over after it are still taken, and freed.
+  Object? _refused;
+
+  Value _taking(Value Function() take) {
+    try {
+      return _keep(take());
+    } on Object catch (e) {
+      _refused ??= e;
+      return _keep(Value.absent());
+    }
+  }
 
   Value _keep(Value v) {
     _received.add(v);
@@ -1049,11 +1080,18 @@ final class ServeScope extends SlotCall {
     return Ref(_CallOwner(node, this, _recorded(node)));
   }
 
-  /// An object handed over: the method owns it from now on.
+  /// An object handed over: the method owns it from now on. One whose
+  /// table is not the kind's is refused, at [held], and left alone: its
+  /// slot after the header need not be a `destroy`.
   R takenObject<R extends KindRemote>(Kind<R> kind, guatiao_object o) {
-    final handle = kind.handle(o.table, o.size, o.ctx);
-    _received.add(handle);
-    return handle;
+    try {
+      final handle = kind.handle(o.table, o.size, o.ctx);
+      _received.add(handle);
+      return handle;
+    } on Object catch (e) {
+      _refused ??= e;
+      return kind.remote(kind._standIn, kind.tableSize, nullptr);
+    }
   }
 
   /// An object lent for the call.
@@ -1115,6 +1153,8 @@ final class ServeScope extends SlotCall {
   /// Ends the call and answers its status: what was handed over to a
   /// method that never ran is released, lent trees are written back.
   int close() {
+    final refused = _refused;
+    if (refused != null && _status == Status.ok.code) fail(refused);
     if (!_ran) {
       for (final v in _received) {
         if (v is Value) v.close();

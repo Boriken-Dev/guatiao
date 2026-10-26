@@ -137,6 +137,33 @@ case("a map handed over and kept is all the provider's own", with_examples({
   reg$close()
 }))
 
+case("a call refused at one handed-over argument still takes the others", with_examples({
+  if (is.null(fixture())) {
+    skip_case("no C compiler: the fixture is not built")
+  } else {
+    PREG$register_library(guatiao_library("r_pair_refused", "0.1.0", providers = list("GtSizes")))
+    t <- PREG$provider_table("r_pair_refused_gt_sizes", "pair")
+    c <- counting()
+    handed <- value(list(b = 2L), alloc = c)
+    # Refused as itself, not as an R error ending the call.
+    st <- suppressWarnings(fx("fx_both_after_null", t$table, t$ctx, .Call(gt$C_node_pointer, handed)))
+    expect_equal(st, 11L)
+    expect_equal(live(c), 0)
+    close(handed)
+    # An object handed over after an argument R refuses is the callee's too.
+    Pocket <- kind("pocket", floor_hash = 9, put = method(label = "string", item = taken(Listener), required = TRUE,
+      fallible = TRUE), where = globalenv())
+    methods::setClass("GtPocket", contains = "Pocket", where = globalenv())
+    methods::setMethod("put", "GtPocket", function(self, label, item) NULL, where = globalenv())
+    PREG$register_library(guatiao_library("r_pocket", "0.1.0", providers = list("GtPocket")))
+    t <- PREG$provider_table("r_pocket_gt_pocket", "pocket")
+    before <- fx("fx_listeners_destroyed")
+    expect_equal(fx("fx_put_refused", t$table, t$ctx), 7L)
+    invisible(gc())
+    expect_equal(fx("fx_listeners_destroyed"), before + 1L)
+  }
+}))
+
 case("nothing crosses when an argument is refused before the call", with_examples({
   c <- counting()
   PREG$register_library(guatiao_library("r_pair", "0.1.0", providers = list("GtSizes")))

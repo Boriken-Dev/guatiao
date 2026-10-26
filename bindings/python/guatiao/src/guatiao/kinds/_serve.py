@@ -21,7 +21,7 @@ from typing import Any
 
 from .. import _abi
 from ..errors import GuatiaoError
-from ..value import Value
+from ..value import Ref, Value
 from ._shapes import Scope, _move_out
 
 _log = logging.getLogger("guatiao.kinds")
@@ -115,21 +115,40 @@ def _shim(kind: Any, method: Any) -> Any:
         scope = Scope()
         err = rest[-1] if method.fallible else None
         status = int(_abi.Status.OK)
+        received: "list[Any]" = []
+        ran = False
         try:
             values: "list[Any]" = [None] * n
-            # What was handed over is taken first, so a refusal below
-            # still owns it, and frees it, rather than leaking it.
+            # What was handed over is taken first, every argument of it
+            # even past a refusal, so the call owns, and frees, all of it.
+            refused: "BaseException | None" = None
             for i, shape in enumerate(shapes):
                 if shape.takes:
-                    values[i] = shape.receive(rest[i], scope)
+                    try:
+                        values[i] = shape.receive(rest[i], scope)
+                        received.append(values[i])
+                    except BaseException as exc:
+                        refused = refused or exc
+            if refused is not None:
+                try:
+                    raise refused
+                finally:
+                    refused = None
             target = held(ctx)
             for i, shape in enumerate(shapes):
                 if not shape.takes:
                     values[i] = shape.receive(rest[i], scope)
+            ran = True
             result = getattr(target, method.name)(*values)
             if answer is not None:
                 answer.write(rest[n], result)
         except BaseException as exc:  # nothing may cross back into C
+            if not ran:
+                # Let go now, not when the collector runs: an object goes
+                # back to its caller's library, which may not outlive that.
+                for got in received:
+                    owner: Any = got.owner if isinstance(got, Ref) else got
+                    owner.close()
             status = _refuse(exc, err, where)
         try:
             scope.close()

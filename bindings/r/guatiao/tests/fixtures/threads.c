@@ -299,6 +299,49 @@ SEXP fx_greet_into_alloc(SEXP lib, SEXP table, SEXP ctx, SEXP name, SEXP alloc) 
   return res;
 }
 
+/* A pair's `both(a, b)`, both handed over, called with `a` null and `b`
+ * the map in the value at `handed`, left absent: the callee's from here. */
+SEXP fx_both_after_null(SEXP table, SEXP ctx, SEXP handed) {
+  typedef guatiao_status (*both_fn)(void *ctx, guatiao_map *a, guatiao_map *b, int64_t *out);
+  both_fn both;
+  memcpy(&both, (const char *)R_ExternalPtrAddr(table) + sizeof(guatiao_kind_header), sizeof both);
+  guatiao_value *v = (guatiao_value *)R_ExternalPtrAddr(handed);
+  guatiao_map m = v->payload.map;
+  memset(v, 0, sizeof *v);
+  int64_t out = 0;
+  return Rf_ScalarInteger((int)both(R_ExternalPtrAddr(ctx), NULL, &m, &out));
+}
+
+static int listeners_destroyed = 0;
+static void fx_listener_destroy(void *ctx) {
+  (void)ctx;
+  listeners_destroyed++;
+}
+static guatiao_status fx_listener_heard(void *ctx, guatiao_str what) {
+  (void)ctx;
+  (void)what;
+  return GUATIAO_OK;
+}
+static const listener_vtable FX_LISTENER = {
+    {(uint32_t)sizeof(listener_vtable), listener_vtable_FLOOR_HASH}, fx_listener_destroy, fx_listener_heard};
+
+/* A pocket's `put(label, item)`: a label holding a NUL, which R refuses,
+ * and a listener of this file's handed over after it. */
+SEXP fx_put_refused(SEXP table, SEXP ctx) {
+  typedef guatiao_status (*put_fn)(void *ctx, guatiao_str label, guatiao_object item, guatiao_provider_error *err);
+  put_fn put;
+  memcpy(&put, (const char *)R_ExternalPtrAddr(table) + sizeof(guatiao_kind_header), sizeof put);
+  guatiao_object item = {&FX_LISTENER, sizeof FX_LISTENER, (void *)&listeners_destroyed};
+  guatiao_provider_error err;
+  memset(&err, 0, sizeof err);
+  guatiao_status st = put(R_ExternalPtrAddr(ctx), guatiao_str_from("a\0b", 3), item, &err);
+  if (err.message.cap) err.message.alloc->free(err.message.alloc->ctx, (void *)err.message.ptr, err.message.cap, 1);
+  return Rf_ScalarInteger((int)st);
+}
+
+/* How many of this file's listeners were destroyed. */
+SEXP fx_listeners_destroyed(void) { return Rf_ScalarInteger(listeners_destroyed); }
+
 /* A library descriptor's own unload slot, asked directly. */
 SEXP fx_library_unload(SEXP info) {
   const guatiao_library_info *i = (const guatiao_library_info *)R_ExternalPtrAddr(info);

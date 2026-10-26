@@ -187,6 +187,20 @@ end
     @test live(c) == 0
 end
 
+@testset "a call refused at one handed-over tree still takes the others" begin
+    c = Counting()
+    Guatiao.register_library(REG, Guatiao.Library("julia_pair_refused", "0.1.0"; providers = [Sizes]))
+    both_slot, ctx = slot_of("julia_pair_refused_sizes", "pair", 1)
+    # The map crosses as a caller hands it over: from here it is the callee's.
+    root = Guatiao.take_root!(Value(Dict("b" => 2); alloc = c.alloc))
+    out = Ref{Int64}(0)
+    status = GC.@preserve out ccall(both_slot, UInt32, (Ptr{Cvoid}, Ptr{GMap}, Ptr{GMap}, Ptr{Int64}),
+        ctx, C_NULL, root + Guatiao.PAYLOAD, out)
+    Libc.free(root)
+    @test status == UInt32(Guatiao.NullArgument)
+    @test live(c) == 0
+end
+
 @testset "an instance per configuration, closed when its host destroys it" begin
     lib = Guatiao.Library("julia_closing", "0.1.0"; providers = [Guatiao.Provider(Closing; config = ClosingConfig)])
     Guatiao.register_library(REG, lib)
