@@ -1890,3 +1890,230 @@ jobs:
         env:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/armv7-unknown-linux-gnueabihf/debug/libmyapp.so
           CC: arm-linux-gnueabihf-gcc
+
+  bindings-armv7:
+    # The bindings on 32-bit ARM, emulated: an Ubuntu armhf root entered
+    # with chroot through qemu-user, the armv7 libraries cross-built against
+    # it with clang and lld, and each binding's suite run inside it (Go's on
+    # the runner, its test programs run by qemu-user). A 64-bit run cannot
+    # catch a word-sized layout written as a number; this can. Julia has no
+    # armv7 build at its floor.
+    name: ${{ matrix.suite }} on armv7 (emulated)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [python, node, go, r, octave, fortran]
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUITE: ${{ matrix.suite }}
+      ARMHF: /opt/armhf-root
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: clang
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS: >-
+        -C link-arg=--target=armv7-unknown-linux-gnueabihf -C link-arg=--sysroot=/opt/armhf-root
+        -C link-arg=-fuse-ld=lld -L native=/opt/armhf-root/usr/lib/arm-linux-gnueabihf
+      CC_armv7_unknown_linux_gnueabihf: clang
+      CFLAGS_armv7_unknown_linux_gnueabihf: --target=armv7-unknown-linux-gnueabihf --sysroot=/opt/armhf-root
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Install clang, lld and qemu-user
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld qemu-user-static
+          # chroot runs the root's ARM programs only with the fix-binary flag.
+          grep -q '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-arm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # One cache for the six legs, saved by the leg that builds the most.
+          key: armv7
+          save-if: ${{ matrix.suite == 'python' }}
+          workspaces: |
+            .
+            crates/guatiao-source-py
+      - name: The armhf root
+        # Ubuntu's base image for armhf, its checksum pinned, entered with
+        # chroot. apt inside it needs /dev and /proc, and its sandbox user
+        # fails under qemu-user.
+        run: |
+          base=ubuntu-base-24.04.5-base-armhf.tar.gz
+          curl -fsSL -o "$RUNNER_TEMP/$base" "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.5/release/$base"
+          echo "4fcee4d278f1c5232e085a021a85e4c6cef3853557a88d98ff380b5e5d5841bb  $RUNNER_TEMP/$base" | sha256sum -c -
+          sudo mkdir -p "$ARMHF"
+          sudo tar -xzf "$RUNNER_TEMP/$base" -C "$ARMHF"
+          sudo cp /etc/resolv.conf "$ARMHF/etc/resolv.conf"
+          sudo mount --bind /dev "$ARMHF/dev"
+          sudo mount -t proc proc "$ARMHF/proc"
+          packages="libc6-dev libgcc-13-dev gcc"
+          case "$SUITE" in
+            python)  packages="$packages python3 python3-pytest libpython3.12-dev" ;;
+            node)    packages="$packages python3 libpython3.12-dev" ;;
+            go)      packages="$packages libpython3.12-dev" ;;
+            r)       packages="$packages r-base-core r-base-dev libffi-dev r-cran-bit64 libpython3.12-dev" ;;
+            octave)  packages="$packages octave octave-dev libffi-dev libpython3.12-dev" ;;
+            fortran) packages="$packages gfortran cmake make" ;;
+          esac
+          apt() { sudo chroot "$ARMHF" /usr/bin/env DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 apt-get -o APT::Sandbox::User=root -qq "$@"; }
+          apt update
+          # shellcheck disable=SC2086
+          apt install -y --no-install-recommends $packages
+      - name: Build the libraries for armv7
+        # The packages and features dart-armv7 builds, plus what a suite's
+        # own tests load.
+        run: |
+          cargo build --target armv7-unknown-linux-gnueabihf \
+            -p guatiao -p guatiao-serde -p guatiao-intake -p hello_library -p derived_greeter -p greeter_caller -p myapp \
+            --features guatiao/load,guatiao/derive,guatiao/provider,guatiao/regex,guatiao-serde/exact-numbers,guatiao-serde/toml,guatiao-serde/yaml
+          case "$SUITE" in
+            python) cargo build --target armv7-unknown-linux-gnueabihf -p guatiao-source-remote \
+                      --features guatiao-source-remote/tcp,guatiao-source-remote/local,guatiao-source-remote/shm,guatiao-source-remote/ws ;;
+            go)     cargo build --target armv7-unknown-linux-gnueabihf -p greeter_host ;;
+          esac
+      - name: Build the guatiao-source-py bridge for armv7, for the Python greeters
+        if: matrix.suite != 'fortran'
+        working-directory: crates/guatiao-source-py
+        run: cargo build --target armv7-unknown-linux-gnueabihf
+        env:
+          PYO3_CROSS: "1"
+          PYO3_CROSS_PYTHON_VERSION: "3.12"
+          PYO3_CROSS_PYTHON_IMPLEMENTATION: CPython
+      - uses: actions/setup-go@v5
+        if: matrix.suite == 'go' || matrix.suite == 'r' || matrix.suite == 'octave'
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: A C compiler for armv7, as cgo calls one
+        if: matrix.suite == 'go' || matrix.suite == 'r' || matrix.suite == 'octave'
+        run: |
+          printf '#!/bin/sh\nexec clang --target=armv7-unknown-linux-gnueabihf --sysroot=%s -fuse-ld=lld -Wno-unused-command-line-argument "$@"\n' "$ARMHF" > "$RUNNER_TEMP/armcc"
+          chmod +x "$RUNNER_TEMP/armcc"
+      - name: Build the Go greeter for armv7 as a library file
+        if: matrix.suite == 'r' || matrix.suite == 'octave'
+        working-directory: examples
+        run: go build -buildmode=c-shared -o "$RUNNER_TEMP/go-arm/libgo_greeter.so" ./go_provider/cshared
+        env:
+          GOARCH: arm
+          GOARM: "7"
+          CGO_ENABLED: "1"
+          CC: ${{ runner.temp }}/armcc
+      - name: The tree and the armv7 libraries in the root
+        run: |
+          sudo mkdir -p "$ARMHF/work/src" "$ARMHF/work/lib" "$ARMHF/work/py" "$ARMHF/work/go"
+          tar --exclude=./.git --exclude=./target --exclude='*/target' --exclude='*/node_modules' -cf - . | sudo tar -xf - -C "$ARMHF/work/src"
+          lib=target/armv7-unknown-linux-gnueabihf/debug
+          sudo cp "$lib"/*.so "$ARMHF/work/lib/"
+          if [ -e "$lib/guatiao-remote-server" ]; then sudo cp "$lib/guatiao-remote-server" "$ARMHF/work/lib/"; fi
+          bridge=crates/guatiao-source-py/target/armv7-unknown-linux-gnueabihf/debug/libguatiao_source_py.so
+          if [ -e "$bridge" ]; then sudo cp "$bridge" "$ARMHF/work/py/"; fi
+          if [ -e "$RUNNER_TEMP/go-arm/libgo_greeter.so" ]; then sudo cp "$RUNNER_TEMP/go-arm/libgo_greeter.so" "$ARMHF/work/go/"; fi
+      - name: Python
+        if: matrix.suite == 'python'
+        # Against the separate libraries, then the application's own.
+        run: |
+          for lib in /work/lib /work/lib/libmyapp.so; do
+            sudo chroot "$ARMHF" /usr/bin/env -i HOME=/root PATH=/usr/bin:/bin LANG=C.UTF-8 \
+              PYTHONPATH=/work/src/bindings/python/guatiao/src:/work/src/bindings/python/guatiao-serde/src:/work/src/bindings/python/guatiao-intake/src \
+              GUATIAO_LIBRARY="$lib" GUATIAO_PY_BRIDGE=/work/py/libguatiao_source_py.so \
+              sh -c 'cd /work/src && python3 -m pytest -p no:cacheprovider -rs -q bindings/python/guatiao/tests bindings/python/guatiao-serde/tests bindings/python/guatiao-intake/tests'
+          done
+      - name: Node
+        if: matrix.suite == 'node'
+        # Node's own armv7l build, its checksum checked; a stated skip
+        # fails the step, as on the node job.
+        run: |
+          node=node-v22.23.4-linux-armv7l
+          curl -fsSL -o "$RUNNER_TEMP/$node.tar.xz" "https://nodejs.org/dist/v22.23.4/$node.tar.xz"
+          curl -fsSL -o "$RUNNER_TEMP/SHASUMS256.txt" https://nodejs.org/dist/v22.23.4/SHASUMS256.txt
+          (cd "$RUNNER_TEMP" && grep " $node.tar.xz\$" SHASUMS256.txt | sha256sum -c -)
+          sudo mkdir -p "$ARMHF/opt"
+          sudo tar -xJf "$RUNNER_TEMP/$node.tar.xz" -C "$ARMHF/opt"
+          inroot() {
+            sudo chroot "$ARMHF" /usr/bin/env -i HOME=/root PATH="/opt/$node/bin:/usr/bin:/bin" LANG=C.UTF-8 NO_COLOR=1 \
+              GUATIAO_PY_BRIDGE=/work/py/libguatiao_source_py.so "$@"
+          }
+          inroot sh -c 'cd /work/src/bindings/node && npm ci'
+          inroot sh -c 'cd /work/src/bindings/node/guatiao && npm run build'
+          inroot sh -c 'cd /work/src/examples && npm ci'
+          for lib in /work/lib /work/lib/libmyapp.so; do
+            for p in guatiao guatiao-serde guatiao-intake; do
+              inroot env GUATIAO_LIBRARY="$lib" sh -c "cd /work/src/bindings/node/$p && npm test" 2>&1 | tee "$RUNNER_TEMP/node-$p.log"
+              test "${PIPESTATUS[0]}" -eq 0
+              if grep -nE "[0-9]+ skipped" "$RUNNER_TEMP/node-$p.log"; then exit 1; fi
+            done
+          done
+      - name: Go
+        if: matrix.suite == 'go'
+        # On the runner, cgo through the armv7 compiler; the test programs
+        # run by qemu-user, the root their loader's prefix. A stated skip
+        # fails the step, as on the go job.
+        run: |
+          (cd bindings/go && go vet ./guatiao/... ./guatiao-serde/... ./guatiao-intake/... \
+            && go test -v ./guatiao/... ./guatiao-serde/... ./guatiao-intake/...) 2>&1 | tee "$RUNNER_TEMP/go.log"
+          test "${PIPESTATUS[0]}" -eq 0
+          (cd examples && go vet ./... && go test -v ./...) 2>&1 | tee "$RUNNER_TEMP/go-examples.log"
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n -- "--- SKIP" "$RUNNER_TEMP/go.log" "$RUNNER_TEMP/go-examples.log"; then exit 1; fi
+        env:
+          GOARCH: arm
+          GOARM: "7"
+          CGO_ENABLED: "1"
+          CC: ${{ runner.temp }}/armcc
+          QEMU_LD_PREFIX: /opt/armhf-root
+          PYTHONHOME: /opt/armhf-root/usr
+          GOFLAGS: -count=1
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/armv7-unknown-linux-gnueabihf/debug
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-source-py/target/armv7-unknown-linux-gnueabihf/debug/libguatiao_source_py.so
+      - name: R
+        if: matrix.suite == 'r'
+        # R CMD check of the three packages, every greeter required; a check
+        # WARNING fails the step, as on the r job.
+        run: |
+          inroot() {
+            sudo chroot "$ARMHF" /usr/bin/env -i HOME=/root PATH=/usr/bin:/bin LANG=C.UTF-8 \
+              GUATIAO_LIBRARY=/work/lib GUATIAO_REPO=/work/src GUATIAO_PY_BRIDGE=/work/py/libguatiao_source_py.so \
+              GUATIAO_GO_LIBRARY=/work/go GUATIAO_REQUIRE_ALL=1 PYTHONDONTWRITEBYTECODE=1 "$@"
+          }
+          sudo mkdir -p "$ARMHF/work/rcheck"
+          inroot sh -c 'cd /work/rcheck && R CMD build --no-manual /work/src/bindings/r/guatiao'
+          status=0
+          inroot sh -c 'cd /work/rcheck && R CMD check --no-manual guatiao_*.tar.gz' || status=$?
+          sudo sh -c "cat $ARMHF/work/rcheck/guatiao.Rcheck/tests/guatiao.Rout*" | tail -n 30 || true
+          if [ "$status" -ne 0 ] || sudo grep -qE "^\* checking .*(WARNING|ERROR)" "$ARMHF/work/rcheck/guatiao.Rcheck/00check.log"; then
+            sudo cat "$ARMHF/work/rcheck/guatiao.Rcheck/00check.log"
+            exit 1
+          fi
+          inroot sh -c 'cd /work/rcheck && R CMD INSTALL guatiao_*.tar.gz'
+          for p in serde intake; do
+            inroot sh -c "cd /work/rcheck && R CMD build --no-manual /work/src/bindings/r/guatiao.$p"
+            status=0
+            inroot sh -c "cd /work/rcheck && R CMD check --no-manual guatiao.${p}_*.tar.gz" || status=$?
+            if [ "$status" -ne 0 ] || sudo grep -qE "^\* checking .*(WARNING|ERROR)" "$ARMHF/work/rcheck/guatiao.$p.Rcheck/00check.log"; then
+              sudo cat "$ARMHF/work/rcheck/guatiao.$p.Rcheck/00check.log"
+              exit 1
+            fi
+          done
+      - name: Octave
+        if: matrix.suite == 'octave'
+        # The suite from a copy, so the MEX files are built outside the
+        # tree; every greeter required, as on the octave job.
+        run: |
+          sudo cp -r "$ARMHF/work/src/bindings/matlab/guatiao" "$ARMHF/work/octave"
+          sudo chroot "$ARMHF" /usr/bin/env -i HOME=/root PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            GUATIAO_LIBRARY=/work/lib GUATIAO_REPO=/work/src GUATIAO_PY_BRIDGE=/work/py/libguatiao_source_py.so \
+            GUATIAO_GO_LIBRARY=/work/go GUATIAO_REQUIRE_ALL=1 \
+            sh -c 'cd /work/octave/tests && octave-cli --no-gui --eval "run_tests(\"Exit\", true)"'
+      - name: Fortran
+        if: matrix.suite == 'fortran'
+        # The binding's CMake build and its tests, with gfortran; a stated
+        # skip fails the step, as on the fortran job.
+        run: |
+          sudo chroot "$ARMHF" /usr/bin/env -i HOME=/root PATH=/usr/bin:/bin LANG=C.UTF-8 GUATIAO_LIBRARY=/work/lib \
+            GUATIAO_REQUIRE_ALL=1 \
+            sh -c 'cmake -S /work/src/bindings/fortran/guatiao -B /work/fortran && cmake --build /work/fortran -j 4 && ctest --test-dir /work/fortran --output-on-failure'
