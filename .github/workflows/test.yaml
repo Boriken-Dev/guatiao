@@ -635,6 +635,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             bindings/node/package-lock.json
+            bindings/node/guatiao-remote/package-lock.json
             examples/package-lock.json
       - name: Install
         # The workspace: guatiao, guatiao-serde and guatiao-intake, the
@@ -681,16 +682,36 @@ jobs:
         env:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
           NO_COLOR: "1"
+      - name: The remote protocol's TypeScript client
+        # Its own install (outside the workspace): the shared vectors, a
+        # scripted peer and guatiao-remote-server over WebSocket, in Node
+        # everywhere and in Chrome (the runner's own) on Linux. The
+        # workspace build above built the server and derived_greeter.
+        working-directory: bindings/node/guatiao-remote
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+          if [ "$RUNNER_OS" = Linux ]; then
+            export CHROME_EXECUTABLE="$(command -v google-chrome)"
+            npx vitest run 2>&1 | tee remote-test.log
+          else
+            npx vitest run --project node 2>&1 | tee remote-test.log
+          fi
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -nE "[0-9]+ skipped" remote-test.log; then exit 1; fi
+        env:
+          NO_COLOR: "1"
       - name: What the packages ship
         if: matrix.os == 'ubuntu-latest' && matrix.node == '24'
         working-directory: bindings/node
         run: |
-          for p in guatiao guatiao-serde guatiao-intake; do
+          for p in guatiao guatiao-serde guatiao-intake guatiao-remote; do
             (cd "$p" && npm pack --dry-run --json > pack.json)
           done
           python3 - <<'EOF'
           import json
-          for p in ("guatiao", "guatiao-serde", "guatiao-intake"):
+          for p in ("guatiao", "guatiao-serde", "guatiao-intake", "guatiao-remote"):
               files = {f["path"] for f in json.load(open(f"{p}/pack.json"))[0]["files"]}
               print(p, sorted(files))
               for need in ("AGENTS.md", "README.md", "LICENSE", "package.json", "dist/index.js", "dist/index.d.ts"):
