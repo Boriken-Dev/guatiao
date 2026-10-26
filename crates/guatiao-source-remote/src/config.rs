@@ -12,7 +12,7 @@
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `security` | `none`, `server-tls` or `mutual-tls`: none on a child, `local://` and `shm://` (the only one they run), mutual TLS on every network transport unless told |
 //! | `key`, `key_file` | the pre-shared key, as text or a file's bytes: proved both ways with `none`, and at server TLS when the server asks for it |
-//! | `token` | what a client presents when its server requires a token |
+//! | `token` | what a client presents when its server requires a token; one empty or only white space is refused |
 //! | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 //! | `identity_file` | TLS: the identity file instead (made when absent) |
 //! | `pins` | TLS: the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
@@ -160,6 +160,11 @@ pub fn options_of(map: &Map, trust: Trust) -> Result<LinkOptions, ProviderError>
         options = options.key(&key);
     }
     if let Some(token) = text(map, "token")? {
+        if token.trim().is_empty() {
+            return Err(refused(
+                "`token` is empty or only white space, and proves nothing: name the token the server requires, or leave `token` out",
+            ));
+        }
         options = options.token(token);
     }
     if let Some(ms) = number(map, "timeout_ms")? {

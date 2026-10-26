@@ -4,8 +4,9 @@
 
 //! The handshake at server TLS (trust 3), over a transport standing in for
 //! one that encrypts and proved the server: the client proves itself by the
-//! key when the server's WELCOME carries a proof, else by a token, and a
-//! transport that encrypts nothing is refused at both ends.
+//! key when the server's WELCOME carries a proof, else by a token; an
+//! empty token and a transport that encrypts nothing are refused at both
+//! ends.
 
 #![cfg(feature = "tcp")]
 
@@ -132,6 +133,24 @@ fn a_server_with_a_token_takes_the_token_alone() {
     let (status, why) = link(&server, true, at_server_tls().token("wrong")).unwrap_err();
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{why}");
     assert!(why.contains("token"), "{why}");
+}
+
+#[test]
+fn a_server_with_an_empty_token_admits_nobody() {
+    for token in ["", " \t"] {
+        let server = common::server(at_server_tls().token(token));
+        let (status, why) = link(&server, true, at_server_tls().key(b"k")).unwrap_err();
+        assert_eq!(status, Status::GUATIAO_ERR_UNSUPPORTED, "{why}");
+        assert!(why.contains("this server's token is empty"), "{why}");
+    }
+}
+
+#[test]
+fn a_client_with_an_empty_token_is_refused_before_it_sends() {
+    let server = common::server(at_server_tls().token("t"));
+    let (status, why) = link(&server, true, at_server_tls().token("")).unwrap_err();
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{why}");
+    assert!(why.contains("the token is empty"), "{why}");
 }
 
 #[test]

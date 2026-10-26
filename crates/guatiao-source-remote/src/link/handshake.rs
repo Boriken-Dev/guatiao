@@ -108,6 +108,17 @@ impl Required {
         #[cfg(not(feature = "tcp"))]
         same(given, &self.token)
     }
+
+    /// Whether a client presenting `given` is admitted: never one
+    /// presenting none, whatever the token required.
+    pub(crate) fn admits(&self, given: Option<&str>) -> bool {
+        given.is_some_and(|given| self.is(given.as_bytes()))
+    }
+}
+
+/// Whether a token is empty or only white space, which proves nothing.
+pub(crate) fn blank(token: &str) -> bool {
+    token.trim().is_empty()
 }
 
 /// What one side offers in its HELLO or WELCOME.
@@ -199,6 +210,14 @@ mod offer_tests {
         assert!(!required.is(b"ab"));
         assert!(!required.is(b"abcd"));
         assert!(!required.is(b""));
+    }
+
+    #[test]
+    fn a_client_presenting_no_token_is_never_admitted() {
+        assert!(!Required::new("").admits(None));
+        assert!(!Required::new("abc").admits(None));
+        assert!(Required::new("abc").admits(Some("abc")));
+        assert!(blank("") && blank(" \t\r\n") && !blank(" t "));
     }
 
     /// A network peer timing its refusals learns nothing of the token's

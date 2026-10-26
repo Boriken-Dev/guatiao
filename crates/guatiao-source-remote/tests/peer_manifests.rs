@@ -330,6 +330,30 @@ fn a_peer_that_cannot_be_reached_is_reported_once_and_the_others_served() {
 }
 
 #[test]
+fn an_empty_token_is_refused_for_one_peer_and_for_every_peer_described() {
+    let mut one = Map::new();
+    one.set("connect", "tcp://127.0.0.1:7000");
+    one.set("security", "none");
+    one.set("key", KEY);
+    one.set("token", "");
+    let mut every = Map::new();
+    let mut dirs = List::new();
+    dirs.push("peers");
+    every.set("dirs", dirs);
+    every.set("key", KEY);
+    every.set("token", " \n");
+    for config in [one, every] {
+        let refused = RemoteSource::from_config(&config).unwrap_err();
+        assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert!(
+            refused.message().contains("`token` is empty"),
+            "{}",
+            refused.message()
+        );
+    }
+}
+
+#[test]
 fn one_peer_and_manifests_of_peers_are_one_or_the_other() {
     let mut config = Map::new();
     config.set("connect", "tcp://127.0.0.1:7000");
