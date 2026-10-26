@@ -44,6 +44,7 @@ node_modules/
 /bindings/node/guatiao/dist/
 /bindings/node/guatiao-serde/dist/
 /bindings/node/guatiao-intake/dist/
+/bindings/node/guatiao-remote/dist/
 *.tsbuildinfo
 
 # Go: what `go build` writes beside the examples
