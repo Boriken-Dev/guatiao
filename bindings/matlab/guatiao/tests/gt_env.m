@@ -40,6 +40,7 @@ function out = gt_env(op, varargin)
       out = fullfile(lib_dir(), lib_file(varargin{1}));
     case 'examples'
       addpath(fullfile(repo_root(), 'examples', 'greeter_kind', 'matlab'));
+      addpath(fullfile(repo_root(), 'examples', 'tally_kind', 'matlab'));
       addpath(fullfile(repo_root(), 'examples', 'matlab_provider', 'mlgreeter'));
       out = true;
     case 'c_greeter'
