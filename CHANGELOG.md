@@ -1549,6 +1549,11 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a peer manifest whose identity file the first
+  refresh makes stays the same peer.** Its stamp was taken before the
+  identity (or a state directory's) was made, so the next refresh saw a
+  new peer: it connected again and an unreachable one was reported
+  twice.
 - **guatiao-source-remote: a call refused before it runs lets go of the
   objects handed over in it.** A call the serving side refused as too
   busy, as made during a call that had returned, as nested too deep, or
