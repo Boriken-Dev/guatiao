@@ -1266,6 +1266,13 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: a server takes its kinds from the providers it
+  serves.** A provider's own descriptions (`Provider::kind_descriptions()`,
+  carried by derived and bridged providers) describe its kinds, so
+  `guatiao-remote-server` serves such libraries with no `--kinds` file.
+  `--kinds` and `Described` still describe the kinds they name; a
+  provider whose own description calls a kind otherwise than the one
+  served (documentation and slots past the shorter aside) is left out.
 - **guatiao-source-remote: described peers are listed at once, and a
   replaced peer serves on until its successor opens.** A refresh lists up
   to 16 peers together, so peers slow to refuse cost one wait instead of
