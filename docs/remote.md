@@ -191,9 +191,15 @@ below), and `--acl PATH` or `--range CIDR` the access control list.
 
 It serves the providers of the libraries it loads (`--load`, `--scan`)
 and of the sources it adds (`--source path=json`, refreshed every
-`--refresh-ms`), for the kinds it has descriptions of (`--kinds`, a kind
-crate's `<crate>.kinds.json`). A provider of a kind it has no
-description of is not served. `--stdio` serves one link on stdin and
+`--refresh-ms`), for the kinds it has descriptions of: those a provider
+carries of its own (every derived provider and every provider a bridge
+serves does), and those `--kinds` names (a kind crate's
+`<crate>.kinds.json`), which a hand-written C provider needs. A kind
+`--kinds` describes is served through that description; otherwise the
+first provider describing a kind decides it. A provider whose own
+description calls a kind otherwise (its documentation, and slots past
+the shorter description, aside) is left out, as is a provider of a kind
+it has no description of. `--stdio` serves one link on stdin and
 stdout, for a host that starts it as its child. In Rust, `Server::new`
 over a `Registry` does the same.
 
