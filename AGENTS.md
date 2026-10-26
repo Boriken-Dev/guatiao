@@ -112,7 +112,8 @@ built by `cargo build -p myapp --target wasm32-unknown-unknown --release`;
 `CHROME_EXECUTABLE` names the browser where it is not found). The remote
 suites start the native `guatiao-remote-server` and `derived_greeter`
 (`cargo build -p guatiao-source-remote -p derived_greeter --features
-guatiao-source-remote/ws`, or the workspace build), on the VM as in a
+guatiao-source-remote/ws,guatiao-source-remote/tls`, or the workspace
+build: `wss://` needs `tls`), on the VM as in a
 browser:
 
 ```bash
@@ -243,7 +244,7 @@ done
 
 The TypeScript client of the remote protocol, a package of its own, after
 `cargo build -p guatiao-source-remote -p derived_greeter --features
-guatiao-source-remote/ws` (`GUATIAO_REMOTE_SERVER` names the server when
+guatiao-source-remote/ws,guatiao-source-remote/tls` (`GUATIAO_REMOTE_SERVER` names the server when
 the target directory is elsewhere; `CHROME_EXECUTABLE` the Chrome its
 browser project drives, else the platform's usual path):
 

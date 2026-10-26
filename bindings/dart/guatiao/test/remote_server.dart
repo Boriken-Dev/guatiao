@@ -88,7 +88,7 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
     throw StateError(
       'no ${server.path} beside ${library.path}: build them with '
       '`cargo build -p guatiao-source-remote -p derived_greeter '
-      '--features guatiao-source-remote/ws` '
+      '--features guatiao-source-remote/ws,guatiao-source-remote/tls` '
       '(or name the server in GUATIAO_REMOTE_SERVER)',
     );
   }
