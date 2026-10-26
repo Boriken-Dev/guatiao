@@ -806,7 +806,16 @@ certificate, which Chrome did not to a profile holding none (whether it
 presents one a user installed is not measured). A session carries one bidirectional stream with the frames
 exactly as over TCP; the server takes every session, whatever its path,
 and does not read the `Origin` a browser sends. Datagrams are the
-session's (HTTP/3 datagrams): `Link::datagrams()` as over QUIC.
+session's (HTTP/3 datagrams): `Link::datagrams()` as over QUIC, and a
+page's `link.datagrams` over the browser's `transport.datagrams`, the
+payload alone either way. In TypeScript `send(payload)` (`BadValue` past
+`maxSize`, the browser's `maxDatagramSize`; `Gone` once the link ended)
+and `receive()`, a promise of the next one that rejects `Gone` when the
+link ends; in Dart `send(payload)`, `maxSize` and `received`, a stream
+done when the link ends. Over a WebSocket there are none (`undefined`,
+`null`). A server reading and answering them is
+`crates/guatiao-source-remote/examples/datagram_echo.rs`, which sends
+every datagram back.
 
 A browser trusts a certificate no authority issued when the page names
 its SHA-256 (`serverCertificateHashes`), and only one valid for at most

@@ -621,14 +621,21 @@ await link.close();
   needs a client certificate the browser presents (else `Gone`).
   One bidirectional stream carries each frame behind its `u32` LE
   length; a frame over `maxFrame` ends the link. A session that does not
-  open, or a certificate matching no pin, is `Gone`.
+  open, or a certificate matching no pin, is `Gone`. `link.datagrams`
+  (`RemoteDatagrams?`, `null` over a WebSocket) carries the session's
+  datagrams beside the calls, the payload alone: `int maxSize` (the
+  browser's `maxDatagramSize`), `send(Uint8List)` (`BadValue` past
+  `maxSize`, `Gone` once the link ended; a lost one is not said),
+  `Stream<Uint8List> received` (listened to once, done when the link
+  ends).
   `RemoteLink.over(RemoteChannel,
   {RemoteTrust trust = trusted, List<int>? key, String? token, ...})` runs
   the handshake over any message transport: `RemoteChannel` is `messages`
   (a `Stream<Uint8List>`, one frame body each), `send(Uint8List)`,
-  `close()`. `timeout: null` waits as long as the link lives; a call
-  waiting for a place under the peer's `max_calls` counts against its
-  timeout and answers `Busy` when it runs out.
+  `close()`, `datagrams` (`null` for a channel without them).
+  `timeout: null` waits as long as the link lives; a call waiting for a
+  place under the peer's `max_calls` counts against its timeout and
+  answers `Busy` when it runs out.
 - A server that does not prove the key fails the connect with
   `BadValue` ("the server does not hold this link's key"); a server that
   refuses the client's proof ends the link, and the first call answers
@@ -788,8 +795,9 @@ A process whose pointers are not four or eight bytes wide gets
 
 - Kinds and providers on the web: a kind table is native code's (a
   page calls a server's providers through `remote.dart`).
-- WebTransport in `remote.dart`; pinning a server or presenting a chosen
-  client certificate from a page (a browser does neither).
+- Presenting a chosen client certificate from a page (a browser does
+  not); pinning a server over a page's WebSocket (only WebTransport takes
+  pins).
 - Serving Dart to a host that is not this Dart process (a bridge, as
   guatiao-source-py is for Python).
 
