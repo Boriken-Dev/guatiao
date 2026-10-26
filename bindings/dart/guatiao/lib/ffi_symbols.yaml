@@ -30,6 +30,8 @@ files:
         name: guatiao_datetime_parse
       c:@F@guatiao_duration_read:
         name: guatiao_duration_read
+      c:@F@guatiao_kind_document_read:
+        name: guatiao_kind_document_read
       c:@F@guatiao_list_clear:
         name: guatiao_list_clear
       c:@F@guatiao_list_discard:

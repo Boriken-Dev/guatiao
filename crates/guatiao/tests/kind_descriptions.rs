@@ -12,6 +12,7 @@
 
 use std::sync::OnceLock;
 
+use guatiao::exports::kind::guatiao_kind_document_read;
 use guatiao::exports::library::{
     guatiao_registry_free, guatiao_registry_kind_descriptions, guatiao_registry_new,
     guatiao_registry_register_entry,
@@ -132,6 +133,49 @@ fn a_host_reads_what_each_provider_carries() {
     let read = of("carries_greeters").unwrap();
     assert_eq!(read, KindDescription::document_json(COMMITTED).unwrap());
     assert!(read.iter().any(|k| k.name() == "greeter"));
+}
+
+/// A C caller with no JSON reader reads a kind crate's document through
+/// the library, and is told where text that is not one goes wrong.
+#[test]
+fn a_c_caller_reads_a_document_from_its_text() {
+    let alloc = Alloc::rust().as_raw();
+    let read = |text: &str| {
+        let (mut out, mut why) = (Value::absent(), Value::absent());
+        // SAFETY: the text is readable, the allocator ours, the slots
+        // writable.
+        let status =
+            unsafe { guatiao_kind_document_read(Str::new(text), alloc, &mut out, &mut why) };
+        (status, out, why)
+    };
+    let (status, document, why) = read(COMMITTED);
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(why, Value::absent());
+    assert_eq!(
+        KindDescription::document(&document).unwrap(),
+        KindDescription::document_json(COMMITTED).unwrap()
+    );
+    for (text, says) in [
+        (r#"{"format":1,"kinds":["#, "`byte 21` is not a value"),
+        (r#"{"format":2,"kinds":[]}"#, "`format` is not 1"),
+        (
+            r#"{"format":1,"kinds":[{"name":"k","floor_hash":1,"object":false,"slots":[{"name":"x","required":true,"fallible":false,"args":[{"name":"a","type":"u256"}]}]}]}"#,
+            "`kinds[0].slots[0].args[0].type`",
+        ),
+    ] {
+        let (status, out, why) = read(text);
+        assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{text}");
+        assert_eq!(out, Value::absent(), "{text}");
+        let why: &str = TryAsRef::try_as_ref(&why).expect("why is a string");
+        assert!(why.contains(says), "{why}");
+    }
+    // `why` may be null.
+    let mut out = Value::absent();
+    // SAFETY: as above, with no slot for why.
+    let status = unsafe {
+        guatiao_kind_document_read(Str::new("nope"), alloc, &mut out, core::ptr::null_mut())
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 }
 
 #[test]

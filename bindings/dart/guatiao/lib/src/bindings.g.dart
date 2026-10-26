@@ -321,6 +321,36 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_kind_document_read(
+    guatiao_str text,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_value> why,
+  ) {
+    return _guatiao_kind_document_read(text, alloc, out, why);
+  }
+
+  late final _guatiao_kind_document_readPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_kind_document_read');
+  late final _guatiao_kind_document_read = _guatiao_kind_document_readPtr
+      .asFunction<
+        int Function(
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_list_clear(ffi.Pointer<guatiao_value> node) {
     return _guatiao_list_clear(node);
   }

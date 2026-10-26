@@ -807,6 +807,24 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
                 )
             });
         }),
+        ("guatiao_kind_document_read", || {
+            let mut why = stale();
+            // SAFETY: a null allocator is the failure under test; `why`
+            // is a writable slot.
+            leaves_absent(
+                "kind_document_read",
+                Status::GUATIAO_ERR_ALLOC,
+                |out| unsafe {
+                    guatiao::exports::kind::guatiao_kind_document_read(
+                        Str::new("{}"),
+                        core::ptr::null(),
+                        out,
+                        &mut why,
+                    )
+                },
+            );
+            assert!(is_absent(&why), "kind_document_read left `why` as it was");
+        }),
         ("guatiao_value_from_walker", || {
             let walker = guatiao::exports::visit::WalkerTable {
                 struct_size: size_of::<guatiao::exports::visit::WalkerTable>() as u32,
