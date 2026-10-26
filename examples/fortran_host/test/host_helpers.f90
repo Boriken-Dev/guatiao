@@ -294,14 +294,15 @@ contains
     character(:), allocatable :: cc
     character(8), parameter :: tries(3) = [character(8) :: 'clang', 'cc', 'gcc']
     character(:), allocatable :: null
-    integer :: i, code
+    integer :: i, code, st
     null = '/dev/null'
     if (gt_windows) null = 'NUL'
     cc = env('CC')
     if (len(cc) > 0) return
     do i = 1, size(tries)
-      call execute_command_line(trim(tries(i)) // ' --version > ' // null // ' 2>&1', exitstat=code)
-      if (code == 0) then
+      ! cmdstat: gfortran stops the program for a command not found without it.
+      call execute_command_line(trim(tries(i)) // ' --version > ' // null // ' 2>&1', exitstat=code, cmdstat=st)
+      if (st == 0 .and. code == 0) then
         cc = trim(tries(i))
         return
       end if
