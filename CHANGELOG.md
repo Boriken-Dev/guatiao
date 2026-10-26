@@ -25,6 +25,13 @@ write now.
   in one registry that way. `Loaded::source` and `Provider::source()`
   answer it in Rust, and the C library and provider maps carry
   `"source"`, so every binding sees it.
+- **Python: a kind read from its description.** `kinds.kinds_of(document)`
+  answers each `Kind` of a `<crate>.kinds.json` (its text, its parsed
+  object, or what `Registry.kind_descriptions` answers), the same a kind
+  class builds, and `python -m guatiao.kinds DOCUMENT -o module.py` writes
+  the kinds as typed `Protocol` classes, docs included (`--check` compares;
+  `kinds.generate` from code). `examples/greeter_kind/python/greeter_kind.py`
+  is now that module, written from the description.
 - **A library carries its kinds' descriptions, so a host needs no file
   for them.** `guatiao_provider_info` gains `kind_descriptions`, appended:
   one JSON document (the format of `<crate>.kinds.json`) describing every
