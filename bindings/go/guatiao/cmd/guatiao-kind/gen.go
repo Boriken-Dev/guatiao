@@ -24,23 +24,38 @@ const bindingPath = "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 
 // goMethod is one method of an interface in the package.
 type goMethod struct {
-	iface   string
+	iface       string
+	name        string
+	params      []goParam
+	results     []string
+	resultExprs []ast.Expr
+	file        *ast.File
+	doc         *ast.CommentGroup
+	pos         token.Pos
+}
+
+// goIface is an interface of the package, kind or not.
+type goIface struct {
 	name    string
-	params  []goParam
-	results []string
+	doc     *ast.CommentGroup
 	file    *ast.File
+	pos     token.Pos
+	methods []*goMethod
 }
 
 type goParam struct {
 	name, typ string
 	expr      ast.Expr
+	unnamed   bool // written without a name; load called it a<i>
 }
 
 // kindDecl is an interface marked as a kind.
 type kindDecl struct {
 	iface, kind, table string
 	required           map[string]*goMethod
+	order              []*goMethod // required, as the interface lists them
 	file               *ast.File
+	doc                *ast.CommentGroup
 }
 
 type pkgInfo struct {
@@ -49,6 +64,8 @@ type pkgInfo struct {
 	kinds    []*kindDecl
 	byIface  map[string]*kindDecl
 	methods  map[string][]*goMethod
+	ifaces   map[string]*goIface  // every interface, by name
+	types    map[string]ast.Expr  // every other type declaration, by name
 	binding  map[*ast.File]string // the binding's import name in each file
 	imports  map[string]string    // import name -> path, across the files declaring kinds
 	fset     *token.FileSet
@@ -79,35 +96,96 @@ func run(dir, from, out string, check bool) error {
 	if len(pkg.kinds) == 0 {
 		return fmt.Errorf("no interface in %s is marked //guatiao:kind", dir)
 	}
-	importPath, err := importPathOf(dir)
+	return pkg.write(dir, from, out, check, tableOf)
+}
+
+// runBorn writes the glue of a package whose kinds are born in Go: their
+// document is written from the interfaces to document (relative to dir),
+// and the glue from that document, as from any other.
+func runBorn(dir, document, out string, check bool) error {
+	pkg, err := load(dir, out)
 	if err != nil {
 		return err
+	}
+	if len(pkg.kinds) == 0 {
+		return fmt.Errorf("no interface in %s is marked //guatiao:kind", dir)
+	}
+	text, err := pkg.describe()
+	if err != nil {
+		return err
+	}
+	doc, err := readDocument(text)
+	if err != nil {
+		return err
+	}
+	files, err := pkg.glue(dir, document, out,
+		func(k *kindDecl) (*cTable, error) { return describedTable(doc, k.kind, k.table) })
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, document)
+	if check {
+		there, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(there, text) {
+			return fmt.Errorf("%s is not the document guatiao-kind writes from the interfaces: run go generate", path)
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, text, 0o644); err != nil {
+			return err
+		}
+	}
+	return writeGlue(dir, document, out, check, files)
+}
+
+// write writes (or with check, compares) the glue of the package's kinds,
+// each kind's table given by tableOf; from names where they were read.
+func (p *pkgInfo) write(dir, from, out string, check bool, tableOf func(*kindDecl) (*cTable, error)) error {
+	files, err := p.glue(dir, from, out, tableOf)
+	if err != nil {
+		return err
+	}
+	return writeGlue(dir, from, out, check, files)
+}
+
+// glue is the glue of the package's kinds, by file name, written nowhere.
+func (p *pkgInfo) glue(dir, from, out string, tableOf func(*kindDecl) (*cTable, error)) (map[string][]byte, error) {
+	importPath, err := importPathOf(dir)
+	if err != nil {
+		return nil, err
 	}
 	h := fnv.New32a()
 	h.Write([]byte(importPath))
-	pkg.prefix = fmt.Sprintf("gk%08x", h.Sum32())
+	p.prefix = fmt.Sprintf("gk%08x", h.Sum32())
 
 	var plans []*kindPlan
-	for _, k := range pkg.kinds {
+	for _, k := range p.kinds {
 		table, err := tableOf(k)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		plan, err := pkg.plan(k, table)
+		plan, err := p.plan(k, table)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		plans = append(plans, plan)
 	}
-	goSrc, err := pkg.emitGo(plans, from, out)
+	goSrc, err := p.emitGo(plans, from, out)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	files := map[string][]byte{
+	return map[string][]byte{
 		out + ".go": goSrc,
-		out + ".h":  pkg.emitH(plans, from, out),
-		out + ".c":  pkg.emitC(plans, from, out),
-	}
+		out + ".h":  p.emitH(plans, from, out),
+		out + ".c":  p.emitC(plans, from, out),
+	}, nil
+}
+
+// writeGlue writes the files glue made beside the package's sources, or
+// with check fails when what is there differs.
+func writeGlue(dir, from, out string, check bool, files map[string][]byte) error {
 	for _, name := range []string{out + ".go", out + ".h", out + ".c"} {
 		path := filepath.Join(dir, name)
 		if check {
@@ -159,6 +237,7 @@ func load(dir, out string) (*pkgInfo, error) {
 		return nil, err
 	}
 	pkg := &pkgInfo{byIface: map[string]*kindDecl{}, methods: map[string][]*goMethod{},
+		ifaces: map[string]*goIface{}, types: map[string]ast.Expr{},
 		binding: map[*ast.File]string{}, imports: map[string]string{}, fset: fset}
 	pkg.exprText = func(e ast.Expr) string { return types.ExprString(e) }
 	for _, e := range entries {
@@ -192,12 +271,15 @@ func load(dir, out string) (*pkgInfo, error) {
 				ts := spec.(*ast.TypeSpec)
 				it, ok := ts.Type.(*ast.InterfaceType)
 				if !ok {
+					pkg.types[ts.Name.Name] = ts.Type
 					continue
 				}
 				doc := ts.Doc
 				if doc == nil && len(gd.Specs) == 1 {
 					doc = gd.Doc
 				}
+				gi := &goIface{name: ts.Name.Name, doc: doc, file: f, pos: ts.Pos()}
+				pkg.ifaces[gi.name] = gi
 				var decl *kindDecl
 				if doc != nil {
 					for _, c := range doc.List {
@@ -209,7 +291,7 @@ func load(dir, out string) (*pkgInfo, error) {
 							// The table's name, which only a header needs, is <kind>_vtable unless said.
 							parts = append(parts, parts[0]+"_vtable")
 							decl = &kindDecl{iface: ts.Name.Name, kind: parts[0], table: parts[1],
-								required: map[string]*goMethod{}, file: f}
+								required: map[string]*goMethod{}, file: f, doc: doc}
 						}
 					}
 				}
@@ -221,7 +303,7 @@ func load(dir, out string) (*pkgInfo, error) {
 						}
 						continue
 					}
-					gm := &goMethod{iface: ts.Name.Name, name: m.Names[0].Name, file: f}
+					gm := &goMethod{iface: ts.Name.Name, name: m.Names[0].Name, file: f, doc: m.Doc, pos: m.Pos()}
 					i := 0
 					for _, p := range ft.Params.List {
 						names := p.Names
@@ -229,7 +311,8 @@ func load(dir, out string) (*pkgInfo, error) {
 							names = []*ast.Ident{{Name: fmt.Sprintf("a%d", i)}}
 						}
 						for _, n := range names {
-							gm.params = append(gm.params, goParam{name: n.Name, typ: pkg.exprText(p.Type), expr: p.Type})
+							gm.params = append(gm.params, goParam{name: n.Name, typ: pkg.exprText(p.Type), expr: p.Type,
+								unnamed: len(p.Names) == 0})
 							i++
 						}
 					}
@@ -238,12 +321,15 @@ func load(dir, out string) (*pkgInfo, error) {
 							count := max(1, len(r.Names))
 							for j := 0; j < count; j++ {
 								gm.results = append(gm.results, pkg.exprText(r.Type))
+								gm.resultExprs = append(gm.resultExprs, r.Type)
 							}
 						}
 					}
 					pkg.methods[gm.name] = append(pkg.methods[gm.name], gm)
+					gi.methods = append(gi.methods, gm)
 					if decl != nil {
 						decl.required[gm.name] = gm
+						decl.order = append(decl.order, gm)
 					}
 				}
 				if decl != nil {

@@ -260,6 +260,28 @@ The binding must be imported as `guatiao`. A slot's method is its C name
 in CamelCase (`greet_into` is `GreetInto`); `guatiao-kind -check` fails
 when the glue is not what it would write.
 
+**A kind born in Go** (no description, no header): `guatiao-kind -document
+<file>` reads the interfaces into the description, writes it there (from
+the package's directory; `-check` compares it instead), and the glue from
+it. Directives in doc comments say what a Go type cannot: on the kind's
+interface `//guatiao:appended <Iface>...` (the appended slots, an
+interface of one method each, in table order) and `//guatiao:floorhash
+<n>` (else computed as `#[guatiao::kind]` would for the same required
+slots); on a method `//guatiao:infallible` (else fallible) and
+`//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable`, `//guatiao:mut`
+followed by argument names. A `Ref`/`MapRef`/`ListRef` is borrowed (a
+list must be lent), `*guatiao.Value` a value handed over, a struct or map
+type a map, a slice a list, `any` a value (borrowed unless `taken`),
+`[]byte` bytes (`mut`: written in place), an object kind's interface an
+object handed over unless `lent`; answered, a struct or map is a map. A
+kind's name is its marker's, a slot's its method's in snake_case
+(capitals in a row are refused), docs its doc comments, an appended
+slot's falling back to its interface's; the document lists the kinds in
+the order the package declares them (files by name). Types from another
+package are refused, object kinds of another package included, as are
+two kinds of one name, two slots of one name, and an appended slot's
+method declared in a second interface. A refusal writes nothing.
+
 | C | a method takes / returns |
 | --- | --- |
 | `guatiao_str` | `string` (`ErrBadValue` served when not UTF-8) |
