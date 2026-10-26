@@ -318,31 +318,33 @@ pub fn encode_writebacks(
     args: &[Decoded<'_>],
     out: &mut Vec<u8>,
 ) -> Result<(), ProtocolError> {
-    for (desc, arg) in slot.args().iter().zip(args) {
-        match (desc.ty(), arg) {
-            (
-                ArgType::Tree {
-                    pass: Pass::Lent, ..
-                },
-                Decoded::Value(Some(v)),
-            ) => put_value(out, v)?,
-            (
-                ArgType::Tree {
-                    pass: Pass::Lent, ..
-                },
-                Decoded::Map(m),
-            ) => put_walk(out, m)?,
-            (
-                ArgType::Tree {
-                    pass: Pass::Lent, ..
-                },
-                Decoded::List(l),
-            ) => put_walk(out, l)?,
-            (ArgType::BytesMut, Decoded::Buffer(b)) => put_bytes(out, b),
-            _ => {}
+    for (i, (desc, arg)) in slot.args().iter().zip(args).enumerate() {
+        if !written_back(desc.ty()) {
+            continue;
+        }
+        match arg {
+            Decoded::Value(Some(v)) => put_value(out, v)?,
+            Decoded::Map(m) => put_walk(out, m)?,
+            Decoded::List(l) => put_walk(out, l)?,
+            Decoded::Buffer(b) => put_bytes(out, b),
+            _ => return Err(mismatch(i, slot, "a tree or buffer to write back")),
         }
     }
     Ok(())
+}
+
+/// Whether an argument of type `ty` is written back after the answer: what
+/// [`encode_writebacks`] writes, and what keeps a large answer inside its
+/// frame. [`decode_answer`] reads the same arguments by their lent forms.
+fn written_back(ty: &ArgType) -> bool {
+    matches!(
+        ty,
+        ArgType::BytesMut
+            | ArgType::Tree {
+                pass: Pass::Lent,
+                ..
+            }
+    )
 }
 
 /// Appends a slot's answer. An object answered is registered by `export`,
@@ -373,16 +375,7 @@ pub fn encode_answer(
 
 /// Whether a call of `slot` writes anything back after its answer.
 fn writes_back(slot: &SlotDescription) -> bool {
-    slot.args().iter().any(|d| {
-        matches!(
-            d.ty(),
-            ArgType::BytesMut
-                | ArgType::Tree {
-                    pass: Pass::Lent,
-                    ..
-                }
-        )
-    })
+    slot.args().iter().any(|d| written_back(d.ty()))
 }
 
 /// As [`encode_answer`], but a tree answered for a slot that writes nothing
@@ -545,6 +538,56 @@ mod tests {
             assert_eq!(tail.is_some(), tail_expected);
             head.extend_from_slice(tail.unwrap_or_default());
             assert_eq!(head, whole);
+        }
+    }
+
+    /// A slot of each argument type, each answering a map; those named
+    /// `back_` write back.
+    const WRITES: &str = r#"{"format": 1, "kinds": [{"name": "w", "floor_hash": 1, "object": false,
+      "slots": [
+        {"name": "back_lent_map", "args": [{"name": "a", "type": "map", "pass": "lent"}]},
+        {"name": "back_lent_list", "args": [{"name": "a", "type": "list", "pass": "lent"}]},
+        {"name": "back_lent_value", "args": [{"name": "a", "type": "value", "pass": "lent"}]},
+        {"name": "back_buffer", "args": [{"name": "a", "type": "bytes_mut"}]},
+        {"name": "map", "args": [{"name": "a", "type": "map", "pass": "borrowed"}]},
+        {"name": "taken_list", "args": [{"name": "a", "type": "list", "pass": "taken"}]},
+        {"name": "value", "args": [{"name": "a", "type": "value", "pass": "borrowed", "nullable": true}]},
+        {"name": "text", "args": [{"name": "a", "type": "str"}]},
+        {"name": "bytes", "args": [{"name": "a", "type": "bytes"}]},
+        {"name": "n", "args": [{"name": "a", "type": "i64"}]}]}]}"#;
+
+    /// What a call writes back is one rule: the slots whose writebacks
+    /// `encode_writebacks` writes are those whose large answer
+    /// `encode_answer_tail` keeps inside the frame.
+    #[test]
+    fn the_slots_that_write_back_are_the_slots_whose_answer_stays_whole() {
+        let slot = r#""required": true, "fallible": false, "answer": {"type": "map"}, "args""#;
+        let doc = WRITES.replace(r#""args""#, slot);
+        let kind = KindDescription::document_json(&doc).unwrap().remove(0);
+        let mut large = Map::new();
+        large.set("k", "v".repeat(TAIL).as_str());
+        for slot in kind.slots() {
+            let arg = match slot.args()[0].ty() {
+                ArgType::Tree {
+                    tree: Tree::Map, ..
+                } => Decoded::Map(Map::new()),
+                ArgType::Tree {
+                    tree: Tree::List, ..
+                } => Decoded::List(List::new()),
+                ArgType::Tree { .. } => Decoded::Value(Some(Value::from(true))),
+                ArgType::BytesMut => Decoded::Buffer(vec![1, 2]),
+                ArgType::Str => Decoded::Str("s"),
+                ArgType::Bytes => Decoded::Bytes(b"b"),
+                _ => Decoded::Int(1),
+            };
+            let back = slot.name().starts_with("back_");
+            let mut written = Vec::new();
+            encode_writebacks(slot, &[arg], &mut written).unwrap();
+            assert_eq!(!written.is_empty(), back, "{}", slot.name());
+            let mut out = Vec::new();
+            let tail =
+                encode_answer_tail(slot, Answer::Map(large.clone()), &mut out, &mut none).unwrap();
+            assert_eq!(tail.is_none(), back, "{}", slot.name());
         }
     }
 
