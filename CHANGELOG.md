@@ -1543,6 +1543,12 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a refused token no longer tells its length.**
+  A server compared a client's token with its own only when both were as
+  long, so a client timing its refusals could learn the required token's
+  length. With `tcp` (every transport another machine reaches) it now
+  compares their SHA-256 digests (its own made once), all 32 bytes every
+  time.
 - **guatiao-source-remote: ending a server's links ends a handshake in
   flight at once on every transport.** On Windows a socket shut down from
   another thread does not wake a read blocked on it, so `end_links` left a
