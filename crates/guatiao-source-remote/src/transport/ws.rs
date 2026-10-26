@@ -15,7 +15,7 @@ use core::net::SocketAddr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{Mutex, TryLockError};
 
 use tungstenite::protocol::{Role, WebSocketConfig};
@@ -75,9 +75,7 @@ impl Raw {
         #[cfg(not(feature = "tls"))]
         let _ = cleanly;
         match self {
-            Raw::Plain(s) => {
-                let _ = s.shutdown(Shutdown::Both);
-            }
+            Raw::Plain(s) => super::tcp::shut(s),
             #[cfg(feature = "tls")]
             Raw::Tls(t) if cleanly => t.close(),
             #[cfg(feature = "tls")]

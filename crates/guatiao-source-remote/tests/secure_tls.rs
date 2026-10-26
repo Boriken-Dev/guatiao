@@ -296,6 +296,21 @@ fn the_access_control_list_closes_a_denied_source_before_the_handshake() {
 }
 
 #[test]
+fn ending_the_links_ends_one_still_in_its_tls_handshake() {
+    let server_id = Identity::generate().unwrap();
+    let config = TlsConfig::new(server_id).pins([Identity::generate().unwrap().fingerprint()]);
+    let listener = TlsListen::bind("127.0.0.1:0", &config).unwrap();
+    // Connected, and never sends its ClientHello: the TLS handshake would
+    // wait out the link's 10 s bound.
+    let _silent = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let Accepted::Connection(conn) = listener.accept().unwrap() else {
+        panic!("a permitted source");
+    };
+    let took = common::ended_in_handshake(&secure_server(), conn);
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
 fn a_fingerprint_rule_refuses_a_trusted_peer_once_the_handshake_names_it() {
     let (server_id, allowed, denied) = (
         Identity::generate().unwrap(),

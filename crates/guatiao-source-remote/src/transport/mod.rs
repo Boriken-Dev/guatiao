@@ -12,7 +12,7 @@
 
 #![deny(unsafe_code)]
 
-#[cfg(all(windows, feature = "local"))]
+#[cfg(all(windows, any(feature = "local", feature = "tcp")))]
 #[allow(unsafe_code)]
 mod cancel;
 pub mod child;

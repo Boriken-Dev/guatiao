@@ -125,9 +125,6 @@ fn a_silent_server_is_given_up_on_within_the_handshake_bound() {
     drop(held.join());
 }
 
-// A Windows socket shut down from another thread does not wake a read
-// blocked on it: there a TCP handshake in flight runs to its bound.
-#[cfg(not(windows))]
 #[test]
 fn ending_the_links_ends_one_still_in_its_handshake() {
     let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
@@ -137,18 +134,6 @@ fn ending_the_links_ends_one_still_in_its_handshake() {
     let Accepted::Connection(conn) = listener.accept().unwrap() else {
         panic!("a permitted source");
     };
-    let (tx, rx) = std::sync::mpsc::channel();
-    let serving = server.clone();
-    std::thread::spawn(move || {
-        let started = Instant::now();
-        let failed = serving.serve(conn).is_err();
-        let _ = tx.send((failed, started.elapsed()));
-    });
-    std::thread::sleep(Duration::from_millis(300));
-    server.end_links();
-    let (failed, took) = rx
-        .recv_timeout(Duration::from_secs(5))
-        .expect("the handshake ended");
-    assert!(failed);
+    let took = common::ended_in_handshake(&server, conn);
     assert!(took < Duration::from_secs(3), "{took:?}");
 }

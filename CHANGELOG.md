@@ -1543,6 +1543,18 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: ending a server's links ends a handshake in
+  flight at once on every transport.** On Windows a socket shut down from
+  another thread does not wake a read blocked on it, so `end_links` left a
+  silent TCP, TLS or WebSocket client's handshake to its 10 s bound, and a
+  named pipe's had no closer at all; everywhere, a shared-memory client
+  that had mapped its rings was not reached. A closer now cancels the
+  socket's I/O after shutting it down on Windows (`tcp` on Windows adds
+  `windows-sys`), a pipe's cancels a handshake read, and shared memory's
+  closes the local connection it waits on. An ended link's reader also
+  stops at once instead of waiting for the peer to close, over TCP, TLS
+  and WebSocket on Windows and over shared memory elsewhere; a named
+  pipe's, and shared memory's on Windows, still wait for the peer.
 - **guatiao-source-remote: a shared-memory or Windows local client that
   stays silent gives up its handshake place at the handshake's time
   limit.** Once its rings were mapped a shared-memory client's handshake

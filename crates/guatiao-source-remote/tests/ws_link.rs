@@ -124,6 +124,19 @@ fn a_wrong_key_is_refused() {
 }
 
 #[test]
+fn ending_the_links_ends_one_still_in_its_upgrade() {
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    // Connected, and never sends its HTTP upgrade.
+    let _silent = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let Accepted::Connection(conn) = listener.accept().unwrap() else {
+        panic!("a permitted source");
+    };
+    let took = common::ended_in_handshake(&server, conn);
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
 fn a_peer_outside_the_ranges_is_turned_away() {
     let port = trusted_server("127.0.0.2");
     let (registry, refused) = refresh(over_ws(

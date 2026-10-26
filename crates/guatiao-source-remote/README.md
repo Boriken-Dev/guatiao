@@ -54,7 +54,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 
 | Flag | Adds | Needed for |
 | --- | --- | --- |
-| `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP with no TLS |
+| `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl`, `windows-sys` (Windows only) | TCP with no TLS |
 | `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3: server TLS and mutual TLS (over TCP, and `wss://` with `ws`) |
 | `platform-roots` | `tls`, `rustls-platform-verifier` | a server verified by the operating system's certificate authorities (`roots = "platform"`) |
 | `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |

@@ -33,7 +33,7 @@ default = []
 # Trusted TCP: no encryption, peers admitted by an access control list
 # (coqui-net-acl), and a pre-shared key proved both ways in the handshake
 # (HMAC-SHA256).
-tcp = ["dep:hmac", "dep:sha2", "dep:getrandom", "dep:coqui-net-acl"]
+tcp = ["dep:hmac", "dep:sha2", "dep:getrandom", "dep:coqui-net-acl", "dep:windows-sys"]
 
 # TLS 1.3 over TCP, the secure level: mutual TLS through coqui-peer-tls
 # (rustls, ring), each side known by its certificate's fingerprint,
@@ -113,8 +113,9 @@ wtransport = { version = "0.7.2", optional = true, default-features = false, fea
 # another writes, with no `unsafe` here.
 [target.'cfg(windows)'.dependencies]
 interprocess = { version = "2", optional = true, default-features = false }
-# Ending a read blocked on a pipe from another thread (`CancelIoEx`),
-# which nothing safe does on Windows. interprocess's own version.
+# Ending a read blocked on a pipe or a socket from another thread
+# (`CancelIoEx`), which nothing safe does on Windows. interprocess's own
+# version.
 windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_System_IO"] }
 
 # RDMA: libibverbs opened at run time, and `poll` on its completion

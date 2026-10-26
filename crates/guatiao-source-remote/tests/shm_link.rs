@@ -166,6 +166,50 @@ fn silent_handshake<T>(tag: &str, client: impl FnOnce(&str) -> T) -> Duration {
     took
 }
 
+/// Ends the links of a server whose one connection's client `client`
+/// connected and holds; answers how long that handshake lasted.
+fn ended_by_the_server<T>(tag: &str, client: impl FnOnce(&str) -> T + Send + 'static) -> Duration
+where
+    T: Send + 'static,
+{
+    let server = common::server(LinkOptions::new(Trust::Local));
+    let name = endpoint(tag);
+    let listener = ShmListen::bind(&name).expect("listens");
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let dialing = name.clone();
+    // The client waits for the server's set-up to answer, so it dials on
+    // a thread of its own and stays connected until the test ends.
+    std::thread::spawn(move || {
+        let held = client(&dialing);
+        let _ = held_tx.send(());
+        std::thread::sleep(Duration::from_secs(20));
+        drop(held);
+    });
+    let conn = listener.accept().expect("accepts");
+    let took = common::ended_in_handshake(&server, conn);
+    let _ = held_rx.recv_timeout(Duration::from_secs(1));
+    took
+}
+
+#[test]
+fn ending_the_links_ends_one_whose_rings_are_mapped() {
+    use guatiao_source_remote::transport::Connect;
+    let took = ended_by_the_server("ending-mapped", |name| {
+        ShmConnect::new(name).connect().expect("connects")
+    });
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
+fn ending_the_links_ends_one_that_never_sent_its_path() {
+    use guatiao_source_remote::transport::Connect;
+    use guatiao_source_remote::transport::local::LocalConnect;
+    let took = ended_by_the_server("ending-pathless", |name| {
+        LocalConnect::new(name).connect().expect("connects")
+    });
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
 #[test]
 fn a_client_that_maps_the_rings_and_says_nothing_is_dropped_at_the_handshake_bound() {
     use guatiao_source_remote::transport::Connect;

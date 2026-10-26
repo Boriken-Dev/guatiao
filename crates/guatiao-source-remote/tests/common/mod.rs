@@ -220,6 +220,31 @@ impl Connect for Memory {
     }
 }
 
+/// Serves `conn`, whose client stays silent, and ends `server`'s links
+/// while its handshake waits, every 50 ms from 300 ms on (a serving thread
+/// slow to start is not missed); answers how long the handshake lasted,
+/// which failed. The handshake's own bound is the 10 s default.
+pub fn ended_in_handshake(server: &Server, conn: Connection) -> Duration {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let serving = server.clone();
+    let started = Instant::now();
+    std::thread::spawn(move || {
+        let failed = serving.serve(conn).is_err();
+        let _ = tx.send(failed);
+    });
+    std::thread::sleep(Duration::from_millis(300));
+    let failed = loop {
+        server.end_links();
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(failed) => break failed,
+            Err(_) if started.elapsed() < Duration::from_secs(15) => {}
+            Err(e) => panic!("the handshake never ended: {e}"),
+        }
+    };
+    assert!(failed, "a silent client never links");
+    started.elapsed()
+}
+
 /// A host registry with `source` added and refreshed.
 pub fn host(source: &RemoteSource) -> Registry {
     let mut registry = Registry::new("host", "1.0");
