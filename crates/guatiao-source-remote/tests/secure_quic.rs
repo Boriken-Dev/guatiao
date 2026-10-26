@@ -1156,3 +1156,17 @@ fn ending_the_links_ends_one_still_in_its_quic_handshake() {
     assert!(took < Duration::from_secs(2), "{took:?}");
     dialing.join().unwrap();
 }
+
+#[test]
+fn localhost_links_whichever_of_its_addresses_the_server_listens_on() {
+    // On 127.0.0.1 alone: `localhost` names ::1 as well, often first, where
+    // QUIC hears nothing back.
+    let address = serve_trusted("127.0.0.1", b"k");
+    let port = address.rsplit_once(':').unwrap().1;
+    let started = Instant::now();
+    let connect = QuicConnect::trusted(&format!("localhost:{port}")).unwrap();
+    let linked = connect.connect().map(drop);
+    assert!(linked.is_ok(), "{linked:?}");
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
