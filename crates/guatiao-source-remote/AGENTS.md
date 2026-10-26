@@ -119,7 +119,8 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
   timeout ends the link (`FrameWrite::set_timeout`, set from it).
 - **Nested calls** (a callback during a call) run on the thread waiting
   for the outer call; a call with no parent runs on the link's pool (at
-  most `max_calls` threads; past it, `GUATIAO_ERR_BUSY`).
+  most `max_calls` threads; past it, or when a thread will not start,
+  `GUATIAO_ERR_BUSY`).
 - **A call an object makes on itself from inside one of its calls** is
   refused `BUSY` rather than deadlocked.
 - The tables behind handles on a peer's objects are shared by a
