@@ -55,7 +55,10 @@ function out = build(varargin)
     if o.Strict
       warn = [warn, {'-Werror'}];
     end
-    cmd = [{'--mex', '-o', target}, warn, args, o.Flags, paths, libs];
+    % Octave raises a MEX error as a C++ exception, which must unwind
+    % through the gateway's C frames: a compiler whose defaults give C no
+    % unwind tables (gcc on 32-bit ARM) then aborts the process instead.
+    cmd = [{'--mex', '-o', target, '-fexceptions'}, warn, args, o.Flags, paths, libs];
     if o.Verbose
       disp(strjoin([{'mkoctfile'}, cmd], ' '));
     end
