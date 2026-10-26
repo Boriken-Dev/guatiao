@@ -497,6 +497,15 @@ impl Handler for ServerInner {
             .cloned()
     }
 
+    fn table_kind(&self, _link: &Arc<Inner>, id: u64) -> Option<Arc<KindDescription>> {
+        let kind = lock(&self.ids)
+            .0
+            .iter()
+            .find(|(_, table)| **table == id)
+            .map(|(key, _)| key.kind.clone())?;
+        self.kinds().get(&kind).cloned()
+    }
+
     fn ended(&self, link: &Arc<Inner>) {
         let opened = lock(&self.links).remove(&link_key(link));
         drop(opened);
@@ -520,6 +529,9 @@ impl Handler for Handle {
     }
     fn table(&self, link: &Arc<Inner>, id: u64) -> Option<Arc<dyn Table>> {
         self.0.table(link, id)
+    }
+    fn table_kind(&self, link: &Arc<Inner>, id: u64) -> Option<Arc<KindDescription>> {
+        self.0.table_kind(link, id)
     }
     fn ended(&self, link: &Arc<Inner>) {
         self.0.ended(link);

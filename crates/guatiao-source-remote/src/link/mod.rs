@@ -296,6 +296,14 @@ pub(crate) trait Handler: Send + Sync + 'static {
         None
     }
 
+    /// The kind of table `id`, which this side named in a catalog though
+    /// `link` may not have it open: how a call refused there finds the
+    /// objects it handed over.
+    fn table_kind(&self, link: &Arc<Inner>, id: u64) -> Option<Arc<KindDescription>> {
+        let _ = (link, id);
+        None
+    }
+
     fn ended(&self, link: &Arc<Inner>) {
         let _ = link;
     }
@@ -1203,6 +1211,75 @@ impl Inner {
         }
     }
 
+    /// The kind of what `target` names, when this side knows it.
+    fn kind_of(self: &Arc<Self>, target: Target) -> Option<Arc<KindDescription>> {
+        match target {
+            Target::Table(id) => match self.handler.table(self, id) {
+                Some(table) => Some(Arc::clone(table.kind())),
+                None => self.handler.table_kind(self, id),
+            },
+            Target::Object(id) => lock(&self.state)
+                .exports
+                .get(&id)
+                .map(|e| Arc::clone(e.kind())),
+        }
+    }
+
+    /// Lets go what a call of the peer's handed over when it is refused
+    /// before running: the peer's objects are released and this side's
+    /// own, given back, dropped; a lent one ends with the call on the
+    /// peer's side. Arguments whose slot this side does not know (a table
+    /// it never named, an object already let go, a slot past its kind's)
+    /// cannot be read, and what they handed over waits for the link's end.
+    fn let_go_handed(self: &Arc<Self>, target: Target, slot: u64, args: &[u8]) {
+        let found = catch_unwind(AssertUnwindSafe(|| {
+            let kind = self.kind_of(target)?;
+            let desc = kind.slots().get(usize::try_from(slot).ok()?)?.clone();
+            decode_args(&desc, args, Alloc::rust())
+                .ok()
+                .map(|decoded| (desc, decoded))
+        }));
+        let Ok(Some((desc, decoded))) = found else {
+            return;
+        };
+        for (d, a) in desc.args().iter().zip(&decoded) {
+            if let (ArgType::Object { pass, .. }, Decoded::Object(r)) = (d.ty(), a)
+                && *pass != Pass::Lent
+            {
+                self.let_go(*r);
+            }
+        }
+    }
+
+    /// Lets go one object handed over in a call that will not take it. One
+    /// of this side's is dropped with the last call still inside it, so
+    /// the reader never waits for that call.
+    fn let_go(self: &Arc<Self>, object: ObjectRef) {
+        match object {
+            ObjectRef::Senders(id) => self.release(id),
+            ObjectRef::Receivers(id) => {
+                let export = {
+                    let mut state = lock(&self.state);
+                    match state.exports.get(&id).map(|e| &**e) {
+                        Some(Export::Owned { .. }) => state.exports.remove(&id),
+                        _ => None,
+                    }
+                };
+                drop(export);
+            }
+        }
+    }
+
+    /// [`let_go_handed`](Inner::let_go_handed) for a CALL frame's body.
+    fn let_go_frame(self: &Arc<Self>, frame: &[u8]) {
+        if let Ok(Frame::Call {
+            target, slot, args, ..
+        }) = Frame::decode(frame, Alloc::rust())
+        {
+            self.let_go_handed(target, slot, args);
+        }
+    }
+
     fn next_call(&self) -> u64 {
         self.next_call.fetch_add(1, Ordering::Relaxed)
     }
@@ -1367,11 +1444,18 @@ impl Inner {
                     let _ = waiting.tx.send(Inbound::Reply(reply[4..].to_vec()));
                 }
             }
-            Frame::Call { call, parent, .. } if parent != 0 => {
+            Frame::Call {
+                call,
+                parent,
+                target,
+                slot,
+                args,
+            } if parent != 0 => {
                 let waiting = lock(&self.state).calls.get(&parent).cloned();
                 if let Some(w) = &waiting
                     && w.queued.load(Ordering::Acquire) >= MAX_QUEUED
                 {
+                    self.let_go_handed(target, slot, args);
                     self.refuse(
                         call,
                         Status::GUATIAO_ERR_BUSY,
@@ -1379,11 +1463,19 @@ impl Inner {
                     );
                     return Ok(());
                 }
-                let handed = waiting.is_some_and(|w| {
-                    w.queued.fetch_add(1, Ordering::AcqRel);
-                    w.tx.send(Inbound::Call(frame)).is_ok()
-                });
-                if !handed {
+                let refused = match waiting {
+                    None => Some(frame),
+                    Some(w) => {
+                        w.queued.fetch_add(1, Ordering::AcqRel);
+                        match w.tx.send(Inbound::Call(frame)) {
+                            Ok(()) => None,
+                            Err(mpsc::SendError(Inbound::Call(frame))) => Some(frame),
+                            Err(_) => None,
+                        }
+                    }
+                };
+                if let Some(frame) = refused {
+                    self.let_go_frame(&frame);
                     self.refuse(
                         call,
                         Status::GUATIAO_ERR_GONE,
@@ -1392,8 +1484,11 @@ impl Inner {
                 }
             }
             Frame::Call { call, .. } => {
-                let inner = Arc::clone(self);
-                if let Err(busy) = self.pool.run(Box::new(move || inner.run_inbound(frame))) {
+                let job = Unrun {
+                    link: Arc::clone(self),
+                    frame: Some(frame),
+                };
+                if let Err(busy) = self.pool.run(Box::new(move || job.run())) {
                     let why = busy.words("the peer is running as many calls as it allows");
                     self.refuse(call, Status::GUATIAO_ERR_BUSY, &why);
                 }
@@ -1532,6 +1627,7 @@ impl Inner {
             return;
         };
         if RUNNING.with(|r| r.borrow().len()) >= MAX_DEPTH {
+            self.let_go_handed(target, slot, args);
             self.refuse(
                 call,
                 Status::GUATIAO_ERR_BUSY,
@@ -1607,7 +1703,9 @@ impl Inner {
         out: &mut Vec<u8>,
         tail: &mut Option<(Vec<u8>, usize)>,
     ) -> Result<bool, ProviderError> {
-        let callee = self.callee(target)?;
+        let callee = self.callee(target).inspect_err(|_| {
+            self.let_go_handed(target, slot, args);
+        })?;
         let kind = Arc::clone(callee.kind());
         let slot = usize::try_from(slot).unwrap_or(usize::MAX);
         let desc = kind.slots().get(slot).ok_or_else(|| {
@@ -1616,10 +1714,13 @@ impl Inner {
         let mut decoded = decode_args(desc, args, Alloc::rust()).map_err(bad)?;
 
         // Objects first: handles on the peer's, or this side's own back.
+        // Every one handed over is taken before a refusal is answered, so
+        // none is left held for a call that never ran.
         let n = decoded.len();
         let mut lent_handles: Vec<Option<RawObject>> = (0..n).map(|_| None).collect();
         let mut taken: Vec<Option<RawObject>> = (0..n).map(|_| None).collect();
         let mut own_lent: Vec<Option<Arc<Export>>> = (0..n).map(|_| None).collect();
+        let mut refused = None;
         for (i, (d, a)) in desc.args().iter().zip(&decoded).enumerate() {
             let (
                 ArgType::Object {
@@ -1631,32 +1732,36 @@ impl Inner {
             else {
                 continue;
             };
-            match (*pass, *r) {
-                (Pass::Lent, ObjectRef::Senders(id)) => {
-                    lent_handles[i] =
-                        Some(
-                            self.proxies
-                                .object(&self.kind(object_kind)?, self, id, true)?,
-                        );
+            if refused.is_some() {
+                if *pass != Pass::Lent {
+                    self.let_go(*r);
                 }
-                (Pass::Lent, ObjectRef::Receivers(id)) => {
-                    own_lent[i] = Some(
-                        lock(&self.state)
-                            .exports
-                            .get(&id)
-                            .cloned()
-                            .ok_or_else(|| gone("the object has been let go"))?,
-                    );
-                }
-                (_, ObjectRef::Senders(id)) => {
-                    taken[i] =
-                        Some(
-                            self.proxies
-                                .object(&self.kind(object_kind)?, self, id, false)?,
-                        );
-                }
-                (_, ObjectRef::Receivers(id)) => taken[i] = Some(self.take_export(id)?),
+                continue;
             }
+            let got = match (*pass, *r) {
+                (Pass::Lent, ObjectRef::Senders(id)) => self
+                    .kind(object_kind)
+                    .and_then(|k| self.proxies.object(&k, self, id, true))
+                    .map(|o| lent_handles[i] = Some(o)),
+                (Pass::Lent, ObjectRef::Receivers(id)) => lock(&self.state)
+                    .exports
+                    .get(&id)
+                    .cloned()
+                    .ok_or_else(|| gone("the object has been let go"))
+                    .map(|e| own_lent[i] = Some(e)),
+                (_, ObjectRef::Senders(id)) => self
+                    .kind(object_kind)
+                    .and_then(|k| self.proxies.object(&k, self, id, false))
+                    .map(|o| taken[i] = Some(o))
+                    .inspect_err(|_| self.release(id)),
+                (_, ObjectRef::Receivers(id)) => self.take_export(id).map(|o| taken[i] = Some(o)),
+            };
+            if let Err(e) = got {
+                refused = Some(e);
+            }
+        }
+        if let Some(e) = refused {
+            return Err(e);
         }
         let mut guards = Vec::new();
         for e in own_lent.iter().flatten() {
@@ -1969,6 +2074,29 @@ impl Inner {
         // The answer holds copies of what it read: the reply's buffer is free.
         self.gate.buffers().give(reply);
         answer
+    }
+}
+
+/// A call of the peer's on its way to a pool thread. Dropped unrun, when
+/// the pool refuses it, it lets go what the call handed over.
+struct Unrun {
+    link: Arc<Inner>,
+    frame: Option<Vec<u8>>,
+}
+
+impl Unrun {
+    fn run(mut self) {
+        if let Some(frame) = self.frame.take() {
+            self.link.run_inbound(frame);
+        }
+    }
+}
+
+impl Drop for Unrun {
+    fn drop(&mut self) {
+        if let Some(frame) = self.frame.take() {
+            self.link.let_go_frame(&frame);
+        }
     }
 }
 
