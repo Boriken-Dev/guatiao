@@ -43,6 +43,7 @@
   X(duration_read)                                                             \
   X(serde_parse)                                                               \
   X(serde_emit)                                                                \
+  X(serde_data)                                                                \
   X(intake_check)                                                              \
   X(intake_layout)                                                             \
   X(intake_is_visible)                                                         \
@@ -56,6 +57,8 @@
   X(redact)                                                                    \
   X(wire_encode)                                                               \
   X(wire_decode)                                                               \
+  X(wire_read)                                                                 \
+  X(wire_of)                                                                   \
   X(wire_frame)                                                                \
   X(receiver_new)                                                              \
   X(receiver_free)                                                             \

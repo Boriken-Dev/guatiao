@@ -199,7 +199,28 @@
     (text, how, alloc, out, err), "yaml")                                                       \
   X(guatiao_status, guatiao_yaml_emit,                                                         \
     (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "yaml")
+    (v, how, alloc, out), "yaml")                                                               \
+  X(guatiao_status, guatiao_json_to_wire,                                                      \
+    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
+     guatiao_parse_error *err),                                                                 \
+    (text, how, alloc, out, err), "")                                                           \
+  X(guatiao_status, guatiao_json_from_wire,                                                    \
+    (guatiao_bytes bytes, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),        \
+    (bytes, how, alloc, out), "")                                                               \
+  X(guatiao_status, guatiao_toml_to_wire,                                                      \
+    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
+     guatiao_parse_error *err),                                                                 \
+    (text, how, alloc, out, err), "toml")                                                       \
+  X(guatiao_status, guatiao_toml_from_wire,                                                    \
+    (guatiao_bytes bytes, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),        \
+    (bytes, how, alloc, out), "toml")                                                           \
+  X(guatiao_status, guatiao_yaml_to_wire,                                                      \
+    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
+     guatiao_parse_error *err),                                                                 \
+    (text, how, alloc, out, err), "yaml")                                                       \
+  X(guatiao_status, guatiao_yaml_from_wire,                                                    \
+    (guatiao_bytes bytes, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),        \
+    (bytes, how, alloc, out), "yaml")
 
 #define GT_INTAKE(X)                                                                            \
   X(guatiao_status, guatiao_intake_check,                                                      \
