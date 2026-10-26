@@ -221,3 +221,28 @@ case("R data writes as wire bytes what it builds as a tree, refusals included", 
   }
 }))
 
+case("the writer judges text as UTF-8 as the library does, after any run of ASCII", with_library({
+  utf8 <- function(...) {
+    s <- rawToChar(as.raw(c(...)))
+    Encoding(s) <- "UTF-8"
+    s
+  }
+  shapes <- list(c(0xc3, 0xa9), c(0xe2, 0x82, 0xac), c(0xf0, 0x90, 0x80, 0x80), c(0xf4, 0x8f, 0xbf, 0xbf),
+    c(0xc0, 0x80), c(0xc1, 0xbf), c(0xe0, 0x9f, 0xbf), c(0xed, 0xa0, 0x80), c(0xf0, 0x8f, 0xbf, 0xbf),
+    c(0xf4, 0x90, 0x80, 0x80), c(0xf5, 0x80, 0x80, 0x80), c(0x80), c(0xc3), c(0xe2, 0x82), c(0xf0, 0x9f, 0x98))
+  for (run in c(0, 1, 7, 8, 9, 16, 23)) {
+    for (shape in shapes) {
+      text <- utf8(rep(0x78, run), shape, rep(0x79, run %% 3))
+      x <- list(text)
+      tree <- tryCatch({
+        v <- value(x)
+        w <- to_wire(v)
+        close(v)
+        w
+      }, error = function(e) conditionMessage(e))
+      tape <- tryCatch(.Call(gt$C_wire_of, x), error = function(e) conditionMessage(e))
+      expect_true(identical(tape, tree), paste(run, "x then", paste(as.hexmode(shape), collapse = " ")))
+    }
+  }
+}))
+
