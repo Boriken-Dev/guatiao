@@ -85,7 +85,7 @@ def devices(tmp_path):
     ports = []
     for _ in range(2):
         server = subprocess.Popen(
-            [str(_SERVER), "--listen", "tcp://127.0.0.1:0", "--trust", "trusted", "--range", "127.0.0.1",
+            [str(_SERVER), "--listen", "tcp://127.0.0.1:0", "--security", "none", "--range", "127.0.0.1",
              "--key-file", str(tmp_path / "link.key"), "--kinds", str(_KINDS), "--load", str(_DERIVED)],
             stderr=subprocess.PIPE, text=True,
         )
@@ -107,10 +107,10 @@ def test_peers_described_by_manifests_are_served_under_their_names(reg, tmp_path
     for name, port in zip(("dev-a", "dev-b"), devices):
         (peers / f"{name}.guatiao.toml").write_text(
             f'type = "remote"\nname = "{name}"\nconnect = "tcp://127.0.0.1:{port}"\n'
-            f'trust = "trusted"\nkey_file = "../link.key"\n'
+            f'security = "none"\nkey_file = "../link.key"\n'
         )
     (peers / "inline.guatiao.toml").write_text(
-        'type = "remote"\nname = "inline"\nconnect = "tcp://127.0.0.1:1"\ntrust = "trusted"\nkey = "here"\n'
+        'type = "remote"\nname = "inline"\nconnect = "tcp://127.0.0.1:1"\nsecurity = "none"\nkey = "here"\n'
     )
     reg.add_source_file(_REMOTE, {"dirs": [str(peers)]})
     changed = reg.refresh()

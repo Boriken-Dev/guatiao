@@ -2,10 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! TLS 1.3 over TCP, the secure level: mutual TLS through coqui-peer-tls.
-//! Each side presents a certificate of its own and knows the other by
-//! its fingerprint (`sha256:<hex>`): fixed pins, or the peers a trust store
-//! has accepted. A server with a store records a client it does not know,
+//! TLS 1.3 over TCP through coqui-peer-tls: mutual TLS, or server TLS
+//! ([`TlsConfig::server_tls`]), where the server alone presents a
+//! certificate and the client proves itself inside the link (its key or a
+//! token). Each side presenting a certificate is known by its fingerprint
+//! (`sha256:<hex>`): fixed pins, or the peers a trust store has accepted.
+//! A server with a store records a client it does not know,
 //! once the client has proved it holds its key, as waiting there until an
 //! operator accepts it. A listener admits peers by an access control list
 //! (the policy's `acl`): by address before anything is read, by
@@ -46,6 +48,12 @@ use super::{Connect, Connection, FrameRead};
 /// The application protocol both ends name and require, so a link never
 /// completes with a TLS endpoint of something else.
 pub(crate) const ALPN: &[u8] = b"guatiao-remote";
+
+/// What a WebSocket over TLS names: the HTTP its upgrade is, as a
+/// browser offers it (or nothing). The HELLO's magic names the protocol
+/// there.
+#[cfg(feature = "ws")]
+pub(crate) const WEBSOCKET_ALPN: &[u8] = b"http/1.1";
 
 /// The identity file [`TlsConfig::open`] keeps in its directory.
 pub const IDENTITY_FILE: &str = "identity.pem";
@@ -248,6 +256,17 @@ fn check_alpn(connection: &rustls::Connection) -> io::Result<()> {
     }
 }
 
+/// The identity in the PEM file at `path`, its certificate's chain kept
+/// (a CA-issued certificate a browser is to trust comes with one); made,
+/// self-issued, when the file is absent.
+pub fn identity_at(path: &Path) -> Result<Identity, PeerError> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Identity::from_pem_chain(&text),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Identity::open_or_create(path),
+        Err(e) => Err(PeerError::Io(e)),
+    }
+}
+
 /// What one side of the secure level is: its identity, whom it trusts and
 /// the TLS policy both are held to.
 ///
@@ -262,6 +281,11 @@ pub struct TlsConfig {
     pins: Vec<PeerId>,
     store: Option<TrustStore>,
     policy: Policy,
+    /// Takes any certificate whose key the peer proves: QUIC at no
+    /// security, where TLS encrypts and the link's key proof decides.
+    checks_nobody: bool,
+    /// Whether both sides present a certificate; false at server TLS.
+    mutual: bool,
 }
 
 impl core::fmt::Debug for TlsConfig {
@@ -271,6 +295,7 @@ impl core::fmt::Debug for TlsConfig {
             .field("pins", &self.pins.len())
             .field("store", &self.store.is_some())
             .field("policy", &self.policy.name)
+            .field("mutual", &self.mutual)
             .finish()
     }
 }
@@ -283,14 +308,56 @@ impl TlsConfig {
             pins: Vec::new(),
             store: None,
             policy: Policy::strict(),
+            checks_nobody: false,
+            mutual: true,
         }
+    }
+
+    /// A client's configuration at server TLS for a host with no identity
+    /// of its own: it presents no certificate (it holds a generated one,
+    /// never shown), and trusts the server its pins or store name.
+    pub fn without_identity() -> io::Result<TlsConfig> {
+        let identity = Identity::generate().map_err(|e| invalid(words(&e)))?;
+        Ok(TlsConfig::new(identity).server_tls())
+    }
+
+    /// Server TLS rather than mutual TLS: as a server it presents its
+    /// certificate and asks clients for none (they prove themselves inside
+    /// the link, by the key or a token); as a client it presents none.
+    /// Listed by [`weakened`](TlsConfig::weakened) as `client_auth`.
+    pub fn server_tls(mut self) -> TlsConfig {
+        self.mutual = false;
+        self
+    }
+
+    /// Whether both sides present a certificate: false at server TLS.
+    pub fn is_mutual(&self) -> bool {
+        self.mutual
+    }
+
+    /// A generated identity that takes any peer's certificate: the TLS
+    /// QUIC runs at no security, where only the link's key proof and the
+    /// access control list decide.
+    #[cfg_attr(not(feature = "quic"), allow(dead_code))]
+    pub(crate) fn checking_nobody() -> io::Result<TlsConfig> {
+        let identity = Identity::generate().map_err(|e| invalid(words(&e)))?;
+        Ok(TlsConfig {
+            checks_nobody: true,
+            ..TlsConfig::new(identity)
+        })
+    }
+
+    /// Whether it trusts certificates at all: false at no security.
+    #[cfg_attr(not(feature = "quic"), allow(dead_code))]
+    pub(crate) fn proves_peers(&self) -> bool {
+        !self.checks_nobody
     }
 
     /// The identity in `dir`'s [`IDENTITY_FILE`], made there when absent
     /// (readable by its owner alone on Unix), and the trust store in `dir`
     /// (`peers/accepted`, `peers/waiting`).
     pub fn open(dir: &Path) -> io::Result<TlsConfig> {
-        let identity = Identity::open_or_create(&dir.join(IDENTITY_FILE)).map_err(|e| {
+        let identity = identity_at(&dir.join(IDENTITY_FILE)).map_err(|e| {
             invalid(format!(
                 "{}: {}",
                 dir.join(IDENTITY_FILE).display(),
@@ -337,6 +404,7 @@ impl TlsConfig {
     }
 
     /// The policy both ends are held to.
+    #[cfg_attr(not(feature = "quic"), allow(dead_code))]
     pub(crate) fn tls_policy(&self) -> &Policy {
         &self.policy
     }
@@ -344,10 +412,31 @@ impl TlsConfig {
     /// Every setting of the policy looser than strict, its access control
     /// list's default included; empty under the strict policy.
     pub fn weakened(&self) -> Vec<Weakening> {
-        self.policy.weakened()
+        if self.mutual {
+            return self.policy.weakened();
+        }
+        coqui_peer_tls::server_config_without_client_auth_with(
+            &self.identity,
+            &[ALPN],
+            &self.policy,
+        )
+        .map_or_else(|_| self.policy.weakened(), |built| built.weakened)
+    }
+
+    /// This side in a refusal's words: its fingerprint, or that it
+    /// presents none.
+    pub(crate) fn me(&self) -> String {
+        if self.mutual {
+            self.identity.fingerprint().canonical()
+        } else {
+            "which presents no certificate (server TLS)".to_string()
+        }
     }
 
     pub(crate) fn trust(&self) -> io::Result<Trust> {
+        if self.checks_nobody {
+            return Ok(Trust::AnyWithKeyProof);
+        }
         if !self.pins.is_empty() {
             return Ok(Trust::Pinned(Pins::fixed(self.pins.iter().copied())));
         }
@@ -360,28 +449,54 @@ impl TlsConfig {
     }
 
     pub(crate) fn client(&self) -> io::Result<Arc<ClientConfig>> {
+        self.client_naming(ALPN)
+    }
+
+    /// A client configuration offering `alpn` alone.
+    pub(crate) fn client_naming(&self, alpn: &[u8]) -> io::Result<Arc<ClientConfig>> {
         if self.policy.acl.is_some() {
             return Err(invalid(
                 "the policy's `acl` admits peers to a listener; a client has none",
             ));
         }
-        let built = coqui_peer_tls::client_config_with(
-            &self.identity,
-            &self.trust()?,
-            &[ALPN],
-            &self.policy,
-        )
+        let built = if self.mutual {
+            coqui_peer_tls::client_config_with(
+                &self.identity,
+                &self.trust()?,
+                &[alpn],
+                &self.policy,
+            )
+        } else {
+            coqui_peer_tls::client_config_without_identity_with(
+                &self.trust()?,
+                &[alpn],
+                &self.policy,
+            )
+        }
         .map_err(|e| invalid(words(&e)))?;
         Ok(Arc::new(built.config))
     }
 
     pub(crate) fn server(&self) -> io::Result<Arc<ServerConfig>> {
-        let built = coqui_peer_tls::server_config_with(
-            &self.identity,
-            &self.trust()?,
-            &[ALPN],
-            &self.policy,
-        )
+        self.server_naming(ALPN)
+    }
+
+    /// A server configuration naming `alpn` alone.
+    pub(crate) fn server_naming(&self, alpn: &[u8]) -> io::Result<Arc<ServerConfig>> {
+        let built = if self.mutual {
+            coqui_peer_tls::server_config_with(
+                &self.identity,
+                &self.trust()?,
+                &[alpn],
+                &self.policy,
+            )
+        } else {
+            coqui_peer_tls::server_config_without_client_auth_with(
+                &self.identity,
+                &[alpn],
+                &self.policy,
+            )
+        }
         .map_err(|e| invalid(words(&e)))?;
         Ok(Arc::new(built.config))
     }
@@ -421,9 +536,13 @@ impl Core {
         }
     }
 
-    fn open(&self, connection: rustls::Connection, peer: &PeerId) {
+    /// The session, and the peer it proved: none for a server's client at
+    /// server TLS.
+    fn open(&self, connection: rustls::Connection, peer: Option<&PeerId>) {
         *lock(&self.state) = Some(connection);
-        let _ = self.peer.set(peer.canonical());
+        if let Some(peer) = peer {
+            let _ = self.peer.set(peer.canonical());
+        }
     }
 
     /// A failure in words a person can act on. A client's link the server
@@ -554,6 +673,11 @@ struct Pending {
     source: SocketAddr,
     local: SocketAddr,
     acl: Option<Arc<Acl>>,
+    /// Whether the client must have agreed on [`ALPN`]; a browser's
+    /// WebSocket offers HTTP's, or nothing.
+    alpn: bool,
+    /// Whether the client presents a certificate: false at server TLS.
+    mutual: bool,
 }
 
 impl Pending {
@@ -566,27 +690,40 @@ impl Pending {
             socket: &core.socket,
             until: bound.map(|b| Instant::now() + b),
         };
-        let established = coqui_peer::drive_stream(handshake, &mut io);
+        let completed = coqui_peer::complete_stream(handshake, &mut io);
         core.socket.set_read_timeout(bound)?;
         core.socket.set_write_timeout(None)?;
-        let established = established.map_err(|e| match e {
+        let completed = completed.map_err(|e| match e {
             DriveError::Io(e) => e,
             DriveError::Handshake(e) => untrusted_by_server(e.refusal(), words(&e)),
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
-        let peer = established.peer;
-        if let Err(e) = check_alpn(&established.session) {
+        // A mutual handshake names the client; at server TLS there is none.
+        let (session, peer) = completed
+            .finish_unauthenticated()
+            .map_err(|e| untrusted_by_server(e.refusal(), words(&e)))?;
+        let peer = peer.map(|p| p.fingerprint);
+        if self.mutual && peer.is_none() {
+            core.shut();
+            return Err(untrusted_by_server(
+                None,
+                "the client presented no certificate",
+            ));
+        }
+        if self.alpn
+            && let Err(e) = check_alpn(&session)
+        {
             core.shut();
             return Err(e);
         }
-        if let Some(acl) = &self.acl {
+        if let (Some(acl), Some(peer)) = (&self.acl, &peer) {
             let decided = acl.decide_peer(self.source, self.local, &peer.canonical());
             if decided.outcome != Outcome::Permit {
                 core.close();
-                return Err(denied_by_acl(&peer, self.source, decided.rule_index));
+                return Err(denied_by_acl(peer, self.source, decided.rule_index));
             }
         }
-        core.open(established.session, &peer);
+        core.open(session, peer.as_ref());
         Ok(())
     }
 }
@@ -682,6 +819,10 @@ impl FrameRead for TlsFrames {
     fn peer_id(&self) -> Option<String> {
         self.core.peer.get().cloned()
     }
+
+    fn encrypted(&self) -> bool {
+        true
+    }
 }
 
 /// The writing half.
@@ -703,6 +844,64 @@ impl Write for TlsWrite {
 
     fn flush(&mut self) -> io::Result<()> {
         self.core.flush()
+    }
+}
+
+/// A TLS session as one byte stream several threads share, what a
+/// WebSocket runs over: the link's reader reads (and a server's first read
+/// runs the handshake), any thread writes whole buffers.
+#[cfg(feature = "ws")]
+pub(crate) struct TlsDuplex {
+    core: Arc<Core>,
+    /// Only the reading thread takes it.
+    read: Mutex<TlsRead>,
+}
+
+#[cfg(feature = "ws")]
+impl TlsDuplex {
+    fn new(core: Core, pending: Option<Pending>) -> TlsDuplex {
+        let core = Arc::new(core);
+        TlsDuplex {
+            read: Mutex::new(TlsRead {
+                core: Arc::clone(&core),
+                pending,
+                raw: vec![0; RAW_READ],
+                fed: 0,
+                filled: 0,
+                ended: false,
+            }),
+            core,
+        }
+    }
+
+    pub(crate) fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        lock(&self.read).read(buf)
+    }
+
+    pub(crate) fn write_all(&self, buf: &[u8]) -> io::Result<()> {
+        self.core.send(&[buf]).map_err(|e| self.core.explain(e))
+    }
+
+    pub(crate) fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.core.socket.set_read_timeout(timeout)
+    }
+
+    pub(crate) fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.core.socket.set_write_timeout(timeout)
+    }
+
+    /// Tells the peer the session ends, then ends the socket.
+    pub(crate) fn close(&self) {
+        self.core.close();
+    }
+
+    /// Ends the socket both ways with nothing more said.
+    pub(crate) fn shut(&self) {
+        self.core.shut();
+    }
+
+    pub(crate) fn peer_id(&self) -> Option<String> {
+        self.core.peer.get().cloned()
     }
 }
 
@@ -744,6 +943,8 @@ pub struct TlsConnect {
     config: Arc<ClientConfig>,
     me: String,
     timeout: Duration,
+    /// Whether the server must agree on [`ALPN`].
+    alpn: bool,
 }
 
 impl core::fmt::Debug for TlsConnect {
@@ -762,8 +963,22 @@ impl TlsConnect {
         Ok(TlsConnect {
             address: address.to_string(),
             config: config.client()?,
-            me: config.fingerprint().canonical(),
+            me: config.me(),
             timeout: CONNECT_TIMEOUT,
+            alpn: true,
+        })
+    }
+
+    /// The TLS under a WebSocket's upgrade: as [`new`](TlsConnect::new),
+    /// offering HTTP's application protocol, none required.
+    #[cfg(feature = "ws")]
+    pub(crate) fn for_websocket(config: &TlsConfig) -> io::Result<TlsConnect> {
+        Ok(TlsConnect {
+            address: String::new(),
+            config: config.client_naming(WEBSOCKET_ALPN)?,
+            me: config.me(),
+            timeout: CONNECT_TIMEOUT,
+            alpn: false,
         })
     }
 
@@ -802,6 +1017,19 @@ impl TlsConnect {
     }
 
     fn handshake(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Connection> {
+        let core = self.established(socket, addr)?;
+        connection(core, None, format!("tls {addr}"))
+    }
+
+    /// The TLS over `socket`, connected to `addr`, under a WebSocket.
+    #[cfg(feature = "ws")]
+    pub(crate) fn duplex(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<TlsDuplex> {
+        let core = self.established(socket, addr)?;
+        Ok(TlsDuplex::new(core, None))
+    }
+
+    /// Runs the client's handshake over `socket` within the timeout.
+    fn established(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Core> {
         socket.set_nodelay(true)?;
         let handshake =
             TlsHandshake::client(Arc::clone(&self.config)).map_err(|e| invalid(words(&e)))?;
@@ -816,10 +1044,12 @@ impl TlsConnect {
         })?;
         socket.set_read_timeout(None)?;
         socket.set_write_timeout(None)?;
-        check_alpn(&established.session)?;
+        if self.alpn {
+            check_alpn(&established.session)?;
+        }
         let core = Core::new(socket, Some(self.me.clone()));
-        core.open(established.session, &established.peer);
-        connection(core, None, format!("tls {addr}"))
+        core.open(established.session, Some(&established.peer));
+        Ok(core)
     }
 }
 
@@ -840,15 +1070,20 @@ impl Connect for TlsConnect {
     }
 }
 
-/// A secure listener. It admits peers by the policy's access control
-/// list, every source when there is none: by address as it accepts,
-/// reading nothing from a peer it denies; by fingerprint after the
-/// handshake, which runs on the serving thread's first read, so a client
-/// that connects and stalls holds only that thread.
+/// A TLS listener, at mutual TLS or server TLS as its configuration says.
+/// It admits peers by the policy's access control list, every source when
+/// there is none: by address as it accepts, reading nothing from a peer it
+/// denies; at mutual TLS by fingerprint after the handshake, which runs on
+/// the serving thread's first read, so a client that connects and stalls
+/// holds only that thread.
 pub struct TlsListen {
     listener: TcpListener,
     config: Arc<ServerConfig>,
     acl: Option<Arc<Acl>>,
+    /// Whether clients must agree on [`ALPN`].
+    alpn: bool,
+    /// Whether clients present a certificate: false at server TLS.
+    mutual: bool,
 }
 
 impl core::fmt::Debug for TlsListen {
@@ -880,6 +1115,23 @@ impl TlsListen {
             listener,
             config: config.server()?,
             acl,
+            alpn: true,
+            mutual: config.is_mutual(),
+        })
+    }
+
+    /// The TLS under a WebSocket's upgrade: as
+    /// [`from_listener`](TlsListen::from_listener), naming HTTP's
+    /// application protocol, none required of the client.
+    #[cfg(feature = "ws")]
+    pub(crate) fn for_websocket(
+        listener: TcpListener,
+        config: &TlsConfig,
+    ) -> io::Result<TlsListen> {
+        Ok(TlsListen {
+            config: config.server_naming(WEBSOCKET_ALPN)?,
+            alpn: false,
+            ..TlsListen::from_listener(listener, config)?
         })
     }
 
@@ -891,13 +1143,24 @@ impl TlsListen {
     /// The next connection, before its handshake, or a peer the list
     /// denies by address, closed unread.
     pub fn accept(&self) -> io::Result<Accepted> {
+        Ok(match self.accept_pending()? {
+            Ok((core, pending, source)) => {
+                Accepted::Connection(connection(core, Some(pending), format!("tls {source}"))?)
+            }
+            Err(source) => Accepted::Refused(source),
+        })
+    }
+
+    /// The next connection with its handshake to come, or the address of
+    /// a peer the list denies, closed unread.
+    fn accept_pending(&self) -> io::Result<Result<(Core, Pending, SocketAddr), SocketAddr>> {
         let (socket, source) = self.listener.accept()?;
         let local = socket.local_addr()?;
         if let Some(acl) = &self.acl
             && acl.decide(source, local).outcome == Outcome::Deny
         {
             let _ = socket.shutdown(Shutdown::Both);
-            return Ok(Accepted::Refused(source));
+            return Ok(Err(source));
         }
         socket.set_nodelay(true)?;
         let pending = Pending {
@@ -905,12 +1168,19 @@ impl TlsListen {
             source,
             local,
             acl: self.acl.clone(),
+            alpn: self.alpn,
+            mutual: self.mutual,
         };
-        Ok(Accepted::Connection(connection(
-            Core::new(socket, None),
-            Some(pending),
-            format!("tls {source}"),
-        )?))
+        Ok(Ok((Core::new(socket, None), pending, source)))
+    }
+
+    /// The next connection as the TLS under a WebSocket, its handshake run
+    /// by the first read.
+    #[cfg(feature = "ws")]
+    pub(crate) fn accept_duplex(&self) -> io::Result<Result<(TlsDuplex, SocketAddr), SocketAddr>> {
+        Ok(self
+            .accept_pending()?
+            .map(|(core, pending, source)| (TlsDuplex::new(core, Some(pending)), source)))
     }
 }
 
@@ -1001,6 +1271,45 @@ mod tests {
         assert!(got == big);
         a.join().unwrap();
         b.join().unwrap();
+    }
+
+    #[test]
+    fn an_identity_file_keeps_the_chain_after_its_certificate() {
+        let dir = std::env::temp_dir().join(format!("guatiao-identity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let leaf = identity();
+        let issuer = identity();
+        let issuer_pem = issuer.to_pem().unwrap();
+        let issuer_cert = &issuer_pem[..issuer_pem.find("-----BEGIN PRIVATE KEY").unwrap()];
+        let pem = leaf.to_pem().unwrap();
+        let key_at = pem.find("-----BEGIN PRIVATE KEY").unwrap();
+        let chained = format!("{}{issuer_cert}{}", &pem[..key_at], &pem[key_at..]);
+        let file = dir.join(IDENTITY_FILE);
+        std::fs::write(&file, chained).unwrap();
+        let read = identity_at(&file).unwrap();
+        assert_eq!(
+            read.fingerprint(),
+            leaf.fingerprint(),
+            "the certificate's, not the chain's"
+        );
+        assert_eq!(read.intermediates_der().len(), 1);
+        assert!(
+            Identity::read(&file).is_err(),
+            "the plain reader refuses a chain"
+        );
+        assert_eq!(
+            TlsConfig::open(&dir).unwrap().fingerprint(),
+            leaf.fingerprint()
+        );
+        // Absent, one is made.
+        let made = dir.join("made.pem");
+        let first = identity_at(&made).unwrap();
+        assert_eq!(
+            identity_at(&made).unwrap().fingerprint(),
+            first.fingerprint()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use guatiao::library::Registry;
 use guatiao::{Alloc, Map, Value};
-use guatiao_source_remote::config::trust_of;
+use guatiao_source_remote::config::{Security, security_of};
 use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
 
 #[cfg(any(feature = "tcp", feature = "local"))]
@@ -28,29 +28,33 @@ guatiao-remote-server (--stdio | --listen URL) [options]
 guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
 
   --stdio               serve one link on stdin and stdout (a host's child)
-  --listen URL          serve every link to URL: tcp://ADDRESS:PORT is the
-                        trusted level, ws://ADDRESS:PORT the same over
-                        WebSocket (a browser), tls://ADDRESS:PORT the secure
-                        level, quic://ADDRESS:PORT the same over QUIC (UDP),
-                        local://name the local one (a socket path or a
-                        pipe name), rdma://ADDRESS:PORT RDMA (experimental,
-                        Linux only)
-  --trust LEVEL         local | trusted | secure (default: local on --stdio)
+  --listen URL          serve every link to URL: tcp://ADDRESS:PORT (TCP;
+                        tls://ADDRESS:PORT the same, TLS required),
+                        quic://ADDRESS:PORT (QUIC, UDP), ws://ADDRESS:PORT and
+                        wss://ADDRESS:PORT (WebSocket, a browser's, without
+                        and with TLS), local://name (a socket path or a pipe
+                        name), shm://name, rdma://ADDRESS:PORT (RDMA,
+                        experimental, Linux only)
+  --security MODE       none | server-tls | mutual-tls: none on --stdio,
+                        local:// and shm:// (the only one they run), mutual-tls
+                        on the network transports unless told; ws:// and
+                        rdma:// run none alone, wss:// and tls:// TLS alone;
+                        server-tls proves clients by --key-file
   --range CIDR          admit peers from this address range (repeatable): a
                         permit rule of the access control list, which denies
                         what no rule permits
   --acl PATH            the access control list, a TOML or JSON file
                         ([[rule]] action, source, destination, port,
-                        fingerprint; default); trusted needs it or --range
-  --key-file PATH       the trusted level's pre-shared key
-  --state-dir DIR       secure: this server's identity (DIR/identity.pem, made
+                        fingerprint; default); none needs it or --range
+  --key-file PATH       the pre-shared key clients prove (none, server-tls)
+  --state-dir DIR       TLS: this server's identity (DIR/identity.pem, made
                         when absent) and its trust store (DIR/peers): unless
                         --pin is given, clients it does not know wait there
                         until accepted
-  --identity PATH       secure: the identity file instead (made when absent)
-  --pin FINGERPRINT     secure: trust this client (repeatable); with any, the
+  --identity PATH       TLS: the identity file instead (made when absent)
+  --pin FINGERPRINT     TLS: trust this client (repeatable); with any, the
                         trust store no longer decides
-  --policy PATH         secure: the TLS policy, a TOML or JSON file (default
+  --policy PATH         TLS: the TLS policy, a TOML or JSON file (default
                         strict); its [acl] is the access control list
   --waiting             list the clients waiting in --state-dir, then exit
   --accept FINGERPRINT  accept a waiting client in --state-dir, then exit
@@ -70,7 +74,7 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
 struct Args {
     stdio: bool,
     listen: Option<String>,
-    trust: Option<Trust>,
+    security: Option<Security>,
     ranges: Vec<String>,
     acl: Option<PathBuf>,
     key_file: Option<PathBuf>,
@@ -96,7 +100,7 @@ fn parse() -> Result<Args, String> {
     let mut a = Args {
         stdio: false,
         listen: None,
-        trust: None,
+        security: None,
         ranges: Vec::new(),
         acl: None,
         key_file: None,
@@ -128,9 +132,12 @@ fn parse() -> Result<Args, String> {
         match flag.as_str() {
             "--stdio" => a.stdio = true,
             "--listen" => a.listen = Some(need(&mut it, &flag)?),
+            "--security" => {
+                a.security =
+                    Some(security_of(&need(&mut it, &flag)?).map_err(|e| e.message().to_string())?);
+            }
             "--trust" => {
-                a.trust =
-                    Some(trust_of(&need(&mut it, &flag)?).map_err(|e| e.message().to_string())?);
+                return Err("--trust is now --security: `trusted` is `none`, `secure` is `mutual-tls` (the default on a network), and `local` is the default on --stdio, local:// and shm://".to_string());
             }
             "--range" => a.ranges.push(need(&mut it, &flag)?),
             "--acl" => a.acl = Some(need(&mut it, &flag)?.into()),
@@ -290,8 +297,46 @@ fn run() -> Result<(), String> {
         return pairing(&a);
     }
     let (registry, described) = registry(&a)?;
-    let trust = a.trust.unwrap_or(Trust::Local);
-    let server = Server::new(registry, described, options(&a, trust)?);
+    let scheme = match a.listen.as_deref() {
+        Some(url) => url
+            .split_once("://")
+            .ok_or_else(|| format!("--listen takes scheme://address, not `{url}`"))?
+            .0
+            .to_string(),
+        None => "stdio".to_string(),
+    };
+    let security = a.security.unwrap_or_else(|| Security::default_for(&scheme));
+    let local = matches!(scheme.as_str(), "stdio" | "local" | "shm");
+    if local && security != Security::None {
+        return Err(format!(
+            "{scheme} runs on this machine with no TLS, and --security is {}: leave it out",
+            security.name()
+        ));
+    }
+    match (scheme.as_str(), security) {
+        ("ws" | "rdma", Security::ServerTls | Security::MutualTls) => {
+            return Err(format!(
+                "{scheme}:// carries no TLS, and the link is {}: pass --security none{}",
+                security.name(),
+                if scheme == "ws" {
+                    ", or listen on wss://"
+                } else {
+                    ""
+                }
+            ));
+        }
+        ("wss" | "tls", Security::None) => {
+            return Err(format!(
+                "{scheme}:// runs TLS: pass --security mutual-tls, or listen on {}://",
+                if scheme == "wss" { "ws" } else { "tcp" }
+            ));
+        }
+        (_, Security::ServerTls) if a.key_file.is_none() => {
+            return Err("server TLS proves clients by the key: pass --key-file".to_string());
+        }
+        _ => {}
+    }
+    let server = Server::new(registry, described, options(&a, security.trust(local))?);
     let refreshed = server.refresh();
     for r in &refreshed.refused {
         eprintln!("guatiao-remote-server: {}: {}", r.source, r.reason);
@@ -321,13 +366,25 @@ fn run() -> Result<(), String> {
     let _ = address;
     #[cfg(any(feature = "tcp", feature = "local"))]
     let front = Front::new(server, a.max_handshakes);
+    let tls = security != Security::None;
+    #[cfg(not(feature = "tls"))]
+    if tls {
+        return Err(format!(
+            "{} is not in this build (guatiao-source-remote's `tls` feature)",
+            security.name()
+        ));
+    }
     match scheme {
         #[cfg(feature = "tcp")]
-        "tcp" => serve_tcp(&front, address, &a),
+        "tcp" if !tls => serve_tcp(&front, address, &a),
         #[cfg(feature = "ws")]
         "ws" => serve_ws(&front, address, &a),
         #[cfg(feature = "tls")]
-        "tls" => serve_tls(&front, address, &a),
+        "tcp" | "tls" => serve_tls(&front, address, &a),
+        #[cfg(all(feature = "ws", feature = "tls"))]
+        "wss" => serve_wss(&front, address, &a),
+        #[cfg(feature = "quic")]
+        "quic" if !tls => serve_quic_trusted(&front, address, &a),
         #[cfg(feature = "quic")]
         "quic" => serve_quic(&front, address, &a),
         #[cfg(feature = "rdma")]
@@ -605,7 +662,7 @@ fn trusted_acl(
 ) -> Result<guatiao_source_remote::acl::Acl, String> {
     if server.options().trust() != Trust::Trusted {
         return Err(format!(
-            "{scheme}:// serves the trusted level: pass --trust trusted"
+            "{scheme}:// with no TLS serves the trusted level: pass --security none"
         ));
     }
     named_acl(a)?.ok_or_else(|| {
@@ -672,15 +729,22 @@ fn secure_config(
     ),
     String,
 > {
-    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig};
-    if server.options().trust() != Trust::Secure {
-        return Err(format!(
-            "{scheme}:// serves the secure level: pass --trust secure"
-        ));
+    use guatiao_source_remote::transport::tls::{PeerId, TlsConfig, identity_at};
+    let mutual = match server.options().trust() {
+        Trust::Secure => true,
+        Trust::ServerTls => false,
+        _ => {
+            return Err(format!(
+                "{scheme}:// with TLS serves mutual TLS or server TLS: pass --security mutual-tls or server-tls"
+            ));
+        }
+    };
+    if !mutual && !a.pins.is_empty() {
+        return Err("server TLS asks clients for no certificate: leave out --pin".to_string());
     }
     let mut config = match (&a.state_dir, &a.identity) {
         (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
-        (None, Some(path)) => TlsConfig::new(Identity::open_or_create(path).map_err(|e| {
+        (None, Some(path)) => TlsConfig::new(identity_at(path).map_err(|e| {
             let under = core::error::Error::source(&e)
                 .map(|u| format!(": {u}"))
                 .unwrap_or_default();
@@ -722,7 +786,10 @@ fn secure_config(
         .as_ref()
         .map_or_else(|| "every source".to_string(), listing);
     config = config.policy(policy);
-    let trusting = if !a.pins.is_empty() {
+    let trusting = if !mutual {
+        config = config.server_tls();
+        "clients by the key (server TLS)".to_string()
+    } else if !a.pins.is_empty() {
         format!("{} pinned clients", a.pins.len())
     } else {
         "the trust store's clients".to_string()
@@ -771,6 +838,33 @@ fn serve_quic(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Resul
     serve_accepted(front, || listener.accept())
 }
 
+#[cfg(feature = "quic")]
+fn serve_quic_trusted(
+    front: &alloc::sync::Arc<Front>,
+    address: &str,
+    a: &Args,
+) -> Result<(), String> {
+    use guatiao_source_remote::transport::quic::QuicListen;
+    let acl = trusted_acl(&front.server, "quic", a)?;
+    let said = listing(&acl);
+    let listener = QuicListen::bind_trusted(address, acl).map_err(|e| e.to_string())?;
+    eprintln!(
+        "guatiao-remote-server: serving quic://{} with no certificate checked, admitting {said}",
+        listener.local_addr().map_err(|e| e.to_string())?,
+    );
+    serve_accepted(front, || listener.accept())
+}
+
+#[cfg(all(feature = "ws", feature = "tls"))]
+fn serve_wss(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
+    use guatiao_source_remote::transport::ws::WsListen;
+    let (config, trusting, said) = secure_config(&front.server, "wss", a)?;
+    let listener = WsListen::bind_tls(address, &config).map_err(|e| e.to_string())?;
+    let at = listener.local_addr().map_err(|e| e.to_string())?;
+    say_serving(&format!("wss://{at}"), &config, &trusting, &said);
+    serve_accepted(front, || listener.accept())
+}
+
 #[cfg(feature = "rdma")]
 fn serve_rdma(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::rdma::{RdmaListen, RdmaPort};
@@ -794,7 +888,7 @@ fn serve_rdma(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Resul
 fn serve_local(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String> {
     use guatiao_source_remote::transport::local::LocalListen;
     if front.server.options().trust() != Trust::Local {
-        return Err("local:// serves the local level".to_string());
+        return Err("local:// runs with no TLS: leave --security out".to_string());
     }
     let listener = LocalListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
     eprintln!("guatiao-remote-server: serving local://{name}");
@@ -810,7 +904,7 @@ fn serve_local(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String
 fn serve_shm(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String> {
     use guatiao_source_remote::transport::shm::ShmListen;
     if front.server.options().trust() != Trust::Local {
-        return Err("shm:// serves the local level".to_string());
+        return Err("shm:// runs with no TLS: leave --security out".to_string());
     }
     let listener = ShmListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
     eprintln!("guatiao-remote-server: serving shm://{name}");

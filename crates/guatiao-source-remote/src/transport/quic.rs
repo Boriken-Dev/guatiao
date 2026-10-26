@@ -2,9 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! QUIC, the secure level over UDP: the mutual TLS 1.3 of
-//! [`tls`](super::tls) inside QUIC (quinn), with the same [`TlsConfig`]:
-//! identity, pins or trust store, policy and access control list. A link is
+//! QUIC over UDP: the mutual TLS 1.3 of [`tls`](super::tls) inside QUIC
+//! (quinn), with the same [`TlsConfig`]: identity, pins or trust store,
+//! policy and access control list. At no security
+//! ([`QuicConnect::trusted`], [`QuicListen::bind_trusted`]) QUIC still
+//! runs TLS, as it always does, but no certificate is checked: each side
+//! presents one it generated, and the link's key proof and the listener's
+//! access control list, by address, decide. A link is
 //! one bidirectional stream carrying the frames as TCP does; [`Datagrams`]
 //! beside it carry what a caller accepts losing. A listener proves a
 //! client's address with a Retry before admitting it, and a connection
@@ -431,6 +435,9 @@ struct Shared {
     send: Mutex<Option<SendStream>>,
     /// The peer's verified fingerprint, canonical.
     peer: OnceLock<String>,
+    /// Whether the peer's certificate was checked: false at no security,
+    /// where it proves nothing and [`peer`](Shared::peer) stays empty.
+    proves: bool,
     /// A client: this side's own fingerprint, to name in a refusal.
     client: Option<String>,
     /// Whether anything has come from the peer since the handshake.
@@ -446,9 +453,11 @@ impl Shared {
         self.rt.handle()
     }
 
-    fn open(&self, conn: quinn::Connection, send: SendStream, peer: &PeerId) {
+    fn open(&self, conn: quinn::Connection, send: SendStream, peer: Option<&PeerId>) {
         *lock(&self.send) = Some(send);
-        let _ = self.peer.set(peer.canonical());
+        if let Some(peer) = peer.filter(|_| self.proves) {
+            let _ = self.peer.set(peer.canonical());
+        }
         let _ = self.conn.set(conn);
     }
 
@@ -532,25 +541,34 @@ impl Pending {
     /// a client verifier scoped to `source`.
     fn config(&self, refusal: &Kept) -> io::Result<Arc<quinn::ServerConfig>> {
         let base = &self.listener.tls;
-        let verifier = Arc::new(Sourced {
-            inner: Arc::clone(&self.listener.verifier),
-            source: self.source,
-            refusal: Arc::clone(refusal),
-        });
-        let mut tls = ServerConfig::builder_with_provider(Arc::clone(base.crypto_provider()))
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .map_err(invalid)?
-            .with_client_cert_verifier(verifier)
-            .with_single_cert(
-                vec![self.listener.certificate.clone()],
-                self.listener.key.clone_key(),
-            )
-            .map_err(invalid)?;
-        tls.alpn_protocols.clone_from(&base.alpn_protocols);
-        tls.session_storage = Arc::clone(&base.session_storage);
-        tls.send_tls13_tickets = base.send_tls13_tickets;
-        tls.ticketer = Arc::clone(&base.ticketer);
-        let crypto = QuicServerConfig::try_from(Arc::new(tls)).map_err(invalid)?;
+        // At server TLS no client certificate is asked, so no verifier
+        // records a waiting client: the listener's own configuration does.
+        let tls = match &self.listener.verifier {
+            Some(inner) => {
+                let verifier = Arc::new(Sourced {
+                    inner: Arc::clone(inner),
+                    source: self.source,
+                    refusal: Arc::clone(refusal),
+                });
+                let mut tls =
+                    ServerConfig::builder_with_provider(Arc::clone(base.crypto_provider()))
+                        .with_protocol_versions(&[&rustls::version::TLS13])
+                        .map_err(invalid)?
+                        .with_client_cert_verifier(verifier)
+                        .with_single_cert(
+                            vec![self.listener.certificate.clone()],
+                            self.listener.key.clone_key(),
+                        )
+                        .map_err(invalid)?;
+                tls.alpn_protocols.clone_from(&base.alpn_protocols);
+                tls.session_storage = Arc::clone(&base.session_storage);
+                tls.send_tls13_tickets = base.send_tls13_tickets;
+                tls.ticketer = Arc::clone(&base.ticketer);
+                Arc::new(tls)
+            }
+            None => Arc::clone(base),
+        };
+        let crypto = QuicServerConfig::try_from(tls).map_err(invalid)?;
         let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
         config.transport_config(transport());
         // The access control list decided on the address the handshake came
@@ -586,17 +604,26 @@ impl Pending {
             e
         };
         check_alpn(&conn).map_err(refuse)?;
-        let peer = fingerprint(&conn).map_err(refuse)?;
-        if let Some(acl) = &self.listener.acl {
+        // At server TLS the client presents no certificate.
+        let peer = match self.listener.verifier {
+            Some(_) => Some(fingerprint(&conn).map_err(refuse)?),
+            None => None,
+        };
+        // At no security the certificate proves nothing: the list decided
+        // by address as the connection was accepted.
+        if let (Some(acl), Some(peer)) = (
+            self.listener.acl.as_ref().filter(|_| self.listener.proves),
+            &peer,
+        ) {
             let decided = acl.decide_peer(source, self.local, &peer.canonical());
             if decided.outcome != Outcome::Permit {
-                return Err(refuse(denied_by_acl(&peer, source, decided.rule_index)));
+                return Err(refuse(denied_by_acl(peer, source, decided.rule_index)));
             }
         }
         let accepting = conn.accept_bi();
         let (send, recv) = wait_at_most(shared.handle(), left(until)?, accepting)?
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
-        shared.open(conn, send, &peer);
+        shared.open(conn, send, peer.as_ref());
         Ok(recv)
     }
 }
@@ -651,6 +678,10 @@ impl FrameRead for QuicFrames {
 
     fn peer_id(&self) -> Option<String> {
         self.shared.peer.get().cloned()
+    }
+
+    fn encrypted(&self) -> bool {
+        true
     }
 
     fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
@@ -812,6 +843,8 @@ pub struct QuicConnect {
     /// Held while connecting, so a refusal kept is that connection's.
     connecting: Mutex<()>,
     me: String,
+    /// Whether the server's certificate is checked: false at no security.
+    proves: bool,
     timeout: Duration,
     rt: Arc<Rt>,
 }
@@ -848,10 +881,19 @@ impl QuicConnect {
             crypto: Arc::new(crypto),
             watched,
             connecting: Mutex::new(()),
-            me: config.fingerprint().canonical(),
+            me: config.me(),
+            proves: config.proves_peers(),
             timeout: CONNECT_TIMEOUT,
             rt: Rt::new()?,
         })
+    }
+
+    /// To `address` at no security: TLS whose certificates nobody checks
+    /// (this side presents one it generated, and takes the server's
+    /// whatever it is), the link's key proof deciding. A server listening
+    /// with [`QuicListen::bind_trusted`] answers it.
+    pub fn trusted(address: &str) -> io::Result<QuicConnect> {
+        QuicConnect::new(address, &TlsConfig::checking_nobody()?)
     }
 
     /// Within `timeout` per address tried, the handshake included.
@@ -930,12 +972,13 @@ impl QuicConnect {
             conn: OnceLock::new(),
             send: Mutex::new(None),
             peer: OnceLock::new(),
+            proves: self.proves,
             client: Some(self.me.clone()),
             heard: AtomicBool::new(false),
             endpoint: Some(endpoint),
             rt: Arc::clone(&self.rt),
         };
-        shared.open(conn, send, &peer);
+        shared.open(conn, send, Some(&peer));
         Ok(connection(shared, None, Some(recv), format!("quic {addr}")))
     }
 }
@@ -964,10 +1007,13 @@ struct Listener {
     /// The listener's TLS configuration, as coqui-peer-tls builds it
     /// under the policy: what each connection's own copies.
     tls: Arc<ServerConfig>,
-    verifier: Arc<dyn ClientCertVerifier>,
+    /// The client verifier; none at server TLS, which asks no certificate.
+    verifier: Option<Arc<dyn ClientCertVerifier>>,
     certificate: CertificateDer<'static>,
     key: PrivateKeyDer<'static>,
     acl: Option<Arc<Acl>>,
+    /// Whether clients' certificates are checked: false at no security.
+    proves: bool,
 }
 
 /// A listener at the secure level over QUIC. It admits peers by the
@@ -1000,6 +1046,26 @@ impl QuicListen {
         QuicListen::from_socket(UdpSocket::bind(addr)?, config)
     }
 
+    /// Binds the UDP `address` at no security, admitting the peers `acl`
+    /// permits by address: QUIC's TLS with a certificate it generated,
+    /// taking any client's, the link's key proof deciding.
+    pub fn bind_trusted(address: &str, acl: Acl) -> io::Result<QuicListen> {
+        let addr = address
+            .to_socket_addrs()?
+            .next()
+            .ok_or_else(|| invalid("no address to bind"))?;
+        QuicListen::from_socket_trusted(UdpSocket::bind(addr)?, acl)
+    }
+
+    /// A UDP socket the caller bound itself, at no security.
+    pub fn from_socket_trusted(socket: UdpSocket, acl: Acl) -> io::Result<QuicListen> {
+        let mut config = TlsConfig::checking_nobody()?;
+        let mut policy = config.tls_policy().clone();
+        policy.acl = Some(acl);
+        config = config.policy(policy);
+        QuicListen::from_socket(socket, &config)
+    }
+
     /// A UDP socket the caller bound itself, as `config` says.
     pub fn from_socket(socket: UdpSocket, config: &TlsConfig) -> io::Result<QuicListen> {
         let acl = match config.tls_policy().acl.clone() {
@@ -1007,10 +1073,16 @@ impl QuicListen {
             None => None,
         };
         let tls = config.server()?;
-        let verifier: Arc<dyn ClientCertVerifier> = config
-            .trust()?
-            .client_cert_verifier_with(config.tls_policy())
-            .map_err(|e| invalid(super::tls::words(&e)))?;
+        let verifier: Option<Arc<dyn ClientCertVerifier>> = if config.is_mutual() {
+            Some(
+                config
+                    .trust()?
+                    .client_cert_verifier_with(config.tls_policy())
+                    .map_err(|e| invalid(super::tls::words(&e)))?,
+            )
+        } else {
+            None
+        };
         let identity = config.identity();
         let pem = identity
             .to_pem()
@@ -1038,6 +1110,7 @@ impl QuicListen {
                 certificate: CertificateDer::from(identity.certificate_der().to_vec()),
                 key,
                 acl,
+                proves: config.proves_peers(),
             }),
             rt,
         })
@@ -1091,6 +1164,7 @@ impl QuicListen {
             conn: OnceLock::new(),
             send: Mutex::new(None),
             peer: OnceLock::new(),
+            proves: self.listener.proves,
             client: None,
             heard: AtomicBool::new(false),
             endpoint: Some(self.endpoint.clone()),

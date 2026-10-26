@@ -144,7 +144,7 @@ fn write(dir: &Path, file: &str, text: &str) {
 
 fn peer(name: &str, port: u16, extra: &str) -> String {
     format!(
-        "type = \"remote\"\nname = \"{name}\"\nconnect = \"tcp://127.0.0.1:{port}\"\ntrust = \"trusted\"\n{extra}"
+        "type = \"remote\"\nname = \"{name}\"\nconnect = \"tcp://127.0.0.1:{port}\"\nsecurity = \"none\"\n{extra}"
     )
 }
 
@@ -258,7 +258,7 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     write(
         &dir,
         "secure.guatiao.toml",
-        "type = \"remote\"\nname = \"far\"\nconnect = \"tcp://192.0.2.1:7000\"\ntrust = \"secure\"\n",
+        "type = \"remote\"\nname = \"far\"\nconnect = \"tcp://192.0.2.1:7000\"\n",
     );
     write(
         &dir,
@@ -281,13 +281,10 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     // The secure level runs over `tls://` alone, in a build that has it.
     let secure = why(&refreshed, "secure.guatiao.toml");
     if cfg!(feature = "tls") {
-        assert!(
-            secure.contains("`tcp://` runs the trusted level"),
-            "{secure}"
-        );
+        assert!(secure.contains("names this side's identity"), "{secure}");
     } else {
         assert!(
-            secure.contains("the secure level is not in this build"),
+            secure.contains("mutual-tls is not in this build"),
             "{secure}"
         );
     }
@@ -336,7 +333,7 @@ fn a_peer_that_cannot_be_reached_is_reported_once_and_the_others_served() {
 fn one_peer_and_manifests_of_peers_are_one_or_the_other() {
     let mut config = Map::new();
     config.set("connect", "tcp://127.0.0.1:7000");
-    config.set("trust", "trusted");
+    config.set("security", "none");
     let mut dirs = List::new();
     dirs.push("peers");
     config.set("dirs", dirs);
@@ -344,15 +341,108 @@ fn one_peer_and_manifests_of_peers_are_one_or_the_other() {
     assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert!(refused.message().contains("one or the other"));
 
+    // A network link with no security named runs mutual TLS, which names
+    // this side's identity.
     let mut secure = Map::new();
     secure.set("connect", "tcp://127.0.0.1:7000");
-    secure.set("trust", "secure");
     let refused = RemoteSource::from_config(&secure).unwrap_err();
     if cfg!(feature = "tls") {
         assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert!(
+            refused.message().contains("state_dir"),
+            "{}",
+            refused.message()
+        );
     } else {
         assert_eq!(refused.status, Status::GUATIAO_ERR_UNSUPPORTED);
+        assert!(
+            refused.message().contains("mutual-tls"),
+            "{}",
+            refused.message()
+        );
     }
+}
+
+#[test]
+fn the_old_trust_key_is_refused_with_what_to_write_now() {
+    let mut config = Map::new();
+    config.set("connect", "tcp://127.0.0.1:7000");
+    config.set("trust", "trusted");
+    let refused = RemoteSource::from_config(&config).unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(
+        refused.message().contains("`trust` is now `security`"),
+        "{}",
+        refused.message()
+    );
+    let dir = scratch("old_trust");
+    write(
+        &dir,
+        "old.guatiao.toml",
+        "type = \"remote\"\nname = \"old\"\nconnect = \"tcp://127.0.0.1:1\"\ntrust = \"trusted\"\n",
+    );
+    let mut dirs = List::new();
+    dirs.push(dir.display().to_string().as_str());
+    let mut config = Map::new();
+    config.set("dirs", dirs);
+    let mut registry = Registry::new("host", "1.0");
+    registry
+        .add_source("peers", RemoteSource::from_config(&config).unwrap())
+        .unwrap();
+    let refreshed = registry.refresh();
+    let words = format!("{:?}", refreshed.refused);
+    assert!(words.contains("`trust` is now `security`"), "{words}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn each_scheme_runs_the_securities_it_can_and_names_the_fix_otherwise() {
+    let refused = |connect: &str, security: Option<&str>| {
+        let mut config = Map::new();
+        config.set("connect", connect);
+        config.set("key", "k");
+        if let Some(s) = security {
+            config.set("security", s);
+        }
+        RemoteSource::from_config(&config)
+            .err()
+            .map(|e| (e.status, e.message().to_string()))
+    };
+    // None runs on these with a key; local transports run it by default.
+    assert_eq!(refused("tcp://127.0.0.1:1", Some("none")), None);
+    if cfg!(feature = "ws") {
+        assert_eq!(refused("ws://127.0.0.1:1/", Some("none")), None);
+        let (status, why) = refused("ws://127.0.0.1:1/", None).unwrap();
+        assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert!(
+            why.contains("carries no TLS") && why.contains("wss://"),
+            "{why}"
+        );
+        let (_, why) = refused("wss://127.0.0.1:1/", Some("none")).unwrap();
+        assert!(why.contains("runs TLS"), "{why}");
+    }
+    if cfg!(feature = "local") {
+        assert_eq!(refused("local://x", None), None);
+        let (_, why) = refused("local://x", Some("mutual-tls")).unwrap();
+        assert!(why.contains("carries no TLS"), "{why}");
+    }
+    if cfg!(feature = "tls") {
+        let (_, why) = refused("tls://127.0.0.1:1", Some("none")).unwrap();
+        assert!(why.contains("runs TLS"), "{why}");
+        // Server TLS needs no identity here, but the server's pins.
+        let (status, why) = refused("tcp://127.0.0.1:1", Some("server-tls")).unwrap();
+        assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert!(why.contains("whom it trusts"), "{why}");
+    }
+    if cfg!(feature = "rdma") {
+        let (_, why) = refused("rdma://127.0.0.1:1", None).unwrap();
+        assert!(why.contains("carries no TLS"), "{why}");
+    }
+    let (_, why) = refused("tcp://127.0.0.1:1", Some("secure")).unwrap();
+    assert!(
+        why.contains("`none`, `server-tls` or `mutual-tls`"),
+        "{why}"
+    );
 }
 
 /// A peer that goes away keeps its libraries listed as they were (calls

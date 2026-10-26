@@ -88,25 +88,23 @@ fn a_configuration_names_a_websocket_peer() {
     let port = trusted_server("127.0.0.1");
     let mut config = Map::new();
     config.set("connect", format!("ws://127.0.0.1:{port}/").as_str());
-    config.set("trust", "trusted");
+    config.set("security", "none");
     config.set("key", "test-key");
     let (registry, refused) = refresh(RemoteSource::from_config(&config).unwrap());
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(registry.offers::<dyn Greeter>().count(), 1);
 
-    let mut local = config.clone();
-    local.set("trust", "local");
-    let refused = RemoteSource::from_config(&local).unwrap_err();
-    assert!(
-        refused.message().contains("runs the trusted level"),
-        "{refused:?}"
-    );
+    let mut mutual = config.clone();
+    mutual.remove("security");
+    let refused = RemoteSource::from_config(&mutual).unwrap_err();
+    assert!(refused.message().contains("carries no TLS"), "{refused:?}");
     let mut secure = Map::new();
     secure.set("connect", "wss://127.0.0.1:1/");
-    secure.set("trust", "trusted");
+    secure.set("security", "none");
     secure.set("key", "k");
     let refused = RemoteSource::from_config(&secure).unwrap_err();
-    assert_eq!(refused.status, guatiao::Status::GUATIAO_ERR_UNSUPPORTED);
+    assert_eq!(refused.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(refused.message().contains("runs TLS"), "{refused:?}");
 }
 
 #[test]

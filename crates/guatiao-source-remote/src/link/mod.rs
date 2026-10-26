@@ -134,13 +134,16 @@ impl LinkOptions {
         self.trust
     }
 
-    /// The pre-shared key the `trusted` level proves.
+    /// The pre-shared key the `trusted` level proves both ways; at server
+    /// TLS, the key a server asks its clients to prove (it sends a proof of
+    /// its own) and a client proves when asked.
     pub fn key(mut self, key: &[u8]) -> LinkOptions {
         self.key = Some(Arc::from(key));
         self
     }
 
-    /// The token a `secure` client presents, or a server requires.
+    /// The token a client presents (at server TLS or mutual TLS), or a
+    /// server requires of every client.
     pub fn token(mut self, token: &str) -> LinkOptions {
         self.token = Some(Arc::from(token));
         self
@@ -495,6 +498,17 @@ pub(crate) struct Setup {
     pub(crate) name: String,
 }
 
+/// Whether this side's handshake proves the pre-shared key: always at the
+/// trusted level, and at server TLS when a key is given (a server's
+/// WELCOME then carries a proof, which asks the client for its own).
+fn proves_key(options: &LinkOptions) -> bool {
+    match options.trust {
+        Trust::Trusted => true,
+        Trust::ServerTls => options.key.is_some(),
+        _ => false,
+    }
+}
+
 #[cfg(feature = "tcp")]
 fn need_key(options: &LinkOptions) -> Result<&[u8], LinkError> {
     options
@@ -527,6 +541,22 @@ impl Link {
             return Err(LinkError::Trust(
                 "the secure level runs over a transport that proves the peer, `tls://`".to_string(),
             ));
+        }
+        if options.trust == Trust::ServerTls {
+            if reader.peer_id().is_none() {
+                writer.shutdown();
+                return Err(LinkError::Trust(
+                    "server TLS runs over a transport that proves the server by its certificate"
+                        .to_string(),
+                ));
+            }
+            if options.key.is_none() && options.token.is_none() {
+                writer.shutdown();
+                return Err(LinkError::Trust(
+                    "at server TLS the client proves itself by a key or a token: name one"
+                        .to_string(),
+                ));
+            }
         }
         reader.set_timeout(Some(options.handshake_timeout))?;
         let ours = Offer {
@@ -568,9 +598,30 @@ impl Link {
                 }));
             }
         };
+        // At server TLS a WELCOME with a proof asks for the key, one
+        // without asks none (a token, if required, went with the HELLO).
+        let asked = match options.trust {
+            Trust::Trusted => true,
+            Trust::ServerTls => !proof.is_empty(),
+            _ => false,
+        };
+        if asked && cfg!(not(feature = "tcp")) {
+            writer.shutdown();
+            return Err(LinkError::Trust(
+                "the key proof needs guatiao-source-remote's `tcp` feature".to_string(),
+            ));
+        }
         #[cfg(feature = "tcp")]
-        if options.trust == Trust::Trusted {
-            let key = need_key(options)?;
+        if asked {
+            let key = options.key.as_deref().ok_or_else(|| {
+                writer.shutdown();
+                LinkError::Trust(if options.trust == Trust::Trusted {
+                    "the trusted level needs a pre-shared key".to_string()
+                } else {
+                    "the server proves clients by a pre-shared key, and this client has none"
+                        .to_string()
+                })
+            })?;
             if !handshake::proves(key, handshake::SERVER, &nonce, &server_nonce, &proof) {
                 writer.shutdown();
                 return Err(LinkError::Trust(
@@ -633,6 +684,20 @@ impl Link {
                         "the secure level runs over a transport that proves the peer, and this one proves none",
                     ));
                 }
+                if trust == Trust::ServerTls && !reader.encrypted() {
+                    return Err(refuse_link(
+                        &mut *writer,
+                        Status::GUATIAO_ERR_UNSUPPORTED,
+                        "server TLS runs over a transport that encrypts and proves the server, and this one does neither",
+                    ));
+                }
+                if trust == Trust::ServerTls && options.key.is_none() && options.token.is_none() {
+                    return Err(refuse_link(
+                        &mut *writer,
+                        Status::GUATIAO_ERR_UNSUPPORTED,
+                        "this server proves clients at server TLS by a key or a token, and has neither",
+                    ));
+                }
                 (nonce, Offer::from_value(&offered, &ours))
             }
             Ok(_) => {
@@ -661,7 +726,7 @@ impl Link {
             }
         }
         let nonce = handshake::nonce();
-        let proof = if options.trust == Trust::Trusted {
+        let proof = if proves_key(options) {
             #[cfg(feature = "tcp")]
             {
                 handshake::proof(need_key(options)?, handshake::SERVER, &client_nonce, &nonce)
@@ -686,7 +751,7 @@ impl Link {
             },
         )?;
         #[cfg(feature = "tcp")]
-        if options.trust == Trust::Trusted {
+        if proves_key(options) {
             read_handshake(&mut *reader, &mut buf)?;
             let proved = match Frame::decode(&buf, Alloc::rust()) {
                 Ok(Frame::Proof { proof }) => handshake::proves(

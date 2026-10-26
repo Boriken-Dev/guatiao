@@ -774,13 +774,7 @@ fn pairing_across_two_processes_through_the_servers_commands() {
     let (server_dir, client_dir) = (dir.join("server"), dir.join("client"));
     let (mut child, lines) = procs::start(
         Command::new(server_program())
-            .args([
-                "--listen",
-                "tls://127.0.0.1:0",
-                "--trust",
-                "secure",
-                "--state-dir",
-            ])
+            .args(["--listen", "tls://127.0.0.1:0", "--state-dir"])
             .arg(&server_dir)
             .arg("--kinds")
             .arg(kinds_json())
@@ -863,8 +857,8 @@ fn a_configuration_map_reaches_the_secure_level() {
     let address = listen(&server, secure_server());
 
     let mut config = guatiao::Map::new();
-    config.set("connect", format!("tls://{address}").as_str());
-    config.set("trust", "secure");
+    config.set("connect", format!("tcp://{address}").as_str());
+    config.set("security", "mutual-tls");
     config.set(
         "state_dir",
         dir.join("client").display().to_string().as_str(),
@@ -897,14 +891,10 @@ fn a_configuration_map_reaches_the_secure_level() {
 #[test]
 fn the_secure_level_over_a_transport_that_proves_no_peer_is_refused() {
     let mut config = guatiao::Map::new();
-    config.set("connect", "tcp://127.0.0.1:9");
-    config.set("trust", "secure");
+    config.set("connect", "tls://127.0.0.1:9");
+    config.set("security", "none");
     let refused = RemoteSource::from_config(&config).unwrap_err();
-    assert!(
-        refused
-            .message()
-            .contains("`tcp://` runs the trusted level")
-    );
+    assert!(refused.message().contains("`tls://` runs TLS"));
     // In Rust, a link at the secure level over memory proves no peer.
     let source = RemoteSource::new(
         Box::new(common::Memory(secure_server())),
@@ -935,7 +925,7 @@ fn a_peer_manifest_names_a_secure_peer() {
     std::fs::write(
         peers.join("lab.guatiao.toml"),
         format!(
-            "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://{address}\"\ntrust = \"secure\"\n\
+            "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://{address}\"\n\
              identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n\n[policy]\nprofile = \"strict\"\n",
             server.fingerprint()
         ),

@@ -45,7 +45,7 @@ fn start(name: &str, args: &[&str]) -> (Running, Receiver<String>, u16) {
     std::fs::write(&key, KEY).unwrap();
     let (child, lines) = procs::start(
         Command::new(env!("CARGO_BIN_EXE_guatiao-remote-server"))
-            .args(["--listen", "tcp://127.0.0.1:0", "--trust", "trusted"])
+            .args(["--listen", "tcp://127.0.0.1:0", "--security", "none"])
             .arg("--key-file")
             .arg(&key)
             .args(args),

@@ -14,6 +14,7 @@
 //! value  := len:uint wire-encoded value
 //!
 //! HELLO    0x01 "GTRM" version:u8 trust:u8 nonce:16 options:value
+//!          trust: 0 local, 1 trusted, 2 secure (mutual TLS), 3 server TLS
 //! WELCOME  0x02 "GTRM" version:u8 nonce:16 proof:bytes options:value
 //! PROOF    0x03 proof:bytes
 //! LIST     0x04 call:uint
@@ -92,8 +93,13 @@ pub enum Trust {
     /// range, a pre-shared key proved in the handshake. Not a defence
     /// against anyone on that network.
     Trusted,
-    /// Any network: TLS 1.3 or QUIC, with a token or client certificates.
+    /// Any network, mutual TLS: TLS 1.3 or QUIC, both sides proven by
+    /// certificate, with a token on top when the server asks one.
     Secure,
+    /// Any network, server TLS: the server proven by its certificate, the
+    /// client by the pre-shared key (when the server's WELCOME carries a
+    /// proof) or a token, inside the encrypted channel.
+    ServerTls,
 }
 
 impl Trust {
@@ -102,6 +108,7 @@ impl Trust {
             Trust::Local => 0,
             Trust::Trusted => 1,
             Trust::Secure => 2,
+            Trust::ServerTls => 3,
         }
     }
 
@@ -110,6 +117,7 @@ impl Trust {
             0 => Trust::Local,
             1 => Trust::Trusted,
             2 => Trust::Secure,
+            3 => Trust::ServerTls,
             _ => {
                 return Err(ProtocolError::Field {
                     at,
@@ -119,12 +127,14 @@ impl Trust {
         })
     }
 
-    /// Its name in a configuration: `local`, `trusted`, `secure`.
+    /// Its name in the protocol's documentation and vectors: `local`,
+    /// `trusted`, `secure`, `server-tls`.
     pub fn name(self) -> &'static str {
         match self {
             Trust::Local => "local",
             Trust::Trusted => "trusted",
             Trust::Secure => "secure",
+            Trust::ServerTls => "server-tls",
         }
     }
 }
@@ -264,7 +274,8 @@ pub enum Frame<'a> {
     Welcome {
         /// Its half of the nonce.
         nonce: [u8; 16],
-        /// Its proof of the key (`trusted`), else empty.
+        /// Its proof of the key (`trusted`, and `server-tls` when the server
+        /// proves the client by the key), else empty.
         proof: &'a [u8],
         /// What it accepts.
         options: Value,
@@ -640,6 +651,11 @@ mod tests {
         round_trip(Frame::Hello {
             trust: Trust::Trusted,
             nonce: [7; 16],
+            options: Value::from(options.clone()),
+        });
+        round_trip(Frame::Hello {
+            trust: Trust::ServerTls,
+            nonce: [8; 16],
             options: Value::from(options.clone()),
         });
         round_trip(Frame::Welcome {

@@ -56,6 +56,14 @@ pub trait FrameRead: Send {
         None
     }
 
+    /// Whether what crosses is encrypted by a TLS session the transport
+    /// ran, which also proved this side's certificate to the peer (TLS,
+    /// QUIC, WebSocket over TLS): what a server needs for server TLS. A
+    /// wrapper forwards it, as `peer_id`.
+    fn encrypted(&self) -> bool {
+        false
+    }
+
     /// Datagrams beside the link's frames, on a transport that has them
     /// (QUIC); `None` elsewhere. A wrapper forwards it.
     fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
