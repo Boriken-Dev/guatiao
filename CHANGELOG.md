@@ -14,6 +14,13 @@ write now.
 
 ### Added
 
+- **Kind generators import an object kind another document describes,
+  and a kind may name itself.** `guatiao-kind DOC --import
+  listener=./listener_kind.js` (Node) and `dart run guatiao:kind DOC -o
+  FILE --import listener=listener_kind.dart` (Dart) write a module that
+  imports the object kinds a separate document describes instead of
+  refusing them. Node's `kindsOf` loads an object kind that names itself
+  through its slots, or one naming it back, which it refused before.
 - **Python: a kind born in Python is written as its description.** A
   `KindProtocol` class naming its kind but no `floor_hash` gets the floor
   hash `#[guatiao::kind]` would give the same required slots, and
