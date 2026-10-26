@@ -27,7 +27,8 @@ use guatiao::library::Registry;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 use guatiao_source_remote::transport::rdma::{self, RING, RdmaConnect, RdmaListen, RdmaPort};
-use guatiao_source_remote::transport::tcp::{Accepted, Range};
+use guatiao_source_remote::acl::{Acl, Action, Rule};
+use guatiao_source_remote::transport::tcp::Accepted;
 use guatiao_source_remote::{LinkOptions, RemoteSource, Server, Trust};
 
 const KEY: &[u8] = b"rdma-test-key";
@@ -47,9 +48,16 @@ fn port() -> RdmaPort {
     }
 }
 
+/// An access control list permitting `source` alone.
+fn permit(source: &str) -> Acl {
+    let mut acl = Acl::default();
+    acl.push(Rule::new(Action::Permit, source.parse().unwrap()));
+    acl
+}
+
 /// A trusted server on loopback, set up over TCP and carried by RDMA.
 fn serve(server: Server) -> String {
-    let listener = RdmaListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.1").unwrap()])
+    let listener = RdmaListen::bind("127.0.0.1:0", permit("127.0.0.1"))
         .expect("listens")
         .port(port());
     let address = listener.local_addr().unwrap().to_string();
@@ -371,7 +379,7 @@ fn the_right_key_links_and_others_are_refused() {
 
 #[test]
 fn a_peer_outside_the_ranges_is_turned_away_unread() {
-    let listener = RdmaListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.2").unwrap()])
+    let listener = RdmaListen::bind("127.0.0.1:0", permit("127.0.0.2"))
         .unwrap()
         .port(port());
     let mut c = TcpStream::connect(listener.local_addr().unwrap()).unwrap();

@@ -18,16 +18,21 @@ use guatiao_source_remote::config::trust_of;
 use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
 
 const USAGE: &str = "\
-guatiao-remote-server (--stdio | --listen tcp://ADDRESS:PORT) [options]
+guatiao-remote-server (--stdio | --listen URL) [options]
 
   --stdio               serve one link on stdin and stdout (a host's child)
-  --listen URL          serve every link to URL (tcp:// is the trusted level,
-                        ws://ADDRESS:PORT the same over WebSocket, for a browser;
-                        local://name the local one: a socket path or a pipe name;
-                        rdma://ADDRESS:PORT is RDMA, experimental, Linux only)
+  --listen URL          serve every link to URL: tcp://ADDRESS:PORT is the
+                        trusted level, ws://ADDRESS:PORT the same over
+                        WebSocket (a browser), local://name the local one (a
+                        socket path or a pipe name), rdma://ADDRESS:PORT RDMA
+                        (experimental, Linux only)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
-  --range CIDR          an address range peers are accepted from, others
-                        closed unread (trusted; repeatable; required)
+  --range CIDR          admit peers from this address range (repeatable): a
+                        permit rule of the access control list, which denies
+                        what no rule permits
+  --acl PATH            the access control list, a TOML or JSON file
+                        ([[rule]] action, source, destination, port,
+                        fingerprint; default); trusted needs it or --range
   --key-file PATH       the trusted level's pre-shared key
   --rdma-device NAME    the RDMA device rdma:// goes through (default: the first)
   --kinds PATH          a kind description document (repeatable)
@@ -43,6 +48,7 @@ struct Args {
     listen: Option<String>,
     trust: Option<Trust>,
     ranges: Vec<String>,
+    acl: Option<PathBuf>,
     key_file: Option<PathBuf>,
     rdma_device: Option<String>,
     kinds: Vec<PathBuf>,
@@ -61,6 +67,7 @@ fn parse() -> Result<Args, String> {
         listen: None,
         trust: None,
         ranges: Vec::new(),
+        acl: None,
         key_file: None,
         rdma_device: None,
         kinds: Vec::new(),
@@ -88,6 +95,7 @@ fn parse() -> Result<Args, String> {
                     Some(trust_of(&need(&mut it, &flag)?).map_err(|e| e.message().to_string())?);
             }
             "--range" => a.ranges.push(need(&mut it, &flag)?),
+            "--acl" => a.acl = Some(need(&mut it, &flag)?.into()),
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),
             "--rdma-device" => a.rdma_device = Some(need(&mut it, &flag)?),
             "--kinds" => a.kinds.push(need(&mut it, &flag)?.into()),
@@ -113,6 +121,22 @@ fn parse() -> Result<Args, String> {
         return Err(format!("name one of --stdio and --listen\n\n{USAGE}"));
     }
     Ok(a)
+}
+
+/// A TOML or JSON file as a value: JSON when its name ends in `.json`.
+#[cfg(feature = "tcp")]
+fn document(path: &std::path::Path) -> Result<Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let how = guatiao_serde::Presentation::new();
+    let read = if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+    {
+        guatiao_serde::text::json::from_str(&text, Alloc::rust(), how)
+    } else {
+        guatiao_serde::text::toml::from_str(&text, Alloc::rust(), how)
+    };
+    read.map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn config_map(json: Option<&str>) -> Result<Map, String> {
@@ -202,11 +226,11 @@ fn run() -> Result<(), String> {
     let _ = address;
     match scheme {
         #[cfg(feature = "tcp")]
-        "tcp" => serve_tcp(&server, address, &a.ranges),
+        "tcp" => serve_tcp(&server, address, &a),
         #[cfg(feature = "ws")]
-        "ws" => serve_ws(&server, address, &a.ranges),
+        "ws" => serve_ws(&server, address, &a),
         #[cfg(feature = "rdma")]
-        "rdma" => serve_rdma(&server, address, &a.ranges, a.rdma_device.as_deref()),
+        "rdma" => serve_rdma(&server, address, &a),
         #[cfg(feature = "local")]
         "local" => serve_local(&server, address),
         #[cfg(feature = "shm")]
@@ -215,21 +239,49 @@ fn run() -> Result<(), String> {
     }
 }
 
+/// The access control list `--acl` and `--range` name, if they name one.
 #[cfg(feature = "tcp")]
-fn ranges_of(
+fn named_acl(a: &Args) -> Result<Option<guatiao_source_remote::acl::Acl>, String> {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    let mut acl = match &a.acl {
+        Some(path) => Some(
+            guatiao_source_remote::config::acl_of(&document(path)?)
+                .map_err(|e| format!("{}: {}", path.display(), e.message()))?,
+        ),
+        None => None,
+    };
+    if !a.ranges.is_empty() {
+        let acl = acl.get_or_insert_with(Acl::default);
+        for range in &a.ranges {
+            let source = range.parse().map_err(|e| format!("--range {range}: {e}"))?;
+            acl.push(Rule::new(Action::Permit, source));
+        }
+    }
+    Ok(acl)
+}
+
+/// An access control list on one line, for the line a server starts with.
+#[cfg(feature = "tcp")]
+fn listing(acl: &guatiao_source_remote::acl::Acl) -> String {
+    acl.to_string().trim_end().replace('\n', "; ")
+}
+
+/// The trusted level's access control list: one must be named, since the
+/// default denies every peer.
+#[cfg(feature = "tcp")]
+fn trusted_acl(
     server: &Server,
     scheme: &str,
-    ranges: &[String],
-) -> Result<Vec<guatiao_source_remote::transport::tcp::Range>, String> {
+    a: &Args,
+) -> Result<guatiao_source_remote::acl::Acl, String> {
     if server.options().trust() != Trust::Trusted {
         return Err(format!(
             "{scheme}:// serves the trusted level: pass --trust trusted"
         ));
     }
-    ranges
-        .iter()
-        .map(|r| guatiao_source_remote::transport::tcp::Range::parse(r))
-        .collect()
+    named_acl(a)?.ok_or_else(|| {
+        format!("{scheme}:// admits the peers --range or --acl names: with neither, every peer would be closed unread")
+    })
 }
 
 /// Serves every link `accept` hands over, each on a thread of its own.
@@ -251,7 +303,7 @@ fn serve_accepted(
                 });
             }
             Ok(Accepted::Refused(peer)) => {
-                eprintln!("guatiao-remote-server: {peer} is outside the configured ranges");
+                eprintln!("guatiao-remote-server: the access control list denies {peer}");
             }
             Ok(_) => {}
             Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
@@ -260,60 +312,46 @@ fn serve_accepted(
 }
 
 #[cfg(feature = "tcp")]
-fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), String> {
+fn serve_tcp(server: &Server, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::tcp::TcpListen;
-    let ranges = ranges_of(server, "tcp", ranges)?;
-    let listener = TcpListen::bind(address, &ranges).map_err(|e| e.to_string())?;
+    let acl = trusted_acl(server, "tcp", a)?;
+    let said = listing(&acl);
+    let listener = TcpListen::bind(address, acl).map_err(|e| e.to_string())?;
     eprintln!(
-        "guatiao-remote-server: serving tcp://{} to {}",
+        "guatiao-remote-server: serving tcp://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
-        ranges
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
     );
     serve_accepted(server, || listener.accept())
 }
 
 #[cfg(feature = "ws")]
-fn serve_ws(server: &Server, address: &str, ranges: &[String]) -> Result<(), String> {
+fn serve_ws(server: &Server, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::ws::WsListen;
-    let ranges = ranges_of(server, "ws", ranges)?;
-    let listener = WsListen::bind(address, &ranges).map_err(|e| e.to_string())?;
+    let acl = trusted_acl(server, "ws", a)?;
+    let said = listing(&acl);
+    let listener = WsListen::bind(address, acl).map_err(|e| e.to_string())?;
     eprintln!(
-        "guatiao-remote-server: serving ws://{} to {}",
+        "guatiao-remote-server: serving ws://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
-        ranges
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
     );
     serve_accepted(server, || listener.accept())
 }
 
 #[cfg(feature = "rdma")]
-fn serve_rdma(
-    server: &Server,
-    address: &str,
-    ranges: &[String],
-    device: Option<&str>,
-) -> Result<(), String> {
+fn serve_rdma(server: &Server, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::rdma::{RdmaListen, RdmaPort};
-    let ranges = ranges_of(server, "rdma", ranges)?;
-    let port = device.map_or_else(RdmaPort::first, RdmaPort::named);
-    let listener = RdmaListen::bind(address, &ranges)
+    let acl = trusted_acl(server, "rdma", a)?;
+    let said = listing(&acl);
+    let port = a
+        .rdma_device
+        .as_deref()
+        .map_or_else(RdmaPort::first, RdmaPort::named);
+    let listener = RdmaListen::bind(address, acl)
         .map_err(|e| e.to_string())?
         .port(port);
     eprintln!(
-        "guatiao-remote-server: serving rdma://{} to {}",
+        "guatiao-remote-server: serving rdma://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
-        ranges
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
     );
     serve_accepted(server, || listener.accept())
 }

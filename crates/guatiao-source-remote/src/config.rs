@@ -115,6 +115,15 @@ fn no_secure_level() -> ProviderError {
     )
 }
 
+/// Reads an access control list from a value in coqui-net-acl's text
+/// form: `default` (`deny` unless `permit`) and `rule`, a list of maps
+/// with `action`, `source`, `destination`, `port`, `fingerprint`, `log`.
+#[cfg(feature = "tcp")]
+pub fn acl_of(value: &guatiao::Value) -> Result<coqui_net_acl::Acl, ProviderError> {
+    guatiao_serde::adapt::from_value(value)
+        .map_err(|e| refused(format!("not an access control list: {e}")))
+}
+
 /// Where a configuration says to connect, and how.
 pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderError> {
     if let Some(child) = map.get("child") {

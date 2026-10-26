@@ -16,7 +16,7 @@ use common::Ear;
 use greeter_kind::Greeter;
 use guatiao::Map;
 use guatiao::library::Registry;
-use guatiao_source_remote::transport::tcp::{Accepted, Range};
+use guatiao_source_remote::transport::tcp::Accepted;
 use guatiao_source_remote::transport::ws::{WsConnect, WsListen};
 use guatiao_source_remote::{LinkOptions, RemoteSource, Server, Trust};
 
@@ -24,7 +24,7 @@ const KEY: &[u8] = b"test-key";
 
 /// A server on loopback admitting `range`; answers its port.
 fn listen(server: Server, range: &str) -> u16 {
-    let listener = WsListen::bind("127.0.0.1:0", &[Range::parse(range).unwrap()]).unwrap();
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&[range])).unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
         while let Ok(accepted) = listener.accept() {

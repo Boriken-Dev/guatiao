@@ -21,7 +21,7 @@ use greeter_kind::Greeter;
 use guatiao::value::convert::TryAsRef;
 use guatiao::value::wire;
 use guatiao::{List, Map, Status, Value};
-use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpConnect, TcpListen};
+use guatiao_source_remote::transport::tcp::{Accepted, TcpConnect, TcpListen};
 use guatiao_source_remote::{LinkOptions, RemoteSource, Trust};
 use serde_json::Value as Json;
 
@@ -303,7 +303,7 @@ fn a_c_client_calls_a_rust_server() {
         return;
     };
     let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY.as_bytes()));
-    let listener = TcpListen::bind("127.0.0.1:0", &[Range::parse("127.0.0.1").unwrap()]).unwrap();
+    let listener = TcpListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
     let port = listener.local_addr().unwrap().port();
     let serving = server.clone();
     std::thread::spawn(move || {

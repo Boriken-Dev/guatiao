@@ -30,7 +30,9 @@ use core::time::Duration;
 use std::io;
 use std::net::TcpListener;
 
-use super::tcp::{Accepted, Range, TcpListen};
+use coqui_net_acl::Acl;
+
+use super::tcp::{Accepted, TcpListen};
 use super::{Connect, Connection};
 
 /// Bytes each direction's ring holds.
@@ -170,8 +172,8 @@ impl Connect for RdmaConnect {
     }
 }
 
-/// Listens for RDMA links on a TCP address, accepting peers inside its
-/// ranges.
+/// Listens for RDMA links on a TCP address, admitting peers by an access
+/// control list.
 #[derive(Debug)]
 pub struct RdmaListen {
     tcp: TcpListen,
@@ -180,26 +182,26 @@ pub struct RdmaListen {
 }
 
 impl RdmaListen {
-    /// Binds `address` as [`TcpListen::bind`] does, accepting peers inside
-    /// `ranges`, through [`RdmaPort::first`].
-    pub fn bind(address: &str, ranges: &[Range]) -> io::Result<RdmaListen> {
+    /// Binds `address` as [`TcpListen::bind`] does, admitting the peers
+    /// `acl` permits, through [`RdmaPort::first`].
+    pub fn bind(address: &str, acl: Acl) -> io::Result<RdmaListen> {
         if cfg!(not(target_os = "linux")) {
             return Err(unsupported());
         }
         Ok(RdmaListen {
-            tcp: TcpListen::bind(address, ranges)?,
+            tcp: TcpListen::bind(address, acl)?,
             port: RdmaPort::first(),
             timeout: SETUP_TIMEOUT,
         })
     }
 
     /// A listener the caller bound itself, as [`TcpListen::from_listener`].
-    pub fn from_listener(listener: TcpListener, ranges: &[Range]) -> io::Result<RdmaListen> {
+    pub fn from_listener(listener: TcpListener, acl: Acl) -> io::Result<RdmaListen> {
         if cfg!(not(target_os = "linux")) {
             return Err(unsupported());
         }
         Ok(RdmaListen {
-            tcp: TcpListen::from_listener(listener, ranges)?,
+            tcp: TcpListen::from_listener(listener, acl),
             port: RdmaPort::first(),
             timeout: SETUP_TIMEOUT,
         })
@@ -216,8 +218,8 @@ impl RdmaListen {
         self.tcp.local_addr()
     }
 
-    /// The next link, set up, or a peer from outside the ranges turned
-    /// away unread.
+    /// The next link, set up, or a peer the list denies, turned away
+    /// unread.
     pub fn accept(&self) -> io::Result<Accepted> {
         let (stream, peer) = match self.tcp.accept_stream()? {
             Ok(accepted) => accepted,

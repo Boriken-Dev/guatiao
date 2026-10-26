@@ -198,6 +198,14 @@ fn tcp_listener(address: &str, mss: Option<u32>) -> io::Result<TcpListener> {
     Ok(s.into())
 }
 
+/// An access control list permitting every source.
+fn every_source() -> guatiao_source_remote::acl::Acl {
+    guatiao_source_remote::acl::Acl {
+        rules: Vec::new(),
+        default: guatiao_source_remote::acl::Action::Permit,
+    }
+}
+
 fn serve(a: &Args) -> Result<(), String> {
     let (scheme, address) = split(&a.url)?;
     let mut registry = Registry::new("bench-server", "1.0");
@@ -231,13 +239,10 @@ fn serve(a: &Args) -> Result<(), String> {
     eprintln!("serving {}", a.url);
     match scheme {
         "tcp" => {
-            use guatiao_source_remote::transport::tcp::{Accepted, Range, TcpListen};
+            use guatiao_source_remote::transport::tcp::{Accepted, TcpListen};
             let listener = tcp_listener(address, a.mss).map_err(|e| e.to_string())?;
-            let ip = listener.local_addr().map_err(|e| e.to_string())?.ip();
-            // Every address of the listener's own family: a bench on a
-            // network its owner isolates.
-            let any = Range::parse(if ip.is_ipv4() { "0.0.0.0/0" } else { "::/0" })?;
-            let listen = TcpListen::from_listener(listener, &[any]).map_err(|e| e.to_string())?;
+            // Every source: a bench on a network its owner isolates.
+            let listen = TcpListen::from_listener(listener, every_source());
             loop {
                 match listen.accept() {
                     Ok(Accepted::Connection(c)) => serve_one(Ok(c)),
@@ -248,11 +253,9 @@ fn serve(a: &Args) -> Result<(), String> {
         }
         #[cfg(feature = "rdma")]
         "rdma" => {
-            use guatiao_source_remote::transport::tcp::{Accepted, Range};
+            use guatiao_source_remote::transport::tcp::Accepted;
             let listener = tcp_listener(address, None).map_err(|e| e.to_string())?;
-            let ip = listener.local_addr().map_err(|e| e.to_string())?.ip();
-            let any = Range::parse(if ip.is_ipv4() { "0.0.0.0/0" } else { "::/0" })?;
-            let listen = transport::rdma::RdmaListen::from_listener(listener, &[any])
+            let listen = transport::rdma::RdmaListen::from_listener(listener, every_source())
                 .map_err(|e| e.to_string())?;
             loop {
                 match listen.accept() {
