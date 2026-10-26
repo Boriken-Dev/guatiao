@@ -223,3 +223,96 @@ fn write_batch(writer: &mut dyn FrameWrite, batch: &[Queued]) -> io::Result<()> 
         writer.write_frames(&whole)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::sync::Arc;
+
+    /// One call on the writer, with the bytes it was given.
+    #[derive(Debug, PartialEq)]
+    enum Op {
+        Frames(Vec<Vec<u8>>),
+        Parts(Vec<u8>, Vec<u8>),
+    }
+
+    /// A writer that records each call it gets.
+    struct Recording(Arc<Mutex<Vec<Op>>>);
+
+    impl FrameWrite for Recording {
+        fn write_frame(&mut self, frame: &[u8]) -> io::Result<()> {
+            lock(&self.0).push(Op::Frames(vec![frame.to_vec()]));
+            Ok(())
+        }
+
+        fn write_frame_parts(&mut self, head: &[u8], tail: &[u8]) -> io::Result<()> {
+            lock(&self.0).push(Op::Parts(head.to_vec(), tail.to_vec()));
+            Ok(())
+        }
+
+        fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
+            lock(&self.0).push(Op::Frames(frames.iter().map(|f| f.to_vec()).collect()));
+            Ok(())
+        }
+    }
+
+    fn gate() -> (Gate, Arc<Mutex<Vec<Op>>>) {
+        let ops = Arc::new(Mutex::new(Vec::new()));
+        (Gate::new(Box::new(Recording(Arc::clone(&ops)))), ops)
+    }
+
+    fn bytes(s: &str) -> Vec<u8> {
+        s.as_bytes().to_vec()
+    }
+
+    #[test]
+    fn a_free_writer_writes_a_frames_parts_from_where_they_lie() {
+        let (gate, ops) = gate();
+        assert!(gate.send_parts(1, bytes("head"), b"tail").is_ok());
+        assert_eq!(*lock(&ops), [Op::Parts(bytes("head"), bytes("tail"))]);
+        assert!(!gate.retract(1), "it went out");
+    }
+
+    #[test]
+    fn frames_queued_behind_a_busy_writer_go_out_in_order_whole_runs_together() {
+        let (gate, ops) = gate();
+        let busy = gate.try_with(|_| {
+            for sent in [
+                gate.send(1, bytes("a")),
+                gate.send_with_tail(2, bytes("h2"), bytes("..t2"), 2),
+                gate.send(3, bytes("b")),
+                gate.send(4, bytes("c")),
+                // Copied behind its head while the writer is busy.
+                gate.send_parts(5, bytes("h5"), b"t5"),
+                gate.send_with_tail(6, bytes("h6"), bytes("t6"), 0),
+            ] {
+                assert!(sent.is_ok());
+            }
+            assert!(lock(&ops).is_empty(), "nothing goes out while busy");
+        });
+        assert!(busy);
+        assert_eq!(
+            *lock(&ops),
+            [
+                Op::Frames(vec![bytes("a")]),
+                Op::Parts(bytes("h2"), bytes("t2")),
+                Op::Frames(vec![bytes("b"), bytes("c"), bytes("h5t5")]),
+                Op::Parts(bytes("h6"), bytes("t6")),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_frame_with_a_tail_queued_behind_a_busy_writer_can_be_taken_back() {
+        let (gate, ops) = gate();
+        gate.try_with(|_| {
+            assert!(gate.send_parts(7, bytes("h7"), b"t7").is_ok());
+            assert!(gate.send_with_tail(8, bytes("h8"), bytes("t8"), 0).is_ok());
+            assert!(gate.send(9, bytes("c9")).is_ok());
+            assert!(gate.retract(7));
+            assert!(!gate.retract(7), "taken back once");
+            assert!(gate.retract(8));
+        });
+        assert_eq!(*lock(&ops), [Op::Frames(vec![bytes("c9")])]);
+    }
+}
