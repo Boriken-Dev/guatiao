@@ -602,5 +602,5 @@ ends, every call waiting answers `GUATIAO_ERR_GONE` and each side drops
 every object it held for the other. A peer that takes in nothing of a
 frame for as long as a call may wait has stalled, and the side writing
 ends the link. A call beyond the receiver's
-`max_calls` is refused `GUATIAO_ERR_BUSY`; a body over `max_frame` ends
-the link.
+`max_calls`, or one the receiver cannot start a thread for, is refused
+`GUATIAO_ERR_BUSY`; a body over `max_frame` ends the link.

@@ -1388,6 +1388,9 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a call the peer cannot start a thread for
+  answers `GUATIAO_ERR_BUSY` at once.** It was dropped unanswered, and its
+  caller waited out the call's timeout.
 - **Go: Go data nests as deep as the library allows.** Converting Go data
   counted each interface and pointer on the way as a level of its own, so
   `[]any` nested 64 deep was refused as deeper than 128. Only values count
