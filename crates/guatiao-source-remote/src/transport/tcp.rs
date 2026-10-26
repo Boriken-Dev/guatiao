@@ -131,14 +131,19 @@ pub enum Accepted {
 }
 
 /// Whether `acl` admits a peer at `source` that proves no identity, before
-/// anything is read. A rule naming a fingerprint cannot match such a peer,
-/// so a decision deferred to one is finished without it.
+/// anything is read. A rule naming a fingerprint, whatever it names, cannot
+/// match such a peer: the rules without one decide.
 pub(crate) fn admits_plain(acl: &Acl, source: SocketAddr, local: SocketAddr) -> bool {
-    match acl.decide(source, local).outcome {
-        Outcome::Permit => true,
-        Outcome::Deny => false,
-        Outcome::Deferred => acl.decide_peer(source, local, "").outcome == Outcome::Permit,
-    }
+    let plain = Acl {
+        rules: acl
+            .rules
+            .iter()
+            .filter(|r| r.fingerprint.is_none())
+            .cloned()
+            .collect(),
+        default: acl.default,
+    };
+    plain.decide(source, local).outcome == Outcome::Permit
 }
 
 impl TcpListen {
@@ -244,6 +249,13 @@ mod tests {
         assert!(
             !admits_plain(&acl, source, local),
             "no fingerprint, no match: the default denies"
+        );
+        let mut empty = Rule::new(Action::Permit, "any".parse().unwrap());
+        empty.fingerprint = Some(String::new());
+        acl.prepend(empty);
+        assert!(
+            !admits_plain(&acl, source, local),
+            "not even a rule naming an empty fingerprint"
         );
         acl.push(Rule::new(Action::Permit, "127.0.0.1".parse().unwrap()));
         assert!(
