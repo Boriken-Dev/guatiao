@@ -182,6 +182,145 @@ def kinds_of(document: Document, *, known: Iterable[Any] = ()) -> "dict[str, Kin
     return {d["name"]: out[d["name"]] for d in _document(document)}
 
 
+# --- a kind written as data ---------------------------------------------------
+
+_SCALAR_NAMES = {shape: name for name, shape in _SCALARS.items()}
+
+
+def _tree_name(tag: Any) -> str:
+    from .. import _abi
+
+    return {None: "value", _abi.Tag.MAP: "map", _abi.Tag.LIST: "list"}[tag]
+
+
+def _arg_description(name: str, shape: shapes.Shape) -> "dict[str, Any]":
+    out: "dict[str, Any]" = {"name": name}
+    if shape in _SCALAR_NAMES:
+        out["type"] = _SCALAR_NAMES[shape]
+    elif shape is shapes.STR:
+        out["type"] = "str"
+    elif shape is shapes.BYTES:
+        out["type"] = "bytes"
+    elif shape is shapes.BYTES_MUT:
+        out["type"] = "bytes_mut"
+    elif isinstance(shape, shapes._ObjectShape):
+        out.update(type="object", kind=shape.kind.name, **{"pass": "taken" if shape.mode == "take" else "lent"})
+    elif isinstance(shape, shapes._Tree):
+        how = {"borrow": "borrowed", "take": "taken", "lend": "lent"}[shape.mode]
+        out.update(type=_tree_name(shape.tag), **{"pass": how})
+    else:
+        raise TypeError(f"{name}: {shape!r} has no description")
+    return out
+
+
+def _answer_description(shape: Any) -> "dict[str, Any] | None":
+    if shape is None:
+        return None
+    if shape in _SCALAR_NAMES:
+        return {"type": _SCALAR_NAMES[shape]}
+    if shape is shapes.TEXT:
+        return {"type": "text"}
+    if isinstance(shape, shapes._ObjectShape):
+        return {"type": "object", "kind": shape.kind.name}
+    if isinstance(shape, shapes._Tree):
+        return {"type": _tree_name(shape.tag)}
+    raise TypeError(f"{shape!r} has no description")
+
+
+def slot_description(method: Method) -> "dict[str, Any]":
+    """One slot as a description says it."""
+    out: "dict[str, Any]" = {
+        "name": method.name,
+        "required": method.required,
+        "fallible": method.fallible,
+        "args": [_arg_description(n, s) for n, s in zip(method.arg_names, method.args)],
+    }
+    answer = _answer_description(method.returns)
+    if answer is not None:
+        out["answer"] = answer
+    if method.doc:
+        out["doc"] = method.doc
+    return out
+
+
+def floor_hash_of(is_object: bool, slots: "list[dict[str, Any]]") -> int:
+    """FNV-1a (32-bit) of the shape and the required slots spelled as
+    `#[guatiao::kind]` spells them (`provider;greet(&str)->Result<Map,ProviderError>`):
+    the hash a kind born outside Rust gets, which a trait declaring the same
+    required slots also has. An object kind is spelled by its name in
+    PascalCase, as its trait would be named."""
+
+    def tree(ty: str) -> str:
+        return {"value": "Value", "map": "Map", "list": "List"}[ty]
+
+    def arg(a: "dict[str, Any]") -> str:
+        ty, how = a["type"], a.get("pass")
+        if ty == "str":
+            return "&str"
+        if ty == "bytes":
+            return "&[u8]"
+        if ty == "bytes_mut":
+            return "&mut[u8]"
+        if ty == "object":
+            pascal = _class_name(a["kind"])
+            return f"Object<dyn{pascal}>" if how == "taken" else f"&mutdyn{pascal}"
+        if ty in ("value", "map", "list"):
+            if how == "taken":
+                return tree(ty)
+            if how == "lent":
+                return f"&mut{tree(ty)}"
+            return f"Option<&{tree(ty)}>" if a.get("nullable") else f"&{tree(ty)}"
+        return str(ty)
+
+    def answer(a: "dict[str, Any] | None") -> str:
+        if a is None:
+            return "()"
+        if a["type"] == "text":
+            return "String"
+        if a["type"] == "object":
+            return f"Object<dyn{_class_name(a['kind'])}>"
+        return tree(a["type"]) if a["type"] in ("value", "map", "list") else str(a["type"])
+
+    def signature(s: "dict[str, Any]") -> str:
+        returns = answer(s.get("answer"))
+        args = ",".join(arg(a) for a in s.get("args", []))
+        return f"{s['name']}({args})->" + (f"Result<{returns},ProviderError>" if s.get("fallible") else returns)
+
+    text = ";".join(["object" if is_object else "provider"] + [signature(s) for s in slots if s.get("required")])
+    hash_ = 0x811C9DC5
+    for byte in text.encode("utf-8"):
+        hash_ = ((hash_ ^ byte) * 0x01000193) & 0xFFFFFFFF
+    return hash_
+
+
+def describe_kinds(*kinds: Any) -> "dict[str, Any]":
+    """The kinds given (kind classes or `Kind`s), each followed by the object
+    kinds its slots take or answer, each once, as the description document a
+    kind crate commits beside its header (`{"format": 1, "kinds": [...]}`):
+    what `kinds_of`, `python -m guatiao.kinds`, Node's `kindsOf` and Dart's
+    `dart run guatiao:kind` read. A kind class's docstrings are the docs."""
+    out: "list[dict[str, Any]]" = []
+    seen: "set[str]" = set()
+
+    def describe(kind: Kind) -> None:
+        if kind.name in seen:
+            return
+        seen.add(kind.name)
+        entry: "dict[str, Any]" = {"name": kind.name, "floor_hash": kind.floor_hash, "object": kind.is_object}
+        if kind.doc:
+            entry["doc"] = kind.doc
+        entry["slots"] = [slot_description(m) for m in kind.methods]
+        out.append(entry)
+        for m in kind.methods:
+            for shape in [*m.args, m.returns]:
+                if isinstance(shape, shapes._ObjectShape):
+                    describe(shape.kind)
+
+    for one in kinds:
+        describe(kind_of(one))
+    return {"format": 1, "kinds": out}
+
+
 # --- written out as classes -------------------------------------------------
 
 

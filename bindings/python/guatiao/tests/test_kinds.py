@@ -50,7 +50,7 @@ from guatiao.kinds.shapes import (  # noqa: E402
     lent,
     taken,
 )
-from guatiao.kinds import _serve  # noqa: E402
+from guatiao.kinds import _description, _serve  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 
 _TARGET_DEBUG = native.library_dir()
@@ -167,6 +167,27 @@ def test_a_description_that_is_not_one_is_refused_naming_where():
     }
     with pytest.raises(TypeError, match="refers to itself"):
         kinds.kinds_of({"format": 1, "kinds": [loop]})
+
+
+def test_kind_classes_describe_as_the_document_they_were_written_from():
+    committed = json.loads(_DOCUMENT.read_text(encoding="utf-8"))
+    assert kinds.describe_kinds(Greeter, Counter, Wide) == committed
+    # The hash a kind born here gets is the one #[guatiao::kind] wrote.
+    for kind in committed["kinds"]:
+        assert _description.floor_hash_of(kind["object"], kind["slots"]) == kind["floor_hash"], kind["name"]
+
+
+def test_a_kind_born_in_python_is_written_as_its_description():
+    import tally_kinds
+
+    committed = json.loads(
+        (native.REPO / "examples" / "tally_kind" / "include" / "tally_kind.kinds.json").read_text(encoding="utf-8")
+    )
+    assert kinds.describe_kinds(tally_kinds.Watcher, tally_kinds.Tally) == committed
+    # And the document reads back as the kinds the classes are.
+    loaded = kinds.kinds_of(committed)
+    _same_kind(loaded["tally"], tally_kinds.Tally.kind)
+    _same_kind(loaded["watcher"], tally_kinds.Watcher.kind)
 
 
 def test_a_host_binds_a_kind_from_what_the_library_carries():

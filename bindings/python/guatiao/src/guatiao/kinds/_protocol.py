@@ -8,6 +8,7 @@ annotations."""
 
 from __future__ import annotations
 
+import inspect
 import typing
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable, ClassVar, Optional, Protocol, TypeVar, Union
@@ -185,9 +186,7 @@ class KindProtocol(Protocol):
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
-        if floor_hash is None:
-            if kind is not None or is_object or struct is not None:
-                raise TypeError(f"{cls.__name__} names a kind with no floor_hash")
+        if floor_hash is None and kind is None and not is_object and struct is None:
             return
         methods: list[Method] = []
         stubs: dict[str, Any] = {}
@@ -212,15 +211,26 @@ class KindProtocol(Protocol):
                     answer,
                     fallible=bool(getattr(fn, _FALLIBLE, False)),
                     required=bool(getattr(fn, _REQUIRED, False)),
+                    arg_names=params,
+                    doc=inspect.cleandoc(fn.__doc__) if fn.__doc__ else None,
                 )
             )
             stubs[attr] = fn
+        name = kind if kind is not None else cls.__name__.lower()
+        doc = cls.__dict__.get("__doc__")
+        if floor_hash is None:
+            # A kind born here: hashed as #[guatiao::kind] would hash the
+            # same required slots, so another language's declaration agrees.
+            from ._description import floor_hash_of, slot_description
+
+            floor_hash = floor_hash_of(is_object, [slot_description(m) for m in methods])
         built = Kind(
-            kind if kind is not None else cls.__name__.lower(),
+            name,
             struct,
             floor_hash=floor_hash,
             methods=methods,
             is_object=is_object,
+            doc=inspect.cleandoc(doc) if doc else None,
         )
         built.stubs = stubs
         setattr(cls, "kind", built)
