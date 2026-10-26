@@ -496,7 +496,6 @@ a file beside the header (`include/<crate>.kinds.json`):
 
 ```json
 {
-  "format": 1,
   "kinds": [
     {
       "name": "greeter",
@@ -526,14 +525,16 @@ a file beside the header (`include/<crate>.kinds.json`):
 }
 ```
 
-- **`format`** is 1. A reader refuses another.
+- **The document** is a map whose `kinds` is the list of kinds; a reader
+  tells it from one kind by that key, and skips any other key.
 - **A kind**: `name` (what a descriptor and a registry call it),
   `floor_hash` (the `<table>_FLOOR_HASH` its header defines), `object`
   (an object kind: its table has `destroy` right after the header), an
   optional `doc`, and `slots`.
 - **A slot**: `name` (its field in the table), `required` (a slot every
-  table carries: the kind's original ones, a prefix of the table, which
-  the floor hash covers), `fallible` (it ends in `guatiao_provider_error
+  provider fills, not null: the required slots come first, and the floor
+  hash covers them; any other is optional, which a provider may leave
+  null), `fallible` (it ends in `guatiao_provider_error
   *err`), `args` (after `ctx`, in order), `answer` (written through a
   pointer before `err`; absent when there is none), and an optional `doc`.
 - **An argument** is `name`, `type`, and for a tree or an object

@@ -195,14 +195,14 @@
   // differs from the host's is refused when the library opens.
   const kindsOf = (document) => {
     const parsed = typeof document === 'string' ? JSON.parse(document) : document;
-    if (parsed === null || typeof parsed !== 'object' || parsed.format !== 1 || !Array.isArray(parsed.kinds)) {
-      throw new TypeError('a kinds document is {"format": 1, "kinds": [...]}');
+    if (parsed === null || typeof parsed !== 'object' || !Array.isArray(parsed.kinds)) {
+      throw new TypeError('a kinds document is {"kinds": [...]}');
     }
     const known = Object.create(null);
     for (const description of parsed.kinds) kindFrom(description, known);
     return known;
   };
-  const kindOf = (description) => kindsOf({ format: 1, kinds: [description] })[description.name];
+  const kindOf = (description) => kindsOf({ kinds: [description] })[description.name];
 
   // Where a handle keeps its identity. Not a registered symbol: no script
   // can name it without holding this object.

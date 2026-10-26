@@ -31,7 +31,7 @@ const COMMITTED: &str =
 fn case(k: usize) -> (&'static str, &'static str) {
     [
         ("carries_none", ""),
-        ("carries_text", r#"{"format":1,"kinds":["#),
+        ("carries_text", r#"{"kinds":["#),
         ("carries_greeters", COMMITTED),
     ][k]
 }
@@ -123,7 +123,7 @@ fn a_host_reads_what_each_provider_carries() {
 
     assert_eq!(of("carries_none"), Ok(Vec::new()));
     let refused = of("carries_text").unwrap_err();
-    assert_eq!(refused.at(), "byte 21", "{refused}");
+    assert_eq!(refused.at(), "byte 10", "{refused}");
     let read = of("carries_greeters").unwrap();
     assert_eq!(read, KindDescription::document_json(COMMITTED).unwrap());
     assert!(read.iter().any(|k| k.name() == "greeter"));
@@ -150,10 +150,10 @@ fn a_c_caller_reads_a_document_from_its_text() {
         KindDescription::document_json(COMMITTED).unwrap()
     );
     for (text, says) in [
-        (r#"{"format":1,"kinds":["#, "`byte 21` is not a value"),
-        (r#"{"format":2,"kinds":[]}"#, "`format` is not 1"),
+        (r#"{"kinds":["#, "`byte 10` is not a value"),
+        (r#"{"kinds":3}"#, "`kinds`"),
         (
-            r#"{"format":1,"kinds":[{"name":"k","floor_hash":1,"object":false,"slots":[{"name":"x","required":true,"fallible":false,"args":[{"name":"a","type":"u256"}]}]}]}"#,
+            r#"{"kinds":[{"name":"k","floor_hash":1,"object":false,"slots":[{"name":"x","required":true,"fallible":false,"args":[{"name":"a","type":"u256"}]}]}]}"#,
             "`kinds[0].slots[0].args[0].type`",
         ),
     ] {

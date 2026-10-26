@@ -13,7 +13,7 @@ use crate::value::status::Status;
 use crate::value::types::{Str, Text, Value};
 
 /// Reads a kinds document from its JSON text: what a kind crate commits as
-/// `<crate>.kinds.json` beside its header, `{"format": 1, "kinds": [...]}`
+/// `<crate>.kinds.json` beside its header, `{"kinds": [...]}`
 /// as `docs/encodings.md` states it ("A kind, described"). On
 /// `GUATIAO_OK`, `out` holds the document as a value built in `alloc`, a
 /// map a caller reads each kind from; the caller frees it with

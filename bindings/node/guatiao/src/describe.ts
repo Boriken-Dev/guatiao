@@ -495,7 +495,7 @@ export async function describeInterfaces(files: string | readonly string[], opti
       }
       if (found === 0) throw new DescribeError(`${file} exports no interface, so it declares no kind`);
     }
-    return { format: 1, kinds: reader.drain() };
+    return { kinds: reader.drain() };
   } finally {
     client.close();
   }

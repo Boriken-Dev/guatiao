@@ -111,7 +111,7 @@ fn registry(dir: &Path) -> Registry {
     std::fs::write(
         &kinds,
         format!(
-            "{{\"format\":1,\"kinds\":[{},{}]}}",
+            "{{\"kinds\":[{},{}]}}",
             EchoVtable::description(),
             RelayVtable::description()
         ),

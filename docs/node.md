@@ -143,16 +143,16 @@ export interface Tally {
   add(name: string, by: u32): i64;
   /** The count under `name`: 0 when there is none. */
   total(name: string): i64;
-  /** Appended: every count, as `{name: count}`. */
+  /** Optional: every count, as `{name: count}`. */
   all?(): MapAnswer;
   /**
-   * Appended: tells `watcher` each count, for this call alone.
+   * Optional: tells `watcher` each count, for this call alone.
    *
    * @throws
    */
   report?(watcher: Lent<Watcher>): void;
   /**
-   * Appended: adds the counts of `counts`, which the tally owns from the
+   * Optional: adds the counts of `counts`, which the tally owns from the
    * call on; answers how many names it held.
    *
    * @throws

@@ -22,40 +22,40 @@ classdef Greeter < guatiao.Kind
     end
 
     function out = shout(self, name)
-    % Appended after `greet`: a library built before it existed makes
-    % the proxy run this body instead.
+    % Optional: a provider that leaves it out has the proxy run this
+    % body instead.
       out = self.call('shout', name);
     end
 
     function out = start(self, listener)
-    % Appended: a conversation the caller then drives, told to the
-    % listener the caller handed in. A greeter built before this slot
-    % existed, or one that holds no conversations, answers the default.
+    % Optional: a conversation the caller then drives, told to the
+    % listener the caller handed in. A greeter that leaves it out, or
+    % one that holds no conversations, answers the default.
       out = self.call('start', listener);
     end
 
     function greet_into(self, name, listener)
-    % Appended: the greeting, told to a listener the caller LENDS for
+    % Optional: the greeting, told to a listener the caller LENDS for
     % this call alone. It stays on the caller's side: nothing is
     % allocated to pass it and nothing is destroyed after. A greeter
-    % built before this slot existed greets through `greet`.
+    % leaving it out greets through `greet`.
       self.call('greet_into', name, listener);
     end
 
     function out = greet_from(self, config)
-    % Appended: the greeting for a configuration the caller HANDS OVER
+    % Optional: the greeting for a configuration the caller HANDS OVER
     % (`{"name": ".."}`). The greeter owns the map from the call on,
     % whatever it answers, and may keep it; nothing is copied to pass
-    % it. A greeter built before this slot existed greets the name
+    % it. A greeter leaving it out greets the name
     % through `greet`.
       out = self.call('greet_from', config);
     end
 
     function out = check(self, config)
-    % Appended: completes a configuration for `greet_from` that the
+    % Optional: completes a configuration for `greet_from` that the
     % caller LENDS for this call, in the caller's own map: fills in what
     % it leaves out and adds what follows from it. Answers whether it can
-    % be greeted. A greeter built before this slot existed changes
+    % be greeted. A greeter leaving it out changes
     % nothing.
       out = self.call('check', config);
     end

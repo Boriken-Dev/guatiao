@@ -33,16 +33,16 @@ export interface Tally {
   add(name: string, by: number): number | bigint;
   /** The count under `name`: 0 when there is none. */
   total(name: string): number | bigint;
-  /** Appended: every count, as `{name: count}`. */
+  /** Optional: every count, as `{name: count}`. */
   all?(): k.MapAnswer;
-  /** Appended: whether `name` has a count. */
+  /** Optional: whether `name` has a count. */
   known?(name: string): boolean;
-  /** Appended: the sum of the bytes, modulo 2^32. */
+  /** Optional: the sum of the bytes, modulo 2^32. */
   checksum?(data: Uint8Array): number;
-  /** Appended: tells `watcher` each count, for this call alone. */
+  /** Optional: tells `watcher` each count, for this call alone. */
   report?(watcher: WatcherRemote): void;
   /**
-   * Appended: adds the counts of `counts` (`{name: count}`), which the
+   * Optional: adds the counts of `counts` (`{name: count}`), which the
    * tally owns from the call on; answers how many names it held.
    */
   load?(counts: g.Value): number;
@@ -55,31 +55,31 @@ export interface TallyRemote extends k.RemoteBase<typeof Tally> {
   /** The count under `name`: 0 when there is none. */
   total(name: string): bigint;
   /**
-   * Appended: every count, as `{name: count}`.
+   * Optional: every count, as `{name: count}`.
    *
    * Throws `Unsupported` when the table lacks it: `has()` asks first.
    */
   all(): g.Value;
   /**
-   * Appended: whether `name` has a count.
+   * Optional: whether `name` has a count.
    *
    * Throws `Unsupported` when the table lacks it: `has()` asks first.
    */
   known(name: string): boolean;
   /**
-   * Appended: the sum of the bytes, modulo 2^32.
+   * Optional: the sum of the bytes, modulo 2^32.
    *
    * Throws `Unsupported` when the table lacks it: `has()` asks first.
    */
   checksum(data: Uint8Array | ArrayBuffer | ArrayBufferView): number;
   /**
-   * Appended: tells `watcher` each count, for this call alone.
+   * Optional: tells `watcher` each count, for this call alone.
    *
    * Throws `Unsupported` when the table lacks it: `has()` asks first.
    */
   report(watcher: Watcher | k.ObjectHandle<typeof Watcher>): void;
   /**
-   * Appended: adds the counts of `counts` (`{name: count}`), which the
+   * Optional: adds the counts of `counts` (`{name: count}`), which the
    * tally owns from the call on; answers how many names it held.
    *
    * Throws `Unsupported` when the table lacks it: `has()` asks first.

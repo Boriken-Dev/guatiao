@@ -1752,7 +1752,7 @@ guatiao_status guatiao_wire_receiver_accept(struct guatiao_wire_receiver *recv,
 
 /*
  Reads a kinds document from its JSON text: what a kind crate commits as
- `<crate>.kinds.json` beside its header, `{"format": 1, "kinds": [...]}`
+ `<crate>.kinds.json` beside its header, `{"kinds": [...]}`
  as `docs/encodings.md` states it ("A kind, described"). On
  `GUATIAO_OK`, `out` holds the document as a value built in `alloc`, a
  map a caller reads each kind from; the caller frees it with
@@ -2482,12 +2482,11 @@ guatiao_status guatiao_registry_provider_meta(const struct guatiao_registry *reg
  The descriptions of the kinds one provider serves, and of every object
  kind their slots take or answer, each once, copied into `alloc` as the
  document `docs/encodings.md` states ("A kind, described"): a map
- `{"format": 1, "kinds": [...]}`. What a host binds a kind from when it
+ `{"kinds": [...]}`. What a host binds a kind from when it
  has no `.kinds.json` for it.
 
  `out` holds the document, or stays ABSENT when the provider carries
- none (a provider written by hand, or a library built before
- descriptors carried them); both answer `GUATIAO_OK`.
+ none (a provider written by hand); both answer `GUATIAO_OK`.
  `GUATIAO_ERR_NOT_FOUND` when nothing answers to `key`;
  `GUATIAO_ERR_BAD_VALUE` when what the provider carries is not a
  description. The caller frees the document with `guatiao_value_free`

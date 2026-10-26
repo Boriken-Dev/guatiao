@@ -167,7 +167,7 @@ its own.
 
 **A kind that exists is loaded, never declared again.** A kind crate
 commits its kinds' description beside their C header
-(`<crate>.kinds.json`: `{ format: 1, kinds: [{ name, floor_hash, object,
+(`<crate>.kinds.json`: `{ kinds: [{ name, floor_hash, object,
 slots: [{ name, required, fallible, args, answer }] }] }`, the format on
 the docs site's encodings page). Two ways to load it:
 

@@ -77,15 +77,15 @@ function refusals()
   for i = 1:size(cases, 1)
     path = fullfile(dir, 'k.kinds.json');
     fid = fopen(path, 'w');
-    fprintf(fid, '{"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [%s]}]}', cases{i, 1});
+    fprintf(fid, '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [%s]}]}', cases{i, 1});
     fclose(fid);
     e = expect_error(@() guatiao.write_kinds(path, fullfile(dir, '+k')), 'guatiao:BadValue', cases{i, 2});
     expect_true(~isempty(strfind(e.message, cases{i, 2})), sprintf('%s: %s', cases{i, 2}, e.message));
   end
   fid = fopen(fullfile(dir, 'other.json'), 'w');
-  fprintf(fid, '{"format": 2, "kinds": []}');
+  fprintf(fid, '{"name": "k"}');
   fclose(fid);
-  expect_error(@() guatiao.write_kinds(fullfile(dir, 'other.json'), fullfile(dir, '+k')), 'guatiao:BadValue', 'format 2');
+  expect_error(@() guatiao.write_kinds(fullfile(dir, 'other.json'), fullfile(dir, '+k')), 'guatiao:BadValue', 'no kinds');
   expect_error(@() guatiao.write_kinds(fullfile(dir, 'none.json'), fullfile(dir, '+k')), 'guatiao:NotFound', 'no file');
   doc = fullfile(repo_root(), 'examples', 'tally_kind', 'include', 'tally_kind.kinds.json');
   e = expect_error(@() guatiao.write_kinds(doc, dir), 'guatiao:BadValue', 'no package folder');

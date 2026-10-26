@@ -35,19 +35,19 @@ class Tally(KindProtocol, Protocol, kind="tally"):
         """The count under `name`: 0 when there is none."""
 
     def all(self) -> MapAnswer:
-        """Appended: every count, as `{name: count}`."""
+        """Optional: every count, as `{name: count}`."""
 
     def known(self, name: str) -> bool:
-        """Appended: whether `name` has a count."""
+        """Optional: whether `name` has a count."""
 
     def checksum(self, data: bytes) -> U32:
-        """Appended: the sum of the bytes, modulo 2^32."""
+        """Optional: the sum of the bytes, modulo 2^32."""
 
     @fallible
     def report(self, watcher: Lent[Watcher]) -> None:
-        """Appended: tells `watcher` each count, for this call alone."""
+        """Optional: tells `watcher` each count, for this call alone."""
 
     @fallible
     def load(self, counts: Taken[Map]) -> U32:
-        """Appended: adds the counts of `counts` (`{name: count}`), which the
+        """Optional: adds the counts of `counts` (`{name: count}`), which the
         tally owns from the call on; answers how many names it held."""

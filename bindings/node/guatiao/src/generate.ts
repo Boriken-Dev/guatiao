@@ -150,8 +150,8 @@ function docComment(text: string | undefined, indent: string, extra: readonly st
 }
 
 function checked(document: KindsDocument): KindsDocument {
-  if (document === null || typeof document !== 'object' || document.format !== 1 || !Array.isArray(document.kinds)) {
-    throw new TypeError('a kinds document is { format: 1, kinds: [...] }');
+  if (document === null || typeof document !== 'object' || !Array.isArray(document.kinds)) {
+    throw new TypeError('a kinds document is { kinds: [...] }');
   }
   return document;
 }
@@ -159,7 +159,6 @@ function checked(document: KindsDocument): KindsDocument {
 /** Each kind's description, without its doc text: what the module loads. */
 function withoutDocs(document: KindsDocument): KindsDocument {
   return {
-    format: 1,
     kinds: document.kinds.map(({ doc: _doc, slots, ...kind }) => ({
       ...kind,
       slots: slots.map(({ doc: _slotDoc, ...slot }) => slot),

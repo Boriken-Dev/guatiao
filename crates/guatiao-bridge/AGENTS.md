@@ -195,7 +195,7 @@ description twice is a no-op; two different ones of one name are refused.
 
 `document(served) -> Result<String, BridgeError>`: the kinds named, each
 followed by the object kinds its slots take or answer (in slot order,
-transitively, every kind once), as compact JSON `{"format":1,"kinds":[..]}`;
+transitively, every kind once), as compact JSON `{"kinds":[..]}`;
 a name not known is left out, and none known is `""`. A described
 provider carries it (`Provider::kind_descriptions()` on the host), as
 `#[derive(Provider)]` does for a Rust provider.

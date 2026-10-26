@@ -94,9 +94,9 @@ case("a kind loaded from its description is the kind kind() declares", with_exam
   expect_true(same_codes(loaded$conversation, Conversation))
   expect_true(same_codes(loaded$counter, Counter))
   expect_true(same_codes(loaded$wide, Wide))
-  e <- expect_error(kinds_of('{"format": 2, "kinds": []}'), "guatiao_error")
+  e <- expect_error(kinds_of('{"kinds": 3}'), "guatiao_error")
   expect_equal(e$status, "BadValue")
-  borrowed_list <- list(format = 1, kinds = list(list(name = "k", floor_hash = 1, object = FALSE,
+  borrowed_list <- list(kinds = list(list(name = "k", floor_hash = 1, object = FALSE,
     slots = list(list(name = "x", required = TRUE, fallible = FALSE,
       args = list(list(name = "a", type = "list", pass = "borrowed")))))))
   e <- expect_error(kinds_of(borrowed_list))

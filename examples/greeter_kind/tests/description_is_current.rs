@@ -27,7 +27,7 @@ fn rendered() -> String {
         CounterVtable::description(),
         WideVtable::description(),
     ];
-    let document = format!("{{\"format\":1,\"kinds\":[{}]}}", kinds.join(","));
+    let document = format!("{{\"kinds\":[{}]}}", kinds.join(","));
     let value = json::from_str(&document, Alloc::rust(), Presentation::new())
         .expect("a kind's description is JSON");
     let mut text = json::to_string_pretty(&value, Presentation::new()).expect("written");

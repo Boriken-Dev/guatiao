@@ -469,11 +469,10 @@ class Registry implements Finalizable {
 
   /// The descriptions of the kinds the provider filed under `key` serves,
   /// and of every object kind their slots take or answer, as the document
-  /// a kind crate commits beside its header (`{"format": 1, "kinds":
-  /// [...]}`, plain data): what `dart run guatiao:kind` writes Dart from,
-  /// for a kind this side has no `.kinds.json` for. `null` when the
-  /// provider carries none (one written by hand, or a library built
-  /// before descriptors carried them).
+  /// a kind crate commits beside its header (`{"kinds": [...]}`, plain
+  /// data): what `dart run guatiao:kind` writes Dart from, for a kind this
+  /// side has no `.kinds.json` for. `null` when the provider carries none
+  /// (one written by hand).
   ///
   /// Throws `NotFound` when nothing answers to `key`, `BadValue` when what
   /// it carries is not a description.

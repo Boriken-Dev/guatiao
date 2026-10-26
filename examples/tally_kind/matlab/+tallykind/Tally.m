@@ -28,27 +28,27 @@ classdef Tally < guatiao.Kind
     end
 
     function out = all(self)
-    % Appended: every count, as `{name: count}`.
+    % Optional: every count, as `{name: count}`.
       out = self.call('all');
     end
 
     function out = known(self, name)
-    % Appended: whether `name` has a count.
+    % Optional: whether `name` has a count.
       out = self.call('known', name);
     end
 
     function out = checksum(self, data)
-    % Appended: the sum of the bytes, modulo 2^32.
+    % Optional: the sum of the bytes, modulo 2^32.
       out = self.call('checksum', data);
     end
 
     function report(self, watcher)
-    % Appended: tells `watcher` each count, for this call alone.
+    % Optional: tells `watcher` each count, for this call alone.
       self.call('report', watcher);
     end
 
     function out = load(self, counts)
-    % Appended: adds the counts of `counts` (`{name: count}`), which the
+    % Optional: adds the counts of `counts` (`{name: count}`), which the
     % tally owns from the call on; answers how many names it held.
       out = self.call('load', counts);
     end

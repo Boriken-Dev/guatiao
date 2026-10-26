@@ -190,8 +190,8 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
 kinds_of <- function(document, known = list(), class = .gt_camel, where = new.env()) {
   if (is.character(document)) document <- .Call(C_kind_document_read, document)
   if (inherits(document, "guatiao_node")) document <- value_data(document)
-  if (!is.list(document) || !isTRUE(document$format == 1)) {
-    stop("a kinds document is {\"format\": 1, \"kinds\": [...]}", call. = FALSE)
+  if (!is.list(document) || is.null(document$kinds)) {
+    stop("a kinds document is {\"kinds\": [...]}", call. = FALSE)
   }
   kinds <- document$kinds
   by_name <- list()

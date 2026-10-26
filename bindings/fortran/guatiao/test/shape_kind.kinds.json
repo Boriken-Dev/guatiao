@@ -1,5 +1,4 @@
 {
-  "format": 1,
   "kinds": [
     {
       "name": "note",
@@ -42,7 +41,7 @@
           "answer": {
             "type": "text"
           },
-          "doc": "Appended: what was said last."
+          "doc": "Optional: what was said last."
         }
       ]
     },
@@ -311,7 +310,7 @@
           "answer": {
             "type": "text"
           },
-          "doc": "Appended: `s` twice."
+          "doc": "Optional: `s` twice."
         },
         {
           "name": "quiet",
@@ -323,7 +322,7 @@
               "type": "str"
             }
           ],
-          "doc": "Appended, and served by nobody."
+          "doc": "Optional, and served by nobody."
         }
       ]
     }

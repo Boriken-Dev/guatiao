@@ -37,31 +37,31 @@ type Tally interface {
 	Total(name string) (int64, error)
 }
 
-// Appended: every count, as `{name: count}`.
+// Optional: every count, as `{name: count}`.
 type AllCounter interface {
 	//guatiao:infallible
 	All() (map[string]int64, error)
 }
 
-// Appended: whether `name` has a count.
+// Optional: whether `name` has a count.
 type Knower interface {
 	//guatiao:infallible
 	Known(name string) (bool, error)
 }
 
-// Appended: the sum of the bytes, modulo 2^32.
+// Optional: the sum of the bytes, modulo 2^32.
 type Checksummer interface {
 	//guatiao:infallible
 	Checksum(data []byte) (uint32, error)
 }
 
-// Appended: tells `watcher` each count, for this call alone.
+// Optional: tells `watcher` each count, for this call alone.
 type Reporter interface {
 	//guatiao:lent watcher
 	Report(watcher Watcher) error
 }
 
-// Appended: adds the counts of `counts` (`{name: count}`), which the
+// Optional: adds the counts of `counts` (`{name: count}`), which the
 // tally owns from the call on; answers how many names it held.
 type Loader interface {
 	//guatiao:taken counts

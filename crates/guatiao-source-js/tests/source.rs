@@ -1150,7 +1150,7 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
         &dir,
         "js_hash",
         "version = \"1.0.0\"\n",
-        "import { Provider } from 'guatiao/provide';\nimport { kindsOf } from 'guatiao/kinds';\nconst { greeter } = kindsOf({ format: 1, kinds: [{ name: 'greeter', floor_hash: 1, object: false, slots: [{ name: 'greet', required: true, fallible: true, args: [], answer: { type: 'map' } }] }] });\nexport class P extends Provider { static kinds = [greeter]; greet() {} }\n",
+        "import { Provider } from 'guatiao/provide';\nimport { kindsOf } from 'guatiao/kinds';\nconst { greeter } = kindsOf({ kinds: [{ name: 'greeter', floor_hash: 1, object: false, slots: [{ name: 'greet', required: true, fallible: true, args: [], answer: { type: 'map' } }] }] });\nexport class P extends Provider { static kinds = [greeter]; greet() {} }\n",
     );
     std::fs::write(dir.join("elsewhere.js"), "export {};\n").expect("written");
     // A manifest naming a file that is not there.

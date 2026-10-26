@@ -26,20 +26,20 @@ export interface Tally {
   add(name: string, by: u32): i64;
   /** The count under `name`: 0 when there is none. */
   total(name: string): i64;
-  /** Appended: every count, as `{name: count}`. */
+  /** Optional: every count, as `{name: count}`. */
   all?(): MapAnswer;
-  /** Appended: whether `name` has a count. */
+  /** Optional: whether `name` has a count. */
   known?(name: string): boolean;
-  /** Appended: the sum of the bytes, modulo 2^32. */
+  /** Optional: the sum of the bytes, modulo 2^32. */
   checksum?(data: Uint8Array): u32;
   /**
-   * Appended: tells `watcher` each count, for this call alone.
+   * Optional: tells `watcher` each count, for this call alone.
    *
    * @throws
    */
   report?(watcher: Lent<Watcher>): void;
   /**
-   * Appended: adds the counts of `counts` (`{name: count}`), which the
+   * Optional: adds the counts of `counts` (`{name: count}`), which the
    * tally owns from the call on; answers how many names it held.
    *
    * @throws

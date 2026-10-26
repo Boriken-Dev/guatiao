@@ -501,19 +501,10 @@ impl KindDescription {
         })
     }
 
-    /// Reads a document, `{"format": 1, "kinds": [..]}`, as a kind crate
-    /// commits it.
+    /// Reads a document, `{"kinds": [..]}`, as a kind crate commits it. A
+    /// key other than `kinds` is skipped.
     pub fn document(value: &Value) -> Result<Vec<KindDescription>, DescriptionError> {
         let map = map_at(value, "")?;
-        let format = map
-            .get("format")
-            .ok_or_else(|| DescriptionError::new("format", "is missing"))?;
-        if u32::from_value(format).ok() != Some(1) {
-            return Err(DescriptionError::new(
-                "format",
-                "is not 1, the only format this build reads",
-            ));
-        }
         let mut kinds = Vec::new();
         for (i, k) in list_at(map, "", "kinds")?.iter().enumerate() {
             kinds.push(Self::read(k, &format!("kinds[{i}]"))?);
@@ -780,20 +771,19 @@ mod tests {
     }
 
     #[test]
-    fn a_document_is_read_and_its_format_checked() {
-        let doc = map_of(vec![
-            ("format", Value::from(1u32)),
+    fn a_document_is_read_by_its_kinds() {
+        let doc = map_of(vec![("kinds", list_of(vec![greeter()]))]);
+        assert_eq!(KindDescription::document(&doc).expect("read").len(), 1);
+        let noted = map_of(vec![
+            ("x-note", text_value("a key this build does not know")),
             ("kinds", list_of(vec![greeter()])),
         ]);
-        assert_eq!(KindDescription::document(&doc).expect("read").len(), 1);
-        let later = map_of(vec![
-            ("format", Value::from(2u32)),
-            ("kinds", list_of(vec![])),
-        ]);
         assert_eq!(
-            KindDescription::document(&later).unwrap_err().at(),
-            "format"
+            KindDescription::document(&noted).expect("an unknown key is skipped"),
+            KindDescription::document(&doc).unwrap()
         );
+        let none = map_of(vec![("name", text_value("greeter"))]);
+        assert_eq!(KindDescription::document(&none).unwrap_err().at(), "kinds");
     }
 
     #[test]

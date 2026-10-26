@@ -123,7 +123,7 @@ def test_a_provider_carries_its_kinds_descriptions():
     with _scanned() as reg:
         document = reg.kind_descriptions("derived_greeter_hello")
         assert document is not None
-        assert document["format"] == 1
+        assert list(document) == ["kinds"]
         names = [k["name"] for k in document["kinds"]]
         assert names == ["greeter", "listener", "conversation", "counter", "wide"]
         by_name = {k["name"]: k for k in committed["kinds"]}

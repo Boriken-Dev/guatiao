@@ -131,7 +131,7 @@ def test_a_kind_loaded_from_its_description_is_the_kind_its_class_declares():
     for cls in (Greeter, Listener, Conversation, Counter, Wide):
         _same_kind(loaded[cls.kind.name], cls.kind)
     # One kind alone finds the object kinds it names among the known ones.
-    greeter_only = {"format": 1, "kinds": [k for k in json.loads(text)["kinds"] if k["name"] == "greeter"]}
+    greeter_only = {"kinds": [k for k in json.loads(text)["kinds"] if k["name"] == "greeter"]}
     with pytest.raises(TypeError, match="no kind listener"):
         kinds.kinds_of(greeter_only)
     _same_kind(kinds.kinds_of(greeter_only, known=[Listener, Conversation])["greeter"], Greeter.kind)
@@ -149,10 +149,10 @@ def test_the_committed_kinds_module_is_what_the_description_writes():
 
 def test_a_description_that_is_not_one_is_refused_naming_where():
     def one(slots):
-        return {"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": False, "slots": slots}]}
+        return {"kinds": [{"name": "k", "floor_hash": 1, "object": False, "slots": slots}]}
 
-    with pytest.raises(TypeError, match="format"):
-        kinds.kinds_of({"format": 2, "kinds": []})
+    with pytest.raises(TypeError, match="kinds"):
+        kinds.kinds_of({"name": "k"})
     with pytest.raises(TypeError, match=r"k\.x argument 0: 'u128'"):
         kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "u128"}]}]))
     with pytest.raises(TypeError, match="answer cannot be 'str'"):
@@ -166,7 +166,7 @@ def test_a_description_that_is_not_one_is_refused_naming_where():
         "slots": [{"name": "next", "args": [], "answer": {"type": "object", "kind": "node"}}],
     }
     with pytest.raises(TypeError, match="refers to itself"):
-        kinds.kinds_of({"format": 1, "kinds": [loop]})
+        kinds.kinds_of({"kinds": [loop]})
 
 
 def test_kind_classes_describe_as_the_document_they_were_written_from():

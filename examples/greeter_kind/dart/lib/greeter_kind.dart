@@ -30,37 +30,37 @@ abstract interface class Greeter {
   Object greet(String name);
 }
 
-/// Appended after `greet`: a library built before it existed makes
-/// the proxy run this body instead.
+/// Optional: a provider that leaves it out has the proxy run this
+/// body instead.
 ///
 /// `shout` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterShout {
   String shout(String name);
 }
 
-/// Appended: a conversation the caller then drives, told to the
-/// listener the caller handed in. A greeter built before this slot
-/// existed, or one that holds no conversations, answers the default.
+/// Optional: a conversation the caller then drives, told to the
+/// listener the caller handed in. A greeter that leaves it out, or
+/// one that holds no conversations, answers the default.
 ///
 /// `start` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterStart {
   Conversation start(ListenerRemote listener);
 }
 
-/// Appended: the greeting, told to a listener the caller LENDS for
+/// Optional: the greeting, told to a listener the caller LENDS for
 /// this call alone. It stays on the caller's side: nothing is
 /// allocated to pass it and nothing is destroyed after. A greeter
-/// built before this slot existed greets through `greet`.
+/// leaving it out greets through `greet`.
 ///
 /// `greet_into` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterGreetInto {
   void greetInto(String name, ListenerRemote listener);
 }
 
-/// Appended: the greeting for a configuration the caller HANDS OVER
+/// Optional: the greeting for a configuration the caller HANDS OVER
 /// (`{"name": ".."}`). The greeter owns the map from the call on,
 /// whatever it answers, and may keep it; nothing is copied to pass
-/// it. A greeter built before this slot existed greets the name
+/// it. A greeter leaving it out greets the name
 /// through `greet`.
 ///
 /// `greet_from` of the `greeter` kind: an optional slot, which a provider may leave null.
@@ -68,10 +68,10 @@ abstract interface class GreeterGreetFrom {
   Object greetFrom(Value config);
 }
 
-/// Appended: completes a configuration for `greet_from` that the
+/// Optional: completes a configuration for `greet_from` that the
 /// caller LENDS for this call, in the caller's own map: fills in what
 /// it leaves out and adds what follows from it. Answers whether it can
-/// be greeted. A greeter built before this slot existed changes
+/// be greeted. A greeter leaving it out changes
 /// nothing.
 ///
 /// `check` of the `greeter` kind: an optional slot, which a provider may leave null.
@@ -111,8 +111,8 @@ final class GreeterRemote extends KindRemote
     }
   }
 
-  /// Appended after `greet`: a library built before it existed makes
-  /// the proxy run this body instead.
+  /// Optional: a provider that leaves it out has the proxy run this
+  /// body instead.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('shout')` asks first.
   @override
@@ -133,9 +133,9 @@ final class GreeterRemote extends KindRemote
     }
   }
 
-  /// Appended: a conversation the caller then drives, told to the
-  /// listener the caller handed in. A greeter built before this slot
-  /// existed, or one that holds no conversations, answers the default.
+  /// Optional: a conversation the caller then drives, told to the
+  /// listener the caller handed in. A greeter that leaves it out, or
+  /// one that holds no conversations, answers the default.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('start')` asks first.
   @override
@@ -157,10 +157,10 @@ final class GreeterRemote extends KindRemote
     }
   }
 
-  /// Appended: the greeting, told to a listener the caller LENDS for
+  /// Optional: the greeting, told to a listener the caller LENDS for
   /// this call alone. It stays on the caller's side: nothing is
   /// allocated to pass it and nothing is destroyed after. A greeter
-  /// built before this slot existed greets through `greet`.
+  /// leaving it out greets through `greet`.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('greet_into')` asks first.
   @override
@@ -181,10 +181,10 @@ final class GreeterRemote extends KindRemote
     }
   }
 
-  /// Appended: the greeting for a configuration the caller HANDS OVER
+  /// Optional: the greeting for a configuration the caller HANDS OVER
   /// (`{"name": ".."}`). The greeter owns the map from the call on,
   /// whatever it answers, and may keep it; nothing is copied to pass
-  /// it. A greeter built before this slot existed greets the name
+  /// it. A greeter leaving it out greets the name
   /// through `greet`.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('greet_from')` asks first.
@@ -207,10 +207,10 @@ final class GreeterRemote extends KindRemote
     }
   }
 
-  /// Appended: completes a configuration for `greet_from` that the
+  /// Optional: completes a configuration for `greet_from` that the
   /// caller LENDS for this call, in the caller's own map: fills in what
   /// it leaves out and adds what follows from it. Answers whether it can
-  /// be greeted. A greeter built before this slot existed changes
+  /// be greeted. A greeter leaving it out changes
   /// nothing.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('check')` asks first.

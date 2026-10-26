@@ -35,7 +35,6 @@ Map<String, Object?> _one(
   List<Object?> slots, [
   List<Object?> more = const [],
 ]) => {
-  'format': 1,
   'kinds': [
     {'name': 'k', 'floor_hash': 1, 'object': false, 'slots': slots},
     ...more,
@@ -109,10 +108,7 @@ void main() {
         contains(text),
       ),
     );
-    expect(
-      () => generateKinds({'format': 2, 'kinds': []}),
-      refusal('"format": 1'),
-    );
+    expect(() => generateKinds({'name': 'k'}), refusal('{"kinds": [...]}'));
     expect(
       () => generateKinds(
         _one([
@@ -158,7 +154,6 @@ void main() {
     );
     expect(
       () => generateKinds({
-        'format': 1,
         'kinds': [
           {'name': 'a', 'floor_hash': 1, 'slots': []},
           {'name': 'A', 'floor_hash': 2, 'slots': []},
@@ -187,14 +182,12 @@ void main() {
     final whole = _document();
     final kinds = (whole['kinds']! as List).cast<Map<String, Object?>>();
     final objects = {
-      'format': 1,
       'kinds': [
         for (final k in kinds)
           if (k['object'] == true) k,
       ],
     };
     final greeters = {
-      'format': 1,
       'kinds': [
         for (final k in kinds)
           if (k['object'] != true) k,
@@ -208,7 +201,6 @@ void main() {
     expect(imported, contains("import 'objects.dart';"));
     expect(imported, isNot(contains('abstract interface class Listener ')));
     final trees = {
-      'format': 1,
       'kinds': [
         {
           'name': 'node',

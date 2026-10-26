@@ -13,7 +13,7 @@ import 'kind_generator.dart'
     show generateKinds, memberNameOf, reservedMemberNames, typeNameOf;
 
 /// The document of the kinds [source] declares: every `abstract interface
-/// class`, in the order written, as `{"format": 1, "kinds": [...]}`. An
+/// class`, in the order written, as `{"kinds": [...]}`. An
 /// object kind a slot takes or answers is one of them.
 /// [file] names the source in a refusal.
 ///
@@ -613,7 +613,6 @@ final class _Describer {
   }
 
   Map<String, Object?> document() => {
-    'format': 1,
     'kinds': [for (final d in decls) describe(d)],
   };
 

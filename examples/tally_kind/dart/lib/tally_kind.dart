@@ -136,35 +136,35 @@ abstract interface class Tally {
   int total(String name);
 }
 
-/// Appended: every count, as `{name: count}`.
+/// Optional: every count, as `{name: count}`.
 ///
 /// `all` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyAll {
   Object all();
 }
 
-/// Appended: whether `name` has a count.
+/// Optional: whether `name` has a count.
 ///
 /// `known` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyKnown {
   bool known(String name);
 }
 
-/// Appended: the sum of the bytes, modulo 2^32.
+/// Optional: the sum of the bytes, modulo 2^32.
 ///
 /// `checksum` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyChecksum {
   int checksum(Uint8List data);
 }
 
-/// Appended: tells `watcher` each count, for this call alone.
+/// Optional: tells `watcher` each count, for this call alone.
 ///
 /// `report` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyReport {
   void report(WatcherRemote watcher);
 }
 
-/// Appended: adds the counts of `counts` (`{name: count}`), which the
+/// Optional: adds the counts of `counts` (`{name: count}`), which the
 /// tally owns from the call on; answers how many names it held.
 ///
 /// `load` of the `tally` kind: an optional slot, which a provider may leave null.
@@ -224,7 +224,7 @@ final class TallyRemote extends KindRemote
     }
   }
 
-  /// Appended: every count, as `{name: count}`.
+  /// Optional: every count, as `{name: count}`.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('all')` asks first.
   @override
@@ -244,7 +244,7 @@ final class TallyRemote extends KindRemote
     }
   }
 
-  /// Appended: whether `name` has a count.
+  /// Optional: whether `name` has a count.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('known')` asks first.
   @override
@@ -265,7 +265,7 @@ final class TallyRemote extends KindRemote
     }
   }
 
-  /// Appended: the sum of the bytes, modulo 2^32.
+  /// Optional: the sum of the bytes, modulo 2^32.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('checksum')` asks first.
   @override
@@ -286,7 +286,7 @@ final class TallyRemote extends KindRemote
     }
   }
 
-  /// Appended: tells `watcher` each count, for this call alone.
+  /// Optional: tells `watcher` each count, for this call alone.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('report')` asks first.
   @override
@@ -306,7 +306,7 @@ final class TallyRemote extends KindRemote
     }
   }
 
-  /// Appended: adds the counts of `counts` (`{name: count}`), which the
+  /// Optional: adds the counts of `counts` (`{name: count}`), which the
   /// tally owns from the call on; answers how many names it held.
   ///
   /// Throws `Unsupported` when the provider left it null: `has('load')` asks first.
