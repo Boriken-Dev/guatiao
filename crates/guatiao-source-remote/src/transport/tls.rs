@@ -34,8 +34,8 @@ use std::time::Instant;
 
 use coqui_net_acl::{Acl, Outcome};
 use coqui_peer::DriveError;
-use coqui_peer_tls::{Digest, PeerError, Pins, TlsHandshake, Trust};
-use rustls::{ClientConfig, ServerConfig};
+use coqui_peer_tls::{Digest, PeerError, Pins, Refusal, TlsHandshake, Trust};
+use rustls::{AlertDescription, ClientConfig, ServerConfig};
 
 pub use coqui_peer_tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening};
 
@@ -80,6 +80,26 @@ fn tls_error(e: &PeerError) -> Option<&rustls::Error> {
     match e {
         PeerError::Io(io) => io.get_ref()?.downcast_ref::<rustls::Error>(),
         _ => None,
+    }
+}
+
+/// Why this side refused the certificate of `whose` ("the client",
+/// "the server at ..."), in words naming what to change.
+fn refused(refusal: Refusal, whose: &str) -> String {
+    match refusal {
+        Refusal::NotPinned => {
+            format!("{whose} is not pinned: its certificate's fingerprint matches none of the pins")
+        }
+        Refusal::NotAccepted => format!(
+            "{whose} is not accepted: its certificate is not one the trust store has accepted"
+        ),
+        Refusal::ChainWhenPinned => format!(
+            "{whose} presented a certificate chain: the policy holds a pinned peer to one certificate (`allow_chain_when_pinned`)"
+        ),
+        Refusal::NotTrusted => format!(
+            "{whose} is not trusted: its certificate matches no pin and the CA policy does not trust it"
+        ),
+        other => format!("{whose} is refused: {other}"),
     }
 }
 
@@ -346,7 +366,23 @@ impl Core {
             BrokenPipe | ConnectionAborted | ConnectionReset | InvalidData | UnexpectedEof
         );
         let early = !self.heard.load(Ordering::Acquire) && !self.closed.load(Ordering::Acquire);
+        let alert = e
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+            .and_then(|tls| match tls {
+                rustls::Error::AlertReceived(alert) => Some(*alert),
+                _ => None,
+            });
         match &self.client {
+            // What the server's verifier sends when it refuses a certificate.
+            Some(me) if early && alert == Some(AlertDescription::CertificateUnknown) => {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "the server does not trust this client, {me}: it refused its certificate (certificate_unknown), which is not pinned there or not yet accepted by its trust store; a server with a trust store keeps an unknown client waiting until an operator accepts it"
+                    ),
+                )
+            }
             Some(me) if ended && early => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
@@ -474,7 +510,14 @@ impl Pending {
             DriveError::Io(e) => e,
             DriveError::Handshake(e) => io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                format!("the client's TLS handshake failed: {}", words(&e)),
+                match e.refusal() {
+                    Some(Refusal::NotAccepted) => format!(
+                        "{}; once it has proved its key it waits there, within the store's caps, until an operator accepts it",
+                        refused(Refusal::NotAccepted, "the client")
+                    ),
+                    Some(r) => refused(r, "the client"),
+                    None => format!("the client's TLS handshake failed: {}", words(&e)),
+                },
             ),
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
@@ -692,12 +735,21 @@ impl TlsConnect {
 
     /// A client handshake's failure in words a person can act on.
     fn refusal(&self, e: &PeerError, addr: SocketAddr) -> io::Error {
-        let (kind, why) = match tls_error(e) {
-            // coqui-peer-tls refuses a certificate with `General` and its reason.
-            Some(rustls::Error::InvalidCertificate(_) | rustls::Error::General(_)) => (
+        if let Some(refusal) = e.refusal() {
+            return io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "the server at {addr} is not one this client trusts: its certificate matches none of the pins or the trust store's peers, or the policy refuses it"
+                    "the server at {addr} is not one this client trusts: {}",
+                    refused(refusal, "it")
+                ),
+            );
+        }
+        let (kind, why) = match tls_error(e) {
+            // Its dates, its encoding or its signature.
+            Some(rustls::Error::InvalidCertificate(why)) => (
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "the server at {addr} presented a certificate this client refuses ({why:?})"
                 ),
             ),
             Some(rustls::Error::AlertReceived(alert)) => (

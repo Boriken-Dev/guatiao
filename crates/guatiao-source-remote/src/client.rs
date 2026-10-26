@@ -225,6 +225,13 @@ impl Peer {
             return Ok(Arc::clone(&c.link));
         }
         let conn = self.connect.connect().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                // A trust check refused the peer: the status of every trust failure.
+                return ProviderError::new(
+                    Status::GUATIAO_ERR_BAD_VALUE,
+                    &format!("{}: {e}", self.connect.describe()),
+                );
+            }
             ProviderError::new(
                 Status::GUATIAO_ERR_GONE,
                 &format!("{} could not be reached: {e}", self.connect.describe()),

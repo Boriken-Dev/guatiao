@@ -221,7 +221,13 @@ impl core::fmt::Display for LinkError {
 impl core::error::Error for LinkError {}
 
 impl From<io::Error> for LinkError {
+    /// A transport answers `PermissionDenied` when one end's trust check
+    /// refused the other (a certificate, an access control list): a trust
+    /// failure, not a lost link.
     fn from(e: io::Error) -> LinkError {
+        if e.kind() == io::ErrorKind::PermissionDenied {
+            return LinkError::Trust(e.to_string());
+        }
         LinkError::Io(e)
     }
 }
