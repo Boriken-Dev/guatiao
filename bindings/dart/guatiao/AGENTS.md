@@ -374,6 +374,41 @@ What each side sees, per description type:
 | `object` lent (`K`) | a `KRemote`, valid for the call | a Dart object implementing `K`, or a `KRemote` |
 | `object` (answer, `K`) | a Dart object implementing `K`, or a handle | a `KRemote` it owns: `close()` destroys it |
 
+**A kind born in Dart** (`package:guatiao/describe.dart`, pure Dart, any
+platform): declared as abstract interface classes spelled with that
+library's marks, read into the description, from which the command above
+writes the Dart as from any other. Nothing implements the declaration.
+
+```text
+dart run guatiao:kind describe FILE.dart -o DOCUMENT [--check]
+```
+
+`describeDeclarations(source, {file})` answers the document (a `Map`) from
+code; a `FormatException` names `file:line:column`. Every `abstract
+interface class` of the file is a kind, in the order written, named in
+snake_case (`SoundLevel` is `sound_level`; `@KindName('x')` says
+otherwise); `implements ObjectKind` makes an object kind. Its methods are
+the slots in table order, required first: `@appended` marks an appended
+one, `@fallible` one that can refuse; a method's name in snake_case is the
+slot's (capitals in a row refused). `///` comments are the docs. The floor
+hash is the one `#[guatiao::kind]` gives the same required slots
+(`@FloorHash(n)` pins one). Plain arguments only; an import prefix is read
+through (`k.U32`). Refused as well: a name the generator would not write
+back (a kind's class is its name in PascalCase, a method its slot's in
+camelCase), two slots or arguments of one name, a slot named `destroy` or
+as a remote's own member (`close`, `has`, `kind`, ...), `BytesMut` on a
+provider kind, and any document `generateKinds` would refuse.
+
+| Dart | description |
+| --- | --- |
+| `String` | `str`; answered, `text` |
+| `Uint8List`, `BytesMut` | `bytes`, `bytes_mut` |
+| `bool`, `int`, `double`; `I8`..`I64`, `U8`..`U64`, `Isize`, `Usize`, `F32`, `F64` | the scalar (`int` is `i64`, `double` `f64`) |
+| `Ref`, `Ref?`, `MapRef` | `value`, `value` nullable, `map`, borrowed (a `ListRef` is refused: lend or take it) |
+| `Lent<T>`, `Taken<T>` of `Ref`, `MapRef`, `ListRef` or an object kind's class | lent, taken (a bare object kind's class is refused) |
+| `ValueAnswer`, `MapAnswer`, `ListAnswer`; an object kind's class | the tree answered; the object answered |
+| `void` | no answer |
+
 **A remote** (`KindRemote`): a method per slot, `has(slotName)` (the C
 name: `has('greet_into')`), `kind`, `table`, `size`, `ctx`, `close()`
 (destroys an object this side owns, once; does nothing otherwise),

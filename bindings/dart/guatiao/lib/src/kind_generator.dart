@@ -103,6 +103,8 @@ const Set<String> _keywords = {
 };
 
 /// What a remote answers itself, so no slot may be called it.
+const Set<String> reservedMemberNames = _reserved;
+
 const Set<String> _reserved = {
   'kind',
   'table',
