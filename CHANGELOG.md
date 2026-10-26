@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **A page's WebTransport datagrams, in TypeScript and Dart.**
+  `link.datagrams` sends and receives the session's datagrams beside the
+  calls, the payload alone as a Rust server's `Link::datagrams()` reads
+  them: `send`, `maxSize` and `receive()` (TypeScript) or `received`
+  (Dart); `undefined` or `null` over a WebSocket. guatiao-source-remote's
+  `datagram_echo` example is a server that sends each one back.
 - **guatiao-source-remote: a host sees the TLS settings its own
   configuration weakens.** `RemoteSource::weakened()` (feature `tls`)
   lists every setting looser than strict in the `policy` a source file's

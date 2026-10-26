@@ -36,7 +36,18 @@ link.close(): void                    // GOODBYE, then the channel closes; idemp
 link.alive: boolean; link.why: string | undefined; link.done: Promise<string>
 link.objectsHeld: number              // objects of this side's the peer holds
 link.trust: RemoteTrust
+link.datagrams: RemoteDatagrams | undefined   // WebTransport's; undefined over a WebSocket
+interface RemoteDatagrams {
+  readonly maxSize: number;           // the browser's maxDatagramSize: the largest payload the path takes now
+  send(payload: Uint8Array): void;    // BadValue past maxSize, Gone once the link ended; a lost one is not said
+  receive(): Promise<Uint8Array>;     // the next to arrive; rejects Gone when the link ends
+}
 ```
+
+- **Datagrams** (WebTransport): each delivered whole or not at all, in
+  any order; the payload alone, nothing added, so a server reads it with
+  its own QUIC stack; for values, a wire channel's frame. A server that
+  sends each one back is guatiao's `datagram_echo` example.
 
 - **WebTransport** (`https://host:port/path`): a browser's only (Node has
   none: `Unsupported`). `pins` (the hashes the server says as
@@ -142,6 +153,7 @@ interface RemoteChannel {
   start(message: (body: Uint8Array) => void, closed: (why: string) => void): void;
   send(body: Uint8Array): void;
   close(): void;
+  readonly datagrams?: RemoteDatagrams;   // what link.datagrams answers
 }
 ```
 

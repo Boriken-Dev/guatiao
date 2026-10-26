@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A page's WebTransport datagrams**: `link.datagrams` (`RemoteDatagrams`,
+  `null` over a WebSocket) sends and receives the session's datagrams
+  beside the calls (`send`, `maxSize`, `received`). `RemoteChannel` gains
+  `datagrams`, which a channel of its own answers `null` for.
 - **A page's remote link over WebTransport**: `RemoteLink.connect` takes
   an `https://` URL in a browser, the server's certificate pinned by hash
   through `RemoteTls(pins: ...)` (`serverCertificateHashes`), at no
