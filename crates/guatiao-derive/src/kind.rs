@@ -3214,6 +3214,36 @@ mod tests {
         );
     }
 
+    /// `tests/vectors/floor_hash.json` pairs each trait with the hash input
+    /// and floor hash every binding computes for a kind born outside Rust:
+    /// a change to how a type is spelled for the hash fails here first.
+    #[test]
+    fn the_floor_hash_vectors_hold_for_the_trait() {
+        let text = include_str!("../tests/vectors/floor_hash.json");
+        let doc: serde_json::Value = serde_json::from_str(text).expect("the vectors are JSON");
+        let vectors = doc["vectors"].as_array().expect("a list of vectors");
+        assert!(vectors.len() >= 6);
+        for v in vectors {
+            let name = v["name"].as_str().unwrap();
+            let attr = if v["object"].as_bool().unwrap() {
+                "object"
+            } else {
+                ""
+            };
+            let want = u32::try_from(v["floor_hash"].as_u64().unwrap()).unwrap();
+            assert_eq!(
+                fnv1a(v["spelled"].as_str().unwrap()),
+                want,
+                "{name}: the spelled input"
+            );
+            assert_eq!(
+                floor_hash(attr, v["trait"].as_str().unwrap()),
+                want,
+                "{name}: the trait"
+            );
+        }
+    }
+
     /// The shim's own parameters are `__ctx`, `__out` and `__err`, so an
     /// argument may take any of the plain names; in the slot's type, which
     /// a C header renders, such an argument gains a `_`.

@@ -219,6 +219,15 @@ export interface Other {
     expect(floorHashOf(false, [])).toBe(fnv1a('provider'));
   });
 
+  it('gets the hash Rust gives the shared vectors', () => {
+    const file = path.join(REPO, 'crates', 'guatiao-derive', 'tests', 'vectors', 'floor_hash.json');
+    const { vectors } = JSON.parse(readText(file)) as {
+      vectors: { name: string; object: boolean; slots: KindsDocument['kinds'][number]['slots']; floor_hash: number }[];
+    };
+    expect(vectors.length).toBeGreaterThanOrEqual(6);
+    for (const v of vectors) expect([v.name, floorHashOf(v.object, v.slots)]).toEqual([v.name, v.floor_hash]);
+  });
+
   it('reaches the object kinds its slots name, in another file too', async () => {
     const document = await describeText(
       `${HEAD}
