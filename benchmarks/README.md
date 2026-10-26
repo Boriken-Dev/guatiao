@@ -383,6 +383,36 @@ length and a bounds check per node, and the map's keys compared (taking
 the check out entirely saved 0.15 us of the configuration's 2.8).
 A large string costs the same either way.
 
+## A wide map to wire bytes and back (`wire-keys*.json`)
+
+The 200 keys written to wire bytes through the `Encoder` and read back
+into a tree through `decode`, before and after the two check a wide
+map's keys for repeats as the streaming readers already did (above):
+each key hashed once, under seeds drawn for the read or the write, into
+a set with room for the map's count. Before, `decode` hashed each key
+with SipHash into a set grown on the way, and the `Encoder` hashed each
+twice (a fixed-key SipHash, then the set's own) into a set made at the
+seventeenth key. Local and provisional, as above: five alternating runs
+of three rounds each on Windows ARM64 (high priority), two such
+sessions pooled in Linux on it. Microseconds per call, median.
+
+| metric | Windows before | Windows after | Linux before | Linux after |
+| --- | --- | --- | --- | --- |
+| 200 keys to wire bytes, `to_bytes_of` | 10.68 | 5.98 | 10.61 | 6.06 |
+| 200 keys into a tree, `decode` | 21.33 | 15.48 | 20.58 | 14.61 |
+| 200 keys into a tree, `decode_as::<Value>` | 25.91 | 25.29 | 24.76 | 25.26 |
+| 200 keys walked, bytes | 6.09 | 6.09 | 6.12 | 5.94 |
+| configuration to wire bytes, `to_bytes_of` | 4.00 | 4.07 | 3.66 | 3.74 |
+| configuration from wire bytes, `decode` then `from_value` | 12.14 | 12.29 | 12.37 | 12.27 |
+| configuration from wire bytes, `decode_as` | 5.24 | 5.23 | 4.79 | 4.82 |
+| configuration walked, bytes | 2.90 | 2.85 | 2.85 | 2.85 |
+
+The configuration's maps hold five keys or fewer and compare them as
+before; its rows and the readers that already hashed once are the
+controls. One Linux session alone showed the configuration rows 2-5%
+slower, the bytes walk among them, whose code did not change; the
+other, within 2% either way.
+
 ## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
 
 A document to a binding's plain objects and back, three ways: through a
