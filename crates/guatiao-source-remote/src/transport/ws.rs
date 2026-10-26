@@ -5,7 +5,7 @@
 //! WebSocket (RFC 6455) over TCP, at the trusted level: what a browser
 //! can open. Each frame's body is one binary message, with no length in
 //! front; the listener admits peers by address range as
-//! [`TcpListen`](super::tcp::TcpListen) does.
+//! [`TcpListen`] does.
 
 #![forbid(unsafe_code)]
 
