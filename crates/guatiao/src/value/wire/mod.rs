@@ -34,7 +34,8 @@
 #![forbid(unsafe_code)]
 
 pub mod channel;
-mod keys;
+// A wide map's keys hashed once each, for its builders, readers and writers.
+pub(super) mod keys;
 mod stream;
 
 pub use stream::{Decoder, Encoded, Encoder, decode_as, encode_of, to_bytes_of};
@@ -500,6 +501,9 @@ impl<'a> Reader<'a> {
         Ok(n)
     }
 
+    // A copy in each code unit that reads, so how the crate is split into
+    // units cannot move this out of the readers' loops.
+    #[inline]
     fn slice(&mut self) -> Result<&'a [u8], WireError> {
         let n = self.len()?;
         let s = &self.bytes[self.at..self.at + n];

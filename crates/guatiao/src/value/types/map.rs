@@ -11,15 +11,14 @@ use alloc::fmt;
 use core::ptr;
 
 use core::borrow::BorrowMut;
-use core::hash::BuildHasher;
 use core::marker::PhantomData;
-use std::collections::HashMap;
-use std::collections::hash_map::{Entry as Slot, RandomState};
+use std::collections::hash_map::Entry as Slot;
 
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::convert::MapError;
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, move_buffer, release_buffer, reserve};
+use crate::value::wire::keys::{ByHash, LINEAR, RESERVE, Seeded};
 
 use super::{List, Payload, Tag, Text, Value, cloned, only_alloc, or_abort, short_form_alloc};
 
@@ -497,7 +496,7 @@ impl Map {
         let mut from = from;
         // Reversed, so each entry is taken from the end in constant time.
         from.entries_mut().reverse();
-        let mut into = Filling::new(self);
+        let mut into = Filling::with_room(self, from.len());
         let mut n = 0;
         while let Some(entry) = from.pop_last() {
             let (key, value) = entry.into_parts();
@@ -792,7 +791,8 @@ impl<K: AsRef<str>, V: Into<Value>> FromIterator<(K, V)> for Map {
 impl<K: AsRef<str>, V: Into<Value>> Extend<(K, V)> for Map {
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         let alloc = short_form_alloc(self.alloc());
-        let mut into = Filling::new(self);
+        let iter = iter.into_iter();
+        let mut into = Filling::with_room(self, iter.size_hint().0);
         for (key, value) in iter {
             let stored = into.set_in(key.as_ref(), value.into(), alloc);
             or_abort(stored, core::alloc::Layout::new::<Entry>());
@@ -848,33 +848,35 @@ impl Entry {
 
 // --- finding keys in a wide map ----------------------------------------------
 
-/// Up to this many keys, a key is found by comparing it with every one.
-const SCAN: usize = 16;
-
 /// Where the first key with each seeded hash sits in a map's entries:
 /// how a wide map is searched without a scan per key. The map itself has
 /// no index, since its layout is the C one.
 #[derive(Debug)]
-struct KeyIndex(HashMap<u64, usize>);
+struct KeyIndex {
+    seeds: Seeded,
+    first: ByHash<usize>,
+}
 
 impl KeyIndex {
-    fn of(entries: &[Entry]) -> KeyIndex {
-        let mut index =
-            HashMap::with_capacity_and_hasher(entries.len().saturating_mul(2), RandomState::new());
+    /// Indexes `entries`, with room for `room` keys in all.
+    fn of(entries: &[Entry], seeds: Seeded, room: usize) -> KeyIndex {
+        let mut first =
+            ByHash::with_capacity_and_hasher(room.max(entries.len()), Default::default());
         for (at, entry) in entries.iter().enumerate() {
-            let hash = index.hasher().hash_one(entry.key());
-            index.entry(hash).or_insert(at);
+            first
+                .entry(seeds.hash_one(entry.key().as_bytes()))
+                .or_insert(at);
         }
-        KeyIndex(index)
+        KeyIndex { seeds, first }
     }
 
     fn hash(&self, key: &str) -> u64 {
-        self.0.hasher().hash_one(key)
+        self.seeds.hash_one(key.as_bytes())
     }
 
     /// The first position of `key` in `entries`, which this indexes.
     fn find(&self, entries: &[Entry], key: &str) -> Option<usize> {
-        let at = *self.0.get(&self.hash(key))?;
+        let at = *self.first.get(&self.hash(key))?;
         if entries[at].key() == key {
             return Some(at);
         }
@@ -885,18 +887,49 @@ impl KeyIndex {
 }
 
 /// A map being filled, where a repeated key replaces the value stored
-/// first and keeps its place, as [`Map::set`] does. Past [`SCAN`] keys
+/// first and keeps its place, as [`Map::set`] does. Past [`LINEAR`] keys
 /// that place is found through a hash of the key, so N stores are linear
 /// in N; nothing else may change the map while it is being filled.
 #[derive(Debug)]
 pub(crate) struct Filling<M: BorrowMut<Map>> {
     map: M,
     index: Option<KeyIndex>,
+    /// How many more keys are expected than the map held when given.
+    more: usize,
 }
 
 impl<M: BorrowMut<Map>> Filling<M> {
     pub(crate) fn new(map: M) -> Filling<M> {
-        Filling { map, index: None }
+        Filling::with_room(map, 0)
+    }
+
+    /// For a map that will be given about `more` keys: past [`LINEAR`] in
+    /// all, its index is made at the first store, with room for them (at
+    /// most [`RESERVE`] more).
+    pub(crate) fn with_room(map: M, more: usize) -> Filling<M> {
+        Filling {
+            map,
+            index: None,
+            more,
+        }
+    }
+
+    /// The index, made first when the map is wide or expected to be,
+    /// under the seeds `drawn` holds (drawn there first if it holds none).
+    fn index<'i>(
+        map: &Map,
+        index: &'i mut Option<KeyIndex>,
+        more: usize,
+        drawn: &mut Option<Seeded>,
+    ) -> Option<&'i mut KeyIndex> {
+        if index.is_none() && map.len().saturating_add(more) > LINEAR {
+            let room = match more {
+                0 => map.len().saturating_mul(2),
+                _ => map.len().saturating_add(more.min(RESERVE)),
+            };
+            *index = Some(KeyIndex::of(map.entries(), Seeded::of(drawn), room));
+        }
+        index.as_mut()
     }
 
     /// Stores `value` under `key`; a refused store frees it.
@@ -906,15 +939,25 @@ impl<M: BorrowMut<Map>> Filling<M> {
         value: Value,
         alloc: Alloc,
     ) -> Result<(), ValueError> {
+        self.set_in_seeded(key, value, alloc, &mut None)
+    }
+
+    /// The same, hashing under the seeds `drawn` holds (drawn there first
+    /// if it holds none and this map needs an index): how one build
+    /// shares its seeds between its maps.
+    pub(in crate::value) fn set_in_seeded(
+        &mut self,
+        key: &str,
+        value: Value,
+        alloc: Alloc,
+        drawn: &mut Option<Seeded>,
+    ) -> Result<(), ValueError> {
         let map = self.map.borrow_mut();
-        if self.index.is_none() && map.len() > SCAN {
-            self.index = Some(KeyIndex::of(map.entries()));
-        }
-        let Some(index) = &mut self.index else {
+        let Some(index) = Self::index(map, &mut self.index, self.more, drawn) else {
             return map.set_node(key, value, alloc);
         };
         let hash = index.hash(key);
-        match index.0.entry(hash) {
+        match index.first.entry(hash) {
             Slot::Vacant(room) => {
                 let at = map.len();
                 map.insert_node(key, value, alloc)?;
@@ -938,10 +981,7 @@ impl<M: BorrowMut<Map>> Filling<M> {
     /// Whether `key` is stored.
     pub(crate) fn contains_key(&mut self, key: &str) -> bool {
         let map: &Map = self.map.borrow();
-        if self.index.is_none() && map.len() > SCAN {
-            self.index = Some(KeyIndex::of(map.entries()));
-        }
-        match &self.index {
+        match Self::index(map, &mut self.index, self.more, &mut None) {
             Some(index) => index.find(map.entries(), key).is_some(),
             None => map.contains_key(key),
         }
@@ -952,7 +992,7 @@ impl<M: BorrowMut<Map>> Filling<M> {
     }
 }
 
-/// A map read by key many times: past [`SCAN`] keys each lookup goes
+/// A map read by key many times: past [`LINEAR`] keys each lookup goes
 /// through a hash of the key rather than a scan. Answers what
 /// [`Map::get`] answers, the first entry under a key.
 #[derive(Debug)]
@@ -964,7 +1004,8 @@ pub(crate) struct Lookup<'a> {
 impl<'a> Lookup<'a> {
     pub(crate) fn new(map: &'a Map) -> Lookup<'a> {
         let entries = map.entries();
-        let index = (entries.len() > SCAN).then(|| KeyIndex::of(entries));
+        let index = (entries.len() > LINEAR)
+            .then(|| KeyIndex::of(entries, Seeded::of(&mut None), entries.len()));
         Lookup { entries, index }
     }
 
@@ -978,5 +1019,74 @@ impl<'a> Lookup<'a> {
 
     pub(crate) fn contains_key(&self, key: &str) -> bool {
         self.get(key).is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Filling, Lookup, Map};
+    use crate::value::alloc::Alloc;
+    use crate::value::read::int_or;
+    use crate::value::types::Value;
+    use crate::value::wire::keys::Seeded;
+
+    /// Seeds that send every key shorter than eight bytes to one hash: the
+    /// index then finds an earlier key for each, and only the bytes tell
+    /// a new key from a repeat.
+    #[test]
+    fn a_filling_tells_colliding_keys_apart_by_their_bytes() {
+        let seeds = Seeded([7, 0]);
+        assert_eq!(seeds.hash_one(b"a"), seeds.hash_one(b"bcd"));
+        for more in [0, 40] {
+            let alloc = Alloc::rust();
+            let mut drawn = Some(seeds);
+            let mut filling = Filling::with_room(Map::new_in(alloc), more);
+            for i in 0..40i64 {
+                let key = format!("k{i}");
+                filling
+                    .set_in_seeded(&key, Value::from(i), alloc, &mut drawn)
+                    .unwrap();
+            }
+            for i in [17i64, 0, 39] {
+                let key = format!("k{i}");
+                filling
+                    .set_in_seeded(&key, Value::from(-i), alloc, &mut drawn)
+                    .unwrap();
+            }
+            filling
+                .set_in_seeded("k40", Value::from(40), alloc, &mut drawn)
+                .unwrap();
+            assert!(filling.contains_key("k17") && !filling.contains_key("k41"));
+            let map = filling.into_map();
+            assert_eq!(map.len(), 41, "{more}");
+            for (at, entry) in map.entries().iter().enumerate() {
+                let i = at as i64;
+                let want = if matches!(i, 17 | 0 | 39) { -i } else { i };
+                assert_eq!(entry.key(), format!("k{i}"), "{more}");
+                assert_eq!(int_or(Some(entry.value()), i64::MIN), want, "{more} k{i}");
+            }
+        }
+    }
+
+    /// The same seeds in a lookup, which answers the first entry under a
+    /// key, as `Map::get` does.
+    #[test]
+    fn a_lookup_tells_colliding_keys_apart_by_their_bytes() {
+        let mut map = Map::new();
+        for i in 0..40i64 {
+            map.insert_node(&format!("k{i}"), Value::from(i), Alloc::rust())
+                .unwrap();
+        }
+        map.insert_node("k5", Value::from(-5), Alloc::rust())
+            .unwrap();
+        let entries = map.entries();
+        let lookup = Lookup {
+            entries,
+            index: Some(super::KeyIndex::of(entries, Seeded([7, 0]), entries.len())),
+        };
+        for i in 0..40i64 {
+            assert_eq!(int_or(lookup.get(&format!("k{i}")), i64::MIN), i);
+        }
+        assert!(!lookup.contains_key("k40"));
     }
 }

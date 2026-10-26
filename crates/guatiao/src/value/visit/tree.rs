@@ -20,6 +20,7 @@ use crate::value::convert::{Kinds, MapError, TryAsRef, copied};
 use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::types::map::Filling;
 use crate::value::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
+use crate::value::wire::keys::Seeded;
 
 /// How many elements a length hint may reserve room for.
 const RESERVE: usize = 1024;
@@ -350,7 +351,7 @@ impl Build for ValueBuild {
             return Ok(map.into());
         }
         // A repeated key replaces, as a map's `set` does.
-        let mut map = Filling::new(Map::new_in(alloc));
+        let mut map = Filling::with_room(Map::new_in(alloc), entries.len_hint().unwrap_or(0));
         each_entry(&mut entries, |key, value| map.set_in(key, value, alloc))?;
         Ok(map.into_map().into())
     }
@@ -442,6 +443,8 @@ pub struct TreeSink {
     alloc: Alloc,
     open: Vec<Open>,
     done: Option<Value>,
+    /// What every wide map of this build hashes its keys under.
+    seeds: Option<Seeded>,
 }
 
 impl TreeSink {
@@ -456,6 +459,7 @@ impl TreeSink {
             alloc,
             open: Vec::new(),
             done: None,
+            seeds: None,
         }
     }
 
@@ -495,7 +499,7 @@ impl TreeSink {
                     return Err(ValueError::WrongKind);
                 }
                 *keyed = false;
-                map.set_in(key, value, alloc)
+                map.set_in_seeded(key, value, alloc, &mut self.seeds)
             }
         }
     }
@@ -565,9 +569,10 @@ impl Sink for TreeSink {
 
     fn map_begin(&mut self, len: Option<usize>) -> Result<(), ValueError> {
         self.ready()?;
-        let map = Map::with_capacity_in(self.alloc, len.unwrap_or(0).min(RESERVE))?;
+        let len = len.unwrap_or(0);
+        let map = Map::with_capacity_in(self.alloc, len.min(RESERVE))?;
         self.open.push(Open::Map {
-            map: Filling::new(map),
+            map: Filling::with_room(map, len),
             key: String::new(),
             keyed: false,
         });
