@@ -1749,6 +1749,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build the modules
         run: cargo build -p myapp -p guatiao-intake --target wasm32-unknown-unknown --release
+      - name: Build the remote server the remote suites call over WebSocket
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
@@ -1803,6 +1805,10 @@ jobs:
           cargo build --target armv7-unknown-linux-gnueabihf
           -p guatiao -p guatiao-serde -p guatiao-intake -p hello_library -p derived_greeter -p greeter_caller -p myapp
           --features guatiao/load,guatiao/derive,guatiao/provider,guatiao/regex,guatiao-serde/exact-numbers,guatiao-serde/toml,guatiao-serde/yaml
+      - name: Build the remote server for the runner
+        # The remote suites call it over WebSocket from the emulated VM: a
+        # separate process, so it runs natively.
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws
       - name: Dart for linux-arm
         # The stable channel's latest release, the one the other legs'
         # `sdk: stable` resolves to, with its published checksum.
