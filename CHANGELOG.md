@@ -14,6 +14,11 @@ write now.
 
 ### Added
 
+- **guatiao-remote-server: a bound on handshakes in flight.** At most
+  `--max-handshakes` connections (64 by default) are in their handshake
+  at once; past it a new connection is closed unread. A source the access
+  control list denies, or whose handshake fails, is reported at most once
+  a minute per address instead of once per connection.
 - **guatiao-source-remote: the secure level, mutual TLS 1.3** (feature
   `tls`, off by default). `tls://host:port` runs the `secure` trust
   level through coqui-peer-tls: each side presents a certificate of its
