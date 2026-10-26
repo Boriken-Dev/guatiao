@@ -38,8 +38,10 @@ library it loaded itself, in any language.
 - **Transports** — a server in a child process (isolation); the same
   machine through a Unix socket or a named pipe, or through shared memory
   (a few microseconds a call); TCP, QUIC (with datagrams beside the
-  calls) and WebSocket (`ws://`, `wss://`, what a page opens) at any
-  security; RDMA (experimental, Linux) with none.
+  calls), WebSocket (`ws://`, `wss://`, what a page opens) and
+  WebTransport (`https://`, what a page opens with the server's
+  certificate pinned by its hash) at any security; RDMA (experimental,
+  Linux) with none.
 
 ## Installation
 
@@ -56,6 +58,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
 | `ws` | `tcp`, `tungstenite` | WebSocket: what a browser page connects to |
+| `webtransport` | `quic`, `wtransport` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash |
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
 from C). `coqui-net-acl`, `coqui-peer` and `coqui-peer-tls` are git

@@ -14,6 +14,22 @@ write now.
 
 ### Added
 
+- **guatiao-source-remote: WebTransport** (feature `webtransport`, off by
+  default). `https://host:port/path` is an HTTP/3 session over QUIC, what
+  a browser opens with `new WebTransport(url)`: `quic://`'s TLS, trust,
+  policy, access control list and Retry under ALPN `h3`, at any of the
+  three securities, one stream per link carrying the frames, the
+  session's datagrams through `Link::datagrams()`. A listener
+  `rotating(every)` presents certificates it makes, each valid for at
+  most 14 days, which a page pins by hash (`serverCertificateHashes`),
+  and `certificate_hashes()` names the one presented and the next.
+  `transport::webtransport::{WtConnect, WtListen}` in Rust; `connect =
+  "https://..."` in a source file's configuration and a peer manifest;
+  `guatiao-remote-server --listen https://`, which rotates its
+  certificates unless `--identity` or `--state-dir` names one, says the hashes, and
+  writes them to `--hashes-file`. wtransport drives HTTP/3 over the
+  transport's own quinn. The protocol is unchanged. `docs/remote.md` has
+  "Over WebTransport".
 - **guatiao's remote links: one security choice, the same on every
   transport and client.** `security` is `none` (an access control list
   and a pre-shared key proved both ways, no encryption), `server-tls`
