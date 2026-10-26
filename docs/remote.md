@@ -214,6 +214,7 @@ a new one goes unreported.
 | `tcp://host:port` | another machine, at the trusted level | 22–36 µs on loopback; 114–123 µs from a host to a VM on it |
 | `ws://host:port/path` | a browser, or any WebSocket client, at the trusted level (feature `ws`): one binary message per frame body | not measured |
 | `tls://host:port` | any network, at the secure level (feature `tls`): mutual TLS 1.3 | 33–37 µs on loopback |
+| `quic://host:port` | any network, at the secure level (feature `quic`): the same mutual TLS 1.3 inside QUIC, with datagrams beside the calls | 58–83 µs on loopback (Windows), about 220 µs in WSL |
 | `rdma://host:port` | another machine with an RDMA device, at the trusted level; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -334,7 +335,7 @@ network by default.
   reads and changes traffic freely. Use it only where the network itself
   is the boundary.
 - **`secure`**: any network: mutual TLS 1.3 over TCP (`tls://`, feature
-  `tls`), through [coqui-peer-tls](https://github.com/Boriken-Dev/coqui-peer-tls).
+  `tls`) or inside QUIC (`quic://`, feature `quic`), through [coqui-peer-tls](https://github.com/Boriken-Dev/coqui-peer-tls).
   Each side presents a certificate of its own, self-issued, and knows the
   other by its **fingerprint**, `sha256:<hex>` (the SHA-256 of the
   certificate's DER encoding: `openssl x509 -outform DER | sha256sum`).
@@ -477,8 +478,64 @@ the cost of sealing and opening every byte on top of the link's own
 copies. Small calls stay near their idle time while large ones stream
 beside them on the same link (`small_calls_stay_quick_while_large_ones_stream`).
 
-Not in this build: QUIC, `wss://`, CA-signed certificates
-(coqui-peer-tls's `ca` feature) and TLS 1.2.
+### Over QUIC
+
+`quic://host:port` (feature `quic`) is the same secure level inside QUIC
+(RFC 9000), over UDP: the same identity, pins or trust store, policy,
+access control list, application protocol `guatiao-remote`, waiting
+entries and refusals as `tls://`, and the same configuration keys
+(`connect = "quic://..."` with `state_dir` or `identity_file`, `pins`,
+`policy`). The server listens with `--listen quic://ADDRESS:PORT --trust
+secure`; in Rust, `transport::quic::{QuicConnect, QuicListen}` take the
+`TlsConfig` above. A listener first proves that a client receives at
+the address it names (a QUIC Retry, as TCP's handshake does), then
+decides by that address, refusing a denied source before any handshake;
+a connection cannot move to another address afterwards.
+
+A link is one bidirectional QUIC stream carrying the frames exactly as
+over TCP. A link ends cleanly when the stream is finished, or the
+connection is closed with code 1; code 0, also what a connection dropped
+unclosed sends, is an end without it, read as an error.
+
+**Datagrams.** Beside the calls a QUIC link carries datagrams
+(RFC 9221): each is delivered whole or not at all, in any order, for
+what a caller accepts losing (a sensor's readings, samples). In Rust,
+`Link::datagrams()` answers `send(&[u8])`, `recv(timeout)` and
+`max_size()` (the largest payload the path takes now; past it a send is
+refused), and `None` over every other transport. A datagram is the
+payload alone, nothing added, so a peer with any QUIC stack reads it.
+For values the payload is a wire channel's frame (`kind:u8 channel:LEB128
+payload`, "Values on the wire" in [encodings](encodings.md)): announce
+the channel's schema, then send values, and read them with the channel's
+receiver: `guatiao_wire_announce`, `guatiao_wire_send` and
+`guatiao_wire_receiver_accept` in C, `wire` in every binding. An
+announcement may be lost like any datagram: the sender repeats it until
+the receiver knows the channel (or announces it over the calls). The
+protocol's frames are unchanged: datagrams carry no calls.
+
+quinn runs the connection on a small tokio runtime inside the
+transport; the link stays on threads, which wait on it without needing
+to be outside another runtime.
+
+Measured on loopback, five runs each alternating with `tls://`, medians,
+local and provisional (`benchmarks/results/remote-quic-*.jsonl`):
+
+| link, loopback | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- |
+| Windows ARM64, TLS | 32.0 | 85.6 | 108 965 | 617 | 37.5 / 36.7 |
+| Windows ARM64, QUIC | 70.3 | 261.8 | 137 089 | 384 | 120.3 / 120.3 |
+| WSL (aarch64), TLS | 60.1 | 188.6 | 59 149 | 1 223 | 67.9 / 67.4 |
+| WSL (aarch64), QUIC | 217.3 | 2 321.5 | 33 764 | 226 | 129.9 / 132.0 |
+
+On Windows a small call over QUIC costs about twice its time over TLS
+and three times its CPU, and 32 threads calling at once go faster. In
+WSL it costs three to four times its time and twice its CPU, its p99
+runs to milliseconds and a 4 MiB round trip moved 40 to 374 MB/s from
+run to run. The causes are not measured. Prefer `tls://` unless
+datagrams are wanted. Not measured: across a real network.
+
+Not in this build: `wss://`, CA-signed certificates (coqui-peer-tls's
+`ca` feature) and TLS 1.2.
 
 ## The protocol
 

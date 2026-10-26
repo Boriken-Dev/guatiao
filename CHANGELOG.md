@@ -43,6 +43,25 @@ write now.
   and coqui-peer-tls are git dependencies pinned by commit, so the crate
   cannot be published to crates.io until they are (`cargo publish` and
   `cargo package` refuse it meanwhile). `docs/remote.md` has "Trust".
+- **guatiao-source-remote: the secure level over QUIC, with datagrams**
+  (feature `quic`, off by default). `quic://host:port` runs the same
+  mutual TLS 1.3 as `tls://`, with the same `TlsConfig` (identity, pins
+  or trust store, policy, access control list), refusals and their
+  words, and a waiting client recorded with the address it came from;
+  resumption stays off unless the policy keeps it. A listener proves a
+  client's address with a Retry before its access control list decides,
+  and a connection cannot move to another address. A link is one QUIC
+  stream carrying the frames. `Link::datagrams()` (and
+  `FrameRead::datagrams()`, a provided method answering `None` on every
+  other transport) sends and receives datagrams beside the calls: the
+  bytes given, one QUIC DATAGRAM frame each, delivered whole or not at
+  all; a wire channel's frames are the documented payload, readable from
+  C and every binding. `transport::quic::{QuicConnect, QuicListen}` in
+  Rust; `connect: quic://...` with the `tls://` keys in a source file's
+  configuration and a peer manifest; `--listen quic://` on the server;
+  `quic://` in `guatiao-remote-bench`. quinn runs on a small tokio
+  runtime inside the transport; the link stays on threads. The protocol
+  is unchanged. `docs/remote.md` has "Over QUIC".
 - **guatiao-source-remote: network peers admitted by an access control
   list.** The trusted listeners (`tcp`, `ws`, `rdma`) and the TLS one take
   a coqui-net-acl `Acl` (ordered permit and deny rules on the source, the
