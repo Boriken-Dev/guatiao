@@ -419,6 +419,9 @@ fn a_peer_removed_from_the_store_cannot_link_again() {
             .any(|r| r.contains("does not trust this client")),
         "{refused:?}"
     );
+    // A refusal is a trust failure, not a peer gone.
+    let e = source.link().unwrap_err();
+    assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -458,6 +461,187 @@ fn resumption_kept_by_the_policy_lets_a_removed_peer_link_again() {
     assert_eq!(greeting(&registry), "hello, tls");
     drop(registry);
     source.disconnect();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A certificate and its key as rustls takes them.
+fn certified(
+    id: &Identity,
+) -> (
+    rustls::pki_types::CertificateDer<'static>,
+    rustls::pki_types::PrivateKeyDer<'static>,
+) {
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    let pem = id.to_pem().unwrap();
+    (
+        CertificateDer::from(id.certificate_der().to_vec()),
+        PrivateKeyDer::from_pem_slice(pem.as_bytes()).unwrap(),
+    )
+}
+
+/// A TLS server presenting `id`'s certificate with a chain behind it,
+/// accepting any client that proves its key.
+fn chain_server(id: &Identity) -> String {
+    let (certificate, key) = certified(id);
+    let extra = certified(&Identity::generate().unwrap()).0;
+    let verifier = coqui_peer_tls::Trust::AnyWithKeyProof
+        .client_cert_verifier()
+        .unwrap();
+    let mut config = rustls::ServerConfig::builder_with_provider(coqui_peer_tls::crypto_provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(vec![certificate, extra], key)
+        .unwrap();
+    config.alpn_protocols = vec![b"guatiao-remote".to_vec()];
+    let config = Arc::new(config);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let _ = coqui_peer_tls::accept(config, socket);
+    });
+    address
+}
+
+/// What `client` is told connecting to `address`: the status and the words.
+fn refused_link(address: &str, client: &TlsConfig) -> (guatiao::Status, String) {
+    let e = source(address, client).link().unwrap_err();
+    (e.status, e.message().to_string())
+}
+
+#[test]
+fn a_client_says_why_it_refuses_a_server() {
+    let server_id = Identity::generate().unwrap();
+    let client_id = Identity::generate().unwrap();
+    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+    let address = listen(&server, secure_server());
+
+    // Pinning another server.
+    let stranger = Identity::generate().unwrap().fingerprint();
+    let pinned = TlsConfig::new(client_id.clone()).pins([stranger]);
+    let (status, why) = refused_link(&address, &pinned);
+    assert_eq!(status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{why}");
+    assert!(why.contains("is not one this client trusts"), "{why}");
+    assert!(why.contains("is not pinned"), "{why}");
+
+    // Trusting what its store accepted, which this server is not.
+    let dir = scratch("client_store");
+    let stored = TlsConfig::open(&dir).unwrap();
+    let server = TlsConfig::new(server_id.clone()).pins([stored.fingerprint()]);
+    let address = listen(&server, secure_server());
+    let (status, why) = refused_link(&address, &stored);
+    assert_eq!(status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{why}");
+    assert!(why.contains("is not accepted"), "{why}");
+
+    // A pinned server presenting a chain.
+    let address = chain_server(&server_id);
+    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let (status, why) = refused_link(&address, &client);
+    assert_eq!(status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{why}");
+    assert!(why.contains("presented a certificate chain"), "{why}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A listener serving one link: its address, and what serving it answered.
+fn serve_once(config: &TlsConfig) -> (String, std::thread::JoinHandle<String>) {
+    let listener = TlsListen::bind("127.0.0.1:0", config).unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let serving = std::thread::spawn(move || {
+        let Accepted::Connection(conn) = listener.accept().unwrap() else {
+            panic!("no access control list: every source proceeds");
+        };
+        match secure_server().serve(conn) {
+            Ok(_) => "served".to_string(),
+            Err(e) => e.to_string(),
+        }
+    });
+    (address, serving)
+}
+
+/// A rustls client presenting `id`'s certificate with a chain behind it.
+fn chain_client(id: &Identity) -> Arc<rustls::ClientConfig> {
+    let (certificate, key) = certified(id);
+    let extra = certified(&Identity::generate().unwrap()).0;
+    let verifier = coqui_peer_tls::Trust::AnyWithKeyProof
+        .server_cert_verifier()
+        .unwrap();
+    let mut config = rustls::ClientConfig::builder_with_provider(coqui_peer_tls::crypto_provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .dangerous()
+        .with_custom_certificate_verifier(verifier)
+        .with_client_auth_cert(vec![certificate, extra], key)
+        .unwrap();
+    config.alpn_protocols = vec![b"guatiao-remote".to_vec()];
+    Arc::new(config)
+}
+
+#[test]
+fn a_server_says_why_it_refuses_a_client() {
+    let server_id = Identity::generate().unwrap();
+    let (known, stranger) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+
+    // Pinning another client.
+    let server = TlsConfig::new(server_id.clone()).pins([known.fingerprint()]);
+    let (address, serving) = serve_once(&server);
+    let client = TlsConfig::new(stranger.clone()).pins([server_id.fingerprint()]);
+    let _ = refresh(&source(&address, &client));
+    let why = serving.join().unwrap();
+    assert!(why.contains("the client is not pinned"), "{why}");
+
+    // A store that has not accepted it: it waits there.
+    let dir = scratch("server_refuses");
+    let server = TlsConfig::open(&dir).unwrap();
+    let (address, serving) = serve_once(&server);
+    let client = TlsConfig::new(stranger.clone()).pins([server.fingerprint()]);
+    let _ = refresh(&source(&address, &client));
+    let why = serving.join().unwrap();
+    assert!(why.contains("the client is not accepted"), "{why}");
+    assert!(why.contains("waits there"), "{why}");
+
+    // A pinned client presenting a chain.
+    let server = TlsConfig::new(server_id).pins([known.fingerprint()]);
+    let (address, serving) = serve_once(&server);
+    let handshake = coqui_peer_tls::TlsHandshake::client(chain_client(&known)).unwrap();
+    let mut socket = TcpStream::connect(&address).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let _ = coqui_peer::drive_stream(handshake, &mut socket);
+    let why = serving.join().unwrap();
+    assert!(why.contains("presented a certificate chain"), "{why}");
+    drop(socket);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The alert a refusing server sends is `certificate_unknown`, and the
+/// client says so: heard before it wrote anything, nothing races it.
+#[test]
+fn a_refused_client_hears_its_certificate_was_refused() {
+    let dir = scratch("alert");
+    let server = TlsConfig::open(&dir).unwrap();
+    let address = listen(&server, secure_server());
+    let client_id = Identity::generate().unwrap();
+    let client = TlsConfig::new(client_id.clone()).pins([server.fingerprint()]);
+    let mut conn = TlsConnect::new(&address, &client)
+        .unwrap()
+        .connect()
+        .unwrap();
+    conn.reader
+        .set_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut buf = Vec::new();
+    let e = conn.reader.read_frame(&mut buf, 1 << 10).unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
+    let why = e.to_string();
+    assert!(why.contains("certificate_unknown"), "{why}");
+    assert!(why.contains("does not trust this client"), "{why}");
+    assert!(why.contains(&client_id.fingerprint().canonical()), "{why}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
