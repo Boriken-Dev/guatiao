@@ -55,7 +55,7 @@ use guatiao_libffi::Libffi;
 use crate::protocol::args::ObjectRef;
 use crate::protocol::{
     self, Decoded, Frame, HANDSHAKE_MAX_FRAME, ProtocolError, Target, Trust, decode_answer,
-    decode_args, encode_answer, encode_args,
+    decode_args,
 };
 use crate::transport::{Connection, Datagrams, FrameRead, FrameWrite};
 use gate::{Gate, Unsent};
@@ -994,6 +994,28 @@ impl Inner {
         self.unsent(sent)
     }
 
+    /// Sends call `id`'s frame, `tail` its last bytes, kept out of `head`.
+    fn write_call_parts(
+        self: &Arc<Self>,
+        id: u64,
+        head: Vec<u8>,
+        tail: &[u8],
+    ) -> Result<(), ProviderError> {
+        let sent = self.gate.send_parts(id, head, tail);
+        self.unsent(sent)
+    }
+
+    /// Sends a frame whose last bytes are `tail[from..]`.
+    fn write_with_tail(
+        self: &Arc<Self>,
+        head: Vec<u8>,
+        tail: Vec<u8>,
+        from: usize,
+    ) -> Result<(), ProviderError> {
+        let sent = self.gate.send_with_tail(0, head, tail, from);
+        self.unsent(sent)
+    }
+
     /// Sends a frame nobody waits on.
     fn post(self: &Arc<Self>, frame: Vec<u8>) {
         let posted = self.gate.send(0, frame);
@@ -1425,14 +1447,18 @@ impl Inner {
             .running
             .insert(call, Arc::clone(&cancelled));
         let mut out = Vec::with_capacity(128);
+        let mut tail = None;
         let served = {
             let _running = Running::enter(self.key(), call);
-            self.serve(call, target, slot, args, &cancelled, &mut out)
+            self.serve(call, target, slot, args, &cancelled, &mut out, &mut tail)
         };
         lock(&self.state).running.remove(&call);
         match served {
             Ok(true) => {
-                let _ = self.write(out);
+                let _ = match tail {
+                    Some((tail, from)) => self.write_with_tail(out, tail, from),
+                    None => self.write(out),
+                };
             }
             Ok(false) => {}
             Err(e) => {
@@ -1467,7 +1493,9 @@ impl Inner {
     }
 
     /// Calls what `target` names with the arguments in `args`, and builds
-    /// the REPLY in `out`. `Ok(false)`: cancelled, nothing to send.
+    /// the REPLY in `out`, a large answer's encoding in `tail` (a vector and
+    /// where in it the bytes start). `Ok(false)`: cancelled, nothing to send.
+    #[allow(clippy::too_many_arguments)]
     fn serve(
         self: &Arc<Self>,
         call: u64,
@@ -1476,6 +1504,7 @@ impl Inner {
         args: &[u8],
         cancelled: &AtomicBool,
         out: &mut Vec<u8>,
+        tail: &mut Option<(Vec<u8>, usize)>,
     ) -> Result<bool, ProviderError> {
         let callee = self.callee(target)?;
         let kind = Arc::clone(callee.kind());
@@ -1622,7 +1651,7 @@ impl Inner {
         };
         let at = protocol::start_reply(out, call, 0);
         let mut failed = None;
-        encode_answer(desc, answer, out, &mut |object| {
+        let large = protocol::args::encode_answer_tail(desc, answer, out, &mut |object| {
             let kind = match desc.answer() {
                 Some(guatiao::library::kind::AnswerType::Object { kind }) => self.kind(kind),
                 _ => Err(ProviderError::new(
@@ -1641,6 +1670,15 @@ impl Inner {
         .map_err(bad)?;
         if let Some(e) = failed {
             return Err(e);
+        }
+        if let Some(from) = large {
+            // A head of its own: the answer's bytes stay where they were encoded.
+            let len = out.len() - from;
+            let mut head = out[..from].to_vec();
+            protocol::codec::put_uint(&mut head, len as u64);
+            protocol::finish_with(&mut head, at, len, self.send_max).map_err(bad)?;
+            *tail = Some((core::mem::replace(out, head), from));
+            return Ok(true);
         }
         protocol::args::encode_writebacks(desc, &decoded, out).map_err(bad)?;
         protocol::finish(out, at, self.send_max).map_err(bad)?;
@@ -1771,18 +1809,28 @@ impl Inner {
         }
         let mut frame = Vec::with_capacity(64);
         let at = protocol::start_call(&mut frame, id, parent, target, slot as u64);
-        let built = encode_args(desc, args, refs, &mut frame)
-            .and_then(|()| protocol::finish(&mut frame, at, self.send_max));
-        if let Err(e) = built {
-            lock(&self.state).calls.remove(&id);
-            // Never sent: what was handed for it is dropped here.
-            for id in handed {
-                self.unexport(*id);
+        let built =
+            protocol::args::encode_args_tail(desc, args, refs, &mut frame).and_then(|tail| {
+                let more = tail.map_or(0, <[u8]>::len);
+                protocol::finish_with(&mut frame, at, more, self.send_max).map(|()| tail)
+            });
+        let tail = match built {
+            Ok(tail) => tail,
+            Err(e) => {
+                lock(&self.state).calls.remove(&id);
+                // Never sent: what was handed for it is dropped here.
+                for id in handed {
+                    self.unexport(*id);
+                }
+                return Err(bad(e));
             }
-            return Err(bad(e));
-        }
+        };
         let sent = Instant::now();
-        if let Err(e) = self.write_call(id, frame) {
+        let written = match tail {
+            Some(tail) => self.write_call_parts(id, frame, tail),
+            None => self.write_call(id, frame),
+        };
+        if let Err(e) = written {
             // Never sent: what was handed for it is dropped here.
             for id in handed {
                 self.unexport(*id);

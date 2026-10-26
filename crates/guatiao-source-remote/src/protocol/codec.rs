@@ -61,9 +61,22 @@ pub(crate) fn put_walk<T: Walk + ?Sized>(
     Ok(())
 }
 
+/// Appends a value in the wire encoding, with no length before it.
+pub(crate) fn put_value_bare(out: &mut Vec<u8>, value: &Value) -> Result<(), ProtocolError> {
+    wire::encode(value, out).map_err(|e| ProtocolError::Value(e.to_string()))
+}
+
+/// Appends what walks in the wire encoding, with no length before it.
+pub(crate) fn put_walk_bare<T: Walk + ?Sized>(
+    out: &mut Vec<u8>,
+    value: &T,
+) -> Result<(), ProtocolError> {
+    wire::encode_of(value, out).map_err(|e| ProtocolError::Value(e.to_string()))
+}
+
 /// Moves the bytes from `at` on behind their length, which is at most ten
 /// bytes: an encoding's length is known only once it is written.
-fn behind_length(out: &mut Vec<u8>, at: usize) {
+pub(crate) fn behind_length(out: &mut Vec<u8>, at: usize) {
     let len = out.len() - at;
     let mut head = Vec::with_capacity(10);
     put_uint(&mut head, len as u64);
