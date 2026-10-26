@@ -556,7 +556,8 @@ JSON); a kind crate writes its document with the same switch that writes
 its header, and a test compares the committed copy with a fresh one. A
 kind that has no trait is written by the language that declares it: Node
 reads TypeScript interfaces (`guatiao-kind`, `describeInterfaces`) and
-JavaScript classes (`describeKinds`) into the same document, and a floor
+JavaScript classes (`describeKinds`), and Python `KindProtocol` classes
+(`kinds.describe_kinds`), into the same document, and a floor
 hash it is not given is the FNV-1a of the shape and the required slots
 spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
 

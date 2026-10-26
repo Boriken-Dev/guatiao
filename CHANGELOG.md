@@ -14,6 +14,11 @@ write now.
 
 ### Added
 
+- **Python: a kind born in Python is written as its description.** A
+  `KindProtocol` class naming its kind but no `floor_hash` gets the floor
+  hash `#[guatiao::kind]` would give the same required slots, and
+  `kinds.describe_kinds(*kinds)` writes kinds as the description document
+  (docstrings as docs), which every other language generates from.
 - **Julia and R declare a kind from its description at run time.**
   `Guatiao.kinds_of(document)` (Julia) evaluates the `@kind` declarations
   of a kinds document into a module of its own, and `kinds_of(document)`

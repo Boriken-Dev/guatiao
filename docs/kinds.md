@@ -15,22 +15,26 @@ binding's own page has the detail.
 | TypeScript | an interface and a value of one name, written by `guatiao-kind` from the description; a kind of its own is written as interfaces (`u32`, `Lent<MapRef>`, `extends ObjectKind`) that `guatiao-kind` reads into one | `class Hello extends Provider implements Greeter`, listed in `static kinds` | the description | `tsc --strict`: a missing or mistyped required method, a mistyped appended one | an optional method of the interface |
 | JavaScript | the same module, `guatiao-kind`'s `.js`, or `kindsOf()` over the description; a kind of its own is a class extending `Kind`, which `describeKinds()` writes the description of | the same class, without the types | the description, or `static slots` | with `// @ts-check` and `@implements`, what TypeScript checks; at run time, a missing required method is a `TypeError` naming it | an optional method |
 | Dart | an abstract interface class, written by `dart run guatiao:kind` from the description | `class Hello extends Provider implements Greeter, GreeterShout`, offered in a `Library` | the description | the analyzer: a missing or mistyped method, appended ones included; at run time, an `ArgumentError` naming a missing one | an interface of its own (`GreeterShout`) |
-| Python | `class Greeter(KindProtocol, Protocol, kind=..., floor_hash=...)` | `class Hello(Provider, Greeter)` | the class's annotations, written from the header | mypy and pyright on the methods; at class creation, a missing required one | a method not marked `@required` |
-| Go | an interface marked `//guatiao:kind`, its glue written by `guatiao-kind` | any value in `guatiao.Single` or `guatiao.Configured` | the interfaces and the header | `var _ Greeter = (*Hello)(nil)`; the generator, a signature that is not the header's | an interface of its own (`Shouter`) |
-| Julia | `@kind Greeter floor_hash = N begin ... end` | `struct Hello <: Greeter`, its methods, and `@provider` | the `@kind` block, written from the header | at run time, when the library is made | a slot not marked `@required` |
-| R | `kind("greeter", floor_hash = N, greet = method(...))` | a class containing the kind, `setMethod` per slot, and `provider()` | the `method()` list, written from the header | at run time | `required = FALSE` |
+| Python | `class Greeter(KindProtocol, Protocol, kind=..., floor_hash=...)`, written by `python -m guatiao.kinds` from the description or loaded by `kinds_of()`; a kind of its own is such a class with no `floor_hash`, which `describe_kinds()` writes the description of | `class Hello(Provider, Greeter)` | the description, or the class's annotations | mypy and pyright on the methods; at class creation, a missing required one | a method not marked `@required` |
+| Go | an interface marked `//guatiao:kind`, its glue written by `guatiao-kind` | any value in `guatiao.Single` or `guatiao.Configured` | the interfaces and the description (or the header) | `var _ Greeter = (*Hello)(nil)`; the generator, a signature that is not the description's | an interface of its own (`Shouter`) |
+| Julia | `@kind Greeter floor_hash = N begin ... end`, or `Guatiao.kinds_of()` over the description | `struct Hello <: Greeter`, its methods, and `@provider` | the `@kind` block, written from the header, or the description | at run time, when the library is made | a slot not marked `@required` |
+| R | `kind("greeter", floor_hash = N, greet = method(...))`, or `kinds_of()` over the description | a class containing the kind, `setMethod` per slot, and `provider()` | the `method()` list, written from the header, or the description | at run time | `required = FALSE` |
 | MATLAB, Octave | `classdef Greeter < guatiao.Kind` with a `guatiao.Kind.describe(...)` constant | `classdef Hello < greeterkind.Greeter` with a `Provider` constant | the `guatiao.slot` list, written from the header | at run time, when the library is made | `'Required'` not true |
 | Fortran | an abstract type with a deferred procedure per required slot | a type extending it, offered with `lib%single` | the kind module, written from the header | the compiler: a missing deferred procedure, a wrong interface | an overridable procedure, named where the provider is served |
 
 **The description is the one source after the header.** TypeScript,
-JavaScript and Dart read it, so a kind that exists is never declared in
-them by hand, and a slot added to the trait reaches them by regenerating
-one file. A kind that exists nowhere else is declared once, in TypeScript
-as interfaces or in JavaScript as a class, and written out as the same
-description, which Dart and the rest read as they read a trait's. Go's generator reads the header, and C++ checks each slot's
-signature against the header's when it compiles; Python, Julia, R and
-MATLAB compare the floor hash they carry with the header's in their own
-tests.
+JavaScript, Dart, Python and Go read it, so a kind that exists is never
+declared in them by hand, and a slot added to the trait reaches them by
+regenerating one file; Julia and R declare it from the description at run
+time. A kind that exists nowhere else is declared once, in TypeScript as
+interfaces, in JavaScript as a class or in Python as a `KindProtocol`
+class, and written out as the same description, which the rest read as
+they read a trait's. A library built with `#[derive(Provider)]` carries
+the description of what it serves, so a host can bind its kinds with no
+file at all. C++ checks each slot's signature against the header's when
+it compiles, and its declarations against the description in its tests;
+MATLAB and Fortran compare the floor hash they carry with the header's in
+their own tests.
 
 **Where a provider's identity comes from**: Rust's crate name and
 version; C++'s `library(id, version)`; TypeScript's and JavaScript's nearest `package.json`; Dart's
