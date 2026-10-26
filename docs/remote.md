@@ -35,7 +35,7 @@ configuration map:
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`; `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
+| `connect` | `tcp://host:port`; `ws://host:port/path` (WebSocket); `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first listed) |
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `trust` | `local`, `trusted` or `secure`; `local` for a child |
@@ -103,6 +103,58 @@ host carries on. The next `refresh()` connects again (a child is started
 again) and lists every library anew, so the registry retires the old
 ones and opens the new.
 
+## A page
+
+A browser page reaches a server the only way a page can, a WebSocket, and
+speaks the frames itself: no native library, no WebAssembly module. The
+Dart package `guatiao` carries the client, `package:guatiao/remote.dart`,
+in plain Dart, so the same code runs under dart2js, dart2wasm and on the
+Dart VM:
+
+```dart
+import 'dart:convert';
+
+import 'package:guatiao/remote.dart';
+
+final link = await RemoteLink.connect(
+  Uri.parse('ws://192.0.2.21:7000/'),
+  key: utf8.encode(key),               // the trusted level's key, as the page gets it
+);
+final catalog = await link.list();     // the kinds' descriptions type every call
+final library = catalog.libraries.singleWhere((l) => l.id == 'derived_greeter');
+await link.open(library);
+final greeter = library.providers.first.table('greeter')!;
+print(await greeter.call('greet', ['web']));          // {greeting: hello, web}
+
+// An object the page serves, called back while a call is open.
+final heard = <String>[];
+final listener = Served('listener', {'heard': (args) => heard.add(args[0] as String)});
+final chat = await greeter.call('start', [listener]) as RemoteObject;
+await chat.call('say', ['hi']);                       // heard: [hi]
+chat.release();
+await link.close();
+```
+
+The server listens with `--listen ws://ADDRESS:PORT` at the trusted
+level, as `tcp://` does: peers admitted by address range, the key proved
+both ways, no encryption. A call is typed by the description the
+catalog carries for its kind: a tree crosses as plain Dart (`Map`,
+`List`, `String`, numbers, `Uint8List`, `absent`), a 64-bit integer as an
+`int` where the platform holds it exactly and a `BigInt` beyond (past
+2^53 under dart2js), a lent map, list or `Uint8List` is written back in
+place, an object of the server's arrives as a `RemoteObject` and one of
+the page's goes as a `Served`. A slot the far table leaves out is
+`Unsupported`: a description carries no default body. A refusal is the
+status's exception (`BadValue`, `Gone`, ...), a lost link answers `Gone`
+for every open call, and a call past its timeout (30 s by default) is
+cancelled.
+
+The page holds the key, so whoever reads the page can link: serve the
+page only to those who may call the device, and keep the server's ranges
+to the network they are on. The server does not read the `Origin` a
+browser sends. `wss://`, WebTransport and the secure level are not in
+this build.
+
 ## A server
 
 ```text
@@ -127,6 +179,7 @@ over a `Registry` does the same.
 | `local://name` | the same machine: a Unix socket, or a named pipe on Windows | 16–40 µs |
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
 | `tcp://host:port` | another machine, at the trusted level | 22–36 µs on loopback; 114–123 µs from a host to a VM on it |
+| `ws://host:port/path` | a browser, or any WebSocket client, at the trusted level (feature `ws`): one binary message per frame body | not measured |
 | `rdma://host:port` | another machine with an RDMA device, at the trusted level; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -257,14 +310,16 @@ network by default.
 Every implementation, in any language, speaks the same frames. The
 shared vectors are `crates/guatiao-source-remote/tests/vectors/remote.json`;
 `crates/guatiao-source-remote/tests/c/` holds a codec, a client and a server
-written in C over guatiao's C API.
+written in C over guatiao's C API, and the Dart client
+(`bindings/dart/guatiao/lib/src/remote/`) passes the same vectors.
 
 ### Frames
 
 On a byte stream (TCP, a pipe, a child's stdio) every frame is its
 length, a `u32` little-endian, then that many bytes of body. A
 message transport (a WebSocket message, a QUIC datagram) carries the body
-alone. A body is a type byte and its fields:
+alone: over `ws://` each binary message is one body, and a text message
+ends the link. A body is a type byte and its fields:
 
 | field | encoding |
 | --- | --- |

@@ -36,6 +36,16 @@ write now.
   `guatiao_kind_document_read(text, alloc, out, why)` answers the checked
   document as a value for any C caller, and names the byte or the place
   where text that is not one goes wrong.
+- **A browser page calls remote providers.** guatiao-source-remote's `ws`
+  feature (off by default) adds `transport::ws`, WebSocket at the trusted
+  level (`WsListen`, admitting peers by range, and `WsConnect`; one
+  binary message per frame body, the frames unchanged), `guatiao-remote-server
+  --listen ws://ADDR:PORT` and a source file's `connect: ws://...`. The
+  Dart package's `package:guatiao/remote.dart` is a client of the
+  protocol in plain Dart, over the browser's WebSocket (or `dart:io`'s),
+  passing the shared vectors: a page lists a server's catalog, opens a
+  library, calls its providers through their kinds' descriptions, and
+  serves objects the server calls back. `docs/remote.md` has "A page".
 - **Go: `guatiao-kind` reads a kind's description.** `guatiao-kind
   -description <crate>.kinds.json` writes the same glue `-header` writes
   from the C header, so a kind with no header (one written in

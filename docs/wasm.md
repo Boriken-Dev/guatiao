@@ -97,6 +97,11 @@ The same app on Android, iOS and the desktops loads the native library
 instead, which the packages' build hooks build and bundle (see
 [Dart and Flutter](flutter.md)).
 
+A page has no registry and maps no libraries, but it can call providers
+a server serves: `package:guatiao/remote.dart` speaks guatiao's remote
+protocol over a WebSocket in plain Dart, with no module loaded (see
+[A page](remote.md#a-page)).
+
 ## Sending values to it
 
 A value crosses a network as the **wire encoding**

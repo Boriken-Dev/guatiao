@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **A server's providers from plain Dart** (`package:guatiao/remote.dart`):
+  `RemoteLink.connect(Uri.parse('ws://host:port/'), key: ...)` speaks
+  guatiao's remote protocol over a WebSocket with no native library and
+  no module, so a browser page calls the providers `guatiao-remote-server
+  --listen ws://...` serves, under dart2js and dart2wasm as on the VM.
+  Calls are typed by the kinds' descriptions the catalog carries; a page
+  serves objects (`Served`) the server calls back while a call is open.
+  The package depends on `package:crypto` for the key proof.
+
 ### Changed
 
 - **Breaking: Dart 3.10 or newer** (Flutter 3.38), the first with build
