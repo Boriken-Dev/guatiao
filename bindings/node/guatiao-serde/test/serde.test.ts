@@ -70,4 +70,62 @@ describe('serde', () => {
   it('dumps plain data as it is', () => {
     expect(serde.dumps({ a: [1, true] })).toBe('{"a":[1,true]}');
   });
+
+  it('parses straight to plain data as loads().toJS() reads it', () => {
+    for (const format of ['json', 'toml', 'yaml'] as const) {
+      // TOML holds no integer past 64 bits.
+      const big = format === 'json' ? 2n ** 70n : 2n ** 62n;
+      const data = { z: 3, a: [1.5, 'two', true, big], nested: { n: '1.10', 'ü': {} } };
+      const text = serde.dumps(data, { format });
+      for (const options of [{}, { numbers: 'text' as const }, { numbers: 'bigint' as const, maps: 'map' as const }]) {
+        using value = serde.loads(text, { format });
+        expect(serde.parse(text, { format, ...options }), `${format} ${JSON.stringify(options)}`).toStrictEqual(
+          value.toJS(options),
+        );
+      }
+    }
+    expect(serde.parse('{"n": 1.10}', { numbers: 'text' })).toStrictEqual({ n: '1.10' });
+  });
+
+  it('renders plain data as dumps writes it', () => {
+    using kept = new Value({ k: 'kept' });
+    for (const format of ['json', 'toml', 'yaml'] as const) {
+      const big = format === 'json' ? 2n ** 70n : 2n ** 62n;
+      const data = { z: 3, a: [1.5, 'two', true, big], bytes: new Uint8Array([1, 2]), ref: kept, 'ü': '€' };
+      for (const pretty of [false, true]) {
+        const options = { format, pretty, how: serde.BYTES_BASE64 };
+        expect(serde.render(data, options), `${format} ${pretty}`).toBe(serde.dumps(data, options));
+      }
+    }
+    expect(serde.render([1, 2])).toBe('[1,2]');
+  });
+
+  it('refuses in parse and render what loads and dumps refuse', () => {
+    for (const [text, format] of [
+      ['{"a":\n 1,,}', 'json'],
+      ['a = = 1', 'toml'],
+      ['a: [1', 'yaml'],
+    ] as const) {
+      let fromLoads: unknown;
+      let fromParse: unknown;
+      try {
+        serde.loads(text, { format });
+      } catch (e) {
+        fromLoads = e;
+      }
+      try {
+        serde.parse(text, { format });
+      } catch (e) {
+        fromParse = e;
+      }
+      expect(fromParse).toBeInstanceOf(ParseError);
+      const [a, b] = [fromLoads as ParseError, fromParse as ParseError];
+      expect([b.format, b.line, b.column, b.reason]).toEqual([a.format, a.line, a.column, a.reason]);
+    }
+    expect(() => serde.render([1, 2], { format: 'toml' })).toThrow(WrongKind);
+    expect(() => serde.render({ a: 1 }, { format: 'xml' as never })).toThrow(TypeError);
+    expect(() => serde.parse('{}', { format: 'xml' as never })).toThrow(TypeError);
+    expect(() => serde.render({ a: Number.POSITIVE_INFINITY })).toThrow(RangeError);
+    expect(() => serde.render({ b: new Uint8Array([1]) }, { how: serde.BYTES_REFUSE })).toThrow(BadValue);
+  });
 });

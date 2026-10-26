@@ -26,6 +26,8 @@ model, its errors and its one koffi.
   the format, line and column, and never quotes the document.
 - **Any guatiao value** — what `loads` returns is an ordinary `Value` of
   `guatiao`, and `dumps` takes any `Ref` or plain data.
+- **Or plain JavaScript, with no value in between** — `parse` answers
+  objects and arrays, `render` writes them; the document crosses once.
 
 ## Installation
 
@@ -59,6 +61,9 @@ doc.asMap().get('n')!.toJS({ numbers: 'text' });          // '1.10'
 serde.dumps(doc, { format: 'yaml' });
 serde.dumps({ port: 5900 }, { pretty: true });            // plain data too
 
+const config = serde.parse('{"port": 5900}');             // { port: 5900 }
+serde.render(config, { format: 'toml' });                 // 'port = 5900\n'
+
 try {
   serde.loads('{"port": }');
 } catch (e) {
@@ -81,6 +86,8 @@ naming its feature. A TOML document must be a map.
 | --- | --- |
 | `loads(text, { format, how, alloc })` | a document as a `Value` |
 | `dumps(value, { format, pretty, how })` | a `Ref` or plain data as text |
+| `parse(text, { format, how, numbers, maps })` | a document as plain data, no `Value` built |
+| `render(data, { format, pretty, how })` | plain data as text, no `Value` built |
 | `ParseError` | a document that does not parse: `format`, `line`, `column`, `reason` |
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
 | `useLibrary(path)`, `library()` | naming and loading `guatiao_serde` |

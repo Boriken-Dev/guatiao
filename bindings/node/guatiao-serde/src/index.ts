@@ -14,7 +14,22 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as n from 'guatiao/ffi';
-import { BadValue, MissingSymbol, SIZE, Status, Tag, VALUE, type Value, adopt, raiseForStatus, withNodes } from 'guatiao/ffi';
+import type { ReadOptions } from 'guatiao';
+import {
+  BadValue,
+  MissingSymbol,
+  OWNED,
+  SIZE,
+  Status,
+  Tag,
+  VALUE,
+  type Value,
+  adopt,
+  jsToWire,
+  raiseForStatus,
+  wireToJS,
+  withNodes,
+} from 'guatiao/ffi';
 
 /** `GUATIAO_FORMAT_*`: which format a parse error names. */
 const FORMAT_NAMES: Readonly<Record<number, string>> = { 0: 'json', 1: 'toml', 2: 'yaml' };
@@ -52,6 +67,12 @@ const EXPORTS: readonly n.Declared[] = [
   ['uint32_t guatiao_toml_emit(void *value, uint32_t how, void *alloc, void *out)', 'toml'],
   ['uint32_t guatiao_yaml_parse_ex(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)', 'yaml'],
   ['uint32_t guatiao_yaml_emit(void *value, uint32_t how, void *alloc, void *out)', 'yaml'],
+  ['uint32_t guatiao_json_to_wire(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)'],
+  ['uint32_t guatiao_json_from_wire(guatiao_bytes bytes, uint32_t how, void *alloc, void *out)'],
+  ['uint32_t guatiao_toml_to_wire(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)', 'toml'],
+  ['uint32_t guatiao_toml_from_wire(guatiao_bytes bytes, uint32_t how, void *alloc, void *out)', 'toml'],
+  ['uint32_t guatiao_yaml_to_wire(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)', 'yaml'],
+  ['uint32_t guatiao_yaml_from_wire(guatiao_bytes bytes, uint32_t how, void *alloc, void *out)', 'yaml'],
 ];
 
 let chosen: string | undefined;
@@ -112,10 +133,30 @@ export const READ_DATA_URIS = 1 << 8;
 /** Indents the output for a person to read. */
 export const PRETTY = 1 << 9;
 
-const FORMATS: Readonly<Record<Format, { parse: string; emit: string; pretty?: string; feature?: string }>> = {
-  json: { parse: 'guatiao_json_parse_ex', emit: 'guatiao_json_emit', pretty: 'guatiao_json_emit_pretty' },
-  toml: { parse: 'guatiao_toml_parse_ex', emit: 'guatiao_toml_emit', feature: 'toml' },
-  yaml: { parse: 'guatiao_yaml_parse_ex', emit: 'guatiao_yaml_emit', feature: 'yaml' },
+const FORMATS: Readonly<
+  Record<Format, { parse: string; emit: string; pretty?: string; toWire: string; fromWire: string; feature?: string }>
+> = {
+  json: {
+    parse: 'guatiao_json_parse_ex',
+    emit: 'guatiao_json_emit',
+    pretty: 'guatiao_json_emit_pretty',
+    toWire: 'guatiao_json_to_wire',
+    fromWire: 'guatiao_json_from_wire',
+  },
+  toml: {
+    parse: 'guatiao_toml_parse_ex',
+    emit: 'guatiao_toml_emit',
+    toWire: 'guatiao_toml_to_wire',
+    fromWire: 'guatiao_toml_from_wire',
+    feature: 'toml',
+  },
+  yaml: {
+    parse: 'guatiao_yaml_parse_ex',
+    emit: 'guatiao_yaml_emit',
+    toWire: 'guatiao_yaml_to_wire',
+    fromWire: 'guatiao_yaml_from_wire',
+    feature: 'yaml',
+  },
 };
 
 function formatOf(format: Format): (typeof FORMATS)[Format] {
@@ -152,16 +193,7 @@ export function loads(text: string, options: LoadOptions = {}): Value {
   const out = n.alloc(SIZE.value);
   const err = n.alloc(PARSE_ERROR.size);
   try {
-    const status = parse(n.str(text), options.how ?? 0, alloc, out, err);
-    const message = takeMessage(err);
-    if (status === Status.ERR_BAD_VALUE) {
-      throw new ParseError(message, {
-        format: FORMAT_NAMES[n.u32(err, PARSE_ERROR.format)] ?? format,
-        line: n.u32(err, PARSE_ERROR.line),
-        column: n.u32(err, PARSE_ERROR.column),
-      });
-    }
-    raiseForStatus(status, message);
+    finishParse(parse(n.str(text), options.how ?? 0, alloc, out, err), err, format);
   } catch (e) {
     n.freeNode(out);
     n.release(out);
@@ -170,6 +202,23 @@ export function loads(text: string, options: LoadOptions = {}): Value {
     n.release(err);
   }
   return adopt(out, alloc);
+}
+
+/**
+ * Throws for a refused parse: `ParseError` for a document that does not
+ * parse, any other status as its own error. The error's message is freed
+ * either way.
+ */
+function finishParse(status: number, err: bigint, format: Format): void {
+  const message = takeMessage(err);
+  if (status === Status.ERR_BAD_VALUE) {
+    throw new ParseError(message, {
+      format: FORMAT_NAMES[n.u32(err, PARSE_ERROR.format)] ?? format,
+      line: n.u32(err, PARSE_ERROR.line),
+      column: n.u32(err, PARSE_ERROR.column),
+    });
+  }
+  raiseForStatus(status, message);
 }
 
 /** The parse error's message, its string value freed. */
@@ -215,4 +264,61 @@ export function dumps(value: unknown, options: DumpOptions = {}): string {
       n.release(out);
     }
   });
+}
+
+export interface ParseOptions {
+  format?: Format;
+  /** `READ_DATA_URIS` and the bytes flags. */
+  how?: number;
+  /** How numbers are read, as `Ref.toJS` reads them. */
+  numbers?: ReadOptions['numbers'];
+  /** `'object'` (the default) or `'map'`, as `Ref.toJS` reads maps. */
+  maps?: ReadOptions['maps'];
+}
+
+/**
+ * Parses `text` straight into plain data, as
+ * `loads(text, options).toJS(options)` reads it, with no `Value` built:
+ * the document crosses once, as wire bytes, and is read here. Errors as
+ * `loads`.
+ */
+export function parse<T = unknown>(text: string, options: ParseOptions = {}): T {
+  const format = options.format ?? 'json';
+  const spec = formatOf(format);
+  const toWire = resolved(spec.toWire, spec.feature);
+  const out = n.alloc(SIZE.value);
+  const err = n.alloc(PARSE_ERROR.size);
+  try {
+    finishParse(toWire(n.str(text), options.how ?? 0, library().alloc, out, err), err, format);
+    const at = out + BigInt(VALUE.payload);
+    const len = n.u32(out, VALUE.tag) === Tag.BYTES ? n.size(at, OWNED.len) : 0;
+    // Read in place: the bytes stay the library's until the node is freed.
+    const tape = len === 0 ? new Uint8Array(0) : new Uint8Array(n.koffi().view(n.ptrAt(at, OWNED.ptr), len));
+    return wireToJS<T>(tape, options);
+  } finally {
+    n.freeNode(out);
+    n.release(out);
+    n.release(err);
+  }
+}
+
+/**
+ * Plain data (or a `Ref`) written as `format`, as
+ * `dumps(new Value(value), options)` writes it, with no `Value` built: it
+ * is written as wire bytes here and crosses once. The data `new Value`
+ * takes, with its errors; a TOML document must be a map.
+ */
+export function render(value: unknown, options: DumpOptions = {}): string {
+  const spec = formatOf(options.format ?? 'json');
+  const fromWire = resolved(spec.fromWire, spec.feature);
+  const how = (options.how ?? 0) | (options.pretty ? PRETTY : 0);
+  const tape = jsToWire(value);
+  const out = n.alloc(SIZE.value);
+  try {
+    raiseForStatus(fromWire(n.bytesArg(tape), how, library().alloc, out));
+    return n.u32(out, VALUE.tag) === Tag.STRING ? n.stringText(out + BigInt(VALUE.payload)) : '';
+  } finally {
+    n.freeNode(out);
+    n.release(out);
+  }
 }

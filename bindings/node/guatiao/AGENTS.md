@@ -21,7 +21,7 @@ ships no native code of its own.
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
 | `guatiao/wire` | `announce`, `send`, `close`, `Receiver`, `Frame`, `Event`, the refusals |
-| `guatiao/ffi` | for a package over another guatiao library: `openSurface`, `Surface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes` |
+| `guatiao/ffi` | for a package over another guatiao library: `openSurface`, `Surface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes`, `wireToJS`, `jsToWire` |
 
 JSON, TOML and YAML are the package `guatiao-serde`, forms
 `guatiao-intake`: each over its own library, built on `guatiao/ffi`.
@@ -595,7 +595,8 @@ using value = n.adopt(out, lib.alloc);       // a Value; it frees the tree and `
 - `Surface`: `.path`, `.fn[name]`, `.missing` (a set of names), `.alloc`
   (the address of its `guatiao_alloc_default`, filled once).
 - Memory: `alloc(len)` / `release(ptr)` (zeroed memory koffi keeps),
-  `str(text)` (a `guatiao_str` argument), readers `u8`, `u32`, `i32`,
+  `str(text)` and `bytesArg(data)` (`guatiao_str` and `guatiao_bytes`
+  arguments), readers `u8`, `u32`, `i32`,
   `u64`, `i64`, `ptrAt`, `size`, `bytesAt`, `textAt`, `stringText` (an
   owned `guatiao_string`), writers `setU8`, `setU32`, `setU64`, `setPtr`;
   `freeNode(node)` frees what a node owns through the core library. The
@@ -607,6 +608,17 @@ using value = n.adopt(out, lib.alloc);       // a Value; it frees the tree and `
   node now; `borrow(source, find) -> Ref` views the node `find()` answers,
   read-only, refused once `source` closes. `raiseForStatus(status,
   message?)` throws the status's `GuatiaoError`.
+- Documents as wire bytes, with no tree and no library:
+  `wireToJS(bytes, { numbers?, maps? })` reads them as
+  `Value.fromWire(bytes).toJS(options)` would, and `jsToWire(data) ->
+  Uint8Array` writes what `new Value(data).toWire()` would (the same data
+  taken, the same errors, a `Ref` written as its node). Both stop at
+  `MAX_DEPTH` (128) nested containers with `BadValue`. The reader refuses
+  bytes cut short, bytes after the value, an unknown tag and text that is
+  not UTF-8, and checks nothing else: it is for bytes a library wrote. A
+  package whose library answers a whole document as wire bytes crosses
+  once this way rather than once per node (`guatiao-serde`'s `parse` and
+  `render`).
 
 **A tree crosses libraries as its root node**: built by one library, it
 is read and freed by any other, since a value records its own allocator.
