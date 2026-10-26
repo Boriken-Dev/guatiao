@@ -834,8 +834,27 @@ machine under 50 % busy (Windows) or 20 % (WSL), medians.
   three (Windows) or two (WSL) times its CPU; with 32 threads Windows'
   QUIC passes TLS.
 - WSL's QUIC moved a 4 MiB round trip at 40-374 MB/s from run to run and
-  its p99 reached 4 ms. Not explained; UDP socket buffers are a guess,
-  unmeasured.
+  its p99 reached 4 ms. Measured again (`remote-quic-wsl-buffers.jsonl`:
+  three runs each, alternating with TLS, the machine under 2 % busy), that
+  spread did not recur: p50 218-266 µs against TLS's 35-60, p99 367-476
+  µs, 4 MiB 398-451 MB/s against 1 419-1 680.
+- Not the socket buffers: with the default 208 KiB each QUIC run dropped
+  104-541 datagrams at a full receive buffer (`RcvbufErrors` in
+  `/proc/net/snmp`; TLS none), and with 4 MiB (`net.core.rmem_default`
+  and `wmem_default` raised for the runs) none, with p50 and throughput
+  unchanged. Not UDP either: a blocking 64-byte UDP ping-pong in WSL takes
+  as long as TCP's (p50 49 against 51 µs).
+- Wake-ups: a small QUIC call costs the client 5.4 voluntary context
+  switches and 10.8 futex calls, TLS's 1.0 and 1.0 (`/usr/bin/time`,
+  `strace -c`, a run without the 32-thread phase). quinn's drivers run on
+  the transport's tokio threads and hand each datagram across threads to
+  the link's, and waking a sleeping thread in WSL costs tens of
+  microseconds (driving a socket through tokio from a blocking thread
+  added 52.7 µs a round trip there, 3.6 µs on Windows).
+- The kernel takes UDP segmentation offload (quinn's `UDP_SEGMENT` probe
+  succeeds) but no send carried a segment count: every datagram is a
+  system call of its own, which bounds a 4 MiB transfer. Why quinn sends
+  no batches is not measured.
 
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
