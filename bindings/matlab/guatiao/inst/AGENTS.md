@@ -351,8 +351,23 @@ refused). Nothing refreshes on its own.
 
 ## Kinds: calling a table, serving one
 
-A kind is a `classdef` in the kind author's package, declared once from
-its C header:
+A kind is a `classdef` in the kind author's package. A kind with a
+description (the `<crate>.kinds.json` a kind crate commits, or one another
+language wrote) is never declared by hand:
+
+```matlab
+guatiao.write_kinds('../include/greeter_kind.kinds.json', '+greeterkind')
+guatiao.write_kinds(doc, '+greeterkind', 'Check', true)   % guatiao:Stale when not current
+```
+
+writes one `<Kind>.m` per kind into the package folder (commit them):
+the class below, named in PascalCase (`session_backend` is
+`SessionBackend`), the description's docs as its help, an object kind a
+slot names given by the folder's package (`+a/+b` is `a.b`). It reads the
+document with `jsondecode`; a document it cannot write a class from
+(a borrowed list, an object kind not in it, a slot named like a method of
+`guatiao.Kind`, an unknown type) raises `guatiao:BadValue` naming the
+slot. A kind with no description is written by hand, the same way:
 
 ```matlab
 classdef Greeter < guatiao.Kind
