@@ -686,9 +686,11 @@ jobs:
         # Its own install (outside the workspace): the shared vectors, a
         # scripted peer and guatiao-remote-server over WebSocket, in Node
         # everywhere and in Chrome (the runner's own) on Linux. The
-        # workspace build above built the server and derived_greeter.
+        # workspace build above built the server and derived_greeter; the
+        # datagram echo the page suite calls is an example of the crate.
         working-directory: bindings/node/guatiao-remote
         run: |
+          cargo build --workspace --all-features --example datagram_echo
           npm ci
           npm run typecheck
           npm run build
@@ -1771,7 +1773,7 @@ jobs:
       - name: Build the modules
         run: cargo build -p myapp -p guatiao-intake --target wasm32-unknown-unknown --release
       - name: Build the remote server the remote suites call over WebSocket and WebTransport
-        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls,guatiao-source-remote/webtransport
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls,guatiao-source-remote/webtransport --lib --bins --example datagram_echo
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
