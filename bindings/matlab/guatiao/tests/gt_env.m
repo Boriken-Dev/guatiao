@@ -181,7 +181,7 @@ function ok = build_fixture()
   mkdir(out);
   try
     if exist('OCTAVE_VERSION', 'builtin')
-      args = [{'--mex', '-o', fullfile(out, 'gtfixture.mex'), '-Wall', '-Wextra', '-Werror'}, incs, {src}];
+      args = [{'--mex', '-o', fullfile(out, 'gtfixture.mex'), '-fexceptions', '-Wall', '-Wextra', '-Werror'}, incs, {src}];
       if isunix() && ~ismac()
         args{end + 1} = '-lpthread';
       end
