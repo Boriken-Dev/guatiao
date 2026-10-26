@@ -85,6 +85,17 @@ write now.
   in `guatiao/ffi`). Each suite now also compares its layouts with the
   ones the platform's C compiler gives `guatiao.h`, and both pass on
   armv7 under qemu-user. `usize` and `isize` slots are a word wide.
+- **R: a document straight to R data and back.** `guatiao.serde` gains
+  `serde_data(text, format, read_data_uris, numbers)`, answering what
+  `value_data(serde_parse(text))` does with no value built, and
+  `serde_emit` of R data (not a value or view) now writes it the same
+  way: the document crosses once as wire bytes, read and written in the
+  package's C. `guatiao_r_api` appends `wire_of` and
+  `read_wire_and_free`, what they are built on. Measured locally on a
+  structured document: 1.06x to 1.5x; slower for one large string
+  written out. R spells a double from 15 significant digits up where it
+  searched from one, which made writing 10k floats about three times
+  faster either way.
 - **Julia: a document straight to plain data and back.**
   `GuatiaoSerde.parse(Any, text; format, how)` answers what
   `parse(text)[]` does with no `Value` built: the library hands each event
