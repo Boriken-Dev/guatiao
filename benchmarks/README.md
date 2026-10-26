@@ -457,7 +457,17 @@ VM, MTU 9000):
 - **Jumbo frames change nothing here**: a small call fits one segment
   either way, and a 4 MiB round trip moves about 400 MB/s, a tenth of
   what raw TCP moves on the same path (3.2-3.9 GB/s), so the bound is
-  the link's own copies and hand-offs, not the wire.
+  the link's own copies and hand-offs, not the wire. On the Windows
+  workstation a raw TCP echo of 4 MiB (a length, the bytes, back again)
+  moves about 1.1 GB/s over loopback, about what the link moves; in a
+  Linux (aarch64) VM on it raw TCP moves 3.5 GB/s and the link 1.5-1.8
+  GB/s. Writing a large last argument or answer from where it lies,
+  rather than copying it into its frame first, saved about 2 ms of a
+  9 ms round trip per stage on Windows but was not kept: over 300 rounds
+  a run, it moved the named pipe on Windows 38 % faster and shared memory
+  and the Unix socket in the VM 28 % and 12 % slower. Reading a frame
+  with `read_to_end` instead of over zeros halved every stream there: it
+  reads in small pieces a socket rarely fills.
 - **Polling pays only past the round trip.** At 50 µs a waiting thread
   polls, then sleeps and pays the wake-up as well; polling past the
   answer's arrival drops the wake-up for about the same CPU, and not
