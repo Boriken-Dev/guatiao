@@ -45,7 +45,11 @@ pub trait Store: Send + Sync {
   `List`. It crosses as a move: the slot receives the caller's own node,
   the caller forgets it, and the callee owns it whatever it answers. The
   tree is still in the caller's allocators, which outlive the call; a
-  callee that keeps it longer than those calls `into_local()` on it.
+  callee that keeps it longer than those calls `into_local()` on it. A
+  provider served by one of the language bindings (Python, Dart, Node,
+  Go, Julia, R, MATLAB and Octave, Fortran, C++) receives it already
+  moved into the binding's allocator; one written in C does what a Rust
+  callee does.
 - **An answer is returned by value**: `Map`, `Value`, `List`, `String`, or
   a type of yours. Never a reference into the provider: nothing on the
   caller's side owns what it would borrow, and the attribute refuses one.
