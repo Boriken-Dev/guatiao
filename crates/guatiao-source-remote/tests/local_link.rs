@@ -32,6 +32,11 @@ fn endpoint(tag: &str) -> String {
 
 fn serve(tag: &str) -> (Server, String) {
     let server = common::server(LinkOptions::new(Trust::Local));
+    let name = listen(&server, tag);
+    (server, name)
+}
+
+fn listen(server: &Server, tag: &str) -> String {
     let name = endpoint(tag);
     let listener = LocalListen::bind(&name).expect("listens");
     let serving = server.clone();
@@ -43,7 +48,7 @@ fn serve(tag: &str) -> (Server, String) {
             });
         }
     });
-    (server, name)
+    name
 }
 
 fn host(name: &str) -> (RemoteSource, Registry) {
@@ -158,4 +163,86 @@ fn large_and_small_calls_from_many_threads_arrive_whole() {
     config.set("name", "z".repeat(1 << 20).as_str());
     assert!(greeter.check(&mut config).unwrap());
     assert_eq!(greeting(&config), (1 << 20) + "hello, ".len());
+}
+
+/// A kind taking bytes last, which a large call sends as its frame's tail.
+mod weighing {
+    #[guatiao::kind]
+    pub trait Scale: Send + Sync {
+        /// `seed` plus every byte of `data` times its position from 1.
+        fn weigh(&self, seed: u64, data: &[u8]) -> u64;
+    }
+
+    pub fn weight(seed: u64, data: &[u8]) -> u64 {
+        data.iter().zip(1u64..).fold(seed, |w, (&b, at)| {
+            w.wrapping_add(u64::from(b).wrapping_mul(at))
+        })
+    }
+
+    #[derive(Default, guatiao::Provider)]
+    #[provider(Scale)]
+    pub struct Weigher;
+
+    impl Scale for Weigher {
+        fn weigh(&self, seed: u64, data: &[u8]) -> u64 {
+            weight(seed, data)
+        }
+    }
+
+    guatiao::local_providers!(id = "weighing", version = "1.0.0", providers = [Weigher]);
+}
+
+#[test]
+fn large_and_small_bytes_from_many_threads_arrive_whole() {
+    use weighing::{Scale, weight};
+    let mut registry = Registry::new("server", "1.0");
+    registry
+        .register_local("weighing", weighing::library)
+        .expect("registers")
+        .loaded()
+        .expect("loaded");
+    // The kind comes from the provider's own description.
+    let server = Server::new(
+        registry,
+        guatiao_source_remote::Described::new(),
+        LinkOptions::new(Trust::Local),
+    );
+    let name = listen(&server, "bytes");
+    let (_source, registry) = host(&name);
+    let scale = registry
+        .offers::<dyn Scale>()
+        .next()
+        .unwrap()
+        .shared()
+        .unwrap();
+    let threads: Vec<_> = (0..8u64)
+        .map(|t| {
+            let s = scale.clone();
+            std::thread::spawn(move || {
+                for i in 0..20u64 {
+                    // Large ones, small ones, and either side of the size
+                    // from which a last argument leaves as the frame's tail.
+                    let len = match (t + i) % 4 {
+                        0 => (1 << 20) + t * 1000 + i,
+                        1 if i < 4 => (64 << 10) - 1 + i % 2,
+                        _ => t + i,
+                    };
+                    // No period a chunk of the stream could repeat unseen.
+                    let mut x = 0x9E37_79B9_7F4A_7C15 ^ (t << 32 | i);
+                    let data: Vec<u8> = (0..len)
+                        .map(|_| {
+                            x ^= x << 13;
+                            x ^= x >> 7;
+                            x ^= x << 17;
+                            x as u8
+                        })
+                        .collect();
+                    assert_eq!(s.weigh(t * 100 + i, &data), weight(t * 100 + i, &data));
+                }
+            })
+        })
+        .collect();
+    for t in threads {
+        t.join().unwrap();
+    }
 }
