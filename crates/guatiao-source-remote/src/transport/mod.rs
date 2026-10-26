@@ -12,6 +12,9 @@
 
 #![deny(unsafe_code)]
 
+#[cfg(all(windows, feature = "local"))]
+#[allow(unsafe_code)]
+mod cancel;
 pub mod child;
 #[cfg(any(test, feature = "shm", all(feature = "rdma", target_os = "linux")))]
 mod deferred;

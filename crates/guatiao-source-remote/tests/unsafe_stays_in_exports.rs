@@ -17,6 +17,8 @@ const ALLOWED: &[&str] = &[
     // libibverbs opened at run time: its structs, calls and registered
     // memory, behind safe types.
     "transport/rdma/verbs.rs",
+    // Windows: `CancelIoEx`, ending a read another thread is blocked in.
+    "transport/cancel.rs",
 ];
 
 fn sources(dir: &Path, into: &mut Vec<PathBuf>) {

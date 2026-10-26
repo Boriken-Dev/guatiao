@@ -15,6 +15,7 @@
 //! than it holds ends the link.
 
 use alloc::sync::Arc;
+use core::cell::Cell;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering, fence};
 use core::time::Duration;
 use std::io::{self, Read, Write};
@@ -130,16 +131,19 @@ impl Ring {
 /// The local connection beside the rings: a byte from the peer is a
 /// wake-up, its end is the peer's.
 struct Bell {
-    read: Box<dyn Read + Send>,
+    read: BellRead,
     write: Arc<Mutex<Box<dyn Write + Send>>>,
 }
 
 /// Reads one direction's ring as a byte stream.
 struct RingReader {
     ring: Ring,
-    bell: Box<dyn Read + Send>,
+    bell: BellRead,
     /// Set once the peer's end is seen: the writer stops waiting for room.
     gone: Arc<AtomicBool>,
+    /// A read bound the link set, given to the bell on the next read: a
+    /// ring the peer writes nothing into is waited on there.
+    bound: Cell<Option<Option<Duration>>>,
 }
 
 /// Writes the other direction's ring as a byte stream.
@@ -155,6 +159,9 @@ impl Read for RingReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
+        }
+        if let Some(bound) = self.bound.take() {
+            self.bell.0.set_timeout(bound)?;
         }
         let tail = self.ring.counter(TAIL).load(Ordering::Relaxed);
         let started = Instant::now();
@@ -359,11 +366,18 @@ fn connection(region: &Arc<Region>, client: bool, bell: Bell, peer: String) -> C
     let (incoming, outgoing) = rings(region, client);
     let gone = Arc::new(AtomicBool::new(false));
     Connection {
-        reader: Box::new(StreamReader::new(RingReader {
-            ring: incoming,
-            bell: bell.read,
-            gone: Arc::clone(&gone),
-        })),
+        reader: Box::new(StreamReader::with_timeout(
+            RingReader {
+                ring: incoming,
+                bell: bell.read,
+                gone: Arc::clone(&gone),
+                bound: Cell::new(None),
+            },
+            |r: &RingReader, bound| {
+                r.bound.set(Some(bound));
+                Ok(())
+            },
+        )),
         writer: Box::new(
             StreamWriter::new(RingWriter {
                 ring: outgoing,
@@ -422,7 +436,7 @@ impl Write for BellWrite {
 
 fn bell(read: Box<dyn FrameRead>, write: Box<dyn FrameWrite>) -> Bell {
     Bell {
-        read: Box::new(BellRead(read, Vec::new())),
+        read: BellRead(read, Vec::new()),
         write: Arc::new(Mutex::new(Box::new(BellWrite(write)))),
     }
 }
@@ -512,8 +526,7 @@ impl ShmListen {
 
     /// The next link. Its file is mapped on the link's first read, on the
     /// thread serving it, the client's path read within the bound the link
-    /// set for its reads (10 s when none is set; a Windows pipe's reads
-    /// take no bound): accepting reads nothing.
+    /// set for its reads (10 s when none is set): accepting reads nothing.
     pub fn accept(&self) -> io::Result<Connection> {
         let mut local = self.local.accept()?;
         let peer = local.peer.clone();

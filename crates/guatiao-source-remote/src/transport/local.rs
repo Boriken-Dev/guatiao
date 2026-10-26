@@ -180,29 +180,152 @@ mod imp {
 #[cfg(windows)]
 mod imp {
     use alloc::sync::Arc;
+    use core::time::Duration;
     use std::io::{self, Read, Write};
+    use std::os::windows::io::AsHandle;
+    use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+    use std::time::Instant;
 
     use interprocess::local_socket::prelude::*;
     use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Stream};
 
     use super::{Connection, StreamReader, StreamWriter};
+    use crate::transport::cancel::cancel_io;
 
     pub(super) type Listener = interprocess::local_socket::Listener;
+
+    /// How soon a read that outlived its bound is cancelled again: a read
+    /// started just after a cancel is not ended by it.
+    const AGAIN: Duration = Duration::from_millis(1);
 
     fn name_of(name: &str) -> io::Result<Name<'static>> {
         name.to_string().to_ns_name::<GenericNamespaced>()
     }
 
-    /// One pipe for the reader and the writer. Nothing here can end a
-    /// read blocked on it: ending the link sends GOODBYE, and the peer
-    /// closing its end is what ends that read.
-    struct Shared(Arc<Stream>);
+    /// A pipe's reads and their bound. A pipe takes no read timeout, so
+    /// while a bound is set (a link's handshake) a thread watches each read
+    /// and cancels one that outlives it; with none, a read waits for data
+    /// or the peer's end, and nothing here ends it: ending the link sends
+    /// GOODBYE, and the peer closing its end is what ends that read.
+    struct Watch {
+        pipe: Arc<Stream>,
+        state: Mutex<Watched>,
+        changed: Condvar,
+    }
 
-    impl Read for Shared {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            (&*self.0).read(buf)
+    #[derive(Default)]
+    struct Watched {
+        bound: Option<Duration>,
+        /// The deadline of the bounded read in progress.
+        reading: Option<Instant>,
+        /// Whether that read was cancelled at its deadline.
+        expired: bool,
+        /// Whether a thread watches.
+        watching: bool,
+    }
+
+    impl Watch {
+        fn state(&self) -> MutexGuard<'_, Watched> {
+            self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        }
+
+        fn cancel(&self) {
+            match &*self.pipe {
+                Stream::NamedPipe(p) => cancel_io(p.inner().as_handle()),
+            }
+        }
+
+        /// Cancels each bounded read past its deadline, until no bound is
+        /// set and no read is in progress.
+        fn run(&self) {
+            let mut state = self.state();
+            loop {
+                let Some(deadline) = state.reading else {
+                    if state.bound.is_none() {
+                        state.watching = false;
+                        return;
+                    }
+                    state = self
+                        .changed
+                        .wait(state)
+                        .unwrap_or_else(PoisonError::into_inner);
+                    continue;
+                };
+                let now = Instant::now();
+                let wait = if now >= deadline {
+                    state.expired = true;
+                    // Under the lock: the read cancelled is the one still
+                    // registered, never I/O begun after it returned.
+                    self.cancel();
+                    AGAIN
+                } else {
+                    deadline - now
+                };
+                state = self
+                    .changed
+                    .wait_timeout(state, wait)
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .0;
+            }
         }
     }
+
+    /// The reading half.
+    struct Reading(Arc<Watch>);
+
+    impl Read for Reading {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let bounded = {
+                let mut state = self.0.state();
+                // A bound past what a clock holds is none.
+                match state.bound.and_then(|b| Instant::now().checked_add(b)) {
+                    None => false,
+                    Some(deadline) => {
+                        state.reading = Some(deadline);
+                        state.expired = false;
+                        if !state.watching {
+                            let watch = Arc::clone(&self.0);
+                            std::thread::Builder::new()
+                                .name("guatiao-remote-pipe-watch".to_string())
+                                .spawn(move || watch.run())
+                                .inspect_err(|_| state.reading = None)?;
+                            state.watching = true;
+                        }
+                        self.0.changed.notify_all();
+                        true
+                    }
+                }
+            };
+            let read = (&*self.0.pipe).read(buf);
+            if !bounded {
+                return read;
+            }
+            let expired = {
+                let mut state = self.0.state();
+                state.reading = None;
+                state.expired
+            };
+            match read {
+                Err(_) if expired => Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "nothing arrived on the pipe within the read's bound",
+                )),
+                read => read,
+            }
+        }
+    }
+
+    impl Drop for Reading {
+        fn drop(&mut self) {
+            let mut state = self.0.state();
+            state.bound = None;
+            state.reading = None;
+            self.0.changed.notify_all();
+        }
+    }
+
+    /// The writing half: the pipe itself.
+    struct Shared(Arc<Stream>);
 
     impl Write for Shared {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -220,8 +343,20 @@ mod imp {
 
     fn connection(stream: Stream, peer: String) -> Connection {
         let stream = Arc::new(stream);
+        let watch = Arc::new(Watch {
+            pipe: Arc::clone(&stream),
+            state: Mutex::new(Watched::default()),
+            changed: Condvar::new(),
+        });
         Connection {
-            reader: Box::new(StreamReader::new(Shared(Arc::clone(&stream)))),
+            reader: Box::new(StreamReader::with_timeout(
+                Reading(watch),
+                |r: &Reading, bound| {
+                    r.0.state().bound = bound;
+                    r.0.changed.notify_all();
+                    Ok(())
+                },
+            )),
             writer: Box::new(StreamWriter::new(Shared(stream))),
             peer,
             closer: None,

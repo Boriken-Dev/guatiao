@@ -246,3 +246,26 @@ fn large_and_small_bytes_from_many_threads_arrive_whole() {
         t.join().unwrap();
     }
 }
+
+#[test]
+fn a_client_that_says_nothing_is_dropped_at_the_handshake_bound() {
+    use guatiao_source_remote::transport::Connect;
+    let server =
+        common::server(LinkOptions::new(Trust::Local).handshake_timeout(Duration::from_secs(1)));
+    let name = endpoint("silent");
+    let listener = LocalListen::bind(&name).expect("listens");
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let conn = listener.accept().expect("accepts");
+        let started = std::time::Instant::now();
+        let failed = server.serve(conn).is_err();
+        let _ = tx.send((failed, started.elapsed()));
+    });
+    // Connected, and never says HELLO.
+    let _silent = LocalConnect::new(&name).connect().expect("connects");
+    let (failed, took) = rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the handshake ended at its bound");
+    assert!(failed, "a silent client never links");
+    assert!(took < Duration::from_secs(5), "{took:?}");
+}
