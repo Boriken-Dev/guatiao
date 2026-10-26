@@ -49,8 +49,13 @@ const ALPN: &[u8] = b"guatiao-remote";
 /// The identity file [`TlsConfig::open`] keeps in its directory.
 pub const IDENTITY_FILE: &str = "identity.pem";
 
-/// Raw bytes read from the socket at a time.
+/// Raw bytes read from the socket at a time, at first.
 const RAW_READ: usize = 64 << 10;
+
+/// What a read that keeps filling its buffer grows it to: few large
+/// reads instead of many small ones while a large frame streams in, which
+/// on Windows quadrupled a transfer.
+const RAW_READ_MAX: usize = 1 << 20;
 
 fn invalid(why: impl core::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
@@ -488,6 +493,9 @@ impl TlsRead {
             }
             // Read raw with no lock held: a writer seals meanwhile.
             let n = (&self.core.socket).read(&mut self.raw)?;
+            if n == self.raw.len() && n < RAW_READ_MAX {
+                self.raw.resize(n * 2, 0);
+            }
             if n == 0 {
                 self.ended = true;
                 let mut state = lock(&self.core.state);
