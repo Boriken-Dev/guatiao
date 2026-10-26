@@ -706,7 +706,12 @@ contains
     type(guatiao_value) :: taken, carrier, answer
     type(guatiao_error), allocatable :: error
     integer :: st
-    taken = guatiao_taken_map(config)
+    taken = guatiao_taken_map(config, st)
+    if (st /= GUATIAO_OK) then
+      call guatiao_fail(error, st, "the map handed over could not be moved into this side's allocator")
+      status = guatiao_failed(error, err)
+      return
+    end if
     impl => guatiao_impl_at(ctx, 'greeter')
     status = GUATIAO_ERR_GONE
     if (.not. associated(impl)) return

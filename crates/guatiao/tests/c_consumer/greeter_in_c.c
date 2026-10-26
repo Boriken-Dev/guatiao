@@ -28,6 +28,8 @@
  * without `const` is a tree this file owns from the call on, built in the
  * caller's allocator. It keeps the last one, and `c_greeter_take_kept`
  * hands it back, so the host can see it is the very map it passed.
+ * `c_greeter_hand_over` is the other direction: C handing a map built
+ * through this file's allocator to the greeter a host files under a key.
  *
  * `check` takes its configuration LENT: a `guatiao_map *` the slot's
  * comment calls lent is the caller's map for this call only. It adds an
@@ -473,6 +475,100 @@ EXPORT guatiao_status c_greeter_check_lending(const greeter_vtable *greeter,
   *len = config.len;
   *all_mine = mine;
   free_flat_map(&config);
+  return status;
+}
+
+/* ---- C handing a map of its own over ----------------------------------- */
+
+/* Whether `s` is the kind name `greeter`. */
+static bool is_greeter(guatiao_str s) {
+  return s.len == 7 && memcmp(s.ptr, "greeter", 7) == 0;
+}
+
+/* The greeter table a provider descriptor carries, with `greet_from`
+ * inside it: a table for the kind first, then `vtable` when `kinds`
+ * names the kind; else null. */
+static const greeter_vtable *greeter_of(const guatiao_provider_info *d) {
+  const size_t need = offsetof(greeter_vtable, greet_from) + sizeof(void *);
+  if (d->struct_size >= offsetof(guatiao_provider_info, tables) + sizeof(d->tables)) {
+    for (size_t i = 0; i < d->tables.len; i++) {
+      const guatiao_kind_table *t =
+          (const guatiao_kind_table *)((const char *)d->tables.ptr + i * d->tables.stride);
+      if (is_greeter(t->kind)) {
+        return t->vtable_size >= need ? (const greeter_vtable *)t->vtable : NULL;
+      }
+    }
+  }
+  for (size_t i = 0; i < d->kinds.len; i++) {
+    if (is_greeter(d->kinds.ptr[i])) {
+      return d->vtable_size >= need ? (const greeter_vtable *)d->vtable : NULL;
+    }
+  }
+  return NULL;
+}
+
+/* Finds the greeter filed under `key` through the host's services and
+ * hands `{"name": name}`, a map built through this file's allocator, to
+ * its `greet_from`. A callee that keeps the map holds blocks of this
+ * file's allocator, which goes with this library, unless it moved them
+ * into its own. The answer, a map of strings, is freed here. */
+EXPORT guatiao_status c_greeter_hand_over(const guatiao_host_info *host,
+                                          guatiao_str key, guatiao_str name) {
+  if (!host ||
+      host->struct_size < offsetof(guatiao_host_info, services) + sizeof(host->services) ||
+      !host->services || !host->services->get) {
+    return GUATIAO_ERR_NULL;
+  }
+  const guatiao_host_services *s = host->services;
+  bool pinned = s->struct_size >= offsetof(guatiao_host_services, unpin) + sizeof(s->unpin) &&
+                s->get_pinned && s->unpin;
+  const guatiao_provider_info *desc = NULL;
+  guatiao_status status = pinned ? s->get_pinned(s->ctx, key, &desc) : s->get(s->ctx, key, &desc);
+  if (status != GUATIAO_OK) {
+    return status;
+  }
+  const greeter_vtable *greeter = greeter_of(desc);
+  if (!greeter || !greeter->greet_from) {
+    status = GUATIAO_ERR_UNSUPPORTED;
+  } else {
+    guatiao_map config = {NULL, 0, 0, &ALLOC};
+    guatiao_entry *entry = (guatiao_entry *)ALLOC.alloc(ALLOC.ctx, sizeof(guatiao_entry),
+                                                        _Alignof(guatiao_entry));
+    guatiao_str none = {NULL, 0};
+    if (!entry) {
+      status = GUATIAO_ERR_ALLOC;
+    } else if (!owned_string(&entry->key, &ALLOC, "name", none)) {
+      ALLOC.free(ALLOC.ctx, entry, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+      status = GUATIAO_ERR_ALLOC;
+    } else {
+      entry->value.tag = (uint32_t)GUATIAO_STRING;
+      entry->value._pad = 0;
+      if (!owned_string(&entry->value.payload.text, &ALLOC, "", name)) {
+        free_string(&entry->key);
+        ALLOC.free(ALLOC.ctx, entry, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+        status = GUATIAO_ERR_ALLOC;
+      } else {
+        config.ptr = entry;
+        config.len = 1;
+        config.cap = 1;
+        guatiao_map out = {NULL, 0, 0, NULL};
+        guatiao_provider_error err;
+        memset(&err, 0, sizeof(err));
+        /* Handed over: the slot owns `config` from here, on every path. */
+        status = greeter->greet_from(desc->ctx, &config, &out, &err);
+        if (err.message.cap && err.message.alloc) {
+          err.message.alloc->free(err.message.alloc->ctx, err.message.ptr,
+                                  err.message.cap, 1);
+        }
+        if (status == GUATIAO_OK) {
+          free_flat_map(&out);
+        }
+      }
+    }
+  }
+  if (pinned) {
+    s->unpin(s->ctx, desc);
+  }
   return status;
 }
 

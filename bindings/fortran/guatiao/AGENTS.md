@@ -472,7 +472,10 @@ object with `guatiao_impl_at(ctx, kind)`, converts the arguments with the
 `guatiao_kinds` helpers (`guatiao_text_in`, `guatiao_bytes_in`,
 `guatiao_map_carrier` and `guatiao_settle_map`, `guatiao_value_carrier`
 and `guatiao_settle_value`, `guatiao_lent_map` and
-`guatiao_end_lent_map`, `guatiao_taken_map`, `guatiao_borrowed_map`,
+`guatiao_end_lent_map`, `guatiao_taken_map` (the map moved into the
+binding's default allocator, so the method may keep it; pass `stat` and
+refuse the call on a non-zero one: without it a refused move answers an
+absent map), `guatiao_borrowed_map`,
 `guatiao_borrowed_value`, `guatiao_take_object`, `guatiao_lend_object`
 and `guatiao_end_lent_object`, `guatiao_serve_object`,
 `guatiao_lend_impl`, `guatiao_string_out`), calls the method in a

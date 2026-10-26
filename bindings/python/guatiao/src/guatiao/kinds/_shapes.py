@@ -179,16 +179,17 @@ def _makes_local() -> bool:
 _MAKES_LOCAL: "bool | None" = None
 
 
-def _make_local(node: "_abi.Value") -> None:
-    """Moves a tree a slot answered into this binding's allocator, so it
-    outlives the library: a slot that ignored the carrier built it in its
-    own. Freed, and the refusal raised, when the move fails."""
+def _make_local(node: "_abi.Value", what: str = "the answer") -> None:
+    """Moves a tree into this binding's allocator, so it outlives the
+    library that built it: a slot's answer, which a slot that ignored the
+    carrier built in its own, or a tree a caller handed over. Freed, and
+    the refusal raised, when the move fails."""
     if not _makes_local():
         return
     status = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
     if status != _abi.Status.OK:
         _free_node(node)
-        raise_for_status(status, "moving the answer into this binding's allocator")
+        raise_for_status(status, f"moving {what} into this binding's allocator")
 
 
 def _recorded_alloc(node: "_abi.Value") -> Any:
@@ -476,7 +477,11 @@ class _Tree(Shape):
                 return None
             raise NullArgument(int(_abi.Status.ERR_NULL), f"the {self.name} argument is null")
         if self.mode == "take":
-            owned = Value(_raw=self._node_over(c_value.contents), alloc=binding_alloc())
+            # Still in the caller's allocators, which may go with the
+            # caller's library while the method keeps the tree.
+            node = self._node_over(c_value.contents)
+            _make_local(node, "a tree handed over")
+            owned = Value(_raw=node, alloc=binding_alloc())
             return self._wrap(Ref(owned, ())) if self.tag is not None else owned
         if self.tag is None:
             node = c_value.contents

@@ -261,7 +261,7 @@ stand for:
 | `bool`, integers, `float`, `double` | themselves | |
 | `view`, `map_view`, `list_view` | `const guatiao_value/map/list *` | borrowed, read-only, for the call |
 | `node`, `map_ref`, `list_ref` | `guatiao_value/map/list *` | LENT: the caller's tree for the call, changed in place |
-| `value`, `map`, `list` | `guatiao_value/map/list *` | HANDED OVER: the callee owns it, on every path |
+| `value`, `map`, `list` | `guatiao_value/map/list *` | HANDED OVER: the callee owns it, on every path; a C++ method receives it in the default allocator (the whole tree copied when any part is elsewhere), so it may keep it past the caller's library |
 | `guatiao::object<K>` | `guatiao_object` | an object handed over |
 | `guatiao::lent<K>` | `const guatiao_object *` | an object lent for the call, never destroyed or kept |
 

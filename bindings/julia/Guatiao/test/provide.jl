@@ -38,6 +38,15 @@ struct Picky <: Greeter end
 GreeterKind.greet(::Picky, name::String) = Dict("greeting" => name)
 const PICKY_WHY = Ref{Union{Nothing,String}}("not on this machine")
 
+"Keeps every map handed to it."
+struct Keeper <: Greeter
+    kept::Vector{Value}
+end
+GreeterKind.greet(::Keeper, name::String) = Dict("greeting" => name)
+GreeterKind.greet_from(k::Keeper, config::Value) = (push!(k.kept, config); Dict("greeting" => "kept"))
+const KEEPER = Keeper(Value[])
+Keeper() = KEEPER
+
 mutable struct Closing <: Greeter
     closed::Bool
 end
@@ -147,6 +156,22 @@ end
         GC.gc(true)
     end
     @test live(c) == 0
+end
+
+@testset "a map handed over and kept is all the provider's own" begin
+    # Handed over in the caller's allocator, it is moved into this
+    # binding's before the method keeps it.
+    c = Counting()
+    Guatiao.register_library(REG, Guatiao.Library("julia_keeper", "0.1.0"; providers = [Keeper]))
+    g = Guatiao.bind(REG, "julia_keeper_keeper", Greeter)
+    answer = GreeterKind.greet_from(g, Value(Dict("name" => "ivy"); alloc = c.alloc))
+    @test answer[] == Dict("greeting" => "kept")
+    close(answer)
+    @test live(c) == 0
+    @test length(KEEPER.kept) == 1
+    @test KEEPER.kept[1][] == Dict("name" => "ivy")
+    foreach(close, KEEPER.kept)
+    empty!(KEEPER.kept)
 end
 
 @testset "a caller frees what it handed over when a later argument fails" begin

@@ -578,12 +578,18 @@ contains
   end subroutine
 
   !> A map handed over (`guatiao_map *` neither const nor lent): the
-  !> method owns it; it is freed when the last handle on it goes.
-  recursive function guatiao_taken_map(ptr) result(v)
+  !> method owns it and may keep it, so it is moved out of the caller's
+  !> allocators (which may go with the caller's library) into this
+  !> binding's; it is freed when the last handle on it goes. A refused
+  !> move frees it and is `stat` when given (absent comes back).
+  recursive function guatiao_taken_map(ptr, stat) result(v)
     type(c_ptr), intent(in) :: ptr
+    integer, intent(out), optional :: stat
     type(guatiao_value) :: v
     type(gt_owned), pointer :: map
-    type(gt_value) :: node
+    type(gt_value), target :: node
+    integer(c_int32_t) :: st
+    if (present(stat)) stat = GUATIAO_OK
     if (.not. c_associated(ptr)) then
       v = guatiao_absent()
       return
@@ -591,7 +597,16 @@ contains
     call c_f_pointer(ptr, map)
     node%tag = GUATIAO_TAG_MAP
     node%payload = map
-    v = gt_wrap(node, .true., .false., carrier_alloc(map%alloc))
+    if (associated(gt_value_make_local)) then
+      st = gt_value_make_local(c_loc(node), gt_default_alloc())
+      if (st /= GUATIAO_OK) then
+        st = gt_value_free(c_loc(node))
+        if (present(stat)) stat = GUATIAO_ERR_ALLOC
+        v = guatiao_absent()
+        return
+      end if
+    end if
+    v = gt_wrap(node, .true., .false., carrier_alloc(node%payload%alloc))
   end function
 
   !> A map borrowed for the call (`const guatiao_map *`): read-only;

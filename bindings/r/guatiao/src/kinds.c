@@ -909,6 +909,12 @@ static SEXP served_args(served_job *j) {
         v.payload.list = *(guatiao_list *)p;
       }
     }
+    /* The method owns it and may keep it: moved out of the caller's
+     * allocators, which may go with the caller's library. */
+    if (into_binding(&v) != GUATIAO_OK) {
+      gt_free(&v);
+      Rf_error("a handed-over tree could not be moved into this binding's allocator");
+    }
     SEXP owner = gt_owner_new(&v, &gt_binding_alloc, R_NilValue);
     if (!owner) {
       gt_free(&v);

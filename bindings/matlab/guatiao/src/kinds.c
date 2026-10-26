@@ -985,6 +985,16 @@ static int served_args(served_job *j, mxArray **out, char *msg, size_t msglen) {
         v.payload.list = *(guatiao_list *)p;
       }
     }
+    /* The method owns it and may keep it: moved out of the caller's
+     * allocators, which may go with the caller's library. */
+    guatiao_status moved = into_binding(&v);
+    if (moved != GUATIAO_OK) {
+      gt_free(&v);
+      j->status = moved;
+      snprintf(msg, msglen, "a handed-over tree could not be moved into this binding's allocator");
+      mxDestroyArray(args);
+      return 0;
+    }
     uint64_t id = gt_owner_new(&v, &gt_binding_alloc);
     if (!id) {
       gt_free(&v);

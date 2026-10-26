@@ -522,6 +522,15 @@ function receive_taken(p::Ptr, kind::Symbol, scope::Scope)
     root = new_root()
     T = kind === :map ? GMap : kind === :list ? GList : GValue
     unsafe_store!(root, kind === :value ? unsafe_load(Ptr{GValue}(p)) : node_of(TREE_TAG[kind], unsafe_load(Ptr{T}(p))))
+    # The method owns it and may keep it: moved out of the caller's
+    # allocators, which may go with the caller's library.
+    if makes_local()
+        status = guatiao_value_make_local(root, binding_alloc())
+        if status != 0
+            free_root(root)
+            throw(GuatiaoError(status, "moving the handed-over $kind into this binding's allocator"))
+        end
+    end
     v = adopt(root)
     push!(scope.taken, v)
     return v

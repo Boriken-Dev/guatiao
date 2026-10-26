@@ -18,7 +18,7 @@ import { kind, liveObjects, t } from '../src/kinds.js';
 import * as n from '../src/native.js';
 import { Provider, library, libraryOf, s } from '../src/provide.js';
 import { Counter, Greeter, Listener } from '../../../../examples/greeter_kind/node/greeter_kind.js';
-import { REPO } from './helpers.js';
+import { Counting, REPO } from './helpers.js';
 import { scratch } from './native.js';
 
 const NODE_GREETER = path.join(REPO, 'examples', 'node_provider', 'node_greeter', 'greeters.ts');
@@ -55,6 +55,38 @@ class Bounded extends Provider implements Counter {
     return BigInt(Math.min(this.#at, this.#limits.high));
   }
 }
+
+/** What `Keeper.greetFrom` was handed, kept past the call. */
+const KEPT: Value[] = [];
+
+class Keeper extends Provider implements Greeter {
+  static override readonly kinds = [Greeter];
+  greet(name: string): { greeting: string } {
+    return { greeting: name };
+  }
+  greetFrom(config: Value): { greeting: string } {
+    KEPT.push(config);
+    return { greeting: 'kept' };
+  }
+}
+
+describe('a provider keeps what it was handed', () => {
+  it("holds it in this binding's allocator, none of it in the caller's", () => {
+    using counting = new Counting();
+    KEPT.length = 0;
+    {
+      using reg = new Registry('node-provide', '0.1');
+      reg.registerLibrary(library('keepers', '1.0', { providers: [Keeper] }));
+      using answer = reg.bind('keepers_keeper', Greeter).greetFrom(new Value({ name: 'ivy' }, { alloc: counting.alloc }));
+      expect(answer.toJS()).toEqual({ greeting: 'kept' });
+      expect(counting.live).toBe(0);
+      expect(KEPT.length).toBe(1);
+      expect(KEPT[0]!.toJS()).toEqual({ name: 'ivy' });
+      KEPT[0]!.close();
+    }
+    KEPT.length = 0;
+  });
+});
 
 describe('a module is its library', () => {
   it('takes its id, version, providers and meta from its package', async () => {
