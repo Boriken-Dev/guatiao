@@ -31,7 +31,7 @@ module guatiao_kinds
             guatiao_list_carrier, guatiao_settle_list, guatiao_lent_list, guatiao_end_lent_list, &
             guatiao_taken_list
   public :: guatiao_call_error, guatiao_map_out, guatiao_settle_home, guatiao_string_in, &
-            guatiao_lend_tree, guatiao_settle_lent, guatiao_hand_over, guatiao_object_arg, &
+            guatiao_lend_tree, guatiao_settle_lent, guatiao_lent_refusal, guatiao_hand_over, guatiao_object_arg, &
             guatiao_list_out, guatiao_value_out, guatiao_borrow_tree
 
   !> What every kind's abstract type extends. `close` runs when the side
@@ -882,9 +882,12 @@ contains
   !> A tree lent to a remote slot (see guatiao_lend_tree), once the call
   !> returned, answered or refused: moved where it stands into `home`, the
   !> allocator it recorded before the call, so what the callee grew it
-  !> with, or wrote over it, outlives the callee's library. A refusal
-  !> leaves it whole, where it was, and is `stat` when given: the error of
-  !> a call that answered, as the slot's own refusal is of one that did not.
+  !> with, or wrote over it, outlives the callee's library; a map also
+  !> loses any key the callee wrote that is not UTF-8
+  !> (GUATIAO_ERR_BAD_VALUE). A refused move leaves it whole, where it was.
+  !> Either is `stat` when given: the error of a call that answered, as
+  !> the slot's own refusal is of one that did not (guatiao_lent_refusal
+  !> words it).
   recursive subroutine guatiao_settle_lent(v, tag, home, stat)
     type(guatiao_value), intent(in) :: v
     integer(c_int32_t), intent(in) :: tag
@@ -899,9 +902,26 @@ contains
     call gt_writable_node(v, tag, node, alloc, st, msg)
     if (st /= GUATIAO_OK) return
     if (c_associated(home)) alloc = home
-    moved = gt_value_make_local(node, alloc)
+    if (tag == GUATIAO_TAG_MAP .and. associated(gt_map_settle_lent)) then
+      moved = gt_map_settle_lent(node, alloc)
+    else
+      moved = gt_value_make_local(node, alloc)
+    end if
     if (present(stat)) stat = int(moved)
   end subroutine
+
+  !> The words of a call's error when guatiao_settle_lent answered `stat`
+  !> for the tree lent to `slot` as `arg`.
+  recursive function guatiao_lent_refusal(stat, slot, arg) result(words)
+    integer, intent(in) :: stat
+    character(*), intent(in) :: slot, arg
+    character(:), allocatable :: words
+    if (stat == GUATIAO_ERR_BAD_VALUE) then
+      words = slot // ' wrote a key that is not UTF-8 into the lent map ' // arg // '; the entry was removed'
+    else
+      words = 'moving what ' // slot // ' put into the lent tree ' // arg // " into that tree's allocator"
+    end if
+  end function
 
   !> The error a remote slot answered: its status and the callee's words,
   !> whose string is freed through the allocator it records.

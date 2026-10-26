@@ -361,6 +361,7 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_value_free": ([_P(Value)], c_uint32, None),
     "guatiao_value_clone": ([_P(Alloc), _P(Value), _P(Value)], c_uint32, None),
     "guatiao_value_make_local": ([_P(Value), _P(Alloc)], c_uint32, None),
+    "guatiao_map_settle_lent": ([_P(Value), _P(Alloc)], c_uint32, None),
     "guatiao_value_null": ([_P(Value)], c_uint32, None),
     "guatiao_value_absent": ([_P(Value)], c_uint32, None),
     "guatiao_value_bool": ([c_bool, _P(Value)], c_uint32, None),

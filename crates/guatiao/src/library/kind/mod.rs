@@ -154,7 +154,9 @@ pub trait Kind: 'static {
 /// Value`): read it, change it, grow it, never free it or keep the
 /// pointer. Build what goes into it through the allocator it records; a
 /// Rust caller moves anything built elsewhere there once the call returns,
-/// and a C caller calls `guatiao_value_make_local` on it.
+/// and removes a top-level key the slot wrote into a lent map that is not
+/// UTF-8; a C caller calls `guatiao_map_settle_lent` on a lent map, which
+/// does both, and `guatiao_value_make_local` on a lent value or list.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KindHeader {

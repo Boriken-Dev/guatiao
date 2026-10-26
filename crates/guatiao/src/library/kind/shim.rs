@@ -188,14 +188,13 @@ impl LentTree for Map {
         self.alloc().unwrap_or_else(|_| Alloc::rust())
     }
     fn settle(&mut self, home: Alloc) -> Result<(), ProviderError> {
-        let moved = self.make_local_in(home);
-        if self.drop_keys_not_text() > 0 {
-            return Err(ProviderError::new(
+        match self.settle_lent(home) {
+            Err(crate::value::error::ValueError::NotUtf8) => Err(ProviderError::new(
                 Status::GUATIAO_ERR_BAD_VALUE,
                 "the provider wrote a key that is not UTF-8 into the map it was lent; the entry was removed",
-            ));
+            )),
+            moved => Ok(moved?),
         }
-        Ok(moved?)
     }
 }
 

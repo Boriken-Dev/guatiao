@@ -18,6 +18,7 @@ function cases = t_greeters()
     'an answer built in the library''s allocator outlives the unload', @careless_answer
     'what a slot grew a lent map with outlives the unload', @lent_grown
     'a refused move of a lent tree is the call''s error', @refused_settle
+    'a key a slot wrote into a lent map that is not UTF-8 is removed', @bad_key
     'a closed value passed to a slot is refused', @closed_argument
     'the Rust proxy calls every greeter', @rust_proxy
     'a table that is not the kind''s is refused before it runs', @floor_refused
@@ -237,6 +238,34 @@ function refused_settle()
   a.refuse(false);
   expect_true(~isempty(strfind(e.message, 'lent tree')), 'the error names the lent tree');
   expect_equal(config.data(), struct('name', 'ivy', 'checked_by', 'C'), 'the map stands whole');
+  config.close();
+  expect_equal(a.live(), 0, 'all back');
+  own.close();
+end
+
+function bad_key()
+  gt_env('examples');
+  % This greeter's check adds a key that is not UTF-8 to the lent map:
+  % removed and freed when the call returns, and the call's error.
+  dir = gt_env('c_greeter_own', 'GREETER_WRITES_BAD_KEY');
+  if isempty(dir)
+    skip_case('the C greeter: no C compiler built it (set GUATIAO_CC)');
+  end
+  own = guatiao.Registry('m-bad-key', '0.1');
+  scan = own.scan_dir(dir, 'kind=greeter');
+  expect_equal(numel(scan.failed), 0, 'the greeter loads');
+  g = own.bind('c_greeter', 'greeterkind.Greeter');
+  a = guatiao.Allocator.counting();
+  config = guatiao.Value(struct('name', 'ivy'), 'Alloc', a);
+  try
+    e = expect_error(@() g.check(config), 'guatiao:BadValue', 'the removed key');
+  catch failure
+    config.close();
+    own.close();
+    rethrow(failure);
+  end
+  expect_true(~isempty(strfind(e.message, 'not UTF-8')), 'the error says why');
+  expect_equal(config.data(), struct('name', 'ivy'), 'the map without it');
   config.close();
   expect_equal(a.live(), 0, 'all back');
   own.close();

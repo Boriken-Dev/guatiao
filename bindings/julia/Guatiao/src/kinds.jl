@@ -113,9 +113,9 @@ mutable struct Scope
     given::Vector{Any}   # undone by close unless the call happened
     blocks::Vector{Ptr{Cvoid}}   # C memory released last, after every `after` and `given`
     taken::Vector{Any}           # what a served call was handed: closed if it refuses
-    lent::Vector{Tuple{Ptr{GValue},Ptr{GAlloc}}}   # lent trees, each with the allocator it recorded when lent
+    lent::Vector{Tuple{Ptr{GValue},Ptr{GAlloc},Bool}}   # lent trees, each with the allocator it recorded when lent, and whether a map
 end
-Scope() = Scope(true, Any[], Any[], Any[], Ptr{Cvoid}[], Any[], Tuple{Ptr{GValue},Ptr{GAlloc}}[])
+Scope() = Scope(true, Any[], Any[], Any[], Ptr{Cvoid}[], Any[], Tuple{Ptr{GValue},Ptr{GAlloc},Bool}[])
 own!(s::Scope, p::Ptr) = (push!(s.blocks, Ptr{Cvoid}(p)); p)
 keep!(s::Scope, x) = (push!(s.keep, x); x)
 after!(f, s::Scope) = (push!(s.after, f); nothing)
@@ -126,13 +126,14 @@ check_scope(s::Scope) = s.open || throw(InvalidStateException("this view was len
 """
 Moves every tree lent for the call into the allocator it recorded when it
 was lent, so what the callee grew it with, or wrote over it, outlives the
-callee's library. The first refusal's status, else 0; a refused tree is
-left whole, where it stands.
+callee's library; a lent map also loses any key the callee wrote that is
+not UTF-8 (`BadValue`). The first refusal's status, else 0; a tree whose
+move is refused is left whole, where it stands.
 """
 function settle_lent!(s::Scope)
     status = UInt32(0)
-    for (node, home) in s.lent
-        moved = guatiao_value_make_local(node, home)
+    for (node, home, is_map) in s.lent
+        moved = is_map && checks_keys() ? guatiao_map_settle_lent(node, home) : guatiao_value_make_local(node, home)
         moved != 0 && status == 0 && (status = UInt32(moved))
     end
     empty!(s.lent)
@@ -143,6 +144,8 @@ end
 function settled!(status::UInt32, out, where::String)
     status == 0 && return nothing
     drop_answer(out)
+    status == UInt32(BadValue) &&
+        throw(GuatiaoError(status, "$where wrote a key that is not UTF-8 into the map it was lent; the entry was removed"))
     throw(GuatiaoError(status, "moving what $where put into a lent tree into that tree's allocator"))
 end
 drop_answer(_) = nothing
@@ -356,7 +359,7 @@ function pass_lent(x, scope::Scope, kind::Symbol)
     # What the callee grew it with may be in its library's allocator: moved
     # into the one the tree records now, which a callee writing a fresh
     # tree over it would change.
-    makes_local() && push!(scope.lent, (node, recorded_alloc(node)))
+    makes_local() && push!(scope.lent, (node, recorded_alloc(node), kind === :map))
     return arm_ptr(node, kind, "a lent argument")
 end
 
@@ -409,6 +412,17 @@ function makes_local()
 end
 "`makes_local()`'s answer in the low bit, above the `GENERATION` it was found in: one word, read whole."
 const MAKES_LOCAL = Ref(-2)
+
+"Whether the core settles a lent map, removing a key the callee wrote that is not UTF-8."
+function checks_keys()
+    found = CHECKS_KEYS[]
+    found >> 1 == GENERATION[] && return isodd(found)
+    answer = exports("guatiao", "guatiao_map_settle_lent")
+    CHECKS_KEYS[] = GENERATION[] << 1 | Int(answer)
+    return answer
+end
+"`checks_keys()`'s answer, kept as `MAKES_LOCAL` keeps its own."
+const CHECKS_KEYS = Ref(-2)
 
 function answer_tree(out::Ref, kind::Symbol)
     root = new_root()

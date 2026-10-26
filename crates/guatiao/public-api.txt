@@ -228,6 +228,7 @@ pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_map_copy_from(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *const guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_map_discard(*mut guatiao::value::value::Value, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_map_set(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_map_settle_lent(*mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 #[no_mangle] pub c fn guatiao::exports::value::guatiao_memory_alloc(usize, usize) -> *mut core::ffi::c_void
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_memory_free(*mut core::ffi::c_void, usize, usize)
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_string_push(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status

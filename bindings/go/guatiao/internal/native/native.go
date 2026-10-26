@@ -575,6 +575,16 @@ func ValueMakeLocal(node, alloc unsafe.Pointer) uint32 {
 	return uint32(C.gt_core_guatiao_value_make_local(n(node), a(alloc)))
 }
 
+// MapSettleLent settles a map lent to a slot into home, as ValueMakeLocal
+// moves a tree, and removes any key the slot wrote that is not UTF-8
+// (ErrBadValue then). A core older than the export only moves it.
+func MapSettleLent(node, home unsafe.Pointer) uint32 {
+	if C.gt_core.guatiao_map_settle_lent == nil {
+		return ValueMakeLocal(node, home)
+	}
+	return uint32(C.gt_core_guatiao_map_settle_lent(n(node), a(home)))
+}
+
 func ValueNull(out unsafe.Pointer) uint32   { return uint32(C.gt_core_guatiao_value_null(n(out))) }
 func ValueAbsent(out unsafe.Pointer) uint32 { return uint32(C.gt_core_guatiao_value_absent(n(out))) }
 func ValueBool(b bool, out unsafe.Pointer) uint32 {

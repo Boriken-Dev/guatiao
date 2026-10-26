@@ -424,6 +424,28 @@ void a_refused_move_of_a_lent_tree_is_the_calls_error() {
   check(alloc.live == 0, "every block of the refusing allocator is back");
 }
 
+void a_key_a_slot_wrote_into_a_lent_map_that_is_not_utf8_is_removed() {
+  // check adds a key that is not UTF-8 to the lent map: removed and freed
+  // when the call returns, and the call's error.
+  refusing alloc;
+  guatiao::registry own("cpp-bad-key", "0.1");
+  own.scan_dir(C_BAD_KEY_GREETER_DIR, guatiao::rules({"kind=greeter"}));
+  auto bound = gk::greeter::try_bind(own, "c_greeter");
+  check(bound.ok(), "the greeter binds");
+  if (!bound.ok()) return;
+  guatiao::remote<gk::greeter> g = *bound;
+  {
+    guatiao::map config({{"name", "ivy"}}, &alloc.a);
+    auto usable = g.try_check(config.ref());
+    check(!usable.ok() && usable.error().code() == guatiao::status::bad_value,
+          "the removed key is the call's error, as BAD_VALUE");
+    check(!usable.ok() && std::string(usable.error().what()).find("not UTF-8") != std::string::npos,
+          "saying why");
+    check(json_of(config) == "{\"name\":\"ivy\"}", "the lent map without the key");
+  }
+  check(alloc.live == 0, "every block of the allocator is back");
+}
+
 }  // namespace
 
 int main() {
@@ -449,6 +471,7 @@ int main() {
   an_answer_built_in_the_librarys_allocator_outlives_the_unload();
   what_a_slot_grew_a_lent_map_with_outlives_the_unload();
   a_refused_move_of_a_lent_tree_is_the_calls_error();
+  a_key_a_slot_wrote_into_a_lent_map_that_is_not_utf8_is_removed();
   std::printf("greeters: %d passed, %d failed, %d skipped\n", passed, failed, skipped);
   return failed ? 1 : 0;
 }

@@ -1921,8 +1921,8 @@ contains
             call put(o, '      call gk_drop%r%close()')
           end if
         end if
-        call put(o, '      call guatiao_fail(error, gk_s' // j // ', "moving what ' // s%name // &
-                 ' put into the lent tree ' // s%args(m)%name // ' into that tree''s allocator")')
+        call put(o, '      call guatiao_fail(error, gk_s' // j // ', guatiao_lent_refusal(gk_s' // j // &
+                 ', "' // s%name // '", "' // s%args(m)%name // '"))')
         call put(o, '      return')
         call put(o, '    end if')
       end if

@@ -220,6 +220,30 @@ end
             close(own)
         end
     end
+    @testset "a key a slot wrote into a lent map that is not UTF-8 is removed" begin
+        # `check` adds a key that is not UTF-8 to the lent map: removed and
+        # freed when the call returns, and the call's error.
+        dir = build_c_greeter(; writes_bad_key = true)
+        if dir === nothing
+            absent_greeter(:c, "no C compiler: the greeter written in C is not built")
+        else
+            own = Registry("julia-bad-key", "0.1")
+            Guatiao.scan_dir(own, dir; rules = "kind=greeter")
+            c = Counting()
+            config = Value(Dict("name" => "ivy"); alloc = c.alloc)
+            refused = try
+                GreeterKind.check(Guatiao.bind(own, "c_greeter", Greeter), config)
+            catch e
+                e
+            end
+            @test refused isa Guatiao.GuatiaoError && refused.status == Guatiao.BadValue &&
+                  occursin("not UTF-8", refused.message)
+            @test config[] == Dict("name" => "ivy")
+            close(config)
+            @test live(c) == 0
+            close(own)
+        end
+    end
 end
 
 @testset "the Rust proxy calls every greeter: $which" for (which, key, greeting) in GREETERS

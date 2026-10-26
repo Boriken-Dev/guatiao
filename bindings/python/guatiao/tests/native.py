@@ -58,10 +58,15 @@ def _build(source: str, into: Path, name: str, defines: "tuple[str, ...]" = ()) 
     return out
 
 
-def build_c_greeter(into: Path, *, ignores_carrier: bool = False) -> "Path | None":
+def build_c_greeter(
+    into: Path, *, ignores_carrier: bool = False, writes_bad_key: bool = False
+) -> "Path | None":
     """The greeter written in C, in a directory of its own; with
-    `ignores_carrier`, one whose answers are built in its own allocator."""
+    `ignores_carrier`, one whose answers are built in its own allocator;
+    with `writes_bad_key`, one whose `check` adds a key that is not UTF-8."""
     defines = ("GREETER_IGNORES_CARRIER",) if ignores_carrier else ()
+    if writes_bad_key:
+        defines += ("GREETER_WRITES_BAD_KEY",)
     built = _build("greeter_in_c.c", into, "c_greeter", defines)
     return None if built is None else into
 

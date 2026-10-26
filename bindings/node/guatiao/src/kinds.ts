@@ -254,8 +254,8 @@ export class Scope {
   readonly #after: (() => void)[] = [];
   #given: (() => void)[] = [];
   readonly #blocks: bigint[] = [];
-  /** Trees lent for the call, each with the allocator it recorded when lent. */
-  #lent: [bigint, bigint][] = [];
+  /** Trees lent for the call, each with the allocator it recorded when lent and whether it is a map. */
+  #lent: [bigint, bigint, boolean][] = [];
 
   get open(): boolean {
     return this.#open;
@@ -282,20 +282,22 @@ export class Scope {
   }
 
   /** A tree lent for the call, settled into `home` once it returns. */
-  lend(node: bigint, home: bigint): void {
-    this.#lent.push([node, home]);
+  lend(node: bigint, home: bigint, isMap = false): void {
+    this.#lent.push([node, home, isMap]);
   }
 
   /**
    * Moves every tree lent for the call into the allocator it recorded when
    * it was lent, so what the callee grew it with, or wrote over it,
-   * outlives the callee's library. The first refusal's status, else OK; a
-   * refused tree is left whole, where it stands.
+   * outlives the callee's library; a lent map also loses any key the
+   * callee wrote that is not UTF-8 (`ERR_BAD_VALUE`). The first refusal's
+   * status, else OK; a tree whose move is refused is left whole, where it
+   * stands.
    */
   settle(): number {
     let status: number = Status.OK;
-    for (const [node, home] of this.#lent.splice(0)) {
-      const moved = makeLocal(node, home);
+    for (const [node, home, isMap] of this.#lent.splice(0)) {
+      const moved = isMap && checksKeys() ? n.core().fn.guatiao_map_settle_lent!(node, home) : makeLocal(node, home);
       if (moved !== Status.OK && status === Status.OK) status = moved;
     }
     return status;
@@ -427,6 +429,11 @@ function raiseCheck(status: number): void {
 /** Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it. */
 function makesLocal(): boolean {
   return !n.core().missing.has('guatiao_value_make_local');
+}
+
+/** Whether the core settles a lent map, removing a key that is not UTF-8. */
+function checksKeys(): boolean {
+  return !n.core().missing.has('guatiao_map_settle_lent');
 }
 
 /**
@@ -808,7 +815,7 @@ class Tree extends ShapeImpl {
       // What the callee grew it with may be in its library's allocator:
       // moved into the one the tree records now, which a callee writing a
       // fresh tree over it would change.
-      if (makesLocal()) scope.lend(node, recordedAlloc(node));
+      if (makesLocal()) scope.lend(node, recordedAlloc(node), this.tag === Tag.MAP);
       return this.#arm(node);
     }
     // Handed over: given up now; freed if the call never happens.
@@ -1697,6 +1704,9 @@ export class RemoteImpl {
       }
       if (settled !== Status.OK) {
         if (out !== undefined) slot.answer!.drop(out);
+        if (settled === Status.ERR_BAD_VALUE) {
+          throw errorFor(settled, `${slot.name} wrote a key that is not UTF-8 into the map it was lent; the entry was removed`);
+        }
         throw errorFor(settled, `moving what ${slot.name} put into a lent tree into that tree's allocator`);
       }
       return slot.answer?.answer(out!, scope);

@@ -472,6 +472,94 @@ fn the_c_export_moves_a_tree_home_and_refuses_nulls() {
     });
 }
 
+/// `map` with its first key replaced by one that is not UTF-8, built
+/// through `alloc`, as only a foreign writer leaves one.
+fn with_bad_first_key(map: Map, alloc: Alloc) -> Map {
+    let (ptr, len, cap, a) = map.into_raw_parts();
+    assert!(len > 0);
+    let (kp, kl, kc, ka) = Buffer::new_in(alloc, b"\xffname").unwrap().into_raw_parts();
+    // SAFETY: an entry is `repr(C)` with its key first; the old key is
+    // freed before a key with consistent storage is written over it. The
+    // key is not UTF-8 on purpose, which only a foreign writer may leave.
+    unsafe {
+        let slot = ptr.cast::<Text>();
+        core::ptr::drop_in_place(slot);
+        core::ptr::write(slot, Text::from_raw_parts(kp, kl, kc, ka));
+        Map::from_raw_parts(ptr, len, cap, a)
+    }
+}
+
+/// What a caller of a kind table runs on a lent map: moved home, and a
+/// key the slot wrote that is not UTF-8 removed, freed and reported.
+#[test]
+fn the_c_export_settles_a_lent_map_and_removes_a_key_that_is_not_utf8() {
+    use guatiao::exports::value::guatiao_map_settle_lent;
+    use guatiao::value::status::Status;
+    with_arena(|arena, counter| {
+        let home = Alloc::rust();
+        let rest: Vec<String> = tree_in(home).keys().skip(1).map(String::from).collect();
+        let mut list = Value::from(List::new());
+        let mut good = Value::from(tree_in(arena));
+        // SAFETY: well-formed values nobody else holds; the allocators are
+        // complete vtables, or null.
+        unsafe {
+            assert_eq!(
+                guatiao_map_settle_lent(core::ptr::null_mut(), home.as_raw()),
+                Status::GUATIAO_ERR_NULL
+            );
+            assert_eq!(
+                guatiao_map_settle_lent(&mut list, home.as_raw()),
+                Status::GUATIAO_ERR_WRONG_KIND
+            );
+            assert_eq!(
+                guatiao_map_settle_lent(&mut good, core::ptr::null()),
+                Status::GUATIAO_ERR_ALLOC
+            );
+            assert!(counter.outstanding.get() > 0, "a refusal moves nothing");
+            assert_eq!(
+                guatiao_map_settle_lent(&mut good, home.as_raw()),
+                Status::GUATIAO_OK
+            );
+        }
+        assert_eq!(counter.outstanding.get(), 0, "moved home");
+        assert_eq!(good, Value::from(tree_in(home)));
+
+        // A home refusing, every key text: the move's refusal, the map whole.
+        let mut whole = Value::from(tree_in(home));
+        counter.fail_at.set(counter.allocs.get() + 1);
+        // SAFETY: as above.
+        let settled = unsafe { guatiao_map_settle_lent(&mut whole, arena.as_raw()) };
+        counter.fail_at.set(0);
+        assert_eq!(settled, Status::GUATIAO_ERR_ALLOC);
+        assert_eq!(whole, Value::from(tree_in(home)), "whole after a refusal");
+        drop(whole);
+
+        let mut bad = Value::from(with_bad_first_key(tree_in(arena), arena));
+        // SAFETY: as above.
+        let settled = unsafe { guatiao_map_settle_lent(&mut bad, home.as_raw()) };
+        assert_eq!(settled, Status::GUATIAO_ERR_BAD_VALUE);
+        assert_eq!(
+            counter.outstanding.get(),
+            0,
+            "the entry freed, the rest moved"
+        );
+        let map = TryAsRef::<Map>::try_as_ref(&bad).expect("every key is text now");
+        assert_eq!(map.keys().collect::<Vec<_>>(), rest);
+        assert!(bad.is_local());
+
+        // A home refusing as well: the key is still removed and reported.
+        let mut bad = Value::from(with_bad_first_key(tree_in(home), home));
+        counter.fail_at.set(counter.allocs.get() + 1);
+        // SAFETY: as above.
+        let settled = unsafe { guatiao_map_settle_lent(&mut bad, arena.as_raw()) };
+        counter.fail_at.set(0);
+        assert_eq!(settled, Status::GUATIAO_ERR_BAD_VALUE);
+        let map = TryAsRef::<Map>::try_as_ref(&bad).expect("every key is text now");
+        assert_eq!(map.keys().collect::<Vec<_>>(), rest);
+        drop(bad);
+    });
+}
+
 /// Past the depth judged on the thread's stack, the walk still reaches
 /// the leaf.
 #[test]

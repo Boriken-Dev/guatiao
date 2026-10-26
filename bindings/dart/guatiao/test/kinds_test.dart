@@ -165,7 +165,10 @@ final String? carelessCGreeterDir = _buildCGreeter(ignoresCarrier: true);
 /// Compiles with `CC` where it is set, as the other suites do: the default
 /// compiler builds for the machine, which is not this process's
 /// architecture under emulation. Else the first of clang and cc found.
-String? _buildCGreeter({bool ignoresCarrier = false}) {
+String? _buildCGreeter({
+  bool ignoresCarrier = false,
+  bool writesBadKey = false,
+}) {
   final named = Platform.environment['CC'] ?? '';
   final compilers = named.isNotEmpty
       ? [named]
@@ -178,6 +181,7 @@ String? _buildCGreeter({bool ignoresCarrier = false}) {
         '-std=c11',
         if (!Platform.isWindows) '-fPIC',
         if (ignoresCarrier) '-DGREETER_IGNORES_CARRIER',
+        if (writesBadKey) '-DGREETER_WRITES_BAD_KEY',
         '-I',
         repoPath(['crates', 'guatiao', 'include']),
         '-I',
@@ -461,6 +465,34 @@ void main() {
       );
       _refusing = false;
       expect(config.toDart(), {'name': 'ivy', 'checked_by': 'C'});
+      config.close();
+      expect(_refusingLive, 0);
+    });
+
+    test("a key a C slot wrote into a lent map that is not UTF-8 is removed, "
+        "as the call's error", () {
+      final dir = _buildCGreeter(writesBadKey: true);
+      if (dir == null) {
+        markTestSkipped('no C compiler');
+        return;
+      }
+      final own = Registry('dart-kinds-bad-key', '0.1');
+      addTearDown(own.close);
+      expect(own.scanDir(dir, rules: 'kind=greeter')['failed'], isEmpty);
+      final alloc = _refusingAlloc();
+      final config = Value.fromDart({'name': 'ivy'}, alloc: alloc);
+      addTearDown(config.close);
+      expect(
+        () => own.bind('c_greeter', Greeter.kind).check(config),
+        throwsA(
+          isA<BadValue>().having(
+            (e) => e.message,
+            'message',
+            contains('not UTF-8'),
+          ),
+        ),
+      );
+      expect(config.toDart(), {'name': 'ivy'});
       config.close();
       expect(_refusingLive, 0);
     });

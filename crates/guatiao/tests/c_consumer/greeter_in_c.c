@@ -38,7 +38,8 @@
  * direction: C lending a map of its own to any greeter's `check`. Built
  * with GREETER_IGNORES_CARRIER, `check` instead rebuilds the map in this
  * file's allocator, which the map then records, as a careless library
- * writing a fresh map over a lent one does.
+ * writing a fresh map over a lent one does; with GREETER_WRITES_BAD_KEY,
+ * the key it adds is not UTF-8.
  *
  * `greet`, `greet_into`, `greet_from` and `check` are filled. `shout` and `start` are left null:
  * to the host that is an older table, and its proxy runs the trait's
@@ -321,7 +322,13 @@ static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
   guatiao_entry *e = &config->ptr[config->len];
   guatiao_str none = {NULL, 0};
   guatiao_str by = {(const uint8_t *)"C", 1};
+  /* Built with GREETER_WRITES_BAD_KEY, the key starts with a byte that is
+   * not UTF-8, as a careless library may write: a caller removes it. */
+#if defined(GREETER_WRITES_BAD_KEY)
+  if (!owned_string(&e->key, a, "\xff" "checked_by", none)) {
+#else
   if (!owned_string(&e->key, a, "checked_by", none)) {
+#endif
     return GUATIAO_ERR_ALLOC;
   }
   e->value.tag = (uint32_t)GUATIAO_STRING;

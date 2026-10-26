@@ -202,6 +202,27 @@ case("a refused move of a lent tree is the call's error", with_examples({
   }
 }))
 
+case("a key a slot wrote into a lent map that is not UTF-8 is removed", with_examples({
+  # `check` adds a key that is not UTF-8 to the lent map: removed and freed
+  # when the call returns, and the call's error.
+  dir <- build_c_greeter("GREETER_WRITES_BAD_KEY")
+  if (is.null(dir)) {
+    absent_greeter("c", "no C compiler: the greeter written in C is not built")
+  } else {
+    own <- registry("r-bad-key", "0.1")
+    own$scan_dir(dir, rules = "kind=greeter")
+    a <- counting()
+    config <- value(list(name = "ivy"), alloc = a)
+    refused <- tryCatch(check(own$bind("c_greeter", Greeter), config), error = function(e) e)
+    expect_true(inherits(refused, "guatiao_error") && identical(refused$status, "BadValue"))
+    expect_true(grepl("not UTF-8", conditionMessage(refused), fixed = TRUE))
+    expect_equal(value_data(config), list(name = "ivy"))
+    close(config)
+    expect_equal(live(a), 0)
+    own$close()
+  }
+}))
+
 case("the Rust proxy calls every greeter", with_examples({
   if (is.null(fixture())) {
     skip_case("no C compiler: the fixture is not built")

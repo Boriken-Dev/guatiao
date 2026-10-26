@@ -59,6 +59,19 @@ foreach(variant IN ITEMS careless lent)
   target_compile_definitions(c_greeter_${variant} PRIVATE GREETER_IGNORES_CARRIER)
 endforeach()
 
+# Once more, its `check` adding a key that is not UTF-8 to a lent map.
+set(dir "${CMAKE_BINARY_DIR}/greeters/c_bad_key")
+add_library(c_greeter_bad_key SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../crates/guatiao/tests/c_consumer/greeter_in_c.c")
+target_include_directories(c_greeter_bad_key PRIVATE ${kinds_include} "${CMAKE_CURRENT_SOURCE_DIR}/../../crates/guatiao/include")
+set_target_properties(c_greeter_bad_key PROPERTIES
+  C_STANDARD 11
+  OUTPUT_NAME c_greeter
+  LIBRARY_OUTPUT_DIRECTORY "${dir}" RUNTIME_OUTPUT_DIRECTORY "${dir}" ARCHIVE_OUTPUT_DIRECTORY "${dir}")
+if(WIN32)
+  set_target_properties(c_greeter_bad_key PROPERTIES PREFIX "")
+endif()
+target_compile_definitions(c_greeter_bad_key PRIVATE GREETER_WRITES_BAD_KEY)
+
 option(CPP_HOST_TESTS "Build the C++ host's test" ON)
 if(CPP_HOST_TESTS)
   enable_testing()
@@ -72,8 +85,9 @@ if(CPP_HOST_TESTS)
     "C_GREETER_DIR=\"${c_greeter_dir}\""
     "C_CARELESS_GREETER_DIR=\"${CMAKE_BINARY_DIR}/greeters/c_careless\""
     "C_LENT_GREETER_DIR=\"${CMAKE_BINARY_DIR}/greeters/c_lent\""
+    "C_BAD_KEY_GREETER_DIR=\"${CMAKE_BINARY_DIR}/greeters/c_bad_key\""
     "CPP_GREETER_DIR=\"${cpp_greeter_dir}\"")
-  add_dependencies(test_greeters cpp_greeter c_greeter c_greeter_careless c_greeter_lent)
+  add_dependencies(test_greeters cpp_greeter c_greeter c_greeter_careless c_greeter_lent c_greeter_bad_key)
   add_test(NAME cpp_host_greeters COMMAND test_greeters)
 
   # 64-bit integers through the wide kind: Rust, C and a provider written here.

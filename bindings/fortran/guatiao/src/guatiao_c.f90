@@ -272,11 +272,12 @@ module guatiao_c
     character(len=8) :: feature
   end type
 
-  type(gt_export), parameter :: gt_core_exports(83) = [ &
+  type(gt_export), parameter :: gt_core_exports(84) = [ &
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
     gt_export('guatiao_value_make_local           ', 2, 'newer'), &
+    gt_export('guatiao_map_settle_lent            ', 2, 'newer'), &
     gt_export('guatiao_kind_document_read         ', 4, 'newer'), &
     gt_export('guatiao_value_null                 ', 1, ''), &
     gt_export('guatiao_value_absent               ', 1, ''), &
@@ -379,6 +380,12 @@ module guatiao_c
       import :: c_int32_t, c_ptr
       type(c_ptr), value :: v
       type(c_ptr), value :: alloc
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_map_settle_lent_i(node, home) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: node
+      type(c_ptr), value :: home
       integer(c_int32_t) :: r
     end function
     function guatiao_kind_document_read_i(text, alloc, out, why) bind(c) result(r)
@@ -962,6 +969,7 @@ module guatiao_c
   procedure(guatiao_value_free_i), pointer :: gt_value_free => null()
   procedure(guatiao_value_clone_i), pointer :: gt_value_clone => null()
   procedure(guatiao_value_make_local_i), pointer :: gt_value_make_local => null()
+  procedure(guatiao_map_settle_lent_i), pointer :: gt_map_settle_lent => null()
   procedure(guatiao_kind_document_read_i), pointer :: gt_kind_document_read => null()
   procedure(guatiao_value_null_i), pointer :: gt_value_null => null()
   procedure(guatiao_value_absent_i), pointer :: gt_value_absent => null()
@@ -1054,6 +1062,7 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_free'), gt_value_free)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_clone'), gt_value_clone)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_make_local'), gt_value_make_local)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_map_settle_lent'), gt_map_settle_lent)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_kind_document_read'), gt_kind_document_read)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_null'), gt_value_null)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_absent'), gt_value_absent)
