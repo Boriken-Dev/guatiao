@@ -277,6 +277,19 @@ unloaded, or, once retired, collected.
 thread; ctypes takes the GIL for the call, so calls into Python are
 serialised by it.
 
+**From a description**: `kinds.kinds_of(document, *, known=())` (the
+document a kind crate commits as `<crate>.kinds.json`, its JSON text or
+parsed, or what `Registry.kind_descriptions` answers) answers each `Kind`
+by name, the same a kind class builds. An object kind a slot names is
+found in the document, else among `known` (kind classes or `Kind`s);
+`TypeError` names the kind and slot for what is not a description, a type
+it does not know, or kinds referring to each other in a cycle.
+`kinds.generate(document, *, source="", command="")` answers the module
+of the kinds as typed `Protocol` classes (object kinds first, docs as
+docstrings, `source`/`command` in its first lines); `python -m
+guatiao.kinds DOCUMENT -o MODULE.py [--check]` writes it, or exits 1
+when the module is not what it would write.
+
 **By hand**: `Kind(name, struct=None, *, floor_hash, methods,
 is_object=False)` with `Method(name, args=(), returns=None, *,
 fallible=False, required=False)` and the shapes of `guatiao.kinds.shapes`

@@ -32,6 +32,11 @@ greeter = reg.bind("acme_greeter", Greeter)
 greeter.greet("ana").to_python()      # {"greeting": "hello, ana"}
 ```
 
+A kind that has a description (the `<crate>.kinds.json` a kind crate
+commits, or what `Registry.kind_descriptions` answers) is loaded from it
+instead: `kinds_of(document)` answers each `Kind` by name, and `python -m
+guatiao.kinds DOCUMENT -o module.py` writes the classes above from it.
+
 The class calls a provider's table (`Registry.bind`, `Kind.bind`) with
 Python values in and out, and a Python class serves it: an object handed
 to a library, or a provider (`guatiao.provide`). `Greeter.kind` is the
@@ -64,6 +69,7 @@ from ._protocol import (
     kind_of,
     required,
 )
+from ._description import generate, kinds_of
 from ._spec import Kind, Method, Object, Remote, live_objects
 from ._table import FloorMismatch, table
 
@@ -95,5 +101,7 @@ __all__ = [
     "FloorMismatch",
     "table",
     "live_objects",
+    "kinds_of",
+    "generate",
     "shapes",
 ]
