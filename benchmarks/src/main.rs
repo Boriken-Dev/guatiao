@@ -351,6 +351,18 @@ const METRICS: &[Metric] = &[
         name: "bytes_json_blob",
         setup: walk::bytes_json_blob,
     },
+    Metric {
+        name: "keys_wire_walk",
+        setup: walk::keys_wire_walk,
+    },
+    Metric {
+        name: "wire_keys_tree",
+        setup: walk::wire_keys_tree,
+    },
+    Metric {
+        name: "wire_keys_walk",
+        setup: walk::wire_keys_walk,
+    },
 ];
 
 /// One `load_file` into a fresh registry; making and dropping the

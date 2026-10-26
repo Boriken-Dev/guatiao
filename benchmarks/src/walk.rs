@@ -399,3 +399,36 @@ pub(crate) fn tree_json_blob(_: &Libraries) -> Run {
 pub(crate) fn bytes_json_blob(_: &Libraries) -> Run {
     bytes_json(blob_tree())
 }
+
+// --- a wide map to wire bytes and back ------------------------------------------
+
+/// The two hundred keys' tree to wire bytes through the `Encoder`, which
+/// checks each key for a repeat as it writes it.
+pub(crate) fn keys_wire_walk(_: &Libraries) -> Run {
+    let tree = keys();
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(wire::to_bytes_of(black_box(&tree)).expect("encoded"));
+        })
+    })
+}
+
+/// Those bytes back into a tree through `decode`.
+pub(crate) fn wire_keys_tree(_: &Libraries) -> Run {
+    let bytes = wire::to_bytes(&keys()).expect("encoded");
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(wire::decode(black_box(&bytes)).expect("decoded"));
+        })
+    })
+}
+
+/// The same through the streamed reader, `decode_as::<Value>`.
+pub(crate) fn wire_keys_walk(_: &Libraries) -> Run {
+    let bytes = wire::to_bytes(&keys()).expect("encoded");
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(wire::decode_as::<Value>(black_box(&bytes)).expect("read"));
+        })
+    })
+}
