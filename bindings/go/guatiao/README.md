@@ -47,7 +47,8 @@ application that carries it.
   `civil.DateTime` and `civil.Span` to the nanosecond, instants as
   `time.Time`, read and written by the library itself.
 - **Values on the wire** — `ref.ToWire()` and `guatiao.FromWire(data)`
-  carry a tree exactly as bytes, and `WireAnnounce` announces a schema on
+  carry a tree exactly as bytes, `guatiao.MarshalWire` and
+  `UnmarshalWire` write and read Go data as those bytes with no tree, and `WireAnnounce` announces a schema on
   a channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
@@ -240,7 +241,7 @@ later.String() // "2026-02-28"
 
 | Package | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library`; `Surface` and the rest of what a package over another guatiao library builds on |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `FromWire`, `MarshalWire`, `UnmarshalWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library`; `Surface` and the rest of what a package over another guatiao library builds on |
 | `guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants, `Normalize` |
 | `guatiao/cmd/guatiao-kind` | writes a kind package's glue from its C header, run by `go generate` |
 

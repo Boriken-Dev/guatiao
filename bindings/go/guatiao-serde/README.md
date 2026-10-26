@@ -29,6 +29,9 @@ module for the value model and its errors.
 - **Any guatiao value** — what `Parse` returns is an ordinary
   `*guatiao.Value`, and `Emit` takes any Value, view or plain data,
   whichever library built it.
+- **Or Go data, with no value in between** — `Unmarshal` reads a document
+  straight into a struct, a map or `any`, and `Emit` writes Go data the
+  same way; the document crosses once.
 
 ## Installation
 
@@ -67,6 +70,12 @@ defer v.Close()
 v.Key("port").IntOr(0) // 5900
 
 text, err := serde.Emit(v, serde.YAML, serde.Pretty())
+
+var cfg struct {
+	Port uint16   `guatiao:"port"`
+	Tags []string `guatiao:"tags"`
+}
+err = serde.Unmarshal(`{"port": 5900, "tags": ["a"]}`, serde.JSON, &cfg)
 ```
 
 ## Known limits
@@ -82,6 +91,7 @@ text, err := serde.Emit(v, serde.YAML, serde.Pretty())
 | Name | Purpose |
 | --- | --- |
 | `Parse(text, format, opts...)` | a document as a `*guatiao.Value` |
+| `Unmarshal(text, format, dst, opts...)` | a document into Go data, no Value built |
 | `Emit(x, format, opts...)` | a Value, view or plain data as text |
 | `JSON`, `TOML`, `YAML` | the formats |
 | `Pretty()`, `How(flags)`, `InAllocator(alloc)` | the options |

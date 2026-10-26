@@ -17,6 +17,7 @@ typedef guatiao_status (*gs_parse_fn)(guatiao_str, uint32_t, const guatiao_alloc
                                       guatiao_parse_error *);
 typedef guatiao_status (*gs_emit_fn)(const guatiao_value *, uint32_t, const guatiao_alloc *, guatiao_value *);
 typedef guatiao_status (*gs_free_fn)(guatiao_value *);
+typedef guatiao_status (*gs_from_wire_fn)(guatiao_bytes, uint32_t, const guatiao_alloc *, guatiao_value *);
 
 static guatiao_status gs_parse(void *fn, guatiao_str text, uint32_t how, const guatiao_alloc *alloc,
                                guatiao_value *out, guatiao_parse_error *err) {
@@ -29,6 +30,22 @@ static guatiao_status gs_emit(void *fn, const guatiao_value *v, uint32_t how, co
 }
 
 static guatiao_status gs_free(void *fn, guatiao_value *v) { return ((gs_free_fn)fn)(v); }
+
+static guatiao_status gs_from_wire(void *fn, const uint8_t *ptr, size_t len, uint32_t how, const guatiao_alloc *alloc,
+                                   guatiao_value *out) {
+  guatiao_bytes b = {ptr, len};
+  return ((gs_from_wire_fn)fn)(b, how, alloc, out);
+}
+
+// The bytes of a BYTES node; empty for any other.
+static guatiao_bytes gs_bytes(const guatiao_value *v) {
+  guatiao_bytes b = {0};
+  if (v->tag == GUATIAO_BYTES) {
+    b.ptr = v->payload.bytes.ptr;
+    b.len = v->payload.bytes.len;
+  }
+  return b;
+}
 
 // The text of a STRING node; empty for any other.
 static guatiao_str gs_text(const guatiao_value *v) {
@@ -111,4 +128,22 @@ func textOf(p unsafe.Pointer) (string, bool) {
 	}
 	s := C.gs_text(node(p))
 	return C.GoStringN((*C.char)(unsafe.Pointer(s.ptr)), C.int(s.len)), true
+}
+
+func fromWire(fn unsafe.Pointer, data []byte, how uint32, a, out unsafe.Pointer) uint32 {
+	var ptr *C.uint8_t
+	if len(data) > 0 {
+		ptr = (*C.uint8_t)(unsafe.Pointer(&data[0]))
+	}
+	return uint32(C.gs_from_wire(fn, ptr, C.size_t(len(data)), C.uint32_t(how), alloc(a), node(out)))
+}
+
+// bytesOf is the bytes of the BYTES node at p, in place: valid until it is
+// freed.
+func bytesOf(p unsafe.Pointer) []byte {
+	b := C.gs_bytes(node(p))
+	if b.len == 0 {
+		return nil
+	}
+	return unsafe.Slice((*byte)(unsafe.Pointer(b.ptr)), int(b.len))
 }

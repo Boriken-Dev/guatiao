@@ -37,15 +37,19 @@ const (
 )
 
 type spec struct {
-	parse, emit string
-	pretty      string
-	feature     string
+	parse, emit      string
+	pretty           string
+	toWire, fromWire string
+	feature          string
 }
 
 var specs = map[Format]spec{
-	JSON: {parse: "guatiao_json_parse_ex", emit: "guatiao_json_emit", pretty: "guatiao_json_emit_pretty"},
-	TOML: {parse: "guatiao_toml_parse_ex", emit: "guatiao_toml_emit", feature: "toml"},
-	YAML: {parse: "guatiao_yaml_parse_ex", emit: "guatiao_yaml_emit", feature: "yaml"},
+	JSON: {parse: "guatiao_json_parse_ex", emit: "guatiao_json_emit", pretty: "guatiao_json_emit_pretty",
+		toWire: "guatiao_json_to_wire", fromWire: "guatiao_json_from_wire"},
+	TOML: {parse: "guatiao_toml_parse_ex", emit: "guatiao_toml_emit",
+		toWire: "guatiao_toml_to_wire", fromWire: "guatiao_toml_from_wire", feature: "toml"},
+	YAML: {parse: "guatiao_yaml_parse_ex", emit: "guatiao_yaml_emit",
+		toWire: "guatiao_yaml_to_wire", fromWire: "guatiao_yaml_from_wire", feature: "yaml"},
 }
 
 var names = map[uint32]Format{formatJSON: JSON, formatTOML: TOML, formatYAML: YAML}
@@ -61,7 +65,7 @@ var library = &guatiao.Surface{
 func exports() map[string]string {
 	all := map[string]string{"guatiao_value_free": ""}
 	for _, s := range specs {
-		for _, name := range []string{s.parse, s.emit, s.pretty} {
+		for _, name := range []string{s.parse, s.emit, s.pretty, s.toWire, s.fromWire} {
 			if name != "" {
 				all[name] = s.feature
 			}
@@ -125,6 +129,19 @@ func open(format Format, symbol func(spec) string) (s spec, fn, free unsafe.Poin
 	return s, fn, free, nil
 }
 
+// parseError is the error for a refused parse: a *ParseError for a
+// document that does not parse, any other status as its own error.
+func parseError(st uint32, failed failure, format Format) error {
+	if st == badValue {
+		f := names[failed.format]
+		if f == "" {
+			f = format
+		}
+		return &ParseError{Format: f, Line: int(failed.line), Column: int(failed.column), Reason: failed.message}
+	}
+	return guatiao.StatusError(st, failed.message)
+}
+
 // Parse reads a document into a new Value to close.
 func Parse(text string, format Format, opts ...Option) (*guatiao.Value, error) {
 	var o options
@@ -143,20 +160,38 @@ func Parse(text string, format Format, opts ...Option) (*guatiao.Value, error) {
 	failed, st := parse(fn, free, text, o.how, alloc, out)
 	if st != statusOK {
 		release(free, out)
-		if st == badValue {
-			f := names[failed.format]
-			if f == "" {
-				f = format
-			}
-			return nil, &ParseError{Format: f, Line: int(failed.line), Column: int(failed.column), Reason: failed.message}
-		}
-		return nil, guatiao.StatusError(st, failed.message)
+		return nil, parseError(st, failed, format)
 	}
 	return guatiao.Adopt(out, alloc), nil
 }
 
+// Unmarshal reads a document straight into what dst points at, as Parse
+// then Decode would, with no Value built: the document crosses once, as
+// wire bytes, and is read in Go (guatiao.UnmarshalWire). Errors as Parse
+// and Decode.
+func Unmarshal(text string, format Format, dst any, opts ...Option) error {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	_, fn, free, err := open(format, func(s spec) string { return s.toWire })
+	if err != nil {
+		return err
+	}
+	out := calloc()
+	defer release(free, out)
+	failed, st := parse(fn, free, text, o.how, library.Alloc(), out)
+	if st != statusOK {
+		return parseError(st, failed, format)
+	}
+	// Read in place: nothing read keeps a reference into the bytes.
+	return guatiao.UnmarshalWire(bytesOf(out), dst)
+}
+
 // Emit writes x (a Value, a view, or anything guatiao.NewValue takes) as
-// a document.
+// a document. Go data is written as wire bytes in Go
+// (guatiao.MarshalWire) and crosses once, with no tree built; a Value or
+// a view is written as it is.
 func Emit(x any, format Format, opts ...Option) (string, error) {
 	var o options
 	for _, opt := range opts {
@@ -175,6 +210,9 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 	if o.pretty && s.pretty == "" {
 		how |= pretty
 	}
+	if _, isValue, _ := guatiao.NodeOf(x); !isValue {
+		return emitData(x, s, how|prettyIf(o.pretty))
+	}
 	var text string
 	err = guatiao.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
 		out := calloc()
@@ -186,6 +224,36 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 		return nil
 	})
 	return text, err
+}
+
+func prettyIf(on bool) uint32 {
+	if on {
+		return pretty
+	}
+	return 0
+}
+
+// emitData writes Go data through its wire bytes.
+func emitData(x any, s spec, how uint32) (string, error) {
+	data, err := guatiao.MarshalWire(x)
+	if err != nil {
+		return "", err
+	}
+	fn, err := library.Symbol(s.fromWire)
+	if err != nil {
+		return "", err
+	}
+	free, err := library.Symbol("guatiao_value_free")
+	if err != nil {
+		return "", err
+	}
+	out := calloc()
+	defer release(free, out)
+	if err := guatiao.StatusError(fromWire(fn, data, how, library.Alloc(), out), ""); err != nil {
+		return "", err
+	}
+	text, _ := textOf(out)
+	return text, nil
 }
 
 // UseLibrary names the guatiao_serde library to load instead of looking for
