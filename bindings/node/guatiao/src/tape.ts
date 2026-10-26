@@ -35,6 +35,13 @@ export const MAX_DEPTH = 128;
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 const ENCODER = new TextEncoder();
 
+/**
+ * Node 22's `encodeInto` encodes a unit at a time: on long ASCII it is
+ * about three times slower than measuring the text's UTF-8 length and
+ * copying it as Latin-1. From Node 24 it is the faster of the two.
+ */
+const SLOW_ENCODE_INTO = Number(process.versions.node.split('.')[0]) < 24;
+
 const cutShort = (): BadValue => new BadValue(Status.ERR_BAD_VALUE, 'the bytes end inside a node');
 const tooDeep = (): BadValue => new BadValue(Status.ERR_BAD_VALUE, `nested deeper than ${MAX_DEPTH}`);
 
@@ -196,9 +203,9 @@ class Out {
 
   room(n: number): void {
     if (this.len + n <= this.buf.length) return;
-    let size = this.buf.length * 2;
-    while (size < this.len + n) size *= 2;
-    const grown = new Uint8Array(size);
+    // Doubled, or what this write needs when that is more: one large
+    // string is not rounded up to a power of two.
+    const grown = new Uint8Array(Math.max(this.buf.length * 2, this.len + n));
     grown.set(this.buf.subarray(0, this.len));
     this.buf = grown;
   }
@@ -234,6 +241,14 @@ class Out {
       }
       if (i === n) return;
       this.len = mark;
+    } else if (SLOW_ENCODE_INTO && text.charCodeAt(0) < 0x80 && Buffer.byteLength(text, 'utf8') === n) {
+      // Every unit is ASCII (a lone surrogate counts three bytes), so the
+      // text's Latin-1 bytes are its UTF-8.
+      this.room(10 + n);
+      this.leb(n);
+      Buffer.from(this.buf.buffer, this.buf.byteOffset).write(text, this.len, n, 'latin1');
+      this.len += n;
+      return;
     }
     if (!text.isWellFormed()) throw new TypeError('the text holds a lone surrogate, which UTF-8 cannot carry');
     // UTF-8 takes at least one byte and at most three per UTF-16 unit:

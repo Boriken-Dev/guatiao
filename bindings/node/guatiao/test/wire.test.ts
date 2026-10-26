@@ -173,7 +173,12 @@ describe('wire bytes read and written in JavaScript', () => {
   it('writes text of every length as the tree does', () => {
     // 43 three-byte characters are 129 bytes: a two-byte length after a
     // guess of one.
-    for (const text of ['', 'a', 'é', '€'.repeat(42), '€'.repeat(43), 'x'.repeat(63), 'x'.repeat(64), 'ü'.repeat(70_000), '😀'.repeat(40)]) {
+    // Long text that starts in ASCII may be copied as Latin-1: whatever
+    // follows (a Latin-1 letter, U+0100 whose low byte is ASCII, an astral
+    // character) must still be written as UTF-8.
+    const ascii = 'x'.repeat(100);
+    const long = [ascii, `${ascii}é`, `${ascii}Āx`, `${ascii}😀`, 'y'.repeat(1 << 20)];
+    for (const text of ['', 'a', 'é', '€'.repeat(42), '€'.repeat(43), 'x'.repeat(63), 'x'.repeat(64), 'ü'.repeat(70_000), '😀'.repeat(40), ...long]) {
       using value = new Value({ [text]: text });
       const data = jsToWire({ [text]: text });
       expect(toHex(data)).toBe(toHex(value.toWire()));
@@ -196,6 +201,7 @@ describe('wire bytes read and written in JavaScript', () => {
       [cyclic, TypeError],
       ['\ud800', TypeError],
       [{ '\udc00': 1 }, TypeError],
+      [`${'x'.repeat(100)}\ud800`, TypeError],
     ] as const) {
       expect(() => new Value(bad)).toThrow(error);
       expect(() => jsToWire(bad)).toThrow(error);
