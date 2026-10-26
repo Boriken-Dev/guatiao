@@ -335,7 +335,10 @@ final class RemoteLink {
   final _running = <int, bool>{};
   int _runningTop = 0;
   int _inFlight = 0;
-  final _permits = Queue<Completer<void>>();
+
+  /// Calls waiting for a place under the peer's `max_calls`, each with
+  /// the timer that gives it up.
+  final _permits = Queue<(Completer<void>, Timer?)>();
   final _exports = <int, _Export>{};
   final _kinds = <String, RemoteKind>{};
 
@@ -595,7 +598,8 @@ final class RemoteLink {
     }
     _pending.clear();
     _exports.clear();
-    for (final waiting in _permits) {
+    for (final (waiting, timer) in _permits) {
+      timer?.cancel();
       waiting.completeError(Gone(Status.gone.code, why));
     }
     _permits.clear();
@@ -704,19 +708,37 @@ final class RemoteLink {
         : 0;
   }
 
-  Future<void> _permit() async {
+  /// A place under the peer's `max_calls`, waiting at most [within]
+  /// (`null`: as long as the link lives), else [Busy].
+  Future<void> _permit(Duration? within) {
     if (_inFlight < _theirCalls) {
       _inFlight++;
-      return;
+      return Future.value();
     }
     final waiting = Completer<void>();
-    _permits.add(waiting);
-    await waiting.future;
+    late final (Completer<void>, Timer?) entry;
+    final timer = within == null
+        ? null
+        : Timer(within, () {
+            if (_permits.remove(entry)) {
+              waiting.completeError(
+                Busy(
+                  Status.busy.code,
+                  "the peer's limit of calls in flight was not freed in time",
+                ),
+              );
+            }
+          });
+    entry = (waiting, timer);
+    _permits.add(entry);
+    return waiting.future;
   }
 
   void _unpermit() {
     if (_permits.isNotEmpty) {
-      _permits.removeFirst().complete();
+      final (waiting, timer) = _permits.removeFirst();
+      timer?.cancel();
+      waiting.complete();
     } else {
       _inFlight--;
     }
@@ -729,6 +751,7 @@ final class RemoteLink {
     Frame Function(int id) build,
     RemoteSlot? slot, {
     void Function()? unsent,
+    Duration? within,
   }) async {
     final Uint8List body;
     final int id;
@@ -748,7 +771,7 @@ final class RemoteLink {
     }
     final pending = _Pending(slot);
     _pending[id] = pending;
-    final timeout = _timeout;
+    final timeout = within ?? _timeout;
     if (timeout != null) {
       pending.timer = Timer(timeout, () {
         if (_pending.remove(id) == null) return;
@@ -822,7 +845,15 @@ final class RemoteLink {
       );
     }
     final parent = _parent();
-    if (parent == 0) await _permit();
+    // One bound for the whole call: waiting for a place, then the answer.
+    final started = Stopwatch()..start();
+    if (parent == 0) await _permit(_timeout);
+    final timeout = _timeout;
+    final left = timeout == null
+        ? null
+        : timeout - started.elapsed < Duration.zero
+        ? Duration.zero
+        : timeout - started.elapsed;
     final lent = <int>[];
     final handed = <int>[];
     final givenBack = <RemoteObject>[];
@@ -844,6 +875,7 @@ final class RemoteLink {
             sent = false;
             handed.forEach(_exports.remove);
           },
+          within: left,
         );
       } finally {
         // Handed back to its owner, who keeps it: nothing to release.
@@ -919,13 +951,55 @@ final class RemoteLink {
   Object? _answerOf(RemoteSlot slot, Object? answer) {
     if (answer is! ObjectRef) return answer;
     if (answer.receivers) {
-      final own = _exports.remove(answer.id);
-      if (own == null) {
-        throw Gone(Status.gone.code, 'the object has been let go');
-      }
-      return own.served;
+      return _takeOwn(answer.id).served;
     }
     return _handle(_kind(slot.answer?.kind), answer.id, lent: false);
+  }
+
+  /// An object of this side's the peer hands back as itself. One lent
+  /// for a call stays lent: it cannot be handed over.
+  _Export _takeOwn(int id) {
+    final own = _exports[id];
+    if (own == null) {
+      throw Gone(Status.gone.code, 'the object has been let go');
+    }
+    if (own.lent) {
+      throw WrongKind(
+        Status.wrongKind.code,
+        'an object lent for a call cannot be handed over',
+      );
+    }
+    return _exports.remove(id)!;
+  }
+
+  /// Lets go one object the peer handed over in a call that will not take
+  /// it: the peer's is released, this side's own given back dropped.
+  void _letGo(ObjectRef ref) {
+    if (!ref.receivers) {
+      _send(Release(ref.id));
+    } else if (_exports[ref.id]?.lent == false) {
+      _exports.remove(ref.id);
+    }
+  }
+
+  /// Lets go what a call of the peer's handed over when it is refused
+  /// before running; a lent object ends with the call on the peer's side.
+  /// A call on an object this side does not hold, or a slot past its
+  /// kind's, cannot be read: what it handed stays until the link ends.
+  void _letGoHanded(Call c) {
+    final export = c.target.object ? _exports[c.target.id] : null;
+    if (export == null || c.slot >= export.kind.slots.length) return;
+    final slot = export.kind.slots[c.slot];
+    final List<Object?> args;
+    try {
+      args = decodeArgs(slot, c.args);
+    } on MalformedFrame {
+      return;
+    }
+    for (var i = 0; i < args.length; i++) {
+      final ref = args[i];
+      if (ref is ObjectRef && slot.args[i].pass != 'lent') _letGo(ref);
+    }
   }
 
   RemoteObject _handle(RemoteKind kind, int id, {required bool lent}) {
@@ -1000,12 +1074,7 @@ final class RemoteLink {
     if (reply.status != 0 || slot.answer?.type != 'object') return;
     try {
       final answer = decodeAnswer(slot, reply.body).answer;
-      if (answer is! ObjectRef) return;
-      if (answer.receivers) {
-        _exports.remove(answer.id);
-      } else {
-        _send(Release(answer.id));
-      }
+      if (answer is ObjectRef) _letGo(answer);
     } on MalformedFrame {
       // Nobody waits for it.
     }
@@ -1016,11 +1085,13 @@ final class RemoteLink {
 
   void _inbound(Call c) {
     if (c.parent != 0 && !_pending.containsKey(c.parent)) {
+      _letGoHanded(c);
       _refuse(c.call, Status.gone, 'the call it was made during has returned');
       return;
     }
     final top = c.parent == 0;
     if (top && _runningTop >= _maxCalls) {
+      _letGoHanded(c);
       _refuse(
         c.call,
         Status.busy,
@@ -1058,6 +1129,7 @@ final class RemoteLink {
     final slot = export.kind.slots[c.slot];
     final handler = export.served.slots[slot.name];
     if (handler == null) {
+      _letGoHanded(c);
       _refuse(
         c.call,
         Status.unsupported,
@@ -1066,35 +1138,53 @@ final class RemoteLink {
       return;
     }
     final List<Object?> args;
-    final lentHandles = <RemoteObject>[];
     try {
       args = decodeArgs(slot, c.args);
-      for (var i = 0; i < args.length; i++) {
-        final ref = args[i];
-        if (ref is! ObjectRef) continue;
-        final a = slot.args[i];
+    } on MalformedFrame catch (e) {
+      _refuse(c.call, Status.badValue, e.message);
+      return;
+    }
+    // Every object handed over is taken before a refusal is answered, so
+    // none is left held for a call that never ran.
+    final lentHandles = <RemoteObject>[];
+    final takenHandles = <RemoteObject>[];
+    GuatiaoException? refused;
+    for (var i = 0; i < args.length; i++) {
+      final ref = args[i];
+      if (ref is! ObjectRef) continue;
+      final lent = slot.args[i].pass == 'lent';
+      if (refused != null) {
+        if (!lent) _letGo(ref);
+        continue;
+      }
+      try {
         if (ref.receivers) {
-          final own = a.pass == 'lent'
-              ? _exports[ref.id]
-              : _exports.remove(ref.id);
+          final own = lent ? _exports[ref.id] : _takeOwn(ref.id);
           if (own == null) {
             throw Gone(Status.gone.code, 'the object has been let go');
           }
           args[i] = own.served;
         } else {
-          final handle = _handle(_kind(a.kind), ref.id, lent: a.pass == 'lent');
-          if (a.pass == 'lent') lentHandles.add(handle);
+          final handle = _handle(_kind(slot.args[i].kind), ref.id, lent: lent);
+          (lent ? lentHandles : takenHandles).add(handle);
           args[i] = handle;
         }
+      } on GuatiaoException catch (e) {
+        refused = e;
+        if (!lent && !ref.receivers) _send(Release(ref.id));
       }
-    } on MalformedFrame catch (e) {
-      _refuse(c.call, Status.badValue, e.message);
-      return;
-    } on GuatiaoException catch (e) {
+    }
+    if (refused != null) {
+      for (final h in lentHandles) {
+        h._gone = true;
+      }
+      for (final h in takenHandles) {
+        h.release();
+      }
       _refuse(
         c.call,
-        Status.fromCode(e.code) ?? Status.internalError,
-        e.message,
+        Status.fromCode(refused.code) ?? Status.internalError,
+        refused.message,
       );
       return;
     }

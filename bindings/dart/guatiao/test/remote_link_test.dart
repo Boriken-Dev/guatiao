@@ -13,7 +13,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:guatiao/guatiao.dart'
-    show BadValue, Gone, NotFound, Unsupported, WrongKind;
+    show BadValue, Busy, Gone, NotFound, Unsupported, WrongKind;
 import 'package:guatiao/remote.dart';
 import 'package:guatiao/src/remote/args.dart';
 import 'package:guatiao/src/remote/codec.dart';
@@ -73,7 +73,8 @@ final class _Pipe implements RemoteChannel {
 }
 
 /// Kinds of the suite's own: `maker` hands the peer an `echo` this side
-/// serves, or two listeners.
+/// serves, or two listeners, or lends it an `echo` and is answered one;
+/// an `echo` takes listeners handed over.
 const List<Object?> _ownKinds = [
   {
     'name': 'maker',
@@ -92,6 +93,13 @@ const List<Object?> _ownKinds = [
           {'name': 'b', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
         ],
       },
+      {
+        'name': 'wrap',
+        'args': [
+          {'name': 'e', 'type': 'object', 'kind': 'echo', 'pass': 'lent'},
+        ],
+        'answer': {'type': 'object', 'kind': 'echo'},
+      },
     ],
   },
   {
@@ -109,16 +117,31 @@ const List<Object?> _ownKinds = [
         ],
         'answer': {'type': 'i64'},
       },
+      {
+        'name': 'take',
+        'args': [
+          {'name': 'l', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
+        ],
+      },
+      {
+        'name': 'take2',
+        'args': [
+          {'name': 'a', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
+          {'name': 'b', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
+        ],
+      },
     ],
   },
 ];
 
 /// A link at the local level over a [_Pipe], its catalog listed: one
-/// provider whose greeter table fills only `greet` and `start`, and whose
-/// `maker` table fills both its slots. [welcome] is what the peer offers.
+/// provider whose greeter table fills only `greet`, `start` and
+/// `greet_into`, and whose `maker` table fills every slot. [welcome] is what
+/// the peer offers, [maxCalls] how many of its calls this side runs.
 Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
   Duration? timeout,
   Map<String, Object?> welcome = const {},
+  int maxCalls = 64,
 }) async {
   final kinds =
       jsonDecode(
@@ -135,6 +158,7 @@ Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
     pipe,
     trust: RemoteTrust.local,
     timeout: timeout,
+    maxCalls: maxCalls,
   );
   expect(await pipe.next(), isA<Hello>());
   pipe.reply(Welcome(Uint8List(16), Uint8List(0), welcome));
@@ -156,12 +180,12 @@ Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
               {
                 'kind': 'greeter',
                 'table': 1,
-                'slots': ['greet', 'start'],
+                'slots': ['greet', 'start', 'greet_into'],
               },
               {
                 'kind': 'maker',
                 'table': 2,
-                'slots': ['make', 'pair'],
+                'slots': ['make', 'pair', 'wrap'],
               },
             ],
           },
@@ -171,6 +195,31 @@ Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
   };
   pipe.reply(Reply(ask.call, 0, (FrameWriter()..value(catalog)).done()));
   return (link, pipe, (await listing).providers.single);
+}
+
+/// Hands the peer [echo] through `maker.make`; the id the peer holds it by.
+Future<int> _handEcho(_Pipe pipe, RemoteProvider provider, Served echo) async {
+  final maker = provider.table('maker')!;
+  final making = maker.call('make', [echo]);
+  final make = await pipe.next() as Call;
+  final ref =
+      decodeArgs(maker.kind.slot('make'), make.args).single! as ObjectRef;
+  pipe.reply(Reply(make.call, 0, Uint8List(0)));
+  await making;
+  return ref.id;
+}
+
+/// The peer's `echo.take` (slot 2) or `echo.take2` (slot 3) on [echo],
+/// handing [refs] over.
+Call _take(int call, int parent, int echo, List<ObjectRef> refs) {
+  final slot = RemoteKind.fromDescription(_ownKinds[1]).slots[refs.length + 1];
+  return Call(
+    call,
+    parent,
+    Target.object(echo),
+    slot.index,
+    encodeArgs(slot, refs),
+  );
 }
 
 void main() {
@@ -643,6 +692,178 @@ void main() {
       expect(await link.done, contains('malformed'));
       expect(link.alive, isFalse);
     });
+
+    test(
+      'a call refused before it runs lets go of what it handed over',
+      () async {
+        final (link, pipe, provider) = await _scripted(maxCalls: 1);
+        final never = Completer<Object?>();
+        final echo = await _handEcho(
+          pipe,
+          provider,
+          Served('echo', {'big': (_) => never.future, 'take': (_) => null}),
+        );
+        // Two listeners of this side's the peer holds.
+        final maker = provider.table('maker')!;
+        final pairing = maker.call('pair', [
+          Served('listener', {}),
+          Served('listener', {}),
+        ]);
+        final pair = await pipe.next() as Call;
+        final mine = decodeArgs(
+          maker.kind.slot('pair'),
+          pair.args,
+        ).cast<ObjectRef>();
+        pipe.reply(Reply(pair.call, 0, Uint8List(0)));
+        await pairing;
+        expect(link.objectsHeld, 3);
+
+        // Made during a call that has returned.
+        pipe.reply(_take(70, 4, echo, [const ObjectRef(5)]));
+        expect((await pipe.next() as Release).object, 5);
+        expect([(await pipe.next() as Reply).call], [70]);
+        // A slot the echo does not fill.
+        pipe.reply(
+          _take(71, 0, echo, [const ObjectRef(6), const ObjectRef(7)]),
+        );
+        expect((await pipe.next() as Release).object, 6);
+        expect((await pipe.next() as Release).object, 7);
+        final unfilled = await pipe.next() as Reply;
+        expect([unfilled.call, unfilled.status], [71, 13]);
+        // Past this side's max_calls: the one place runs `big`, forever.
+        pipe.reply(Call(72, 0, Target.object(echo), 0, Uint8List(0)));
+        pipe.reply(_take(73, 0, echo, [const ObjectRef(8)]));
+        expect((await pipe.next() as Release).object, 8);
+        final busy = await pipe.next() as Reply;
+        expect([busy.call, busy.status], [73, 14]);
+        // This side's own, given back in a refused call, is dropped.
+        pipe.reply(
+          _take(74, 4, echo, [ObjectRef(mine[0].id, receivers: true)]),
+        );
+        expect((await pipe.next() as Reply).call, 74);
+        expect(link.objectsHeld, 2);
+        never.complete(null);
+        await link.close();
+      },
+    );
+
+    test(
+      'a call refused while its arguments are received lets each go',
+      () async {
+        final (link, pipe, provider) = await _scripted();
+        final echo = await _handEcho(
+          pipe,
+          provider,
+          Served('echo', {'take2': (_) => null}),
+        );
+        // The first is no object of this side's; the second is the peer's.
+        pipe.reply(
+          _take(80, 0, echo, [
+            const ObjectRef(99, receivers: true),
+            const ObjectRef(9),
+          ]),
+        );
+        expect((await pipe.next() as Release).object, 9);
+        final refused = await pipe.next() as Reply;
+        expect([refused.call, refused.status], [80, 12]);
+        await link.close();
+      },
+    );
+
+    test('an object lent for a call cannot come back handed over', () async {
+      final (link, pipe, provider) = await _scripted();
+      final echo = await _handEcho(
+        pipe,
+        provider,
+        Served('echo', {'take': (_) => null}),
+      );
+      final table = provider.table('greeter')!;
+      final heard = <Object?>[];
+      final listener = Served('listener', {
+        'heard': (args) => heard.add(args[0]),
+      });
+      final greeting = table.call('greet_into', ['x', listener]);
+      final greet = await pipe.next() as Call;
+      final lent =
+          decodeArgs(table.kind.slot('greet_into'), greet.args)[1]!
+              as ObjectRef;
+      pipe.reply(
+        _take(90, greet.call, echo, [ObjectRef(lent.id, receivers: true)]),
+      );
+      final refused = await pipe.next() as Reply;
+      expect([refused.call, refused.status], [90, 9]);
+      // Still lent: the call it was lent for can call it.
+      pipe.reply(
+        Call(
+          91,
+          greet.call,
+          Target.object(lent.id),
+          0,
+          (FrameWriter()..text('still')).done(),
+        ),
+      );
+      final called = await pipe.next() as Reply;
+      expect([called.call, called.status], [91, 0]);
+      expect(heard, ['still']);
+      pipe.reply(Reply(greet.call, 0, Uint8List(0)));
+      await greeting;
+
+      // Nor come back as an answer.
+      final maker = provider.table('maker')!;
+      final wrapSlot = maker.kind.slot('wrap');
+      final wrapping = maker.call('wrap', [Served('echo', {})]);
+      final wrap = await pipe.next() as Call;
+      final mine = decodeArgs(wrapSlot, wrap.args).single! as ObjectRef;
+      pipe.reply(
+        Reply(
+          wrap.call,
+          0,
+          encodeAnswer(wrapSlot, ObjectRef(mine.id, receivers: true), [null]),
+        ),
+      );
+      await expectLater(wrapping, throwsA(isA<WrongKind>()));
+      await link.close();
+    });
+
+    test(
+      "a call waiting for a place under the peer's max_calls gives up Busy at its timeout",
+      () async {
+        final (link, pipe, provider) = await _scripted(
+          timeout: const Duration(milliseconds: 300),
+          welcome: {'max_calls': 1},
+        );
+        final table = provider.table('greeter')!;
+        final greet = table.kind.slot('greet');
+        final first = expectLater(
+          table.call('greet', ['a']),
+          throwsA(isA<Gone>()),
+        );
+        final a = await pipe.next() as Call;
+        // Both wait for the one place the first holds.
+        final second = table.call('greet', ['b']);
+        final third = expectLater(
+          table.call('greet', ['c']),
+          throwsA(isA<Busy>()),
+        );
+        // The first times out and its place goes to the second; the third
+        // has waited its whole timeout by then.
+        expect((await pipe.next() as Cancel).call, a.call);
+        await first;
+        final b = await pipe.next() as Call;
+        expect(decodeArgs(greet, b.args), ['b']);
+        await third;
+        pipe.reply(Reply(b.call, 0, encodeAnswer(greet, {'g': 1}, [null])));
+        expect(await second, {'g': 1});
+        final pinged = expectLater(link.ping(), throwsA(isA<Gone>()));
+        expect(
+          await pipe.next(),
+          isA<Ping>(),
+          reason: 'the third was never sent',
+        );
+        await link.close();
+        await pinged;
+      },
+    );
 
     test("a call made during a call that returned is refused Gone", () async {
       final (link, pipe, _) = await _scripted();
