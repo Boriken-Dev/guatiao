@@ -300,7 +300,7 @@ final class FrameReader {
     final start = at;
     final raw = bytes();
     try {
-      return utf8.decode(raw);
+      return utf8Text(raw);
     } on FormatException {
       throw MalformedFrame(
         FrameFault.notUtf8,
@@ -310,12 +310,13 @@ final class FrameReader {
     }
   }
 
-  /// A value in the wire encoding, read into plain Dart.
+  /// A value in the wire encoding, read into plain Dart as strictly as
+  /// the encoding states: a peer wrote it.
   Object? value() {
     final start = at;
     final raw = bytes();
     try {
-      return wireToDart(raw);
+      return wireToDartStrict(raw);
     } on BadValue catch (e) {
       throw MalformedFrame(
         FrameFault.wire,
