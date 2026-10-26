@@ -9,9 +9,10 @@
 //! guatiao-remote-bench run URL [options]     five metrics against it, one JSON line
 //! ```
 //!
-//! URL is `tcp://`, `local://`, `shm://` or, built with the `rdma`
-//! feature, `rdma://` (the address of its TCP set-up). Options:
-//! `--key TEXT` (tcp, rdma),
+//! URL is `tcp://`, `tls://`, `local://`, `shm://` or, built with the
+//! `rdma` feature, `rdma://` (the address of its TCP set-up). Options:
+//! `--key TEXT` (tcp, rdma), `--identity PATH` (tls: both ends present
+//! the identity in this file, made when absent, and each pins it),
 //! `--mss N` (tcp, Unix: caps the segment size, as on a path without
 //! jumbo frames), `--spin MICROSECONDS` (how long a waiting thread polls before it
 //! sleeps), `--label TEXT`, `--seconds N`, `--out FILE` (appends the line).
@@ -116,6 +117,7 @@ guatiao::local_providers!(id = "bench", version = "1.0.0", providers = [Bench]);
 struct Args {
     url: String,
     key: Option<String>,
+    identity: Option<PathBuf>,
     mss: Option<u32>,
     spin: Option<u64>,
     label: String,
@@ -130,6 +132,7 @@ fn parse() -> Result<(String, Args), String> {
     let mut a = Args {
         url,
         key: None,
+        identity: None,
         mss: None,
         spin: None,
         label: String::new(),
@@ -140,6 +143,7 @@ fn parse() -> Result<(String, Args), String> {
         let v = it.next().ok_or(format!("{flag} needs a value"))?;
         match flag.as_str() {
             "--key" => a.key = Some(v),
+            "--identity" => a.identity = Some(v.into()),
             "--mss" => a.mss = Some(v.parse().map_err(|_| "--mss")?),
             "--spin" => a.spin = Some(v.parse().map_err(|_| "--spin")?),
             "--label" => a.label = v,
@@ -159,6 +163,7 @@ fn split(url: &str) -> Result<(&str, &str), String> {
 fn options(scheme: &str, a: &Args) -> LinkOptions {
     let trust = match scheme {
         "tcp" | "rdma" => Trust::Trusted,
+        "tls" => Trust::Secure,
         _ => Trust::Local,
     };
     let mut o = LinkOptions::new(trust);
@@ -196,6 +201,20 @@ fn tcp_listener(address: &str, mss: Option<u32>) -> io::Result<TcpListener> {
     s.bind(&addr.into())?;
     s.listen(64)?;
     Ok(s.into())
+}
+
+/// The secure level's configuration: one identity at both ends, each
+/// pinning it.
+fn tls_config(a: &Args) -> Result<transport::tls::TlsConfig, String> {
+    use transport::tls::{Identity, TlsConfig};
+    let path = a
+        .identity
+        .as_deref()
+        .ok_or("tls:// needs --identity PATH")?;
+    let identity =
+        Identity::open_or_create(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let me = identity.fingerprint();
+    Ok(TlsConfig::new(identity).pins([me]))
 }
 
 /// An access control list permitting every source.
@@ -265,6 +284,19 @@ fn serve(a: &Args) -> Result<(), String> {
                 }
             }
         }
+        "tls" => {
+            use guatiao_source_remote::transport::tcp::Accepted;
+            let listener = tcp_listener(address, a.mss).map_err(|e| e.to_string())?;
+            let listen = transport::tls::TlsListen::from_listener(listener, &tls_config(a)?)
+                .map_err(|e| e.to_string())?;
+            loop {
+                match listen.accept() {
+                    Ok(Accepted::Connection(c)) => serve_one(Ok(c)),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("accept: {e}"),
+                }
+            }
+        }
         "local" => {
             let listen = transport::local::LocalListen::bind(address).map_err(|e| e.to_string())?;
             loop {
@@ -301,6 +333,10 @@ impl FrameRead for CountRead {
 
     fn set_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
         self.0.set_timeout(t)
+    }
+
+    fn peer_id(&self) -> Option<String> {
+        self.0.peer_id()
     }
 }
 
@@ -381,6 +417,9 @@ fn connector(scheme: &str, address: &str, a: &Args) -> Result<Box<dyn Connect>, 
             address: address.to_string(),
             mss: a.mss,
         }),
+        "tls" => Box::new(
+            transport::tls::TlsConnect::new(address, &tls_config(a)?).map_err(|e| e.to_string())?,
+        ),
         "local" => Box::new(transport::local::LocalConnect::new(address)),
         "shm" => Box::new(transport::shm::ShmConnect::new(address)),
         #[cfg(feature = "rdma")]
@@ -457,7 +496,7 @@ fn run(a: &Args) -> Result<(), String> {
 
     // 1, 4 and 5: latency, bytes and CPU of a small call.
     let n = 20_000u64;
-    let peer = (scheme == "tcp").then(|| address.to_string());
+    let peer = matches!(scheme, "tcp" | "tls").then(|| address.to_string());
     let wire0 = peer.as_deref().and_then(tcp_counters);
     let bytes0 = *tally.bytes.lock().unwrap();
     let (cpu0, server0) = (
