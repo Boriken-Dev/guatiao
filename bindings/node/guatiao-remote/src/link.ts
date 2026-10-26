@@ -38,6 +38,7 @@ import { RemoteKind, type RemoteSlot } from './described.js';
 import { BadValue, Gone, GuatiaoError, NotFound, Status, Unsupported, WrongKind, errorFor } from './errors.js';
 import * as proof from './proof.js';
 import { openWebSocket } from './socket.js';
+import { openWebTransport } from './webtransport.js';
 import { define, isPlainObject } from './wire.js';
 
 /** How far a link trusts its peer: the level both sides must name. */
@@ -58,7 +59,9 @@ export type RemoteTrust = (typeof RemoteTrust)[keyof typeof RemoteTrust];
  * (`ws://`: the key proved both ways, no encryption), `server-tls`
  * (`wss://`: TLS proves the server; this side proves the key when asked, or a
  * token) or `mutual-tls` (`wss://`: in a page, with a client certificate the
- * user installed in the browser).
+ * user installed in the browser). WebTransport (`https://`) runs any of the
+ * three: QUIC always encrypts, and the browser always checks the server's
+ * certificate.
  */
 export type RemoteSecurity = 'none' | 'server-tls' | 'mutual-tls';
 
@@ -367,8 +370,15 @@ class Inbox {
 
 /** How a link is set up. Times are in milliseconds. */
 export interface LinkOptions {
-  /** The link's security: `mutual-tls` unless told; `ws://` runs `none` alone, `wss://` the TLS modes. */
+  /** The link's security: `mutual-tls` unless told; `ws://` runs `none` alone, `wss://` the TLS modes, `https://` any. */
   security?: RemoteSecurity;
+  /**
+   * WebTransport (`https://`) only: the server certificates trusted, by
+   * fingerprint (`sha256:<hex>`, as guatiao-remote-server says its
+   * `certificate hashes`), passed to the browser as `serverCertificateHashes`.
+   * Without any, the browser trusts what it trusts for any page.
+   */
+  pins?: readonly string[];
   /** The pre-shared key: proved both ways with `none`, and at server TLS when the server asks for it. */
   key?: Uint8Array | string;
   /** What this side presents when the server requires a token (server TLS or mutual TLS). */
@@ -421,16 +431,39 @@ export class RemoteLink {
   }
 
   /**
-   * Connects to a server's WebSocket URL at `options.security`, mutual TLS
-   * unless told: `ws://host:port/path` runs `none` alone, `wss://` the TLS
-   * modes, whose certificates the browser (or Node) checks as it checks any.
+   * Connects to a server's WebSocket or WebTransport URL at
+   * `options.security`, mutual TLS unless told: `ws://host:port/path` runs
+   * `none` alone, `wss://` the TLS modes, whose certificates the browser (or
+   * Node) checks as it checks any; `https://host:port/path` is WebTransport
+   * (a browser's only), any security, the server's certificate pinned by
+   * `options.pins` or trusted as the browser trusts any.
    */
   static async connect(url: string | URL, options: LinkOptions = {}): Promise<RemoteLink> {
     const text = String(url);
     const scheme = text.slice(0, text.indexOf(':')).toLowerCase();
-    if (scheme !== 'ws' && scheme !== 'wss') throw new TypeError(`\`${text}\` is not a ws:// or wss:// URL`);
+    if (scheme !== 'ws' && scheme !== 'wss' && scheme !== 'https') {
+      throw new TypeError(`\`${text}\` is not a ws://, wss:// or https:// (WebTransport) URL`);
+    }
     const security = options.security ?? 'mutual-tls';
     if (!(security in TRUST_OF)) throw new TypeError(`\`${String(security)}\` is not none, server-tls or mutual-tls`);
+    const pins = options.pins ?? [];
+    if (scheme === 'https') {
+      const trust = TRUST_OF[security];
+      const key = typeof options.key === 'string' ? new TextEncoder().encode(options.key) : options.key;
+      checkProof(trust, key, options.token);
+      const channel = await openWebTransport(
+        text,
+        options.handshakeTimeout ?? 10_000,
+        pins,
+        options.maxFrame ?? 64 << 20,
+      );
+      return RemoteLink.over(channel, { ...options, trust });
+    }
+    if (pins.length > 0) {
+      throw new TypeError(
+        "pins are WebTransport's (https://): a page's WebSocket trusts the certificates its browser trusts",
+      );
+    }
     if ((scheme === 'wss') !== (security !== 'none')) {
       throw new TypeError(
         scheme === 'wss'

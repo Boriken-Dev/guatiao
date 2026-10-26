@@ -396,8 +396,13 @@ describe('security', () => {
       /a key or a token/,
     );
     await expect(RemoteLink.connect('http://127.0.0.1:9/', { security: 'none', key: 'k' })).rejects.toThrow(
-      /not a ws:\/\/ or wss:\/\/ URL/,
+      /not a ws:\/\/, wss:\/\/ or https:\/\//,
     );
+  });
+
+  test('an https:// URL is WebTransport: unsupported where there is none, gone where nothing answers', async () => {
+    const linking = RemoteLink.connect('https://127.0.0.1:9/', { security: 'server-tls', key: 'k', handshakeTimeout: 3_000 });
+    await expect(linking).rejects.toBeInstanceOf('WebTransport' in globalThis ? Gone : Unsupported);
   });
 
   test('server TLS proves the key when the WELCOME asks for it', async () => {
