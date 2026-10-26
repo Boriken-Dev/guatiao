@@ -137,16 +137,12 @@ key with the member `b` of a field `a`. `keys` spells its keys as
 store key off the grammar (`agent.[0]`) is not found by `unflatten` and
 `validate_texts` refuses it as undeclared.
 
-**Reading takes every spelling the grammar reads**, so a store written
-before this spelling still loads: an open map's key however it was
-written (`env[01]`, `env["01"]`, `env.PATH`), and a top-level field
-holding a `.` or a bracket under its bare name (`a.b`, `x.y[k]`) as well
-as `[a.b]`. `unflatten`, `resolve`, `resolve_in` and `validate_texts`
-agree on this; where two spellings of one key are both present, the one
-`flatten` writes wins and the other is ignored. The bare name is the old
-ambiguity: in a schema declaring both a field `a.b` and a field `a` with
-a member `b`, a store holding `a.b` and no `[a.b]` reads that entry as
-both.
+**Reading takes every spelling the grammar reads** for an open map's key
+(`env[01]`, `env["01"]`, `env.PATH`); where two spellings of one key are
+both present, the one `flatten` writes wins and the other is ignored. A
+top-level field holding a `.` or a bracket is read under `[a.b]` alone:
+a store key `x.y[k]` reaches no field `x.y`, and `unflatten` does not read
+`a.b` as the field `a.b`.
 
 ```rust
 // can this name be written as it stands?

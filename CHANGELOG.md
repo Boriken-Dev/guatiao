@@ -1419,6 +1419,10 @@ write now.
   tree where it stands, or settle a lent map without dropping its bad
   keys, when the core lacks one: Go, R, MATLAB and Fortran refuse to open
   such a core, the others name the missing export when it is called.
+- **guatiao-intake reads a dotted top-level field under `[a.b]` alone.**
+  `unflatten`, `resolve`, `resolve_in` and `validate_texts` no longer
+  read a store key spelled with the field's bare name (`a.b`, `x.y[k]`);
+  an open map's key is still read in any spelling the grammar reads.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate

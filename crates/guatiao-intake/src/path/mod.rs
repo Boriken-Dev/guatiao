@@ -66,10 +66,6 @@
 //! data, not from a declaration — are the case this was built for, and
 //! they get the same escape.
 //!
-//! An earlier rule refused a declared key holding a `.` when the schema
-//! was finished. It was dropped with this grammar: the ambiguity it
-//! protected against is what quoting removes.
-//!
 //! # Walking is iterative
 //!
 //! [`get`] and [`get_mut`] loop; they do not recurse. A path is as deep as

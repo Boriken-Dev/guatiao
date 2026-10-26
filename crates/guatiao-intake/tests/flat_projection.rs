@@ -311,13 +311,9 @@ fn resolve_in_a_store_follows_the_selected_arm() {
     );
 }
 
-/// **A field key holding a delimiter is legal**, and used not to be.
-///
-/// The old rule refused `auth.username` at `SchemaBuilder::finish`,
-/// because the only spelling for a nested path was `owner.member` and a
-/// key like that made one ambiguous. The grammar has brackets and
-/// quoting now, so the key has an unambiguous spelling of its own and
-/// the schema is free to describe the struct exactly as it is.
+/// **A field key holding a delimiter is legal.** The grammar has brackets
+/// and quoting, so the key has an unambiguous spelling of its own and the
+/// schema describes the struct exactly as it is.
 #[test]
 fn a_field_key_may_hold_a_delimiter_and_is_named_by_quoting_it() {
     let alloc = Alloc::rust();
@@ -1072,14 +1068,14 @@ fn flatten_stops_at_the_depth_bound() {
     assert!(store.is_empty(), "and nothing past the bound is written");
 }
 
-/// A store written in an earlier spelling reads back, and validates, as
-/// the one `flatten` writes now: an open map's key `01` quoted
-/// (`env["01"]`), a top-level field holding a `.` under its bare name
-/// (`a.b`, `x.y[k]`), and a variant under such a key, whose discriminant
-/// is found where the store spelled it. Where both spellings are present,
-/// the current one wins.
+/// An open map's key reads back in any spelling the grammar reads (`01`
+/// quoted, `env["01"]`), and so does a variant under such a key, whose
+/// discriminant is found where the store spelled it; where both spellings
+/// are present, the one `flatten` writes wins. A top-level field holding
+/// a `.` is read under `[a.b]` alone: its bare name (`a.b`, `x.y[k]`)
+/// reaches nothing.
 #[test]
-fn a_store_in_an_earlier_spelling_reads_back() {
+fn a_store_reads_every_spelling_of_a_key_and_only_the_bracketed_dotted_field() {
     let schema = SchemaBuilder::new()
         .field(FieldBuilder::new(
             "env",
@@ -1108,29 +1104,21 @@ fn a_store_in_an_earlier_spelling_reads_back() {
         flat::unflatten(alloc, s.find(field).unwrap(), store)
     };
 
-    let old = store_of(&[
+    let quoted = store_of(&[
         ("env[\"01\"]", "old"),
         ("env[PATH]", "/bin"),
-        ("a.b", "dotted"),
-        ("x.y[k]", "v"),
         ("m[\"01\"]", "userpass"),
         ("m[\"01\"].username", "alice"),
     ]);
-    assert_eq!(guatiao_intake::validate_texts(s, &old), Ok(()));
+    assert_eq!(guatiao_intake::validate_texts(s, &quoted), Ok(()));
     assert_eq!(
-        texts_of(&read("env", &old).expect("the open map reads")),
+        texts_of(&read("env", &quoted).expect("the open map reads")),
         [
             ("01".to_string(), "old".to_string()),
             ("PATH".to_string(), "/bin".to_string())
         ]
     );
-    let dotted = read("a.b", &old).expect("the bare top-level key reads");
-    assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("dotted"));
-    assert_eq!(
-        texts_of(&read("x.y", &old).expect("so does a container under it")),
-        [("k".to_string(), "v".to_string())]
-    );
-    let m = read("m", &old).expect("the variant under a quoted key reads");
+    let m = read("m", &quoted).expect("the variant under a quoted key reads");
     let one = TryAsRef::<Map>::try_as_ref(&m)
         .and_then(|m| m.get("01"))
         .expect("under its key");
@@ -1141,25 +1129,38 @@ fn a_store_in_an_earlier_spelling_reads_back() {
             ("username".to_string(), "alice".to_string())
         ]
     );
+
+    let bare = store_of(&[("a.b", "dotted"), ("x.y[k]", "v")]);
     assert_eq!(
-        flat::resolve(s, "x.y[k]").map(|f| matches!(f.kind(), Kind::Str { .. })),
-        Some(true),
-        "the bare spelling resolves into the field"
+        read("a.b", &bare),
+        None,
+        "a bare dotted name is not the field's key"
+    );
+    assert_eq!(read("x.y", &bare), None, "nor is a path under one");
+    assert!(flat::resolve(s, "x.y[k]").is_none());
+    assert!(
+        guatiao_intake::validate_texts(s, &store_of(&[("x.y[k]", "v")])).is_err(),
+        "a key under a bare dotted name is undeclared"
+    );
+    assert!(
+        guatiao_intake::validate_texts(s, &store_of(&[("a.b", "dotted")])).is_err(),
+        "and so is the bare name itself, which nothing reads back"
+    );
+    let bracketed = store_of(&[("[a.b]", "dotted"), ("[x.y][k]", "v")]);
+    assert_eq!(guatiao_intake::validate_texts(s, &bracketed), Ok(()));
+    let dotted = read("a.b", &bracketed).expect("the bracketed key reads");
+    assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("dotted"));
+    assert_eq!(
+        texts_of(&read("x.y", &bracketed).expect("so does a container under it")),
+        [("k".to_string(), "v".to_string())]
     );
 
-    let both = store_of(&[
-        ("env[\"01\"]", "old"),
-        ("env[01]", "new"),
-        ("a.b", "old"),
-        ("[a.b]", "new"),
-    ]);
+    let both = store_of(&[("env[\"01\"]", "old"), ("env[01]", "new")]);
     assert_eq!(guatiao_intake::validate_texts(s, &both), Ok(()));
     assert_eq!(
         texts_of(&read("env", &both).unwrap()),
         [("01".to_string(), "new".to_string())]
     );
-    let dotted = read("a.b", &both).unwrap();
-    assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("new"));
 }
 
 /// A tuple stores each position under its index, reads the positions back
