@@ -596,7 +596,11 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   source and in all; a source is an IPv4 address, or an IPv6 /64, so the
   holder of one subnet cannot fill the queue from many addresses (in
   Rust, `TrustStore::with_ipv6_prefix(bits)` on the store handed to
-  `TlsConfig::store` groups by another prefix). Removing a peer from the
+  `TlsConfig::store` groups by another prefix). A client the access
+  control list will not admit from where it came (its address passes only
+  to a rule naming another fingerprint) is refused as it presents its
+  certificate and never recorded: accepting it could not let it in.
+  Removing a peer from the
   store refuses its next link: TLS session resumption is off at both
   ends unless the policy's `allow_resumption` keeps it.
 - **A refusal says why.** The side that refuses a certificate names the

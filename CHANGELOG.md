@@ -1549,6 +1549,14 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a trust store no longer keeps waiting a client
+  the access control list will never admit.** A listener whose list sends
+  every source on to a fingerprint rule (`permit` one fingerprint from
+  anywhere, deny the rest) recorded any stranger that proved its key as
+  waiting, though accepting it could not let it in. Over TLS, `wss://`,
+  QUIC and WebTransport such a client is now refused as it presents its
+  certificate, before the store sees it, and the server's refusal names
+  the list.
 - **guatiao-source-remote: a peer manifest whose identity file the first
   refresh makes stays the same peer.** Its stamp was taken before the
   identity (or a state directory's) was made, so the next refresh saw a
