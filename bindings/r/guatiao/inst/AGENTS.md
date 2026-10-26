@@ -269,7 +269,8 @@ const guatiao_r_api *api =
   ((const guatiao_r_api *(*)(void))R_GetCCallable("guatiao", "guatiao_r_api"))();
 ```
 
-- `size` first; fields are appended, never reordered.
+- `size` first: refuse a table whose `size` is not your
+  `sizeof(guatiao_r_api)`, as `guatiao.serde` and `guatiao.intake` do.
 - `export_of(surface, name)`: an export of the library carrying
   `"guatiao"`, `"guatiao_serde"` or `"guatiao_intake"`, opened on first
   use by the order above; NULL when the build lacks it. `missing(surface,

@@ -14,8 +14,9 @@
  *   const guatiao_r_api *api =
  *     ((const guatiao_r_api *(*)(void))R_GetCCallable("guatiao", "guatiao_r_api"))();
  *
- * Fields are appended, never reordered: a package built against an older
- * table reads `size` before a field past its own end.
+ * `size` is checked first: a package refuses a table whose size is not
+ * the one it was built against, since guatiao, guatiao.serde and
+ * guatiao.intake are installed together at one version.
  *
  * A tree crosses as its root guatiao_value: built by one library, it is
  * read and freed by any other, since a value records its own allocator;

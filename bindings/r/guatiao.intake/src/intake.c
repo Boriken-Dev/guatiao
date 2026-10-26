@@ -184,7 +184,10 @@ static const R_CallMethodDef calls[] = {
 
 void R_init_guatiao_intake(DllInfo *dll) {
   api = ((const guatiao_r_api *(*)(void))R_GetCCallable("guatiao", "guatiao_r_api"))();
-  if (api->size < sizeof(guatiao_r_api)) Rf_error("the guatiao package is older than guatiao.intake needs");
+  if (api->size != sizeof(guatiao_r_api))
+    Rf_error("the guatiao package's table is %d bytes, and guatiao.intake was built against one of %d: install the two "
+             "at one version",
+             (int)api->size, (int)sizeof(guatiao_r_api));
   R_registerRoutines(dll, NULL, calls, NULL, NULL);
   R_useDynamicSymbols(dll, FALSE);
   R_forceSymbols(dll, TRUE);
