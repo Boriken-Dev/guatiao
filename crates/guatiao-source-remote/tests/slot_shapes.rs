@@ -14,6 +14,7 @@ use alloc::sync::Arc;
 use core::sync::atomic::Ordering;
 use core::time::Duration;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use common::{CHATS, Ear, eventually, pair};
 use greeter_kind::{Counter, Greeter, Listener, Wide};
@@ -167,16 +168,22 @@ fn a_callback_runs_on_the_thread_that_lent() {
 
 #[test]
 fn a_slow_call_times_out_gone_and_the_link_carries_on() {
-    let (_server, _source, registry) = pair(Some(Duration::from_millis(200)));
+    // The bound leaves a quick call room on a loaded machine; the slow
+    // call takes four times as long, so only the timeout can end it soon.
+    let timeout = Duration::from_secs(1);
+    let (_server, _source, registry) = pair(Some(timeout));
     let wide = registry
         .offers::<dyn Wide>()
         .next()
         .unwrap()
         .shared()
         .unwrap();
-    let e = wide.echo_i64(1600).unwrap_err();
+    let started = Instant::now();
+    let e = wide.echo_i64(1000 + 4000).unwrap_err();
+    let took = started.elapsed();
     assert_eq!(e.status, Status::GUATIAO_ERR_GONE);
     assert!(e.message().contains("no answer"), "{}", e.message());
+    assert!(took >= timeout && took < Duration::from_secs(3), "{took:?}");
     assert_eq!(wide.echo_i64(3).unwrap(), 3);
 }
 
