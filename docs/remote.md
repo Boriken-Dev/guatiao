@@ -272,10 +272,16 @@ over a `Registry` does the same.
 
 Each connection's link handshake runs on a thread of its own, at most
 `--max-handshakes` at once (64 unless told); past it, a new connection is
-closed unread. A source the access control list denies, or whose
+closed unread. A transport's own set-up (TLS, QUIC, the WebSocket
+upgrade, shared memory's rings, RDMA's queue pairs) runs there too, never
+on the listener's thread; on Windows a local or shared-memory client that
+connects and stays silent holds its place until it goes, since a named
+pipe's reads take no time limit. A source the access control list denies, or whose
 handshake fails, is reported at most once a minute per address, the next
 report saying how many were held back; past 1024 addresses in one minute,
-a new one goes unreported.
+a new one goes unreported. A listener whose accepts keep failing (out of
+file descriptors, say) says so once a minute and pauses between attempts,
+from 5 ms up to a second while the failures last.
 
 ## Transports
 
