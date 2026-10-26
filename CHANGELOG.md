@@ -107,10 +107,23 @@ write now.
   older than the export they only move it. Fortran's
   `guatiao_lent_refusal(stat, slot, arg)` words either refusal for a
   kind module's remote.
+- **guatiao-source-remote: a link that has gone quiet lets its large
+  buffers go.** Once the side serving a link's calls has had none for 30
+  seconds, the buffers the link kept for large calls, and the one its
+  reader would read the next into, are freed: a server whose links each
+  made a 4 MiB call and went quiet held about 12 MiB a link for as long
+  as the link lived (50 links: 610 MB of private memory on Windows,
+  8 MB after; local, provisional). A busy link keeps them, its 4 MiB
+  round trips as fast as before; a host's link, serving no calls of its
+  peer, keeps them until it ends. `FrameRead::read_frame_in` is new: the
+  link hands a transport the buffer for a large frame when the frame's
+  length is known, so its reader holds none while it waits; a wrapper
+  around a reader forwards it.
 - **guatiao-source-remote: a link keeps its large buffers.** The frames
   it reads and the replies it writes, 64 KiB and up, are reused for the
-  next call (at most 16 MiB a link besides the one being read into, let
-  go when the link ends) instead of being freed, which glibc and
+  next call (at most 16 MiB a link besides the one parked for the next
+  frame, let go when the link ends or goes quiet) instead of being
+  freed, which glibc and
   Windows' heap answered by giving the memory back and faulting every
   page of the next buffer in again. A 4 MiB round trip moves 1.3 to 1.6
   times as many bytes a second over a local socket and shared memory, on

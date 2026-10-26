@@ -44,9 +44,18 @@ struct StallRead(Box<dyn FrameRead>, Arc<Valve>);
 
 impl FrameRead for StallRead {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
+        self.read_frame_in(buf, max, &mut |_| Vec::new())
+    }
+
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
         // Also after: a read already waiting when the valve closes holds
         // what it gets.
-        let got = self.0.read_frame(buf, max);
+        let got = self.0.read_frame_in(buf, max, room);
         if self.1.stalled.load(Ordering::Acquire) {
             self.1.held.fetch_add(1, Ordering::AcqRel);
             wait_while(&self.1.stalled);

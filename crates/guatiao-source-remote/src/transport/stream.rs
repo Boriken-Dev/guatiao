@@ -48,6 +48,15 @@ impl<R: Read + Send> StreamReader<R> {
 
 impl<R: Read + Send> FrameRead for StreamReader<R> {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
+        self.read_frame_in(buf, max, &mut |_| Vec::new())
+    }
+
+    fn read_frame_in(
+        &mut self,
+        buf: &mut Vec<u8>,
+        max: usize,
+        room: &mut dyn FnMut(usize) -> Vec<u8>,
+    ) -> io::Result<bool> {
         let mut len = [0u8; 4];
         // A clean end is one between frames; inside one it is an error.
         let mut got = 0;
@@ -66,6 +75,9 @@ impl<R: Read + Send> FrameRead for StreamReader<R> {
                 io::ErrorKind::InvalidData,
                 format!("a frame of {n} bytes is over the {max} allowed"),
             ));
+        }
+        if buf.capacity() < n {
+            *buf = room(n);
         }
         buf.clear();
         buf.resize(n, 0);

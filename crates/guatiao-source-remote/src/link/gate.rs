@@ -13,6 +13,7 @@
 //! waiting for its answer, and at its deadline takes back a frame not yet
 //! written.
 
+use alloc::sync::Arc;
 use std::io;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -25,8 +26,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 pub(crate) struct Gate {
     state: Mutex<State>,
-    /// What a written frame's buffers go back to.
-    buffers: Buffers,
+    /// What a written frame's buffers go back to; shared with the pool,
+    /// which lets them go when its threads all leave idle.
+    buffers: Arc<Buffers>,
 }
 
 struct State {
@@ -66,12 +68,12 @@ impl Gate {
                 spare: Vec::new(),
                 closed: false,
             }),
-            buffers: Buffers::default(),
+            buffers: Arc::default(),
         }
     }
 
     /// The link's large buffers: a frame's go back here once written.
-    pub(crate) fn buffers(&self) -> &Buffers {
+    pub(crate) fn buffers(&self) -> &Arc<Buffers> {
         &self.buffers
     }
 
