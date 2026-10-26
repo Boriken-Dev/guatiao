@@ -27,7 +27,7 @@ public surface); this file is about the repository.
 | `examples/rhai_provider/` | `rhai_greeter/`, greeters written in Rhai: a script and its `*.guatiao.toml`, serving every slot of the example kinds |
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` is what `python -m guatiao.kinds` writes from the description (the Python suite checks it is current); `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
 | `examples/tally_kind/` | a kind that exists only in TypeScript: `tally_kind.ts` declares it as interfaces (`u32`, `Lent<Watcher>`, `extends ObjectKind`), `guatiao-kind` reads them into `include/tally_kind.kinds.json` and writes `node/` from it, and `dart/` is the Dart package `dart run guatiao:kind` writes from the same document; the Node suite checks the document and the Node files, the Dart suite the Dart ones, and each serves the kind from a provider of its own |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
@@ -233,14 +233,17 @@ done
 (cd bindings/node/guatiao && npm pack --dry-run)      # what ships; the same in the other two
 ```
 
-After the greeter kinds' description changes, the Node module and the
-Dart file written from it (each suite fails until they are):
+After the greeter kinds' description changes, the Node module, the Dart
+file and the Python module written from it (each suite fails until they
+are):
 
 ```bash
 (cd examples/greeter_kind/node && node ../../../bindings/node/guatiao/dist/kind_cli.js \
   ../include/greeter_kind.kinds.json --out greeter_kind)
 (cd examples/greeter_kind/dart && dart run guatiao:kind ../include/greeter_kind.kinds.json -o lib/greeter_kind.dart)
 (cd examples/dart_provider/dart_greeter && dart run guatiao:kind identity)   # after its pubspec's version moves
+(cd examples/greeter_kind/python && PYTHONPATH=../../../bindings/python/guatiao/src \
+  python -m guatiao.kinds ../include/greeter_kind.kinds.json -o greeter_kind.py)
 ```
 
 After `examples/tally_kind/tally_kind.ts` changes, its document, the Node

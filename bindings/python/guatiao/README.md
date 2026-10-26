@@ -172,6 +172,11 @@ with Value({"name": "bo"}) as config:
     greeter.check(config)                 # the provider fills it in, in place
 ```
 
+A kind that has a description, the `<crate>.kinds.json` a kind crate
+commits, is written out as these classes by `python -m guatiao.kinds
+DOCUMENT -o module.py`, or loaded at run time by `kinds.kinds_of(document)`;
+`reg.kind_descriptions(key)` answers the document a library carries.
+
 An integer says its width (`kinds.I64`, `kinds.U32`, ...), as the C
 header does. An object a slot takes, such as a listener, is any Python
 object with the kind's methods; an object a slot answers closes with

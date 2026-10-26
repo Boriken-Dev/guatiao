@@ -60,6 +60,21 @@ The binding's
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao/src/guatiao/AGENTS.md)
 lists every annotation and the C type it stands for.
 
+A kind that has a description (the `<crate>.kinds.json` a kind crate
+commits beside its header) need not be written by hand: `python -m
+guatiao.kinds greeter_kind.kinds.json -o greeter_kind.py` writes these
+classes from it, docs included (`--check` says whether a committed module
+is current), and `kinds.kinds_of(document)` loads the same kinds at run
+time. A library built with `#[derive(Provider)]` carries the document
+itself, so a host can call it with nothing on its side:
+
+```python
+from guatiao import kinds
+
+carried = kinds.kinds_of(reg.kind_descriptions("derived_greeter_hello"))
+greeter = reg.bind("derived_greeter_hello", carried["greeter"])
+```
+
 ## As a host
 
 ```python
