@@ -75,6 +75,50 @@ case("a provider's meta is a copy carrying its form", with_examples({
   reg$close()
 }))
 
+# Two kinds' C descriptions agree on everything a table is called by.
+same_codes <- function(a, b) {
+  identical(a$name, b$name) && isTRUE(all.equal(a$floor_hash, b$floor_hash)) && identical(a$object, b$object) &&
+    identical(names(a$slots), names(b$slots)) &&
+    identical(lapply(a$codes, function(c) list(vapply(c$args, function(x) x$code, 1L), c$ret$code)),
+              lapply(b$codes, function(c) list(vapply(c$args, function(x) x$code, 1L), c$ret$code))) &&
+    identical(lapply(a$slots, function(s) c(s$required, s$fallible)), lapply(b$slots, function(s) c(s$required, s$fallible)))
+}
+
+case("a kind loaded from its description is the kind kind() declares", with_examples({
+  text <- paste(readLines(repo_file("examples", "greeter_kind", "include", "greeter_kind.kinds.json"), warn = FALSE),
+    collapse = "\n")
+  loaded <- kinds_of(text, class = function(n) paste0("Described", gt$.gt_camel(n)))
+  expect_equal(names(loaded), c("greeter", "listener", "conversation", "counter", "wide"))
+  expect_true(same_codes(loaded$greeter, Greeter))
+  expect_true(same_codes(loaded$listener, Listener))
+  expect_true(same_codes(loaded$conversation, Conversation))
+  expect_true(same_codes(loaded$counter, Counter))
+  expect_true(same_codes(loaded$wide, Wide))
+  e <- expect_error(kinds_of('{"format": 2, "kinds": []}'), "guatiao_error")
+  expect_equal(e$status, "BadValue")
+  borrowed_list <- list(format = 1, kinds = list(list(name = "k", floor_hash = 1, object = FALSE,
+    slots = list(list(name = "x", required = TRUE, fallible = FALSE,
+      args = list(list(name = "a", type = "list", pass = "borrowed")))))))
+  e <- expect_error(kinds_of(borrowed_list))
+  expect_true(grepl("k.x(a): a list cannot be passed borrowed", conditionMessage(e), fixed = TRUE))
+}))
+
+case("a host binds a kind from what the library carries", with_examples({
+  reg <- scanned()
+  document <- reg$kind_descriptions("derived_greeter_hello")
+  expect_equal(vapply(document$kinds, function(k) k$name, ""), c("greeter", "listener", "conversation", "counter", "wide"))
+  where <- new.env()
+  carried <- kinds_of(document, class = function(n) paste0("Carried", gt$.gt_camel(n)), where = where)
+  g <- reg$bind("derived_greeter_hello", carried$greeter)
+  answer <- get("greet", envir = where)(g, "ana")
+  expect_equal(value_data(answer), list(greeting = "hello, ana"))
+  close(answer)
+  expect_true(is.null(reg$kind_descriptions("hello_library_greeter")))
+  e <- expect_error(reg$kind_descriptions("nobody"), "guatiao_error")
+  expect_equal(e$status, "NotFound")
+  reg$close()
+}))
+
 case("builds an instance, and gives a copy of its configuration schema", with_examples({
   reg <- scanned()
   schema <- reg$provider_config("derived_greeter_shouter")

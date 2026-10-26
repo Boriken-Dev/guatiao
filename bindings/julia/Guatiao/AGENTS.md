@@ -282,7 +282,9 @@ borrowed, read-only view of the schema, or `nothing`),
 `provider_meta(reg, key)` (what the provider declared beyond its schema,
 its notices or its form under `GuatiaoIntake.PROVIDER_FORM_KEY`: a `Value`
 the caller owns, outliving the library, or `nothing`; `NotFound` for an
-unknown key), `host(reg)` (the
+unknown key), `kind_descriptions(reg, key)` (the document of the kinds the
+provider serves and the object kinds they reach, a `Value` the caller owns,
+or `nothing` when it carries none; what `kinds_of` loads), `host(reg)` (the
 `guatiao_host_info *`). All reached as `Guatiao.name`.
 
 `create(reg, key, config)` checks the configuration against the
@@ -349,6 +351,19 @@ unless `name` says it. `@required` marks a slot every table fills (the
 kind's original ones), `@fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close` on
 its remote. Object kinds a slot names are declared before it.
+
+**From a description**: `Guatiao.kinds_of(document; into = Module(:Kinds),
+known = ())` declares every kind of a description document in `into`, as
+`@kind` would (object kinds first), and answers them by C name
+(`Dict{String,Type}`): the `<crate>.kinds.json` a kind crate commits, as
+its JSON text (read by the library, so no JSON package is needed), the
+`Value` `kind_descriptions` answers, or a `Dict`. `known` are `@kind`
+types a slot may name that the document lacks. A slot's function is
+`getfield(into, :greet)`, reached through `Base.invokelatest` from code
+compiled before the call. `Guatiao.kind_declarations(document)` answers the
+`@kind` expressions instead. An unknown type, a borrowed list or a cycle
+is an `ArgumentError` naming the kind and slot; text that is not a
+description a `GuatiaoError` (`BadValue`) naming where.
 
 | shape | C | the caller passes | the provider receives / returns |
 | --- | --- | --- | --- |

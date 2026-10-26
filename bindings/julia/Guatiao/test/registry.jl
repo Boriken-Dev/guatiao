@@ -64,6 +64,47 @@ end
     close(reg)
 end
 
+const DOCUMENT = joinpath(REPO, "examples", "greeter_kind", "include", "greeter_kind.kinds.json")
+
+same_spec(a, b) = (a.name, a.floor_hash, a.object, a.size, a.floor) == (b.name, b.floor_hash, b.object, b.size, b.floor) &&
+    all(((x, y),) -> (x.name, x.fallible, x.required, x.answer === nothing, [(s.kind, s.mode) for s in x.args]) ==
+                     (y.name, y.fallible, y.required, y.answer === nothing, [(s.kind, s.mode) for s in y.args]),
+        zip(a.slots, b.slots))
+
+@testset "a kind loaded from its description is the kind @kind declares" begin
+    loaded = Guatiao.kinds_of(read(DOCUMENT, String))
+    @test sort(collect(keys(loaded))) == ["conversation", "counter", "greeter", "listener", "wide"]
+    for (name, K) in ("greeter" => Greeter, "listener" => Listener, "conversation" => Conversation,
+                      "counter" => Counter, "wide" => Wide)
+        @test same_spec(Guatiao.kind(loaded[name]), Guatiao.kind(K))
+    end
+    # The text is read by the library, and refused naming where.
+    e = try Guatiao.kinds_of("{\"format\": 2, \"kinds\": []}") catch e; e end
+    @test e isa GuatiaoError && e.status == Guatiao.BadValue && occursin("format", e.message)
+    bad = Dict("format" => 1, "kinds" => [Dict("name" => "k", "floor_hash" => 1, "object" => false,
+        "slots" => [Dict("name" => "x", "required" => true, "fallible" => false,
+                         "args" => [Dict("name" => "a", "type" => "list", "pass" => "borrowed")])])])
+    e = try Guatiao.kinds_of(bad) catch e; e end
+    @test e isa ArgumentError && occursin("k.x(a): a list cannot be passed borrowed", e.msg)
+end
+
+@testset "a host binds a kind from what the library carries" begin
+    reg = scanned()
+    document = Guatiao.kind_descriptions(reg, "derived_greeter_hello")
+    @test [k["name"] for k in document["kinds"][]] == ["greeter", "listener", "conversation", "counter", "wide"]
+    kinds = Base.invokelatest(Guatiao.kinds_of, document)
+    close(document)
+    into = parentmodule(kinds["greeter"])
+    g = Base.invokelatest(Guatiao.bind, reg, "derived_greeter_hello", kinds["greeter"])
+    answer = Base.invokelatest(getfield(into, :greet), g, "ana")
+    @test answer["greeting"][] == "hello, ana"
+    close(answer)
+    @test Guatiao.kind_descriptions(reg, "hello_library_greeter") === nothing
+    e = try Guatiao.kind_descriptions(reg, "nobody") catch e; e end
+    @test e isa GuatiaoError && e.status == Guatiao.NotFound
+    close(reg)
+end
+
 @testset "builds an instance, and lends its configuration schema" begin
     reg = scanned()
     schema = Guatiao.provider_config(reg, "derived_greeter_shouter")

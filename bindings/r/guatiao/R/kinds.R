@@ -130,7 +130,109 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
     methods::setMethod(n, spec$remote_class, eval(call("function", as.pairlist(formals), body)), where = where)
   }
   assign(.gt_kind_var(class), spec, envir = where)
+  # A kind declared in an environment that is no package (what kinds_of
+  # declares in) is found by its class name: S4 class names are global.
+  if (!isNamespace(where) && !identical(where, globalenv())) .gt_state$class_kinds[[class]] <- spec
   invisible(spec)
+}
+
+# ---- a kind read from its description ----------------------------------------
+
+.gt_described_scalars <- c(bool = "bool", i8 = "int8", u8 = "uint8", i16 = "int16", u16 = "uint16",
+  i32 = "int32", u32 = "uint32", i64 = "int64", u64 = "uint64", f32 = "float", f64 = "double",
+  usize = "size", isize = "intptr")
+
+.gt_described_arg <- function(a, made, where) {
+  ty <- a$type
+  pass <- if (is.null(a$pass)) "" else a$pass
+  if (!is.null(ty) && ty %in% names(.gt_described_scalars)) return(unname(.gt_described_scalars[ty]))
+  if (identical(ty, "str")) return("string")
+  if (identical(ty, "bytes")) return("bytes")
+  if (identical(ty, "bytes_mut")) return(lent("bytes"))
+  if (identical(ty, "object")) {
+    if (!pass %in% c("taken", "lent")) stop(sprintf("%s: an object is passed taken or lent", where), call. = FALSE)
+    k <- made[[a$kind]]
+    return(if (pass == "taken") taken(k) else lent(k))
+  }
+  if (is.null(ty) || !ty %in% c("value", "map", "list")) {
+    stop(sprintf("%s: %s is no argument type", where, deparse(ty)), call. = FALSE)
+  }
+  if (pass == "borrowed") {
+    if (ty == "list") stop(sprintf("%s: a list cannot be passed borrowed", where), call. = FALSE)
+    return(ty)
+  }
+  if (pass == "taken") return(taken(ty))
+  if (pass == "lent") return(lent(ty))
+  stop(sprintf("%s: a %s is passed borrowed, taken or lent", where, ty), call. = FALSE)
+}
+
+.gt_described_answer <- function(a, made, where) {
+  if (is.null(a)) return(NULL)
+  ty <- a$type
+  if (!is.null(ty) && ty %in% names(.gt_described_scalars)) return(unname(.gt_described_scalars[ty]))
+  if (identical(ty, "text")) return("string")
+  if (!is.null(ty) && ty %in% c("value", "map", "list")) return(ty)
+  if (identical(ty, "object")) return(made[[a$kind]])
+  stop(sprintf("%s: an answer cannot be %s", where, deparse(ty)), call. = FALSE)
+}
+
+# Every kind a slot of `k` names, in order.
+.gt_named_kinds <- function(k) {
+  out <- character()
+  for (s in k$slots) {
+    for (one in c(s$args, list(s$answer))) {
+      if (identical(one$type, "object")) out <- c(out, one$kind)
+    }
+  }
+  out
+}
+
+kinds_of <- function(document, known = list(), class = .gt_camel, where = new.env()) {
+  if (is.character(document)) document <- .Call(C_kind_document_read, document)
+  if (inherits(document, "guatiao_node")) document <- value_data(document)
+  if (!is.list(document) || !isTRUE(document$format == 1)) {
+    stop("a kinds document is {\"format\": 1, \"kinds\": [...]}", call. = FALSE)
+  }
+  kinds <- document$kinds
+  by_name <- list()
+  for (k in kinds) {
+    if (!is.character(k$name) || !nzchar(k$name)) stop("a kind without a name", call. = FALSE)
+    if (!is.null(by_name[[k$name]])) stop(sprintf("the document describes %s twice", k$name), call. = FALSE)
+    by_name[[k$name]] <- k
+  }
+  made <- list()
+  for (k in known) made[[k$name]] <- k
+  making <- character()
+  make <- function(name) {
+    if (!is.null(made[[name]])) return(invisible())
+    if (name %in% making) {
+      stop(sprintf("%s refers to itself through its slots, which a description cannot load here", name), call. = FALSE)
+    }
+    k <- by_name[[name]]
+    making <<- c(making, name)
+    for (named in .gt_named_kinds(k)) {
+      if (!is.null(by_name[[named]])) {
+        make(named)
+      } else if (is.null(made[[named]])) {
+        stop(sprintf("%s: no kind %s in the document or among the known kinds", name, named), call. = FALSE)
+      }
+    }
+    making <<- setdiff(making, name)
+    slots <- list()
+    for (s in k$slots) {
+      at <- sprintf("%s.%s", name, s$name)
+      args <- list()
+      for (a in s$args) args[[a$name]] <- .gt_described_arg(a, made, sprintf("%s(%s)", at, a$name))
+      slots[[s$name]] <- do.call(method, c(args, list(returns = .gt_described_answer(s$answer, made, at),
+        required = isTRUE(s$required), fallible = isTRUE(s$fallible))))
+    }
+    made[[name]] <<- do.call(kind, c(list(name, k$floor_hash), slots,
+      list(object = isTRUE(k$object), class = class(name), where = where)))
+  }
+  for (k in kinds) make(k$name)
+  out <- lapply(kinds, function(k) made[[k$name]])
+  names(out) <- vapply(kinds, function(k) k$name, character(1))
+  out
 }
 
 print.guatiao_kind <- function(x, ...) {
@@ -141,6 +243,7 @@ print.guatiao_kind <- function(x, ...) {
 
 # The kind a class name declares, found where the class was defined.
 .gt_kind_of_class <- function(class) {
+  if (exists(class, envir = .gt_state$class_kinds, inherits = FALSE)) return(get(class, envir = .gt_state$class_kinds))
   def <- methods::getClassDef(class)
   if (is.null(def)) return(NULL)
   env <- .gt_class_env(def)
@@ -263,6 +366,7 @@ close.guatiao_remote <- function(con, ...) {
 # ---- serving R objects -------------------------------------------------------------
 
 .gt_state$objects <- new.env(parent = emptyenv())
+.gt_state$class_kinds <- new.env(parent = emptyenv())
 .gt_state$next_id <- 0
 .gt_state$tables <- new.env(parent = emptyenv())
 

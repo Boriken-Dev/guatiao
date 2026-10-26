@@ -323,6 +323,10 @@ ctx)`, `table` NULL for none; no `kind` for a single table),
 `provider_meta(key)` (what the provider declared beyond its schema, its
 notices or its form under `guatiao.intake`'s `intake_provider_form_key`: a
 copy, outliving the library, or NULL; `NotFound` for an unknown key),
+`kind_descriptions(key)` (the document of the kinds the provider serves
+and the object kinds they reach, as R data `kinds_of()` loads, or NULL when
+it carries none; `NotFound` for an unknown key, `BadValue` for one that is
+not a description),
 `host()` (the `guatiao_host_info *` as an external pointer).
 
 `create(key, config)` checks the configuration against the provider's
@@ -384,6 +388,18 @@ FALSE)` lists a slot's arguments, named, in order; `required` marks the
 kind's original slots (they come first), `fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close()`
 on its remote.
+
+`kinds_of(document, known = list(), class = .gt_camel, where = new.env())`
+declares every kind of a description document as `kind()` would (each
+object kind before the kinds naming it) and answers them in a list named
+by C name: the `<crate>.kinds.json` a kind crate commits, as its JSON text
+(read by the library; no JSON package needed), or the R data
+`reg$kind_descriptions(key)` answers. `known` are kinds a slot may name
+that the document lacks; `class` names each kind's S4 class from its C
+name (give another when the same kinds are already declared, as class
+names are global); a slot's generic is `get("greet", envir = where)`. An
+unknown type, a borrowed list or a cycle is an error naming the kind and
+slot; text that is not a description is `BadValue` naming where.
 
 | shape | C | the caller passes | the provider receives / returns |
 | --- | --- | --- | --- |
