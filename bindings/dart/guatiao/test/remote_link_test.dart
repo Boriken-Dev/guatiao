@@ -12,7 +12,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:guatiao/guatiao.dart' show BadValue, Gone, Unsupported;
+import 'package:guatiao/guatiao.dart'
+    show BadValue, Gone, NotFound, Unsupported, WrongKind;
 import 'package:guatiao/remote.dart';
 import 'package:guatiao/src/remote/args.dart';
 import 'package:guatiao/src/remote/codec.dart';
@@ -67,9 +68,54 @@ final class _Pipe implements RemoteChannel {
   void reply(Frame frame) => _fromPeer.add(frame.encode());
 }
 
+/// Kinds of the suite's own: `maker` hands the peer an `echo` this side
+/// serves, or two listeners.
+const List<Object?> _ownKinds = [
+  {
+    'name': 'maker',
+    'object': false,
+    'slots': [
+      {
+        'name': 'make',
+        'args': [
+          {'name': 'e', 'type': 'object', 'kind': 'echo', 'pass': 'taken'},
+        ],
+      },
+      {
+        'name': 'pair',
+        'args': [
+          {'name': 'a', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
+          {'name': 'b', 'type': 'object', 'kind': 'listener', 'pass': 'taken'},
+        ],
+      },
+    ],
+  },
+  {
+    'name': 'echo',
+    'object': true,
+    'slots': [
+      {
+        'name': 'big',
+        'answer': {'type': 'text'},
+      },
+      {
+        'name': 'fill',
+        'args': [
+          {'name': 'dst', 'type': 'bytes_mut'},
+        ],
+        'answer': {'type': 'i64'},
+      },
+    ],
+  },
+];
+
 /// A link at the local level over a [_Pipe], its catalog listed: one
-/// provider whose greeter table fills only `greet` and `start`.
-Future<(RemoteLink, _Pipe, RemoteTable)> _scripted({Duration? timeout}) async {
+/// provider whose greeter table fills only `greet` and `start`, and whose
+/// `maker` table fills both its slots. [welcome] is what the peer offers.
+Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
+  Duration? timeout,
+  Map<String, Object?> welcome = const {},
+}) async {
   final kinds =
       jsonDecode(
             await readRepoText([
@@ -87,12 +133,12 @@ Future<(RemoteLink, _Pipe, RemoteTable)> _scripted({Duration? timeout}) async {
     timeout: timeout,
   );
   expect(await pipe.next(), isA<Hello>());
-  pipe.reply(Welcome(Uint8List(16), Uint8List(0), const <String, Object?>{}));
+  pipe.reply(Welcome(Uint8List(16), Uint8List(0), welcome));
   final link = await linking;
   final listing = link.list();
   final ask = await pipe.next() as ListCatalog;
   final catalog = {
-    'kinds': kinds['kinds'],
+    'kinds': [...kinds['kinds'] as List, ..._ownKinds],
     'libraries': [
       {
         'id': 'scripted',
@@ -108,6 +154,11 @@ Future<(RemoteLink, _Pipe, RemoteTable)> _scripted({Duration? timeout}) async {
                 'table': 1,
                 'slots': ['greet', 'start'],
               },
+              {
+                'kind': 'maker',
+                'table': 2,
+                'slots': ['make', 'pair'],
+              },
             ],
           },
         ],
@@ -115,8 +166,7 @@ Future<(RemoteLink, _Pipe, RemoteTable)> _scripted({Duration? timeout}) async {
     ],
   };
   pipe.reply(Reply(ask.call, 0, (FrameWriter()..value(catalog)).done()));
-  final table = (await listing).providers.single.table('greeter')!;
-  return (link, pipe, table);
+  return (link, pipe, (await listing).providers.single);
 }
 
 void main() {
@@ -267,7 +317,8 @@ void main() {
     test(
       'a slot the far table leaves out is Unsupported, and nothing is sent',
       () async {
-        final (link, pipe, table) = await _scripted();
+        final (link, pipe, provider) = await _scripted();
+        final table = provider.table('greeter')!;
         expect(table.has('shout'), isFalse);
         await expectLater(
           table.call('shout', ['x']),
@@ -285,9 +336,10 @@ void main() {
     test(
       'a call past its timeout is cancelled, and an object its late answer carries is released',
       () async {
-        final (link, pipe, table) = await _scripted(
+        final (link, pipe, provider) = await _scripted(
           timeout: const Duration(milliseconds: 200),
         );
+        final table = provider.table('greeter')!;
         final listener = Served('listener', {'heard': (_) => null});
         final starting = table.call('start', [listener]);
         final call = await pipe.next() as Call;
@@ -306,9 +358,125 @@ void main() {
         );
         final release = await pipe.next() as Release;
         expect(release.object, 5);
+
+        // Another, whose late answer names this side's own object.
+        final again = table.call('start', [listener]);
+        final second = await pipe.next() as Call;
+        await expectLater(again, throwsA(isA<Gone>()));
+        expect(await pipe.next(), isA<Cancel>());
+        expect(link.objectsHeld, 2);
+        final mine = decodeArgs(slot, second.args).single! as ObjectRef;
+        pipe.reply(
+          Reply(
+            second.call,
+            0,
+            encodeAnswer(slot, ObjectRef(mine.id, receivers: true), [null]),
+          ),
+        );
+        final ping = link.ping();
+        final asked = await pipe.next() as Ping;
+        pipe.reply(Pong(asked.n));
+        await ping;
+        expect(link.objectsHeld, 1, reason: 'the one answered back is dropped');
         await link.close();
       },
     );
+
+    test('a call made after its handler returned names no parent', () async {
+      final (link, pipe, provider) = await _scripted();
+      final table = provider.table('greeter')!;
+      final greet = table.kind.slot('greet');
+      final later = Completer<Future<Object?>>();
+      final listener = Served('listener', {
+        'heard': (args) async {
+          await table.call('greet', ['inside']);
+          Timer(Duration.zero, () {
+            later.complete(table.call('greet', ['after']));
+          });
+          return null;
+        },
+      });
+      final starting = table.call('start', [listener]);
+      final start = await pipe.next() as Call;
+      final slot = table.kind.slot('start');
+      final mine = decodeArgs(slot, start.args).single! as ObjectRef;
+      pipe.reply(
+        Reply(start.call, 0, encodeAnswer(slot, const ObjectRef(5), [null])),
+      );
+      await starting;
+      // The peer tells the listener something, during no call of ours.
+      pipe.reply(
+        Call(
+          40,
+          0,
+          Target.object(mine.id),
+          0,
+          (FrameWriter()..text('x')).done(),
+        ),
+      );
+      final inside = await pipe.next() as Call;
+      expect(inside.parent, 40, reason: 'made while `heard` runs');
+      pipe.reply(Reply(inside.call, 0, encodeAnswer(greet, {'g': 1}, [null])));
+      final heard = await pipe.next() as Reply;
+      expect([heard.call, heard.status], [40, 0]);
+      final after = await pipe.next() as Call;
+      expect(after.parent, 0, reason: '`heard` has returned');
+      pipe.reply(Reply(after.call, 0, encodeAnswer(greet, {'g': 2}, [null])));
+      expect(await (await later.future), {'g': 2});
+      await link.close();
+    });
+
+    test("an answer over the peer's max_frame is refused, not sent", () async {
+      final (link, pipe, provider) = await _scripted(
+        welcome: {'max_frame': 64},
+      );
+      final maker = provider.table('maker')!;
+      final echo = Served('echo', {
+        'big': (_) => 'x' * 200,
+        // Breaks the buffer the answer writes back.
+        'fill': (args) {
+          args[0] = null;
+          return 0;
+        },
+      });
+      final making = maker.call('make', [echo]);
+      final make = await pipe.next() as Call;
+      final ref =
+          decodeArgs(maker.kind.slot('make'), make.args).single! as ObjectRef;
+      pipe.reply(Reply(make.call, 0, Uint8List(0)));
+      await making;
+      pipe.reply(Call(60, 0, Target.object(ref.id), 0, Uint8List(0)));
+      final refused = await pipe.next() as Reply;
+      expect([refused.call, refused.status], [60, 7]);
+      expect(refused.words(), contains('over the 64'));
+      pipe.reply(
+        Call(61, 0, Target.object(ref.id), 1, (FrameWriter()..uint(8)).done()),
+      );
+      final broken = await pipe.next() as Reply;
+      expect([broken.call, broken.status], [61, 100], reason: 'still answered');
+      expect(link.alive, isTrue);
+      await link.close();
+    });
+
+    test('a handed object is taken back when a later argument fails', () async {
+      final (link, _, provider) = await _scripted();
+      await expectLater(
+        provider.table('maker')!.call('pair', [
+          Served('listener', {}),
+          Served('echo', {}),
+        ]),
+        throwsA(isA<WrongKind>()),
+      );
+      expect(link.objectsHeld, 0);
+      await link.close();
+    });
+
+    test('a slot the kind does not have fails the Future', () async {
+      final (link, _, provider) = await _scripted();
+      final calling = provider.table('greeter')!.call('nope');
+      await expectLater(calling, throwsA(isA<NotFound>()));
+      await link.close();
+    });
 
     test('a malformed frame ends the link with GOODBYE', () async {
       final (link, pipe, _) = await _scripted();

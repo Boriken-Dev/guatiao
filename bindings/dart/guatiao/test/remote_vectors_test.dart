@@ -360,6 +360,15 @@ void main() {
       final w = FrameWriter()..int_(n);
       expect(bigOf(FrameReader(w.done()).int_()), bigOf(n), reason: '$n');
     }
+    // Zigzagged, -2^62 is 2^63 - 1: the largest odd number a VM int holds.
+    final minus62 = narrow(-(BigInt.one << 62));
+    final w = FrameWriter()..int_(minus62);
+    expect(FrameReader(w.done()).int_(), minus62);
+    // Past 2^53 a JavaScript number is no longer exact, though 2^60 is one.
+    final twoTo60 = BigInt.one << 60;
+    final read = FrameReader((FrameWriter()..uint(twoTo60)).done()).uint();
+    expect(read, jsNumbers ? twoTo60 : twoTo60.toInt());
+    expect(read, jsNumbers ? isA<BigInt>() : isA<int>());
     expect(() => FrameWriter().uint(-1), throwsArgumentError);
     expect(() => FrameWriter().uint(BigInt.one << 64), throwsArgumentError);
   });
