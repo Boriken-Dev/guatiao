@@ -1160,6 +1160,10 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a link ended while a write is under way still
+  tells the peer.** GOODBYE went out only if the writer was free at that
+  moment; over shared memory on Windows the peer then never saw the end.
+  It is now queued for the thread writing.
 - **guatiao-source-remote: threads calling at once over one link share its
   writes.** Each frame was one write under the link's writer and each
   hand-off of the writer a wake-up, which held TCP from 32 threads near

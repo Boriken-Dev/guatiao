@@ -882,9 +882,10 @@ impl Inner {
         }
     }
 
-    /// Ends the link from this side: GOODBYE first, when the writer is
-    /// free, since on a transport whose halves share one handle (a named
-    /// pipe) only the peer closing its end ends a read blocked here.
+    /// Ends the link from this side: GOODBYE first, written now or by the
+    /// thread writing, since on a transport whose halves share one handle (a
+    /// named pipe, a shared-memory link's bell) only the peer closing its end
+    /// ends a read blocked here.
     pub(crate) fn close_from_here(self: &Arc<Self>) {
         let why = "this side closed the link";
         if lock(&self.state).alive {
@@ -896,9 +897,7 @@ impl Inner {
             .encode(&mut out, usize::MAX)
             .is_ok()
             {
-                self.gate.try_with(|w| {
-                    let _ = w.write_frame(&out);
-                });
+                let _ = self.gate.send(0, out);
             }
         }
         self.end(why);

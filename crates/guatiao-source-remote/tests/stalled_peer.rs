@@ -169,3 +169,60 @@ fn a_write_the_peer_never_takes_holds_up_no_other_call() {
     link.ping()
         .expect("the link carries on once the peer reads again");
 }
+
+/// The server's writes wait while `valve.choked` holds.
+struct ServerChoked {
+    server: Server,
+    valve: Arc<Valve>,
+}
+
+impl Connect for ServerChoked {
+    fn connect(&self) -> io::Result<Connection> {
+        let (host, device) = memory::pair();
+        let device = Connection {
+            writer: Box::new(ChokeWrite(device.writer, Arc::clone(&self.valve))),
+            ..device
+        };
+        let server = self.server.clone();
+        std::thread::spawn(move || {
+            let _ = server.serve(device);
+        });
+        Ok(host)
+    }
+
+    fn describe(&self) -> String {
+        "memory, the server choked".to_string()
+    }
+}
+
+#[test]
+fn a_link_ended_while_a_write_is_under_way_still_says_goodbye() {
+    let valve = Arc::new(Valve::default());
+    let server = common::server(LinkOptions::new(Trust::Local));
+    let source = RemoteSource::new(
+        Box::new(ServerChoked {
+            server: server.clone(),
+            valve: Arc::clone(&valve),
+        }),
+        LinkOptions::new(Trust::Local),
+    );
+    let link = source.link().expect("the link is set up");
+    link.ping().expect("the server answers");
+
+    // The server's answer to this ping is being written when its links end.
+    valve.choked.store(true, Ordering::Release);
+    let pinged = ping(&link);
+    common::eventually("the server's answer waits at the choke", || {
+        valve.choking.load(Ordering::Acquire) == 1
+    });
+    server.end_links();
+    valve.choked.store(false, Ordering::Release);
+
+    let _ = pinged.recv_timeout(Duration::from_secs(5));
+    common::eventually("the host's link ends", || !link.alive());
+    assert!(
+        link.why().contains("the peer ended the link"),
+        "the host heard no GOODBYE: {}",
+        link.why()
+    );
+}
