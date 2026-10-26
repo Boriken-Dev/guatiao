@@ -1423,6 +1423,9 @@ write now.
   `unflatten`, `resolve`, `resolve_in` and `validate_texts` no longer
   read a store key spelled with the field's bare name (`a.b`, `x.y[k]`);
   an open map's key is still read in any spelling the grammar reads.
+- **R: `guatiao.serde` and `guatiao.intake` need the `guatiao` package
+  of their own version**: a `guatiao_r_api` table of another size is
+  refused when the package loads, naming both sizes.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate
