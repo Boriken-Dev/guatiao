@@ -18,7 +18,7 @@ rdma = ["guatiao-source-remote/rdma"]
 
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
-guatiao-source-remote = { path = "../../crates/guatiao-source-remote", features = ["tcp", "local", "shm"] }
+guatiao-source-remote = { path = "../../crates/guatiao-source-remote", features = ["tcp", "tls", "local", "shm"] }
 greeter_kind = { path = "../../examples/greeter_kind" }
 # A listener and a connection with a capped segment size: jumbo frames off.
 socket2 = { version = "0.5", features = ["all"] }
