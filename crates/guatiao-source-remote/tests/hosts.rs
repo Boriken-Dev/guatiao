@@ -102,6 +102,55 @@ fn a_rust_host_calls_a_remote_rust_and_a_remote_c_greeter() {
     assert_eq!(c_greeter.shout("cy"), "HELLO FROM C, CY");
 }
 
+/// A host refreshing a `--stdio` server loading `libraries` with no kind
+/// files; answers the ids loaded.
+fn served_without_kind_files(libraries: &[&PathBuf]) -> (Registry, Vec<String>) {
+    let mut child = ChildCommand::new(server()).arg("--stdio");
+    for library in libraries {
+        child = child.arg("--load").arg(library);
+    }
+    let source = RemoteSource::new(Box::new(child), LinkOptions::new(Trust::Local));
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("child", source).unwrap();
+    let refreshed = registry.refresh();
+    assert!(refreshed.refused.is_empty(), "{refreshed:?}");
+    let ids = refreshed.loaded.iter().map(|s| s.id.clone()).collect();
+    (registry, ids)
+}
+
+/// With no kind files the server serves what the Rust greeter's own
+/// descriptions describe, the C greeter (which carries none) included; the
+/// C greeter alone is described by nobody and left out.
+#[test]
+fn a_server_given_no_kind_files_serves_the_kinds_its_providers_describe() {
+    let Some((derived, c, _)) = greeters() else {
+        return;
+    };
+    let (_, alone) = served_without_kind_files(&[&c]);
+    assert!(alone.is_empty(), "{alone:?}");
+
+    // The C greeter first: it is served all the same.
+    let (registry, ids) = served_without_kind_files(&[&c, &derived]);
+    assert_eq!(ids, ["c_greeter_library", "derived_greeter"]);
+    let rust = registry
+        .offer::<dyn Greeter>("derived_greeter_hello")
+        .expect("the Rust greeter")
+        .unwrap()
+        .shared()
+        .unwrap();
+    assert_eq!(greeting(&rust.greet("ana").unwrap()), "hello, ana");
+    let c_greeter = registry
+        .offer::<dyn Greeter>("c_greeter")
+        .expect("the C greeter")
+        .unwrap()
+        .shared()
+        .unwrap();
+    assert_eq!(
+        greeting(&c_greeter.greet("bo").unwrap()),
+        "hello from C, bo"
+    );
+}
+
 #[test]
 fn a_c_host_calls_a_remote_rust_and_a_remote_c_greeter() {
     let Some((derived, c, cc)) = greeters() else {

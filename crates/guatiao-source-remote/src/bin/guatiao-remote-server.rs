@@ -55,7 +55,9 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --waiting             list the clients waiting in --state-dir, then exit
   --accept FINGERPRINT  accept a waiting client in --state-dir, then exit
   --rdma-device NAME    the RDMA device rdma:// goes through (default: the first)
-  --kinds PATH          a kind description document (repeatable)
+  --kinds PATH          a kind description document (repeatable): the
+                        descriptions served for the kinds it names, needed
+                        for providers that describe none themselves
   --load PATH           a library to load (repeatable)
   --scan DIR            a directory of libraries to load (repeatable)
   --source PATH[=JSON]  a source file and its configuration (repeatable)
