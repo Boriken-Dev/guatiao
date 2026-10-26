@@ -14,13 +14,15 @@
 //! One peer the configuration names serves its libraries under their own
 //! ids. Peers described by manifests are named, and serve their libraries
 //! and providers as `<peer>/<id>`: identical devices serve the same
-//! library, and a source lists each id once.
+//! library, and a source lists each id once. They are listed at once, each
+//! connecting on a thread of its own; a peer whose manifest changed keeps
+//! its link while the registry holds a library it opened.
 
 #![forbid(unsafe_code)]
 
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
@@ -39,6 +41,12 @@ use crate::protocol::Target;
 use crate::protocol::catalog::{Catalog, LibraryEntry};
 use crate::transport::Connect;
 
+#[cfg(all(test, feature = "tcp"))]
+mod tests;
+
+/// Described peers listed at once by one refresh.
+const LISTED_AT_ONCE: usize = 16;
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -56,10 +64,16 @@ struct Peer {
     options: LinkOptions,
     proxies: Proxies,
     current: Mutex<Option<Current>>,
+    /// Bumped by `disconnect`: a link that connected meanwhile is ended,
+    /// not kept.
+    disconnects: AtomicU64,
     /// What the last listing that succeeded answered: a peer that cannot
     /// be listed now, whether it could not be reached or its new link
-    /// failed to list, keeps what it served.
-    listed: Mutex<Vec<Candidate>>,
+    /// failed to list, keeps what it served. `None` until one succeeds.
+    listed: Mutex<Option<Vec<Candidate>>>,
+    /// How many of each library the registry has open, by the id the peer
+    /// gives and the stamp it was listed under.
+    opened: Mutex<BTreeMap<(String, String), usize>>,
     /// Counts links across every peer of a source, so no stamp repeats
     /// within it.
     generations: Arc<AtomicU64>,
@@ -97,6 +111,9 @@ struct Listing {
     /// Each peer by name, and the stamp of the description it was made
     /// from: a changed one is a new peer.
     named: BTreeMap<String, (Arc<Peer>, String)>,
+    /// Peers a changed description replaced, by name: each keeps its link
+    /// while the registry holds a library it opened.
+    leaving: Vec<(String, Arc<Peer>)>,
     /// Candidates listed only to be reported, by id (a manifest's path):
     /// a manifest describing no peer, a peer that cannot be reached. Their
     /// open answers this.
@@ -104,6 +121,16 @@ struct Listing {
 }
 
 impl Listing {
+    /// Takes out the replaced peers the registry holds nothing of, for
+    /// their links to end.
+    fn let_go(&mut self) -> Vec<Arc<Peer>> {
+        let (kept, gone) = core::mem::take(&mut self.leaving)
+            .into_iter()
+            .partition(|(_, peer)| peer.holds());
+        self.leaving = kept;
+        gone.into_iter().map(|(_, peer)| peer).collect()
+    }
+
     /// Lists `id` only to report `why` when it is opened.
     fn refuse(
         &mut self,
@@ -212,18 +239,23 @@ impl Peer {
             options,
             proxies: Proxies::new(),
             current: Mutex::new(None),
-            listed: Mutex::new(Vec::new()),
+            disconnects: AtomicU64::new(0),
+            listed: Mutex::new(None),
+            opened: Mutex::new(BTreeMap::new()),
             generations,
         }
     }
 
+    /// The link, connecting first unless one is alive. The connection and
+    /// its handshake run outside the lock, so `disconnect` never waits for
+    /// them.
     fn link(&self) -> Result<Arc<Link>, ProviderError> {
-        let mut current = lock(&self.current);
-        if let Some(c) = current.as_ref()
+        if let Some(c) = lock(&self.current).as_ref()
             && c.link.alive()
         {
             return Ok(Arc::clone(&c.link));
         }
+        let disconnects = self.disconnects.load(Ordering::Acquire);
         let conn = self.connect.connect().map_err(|e| {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 // A trust check refused the peer: the status of every trust failure.
@@ -247,8 +279,26 @@ impl Peer {
                 name: "guatiao-source-remote".to_string(),
             },
         )?;
-        let generation = self.generations.fetch_add(1, Ordering::Relaxed) + 1;
         let link = Arc::new(link);
+        let mut current = lock(&self.current);
+        if self.disconnects.load(Ordering::Acquire) != disconnects {
+            drop(current);
+            link.end();
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_GONE,
+                "the source was disconnected while it connected",
+            ));
+        }
+        if let Some(c) = current.as_ref()
+            && c.link.alive()
+        {
+            // Another thread connected meanwhile: one link is kept.
+            let theirs = Arc::clone(&c.link);
+            drop(current);
+            link.end();
+            return Ok(theirs);
+        }
+        let generation = self.generations.fetch_add(1, Ordering::Relaxed) + 1;
         *current = Some(Current {
             link: Arc::clone(&link),
             generation,
@@ -281,19 +331,36 @@ impl Peer {
             .map(|l| (l.id.clone(), l.clone()))
             .collect();
         let listed = candidates(c);
-        lock(&self.listed).clone_from(&listed);
+        *lock(&self.listed) = Some(listed.clone());
         Ok(listed)
     }
 
     /// What the last listing that succeeded answered, under the stamps it
     /// answered.
     fn listed_before(&self) -> Vec<Candidate> {
-        lock(&self.listed).clone()
+        lock(&self.listed).clone().unwrap_or_default()
+    }
+
+    /// Whether a listing of it ever succeeded.
+    fn ever_listed(&self) -> bool {
+        lock(&self.listed).is_some()
+    }
+
+    /// Whether the registry holds a library this peer opened.
+    fn holds(&self) -> bool {
+        !lock(&self.opened).is_empty()
+    }
+
+    /// Whether its link's last listing listed `id`.
+    fn lists(&self, id: &str) -> bool {
+        lock(&self.current)
+            .as_ref()
+            .is_some_and(|c| c.libraries.contains_key(id))
     }
 
     /// Opens the library the peer calls `id`, named as `peer` names it.
     fn open(&self, id: &str, peer: Option<&str>) -> Result<LocalLibrary<'static>, ProviderError> {
-        let (link, entry) = {
+        let (link, entry, generation) = {
             let current = lock(&self.current);
             let c = current.as_ref().ok_or_else(|| {
                 ProviderError::new(Status::GUATIAO_ERR_GONE, "not connected: refresh first")
@@ -301,8 +368,21 @@ impl Peer {
             let entry = c.libraries.get(id).cloned().ok_or_else(|| {
                 ProviderError::new(Status::GUATIAO_ERR_NOT_FOUND, "the peer no longer lists it")
             })?;
-            (Arc::clone(&c.link), entry)
+            (Arc::clone(&c.link), entry, c.generation)
         };
+        let library = self.build(&link, &entry, peer)?;
+        let key = (entry.id.clone(), listed_stamp(&entry.stamp, generation));
+        *lock(&self.opened).entry(key).or_insert(0) += 1;
+        Ok(library)
+    }
+
+    /// The library `entry` lists, its tables calling over `link`.
+    fn build(
+        &self,
+        link: &Arc<Link>,
+        entry: &LibraryEntry,
+        peer: Option<&str>,
+    ) -> Result<LocalLibrary<'static>, ProviderError> {
         link.open(&entry.id, &entry.stamp)?;
         let kinds = link.kinds();
         let mut providers = Vec::new();
@@ -364,6 +444,16 @@ impl Peer {
     }
 
     fn close(&self, id: &str, stamp: &str) {
+        {
+            let mut opened = lock(&self.opened);
+            let key = (id.to_string(), stamp.to_string());
+            if let Some(n) = opened.get_mut(&key) {
+                *n -= 1;
+                if *n == 0 {
+                    opened.remove(&key);
+                }
+            }
+        }
         let Some((theirs, generation)) = unlisted_stamp(stamp) else {
             return;
         };
@@ -377,10 +467,57 @@ impl Peer {
     }
 
     fn disconnect(&self) {
-        if let Some(c) = lock(&self.current).take() {
+        let ended = {
+            let mut current = lock(&self.current);
+            self.disconnects.fetch_add(1, Ordering::AcqRel);
+            current.take()
+        };
+        if let Some(c) = ended {
             c.link.end();
         }
     }
+}
+
+/// What listing one peer answered.
+type Listed = Result<Vec<Candidate>, ProviderError>;
+
+/// Lists every peer, at most [`LISTED_AT_ONCE`] at a time, each answer in
+/// its peer's place.
+fn list_each(peers: &[Arc<Peer>]) -> Vec<Listed> {
+    if peers.len() < 2 {
+        return peers.iter().map(|p| p.list()).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let answers: Vec<Mutex<Option<Listed>>> = peers.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..peers.len().min(LISTED_AT_ONCE) {
+            let work = || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(peer) = peers.get(i) else {
+                        break;
+                    };
+                    let answer = peer.list();
+                    *lock(&answers[i]) = Some(answer);
+                }
+            };
+            // A thread that will not start leaves its share to the others,
+            // or to the loop below.
+            if std::thread::Builder::new().spawn_scoped(s, work).is_err() {
+                break;
+            }
+        }
+    });
+    answers
+        .into_iter()
+        .zip(peers)
+        .map(|(answer, peer)| {
+            answer
+                .into_inner()
+                .unwrap_or_else(PoisonError::into_inner)
+                .unwrap_or_else(|| peer.list())
+        })
+        .collect()
 }
 
 impl Described {
@@ -389,8 +526,14 @@ impl Described {
     /// whose open reports it.
     fn list(&self) -> Vec<Candidate> {
         let found = manifest::find(&config::PEER_MANIFESTS, &self.dirs, &self.files);
-        let mut old = lock(&self.state).named.clone();
-        let mut now = Listing::default();
+        let (mut old, leaving) = {
+            let state = lock(&self.state);
+            (state.named.clone(), state.leaving.clone())
+        };
+        let mut now = Listing {
+            leaving,
+            ..Listing::default()
+        };
         let mut listed = Vec::new();
         let mut described: Vec<(String, String, Arc<Peer>, String)> = Vec::new();
         for one in found {
@@ -426,7 +569,9 @@ impl Described {
                 Some((peer, was)) if was == stamp => peer,
                 was => {
                     if let Some((peer, _)) = was {
-                        peer.disconnect();
+                        // It keeps its link while the registry holds a
+                        // library it opened.
+                        now.leaving.push((name.to_string(), peer));
                     }
                     match config::peer_of(&self.defaults, m.table(), m.path()) {
                         Ok((connect, options)) => {
@@ -447,10 +592,23 @@ impl Described {
         for (_, (peer, _)) in old {
             peer.disconnect();
         }
-        for (at, name, peer, stamp) in described {
-            let (served, failed) = match peer.list() {
+        let peers: Vec<Arc<Peer>> = described.iter().map(|(_, _, p, _)| Arc::clone(p)).collect();
+        let answers = list_each(&peers);
+        for ((at, name, peer, stamp), answer) in described.into_iter().zip(answers) {
+            let (served, failed) = match answer {
                 Ok(served) => (served, None),
-                Err(e) => (peer.listed_before(), Some(e)),
+                Err(e) => {
+                    let mut before = peer.listed_before();
+                    if !peer.ever_listed() {
+                        // A new peer never listed: the one it replaces
+                        // stays listed as it was.
+                        let mut leaving = now.leaving.iter().rev();
+                        if let Some((_, was)) = leaving.find(|(n, p)| *n == name && p.holds()) {
+                            before = was.listed_before();
+                        }
+                    }
+                    (before, Some(e))
+                }
             };
             listed.extend(served.into_iter().map(|c| {
                 Candidate::new(
@@ -468,7 +626,9 @@ impl Described {
                 now.refuse(&mut listed, at, &stamp, e.status, why);
             }
         }
+        let gone = now.let_go();
         *lock(&self.state) = now;
+        gone.iter().for_each(|p| p.disconnect());
         listed
     }
 
@@ -481,6 +641,18 @@ impl Described {
             id.split_once('/')
                 .and_then(|(name, library)| {
                     let (peer, _) = state.named.get(name)?;
+                    // What a replaced peer still lists, while its successor
+                    // cannot be listed, it opens.
+                    let peer = if peer.lists(library) {
+                        peer
+                    } else {
+                        state
+                            .leaving
+                            .iter()
+                            .rev()
+                            .find(|(n, p)| n == name && p.lists(library))
+                            .map_or(peer, |(_, p)| p)
+                    };
                     Some((Arc::clone(peer), name.to_string(), library.to_string()))
                 })
                 .ok_or_else(|| {
@@ -495,20 +667,30 @@ impl Described {
         let Some((name, library)) = id.split_once('/') else {
             return;
         };
-        let peer = lock(&self.state)
-            .named
-            .get(name)
-            .map(|(peer, _)| Arc::clone(peer));
-        if let Some(peer) = peer {
-            peer.close(library, stamp);
-        }
+        let peers: Vec<Arc<Peer>> = {
+            let state = lock(&self.state);
+            let leaving = state.leaving.iter().filter(|(n, _)| n == name);
+            let named = state.named.get(name).map(|(peer, _)| peer);
+            named
+                .into_iter()
+                .chain(leaving.map(|(_, p)| p))
+                .cloned()
+                .collect()
+        };
+        // Closing writes to the link: not under the state's lock.
+        peers.iter().for_each(|p| p.close(library, stamp));
+        let gone = lock(&self.state).let_go();
+        gone.iter().for_each(|p| p.disconnect());
     }
 
     fn peers(&self) -> Vec<Arc<Peer>> {
-        lock(&self.state)
+        let state = lock(&self.state);
+        state
             .named
             .values()
-            .map(|(peer, _)| Arc::clone(peer))
+            .map(|(peer, _)| peer)
+            .chain(state.leaving.iter().map(|(_, peer)| peer))
+            .cloned()
             .collect()
     }
 }
@@ -567,7 +749,8 @@ impl RemoteSource {
     }
 
     /// Handles on the peers' objects that are still out: for described
-    /// peers, those of the peers the manifests still describe.
+    /// peers, those of the peers the manifests still describe and of
+    /// replaced peers whose libraries the registry still holds.
     pub fn objects_out(&self) -> usize {
         match &*self.inner {
             Peers::One(peer) => peer.proxies.live(),

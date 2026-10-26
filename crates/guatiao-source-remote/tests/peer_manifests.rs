@@ -5,8 +5,10 @@
 //! Peers described by manifests: two identical devices in one registry
 //! under their names, a manifest that describes no peer reported in its
 //! own words, a peer that cannot be reached reported once and the others
-//! served, one that goes away keeping its libraries until it is back, and
-//! a manifest edited or removed followed by the next refresh.
+//! served, one that goes away keeping its libraries until it is back, a
+//! manifest edited or removed followed by the next refresh, peers slow to
+//! refuse listed at once, and a replaced peer serving on while its
+//! successor cannot be reached.
 
 #![cfg(feature = "tcp")]
 
@@ -16,13 +18,15 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use greeter_kind::Greeter;
 use guatiao::library::{Refreshed, Registry};
 use guatiao::{List, Map, Status};
-use guatiao_source_remote::transport::tcp::{Accepted, TcpListen};
+use guatiao_source_remote::transport::tcp::{Accepted, TcpConnect, TcpListen};
 use guatiao_source_remote::{LinkOptions, RemoteSource, Trust};
 
 const KEY: &str = "a key every device here holds";
@@ -51,6 +55,71 @@ fn device_with(key: &str, down: Arc<AtomicBool>) -> u16 {
 
 fn device() -> u16 {
     device_with(KEY, Arc::default())
+}
+
+/// A port where every connection is held unanswered for `wait`, then
+/// closed: a peer slow to refuse.
+fn slow_to_refuse(wait: Duration) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for conn in listener.incoming().map_while(Result::ok) {
+            std::thread::spawn(move || {
+                std::thread::sleep(wait);
+                drop(conn);
+            });
+        }
+    });
+    port
+}
+
+/// A device that waits `wait` before it answers a connection; answers its
+/// port and a channel told of every connection as it arrives.
+fn slow_device(wait: Duration) -> (u16, std::sync::mpsc::Receiver<()>) {
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY.as_bytes()));
+    let listener = TcpListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (arrived, arrivals) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            if let Accepted::Connection(conn) = accepted {
+                let _ = arrived.send(());
+                let server = server.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(wait);
+                    let _ = server.serve(conn);
+                });
+            }
+        }
+    });
+    (port, arrivals)
+}
+
+/// A device serving no library, its server kept to end its links; while
+/// `down` is set it closes every connection unanswered.
+fn empty_device(down: Arc<AtomicBool>) -> (u16, guatiao_source_remote::Server) {
+    let server = guatiao_source_remote::Server::new(
+        Registry::new("server", "1.0"),
+        common::described(),
+        LinkOptions::new(Trust::Trusted).key(KEY.as_bytes()),
+    );
+    let listener = TcpListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let serving = server.clone();
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            if let Accepted::Connection(conn) = accepted {
+                if down.load(Ordering::Relaxed) {
+                    continue;
+                }
+                let server = serving.clone();
+                std::thread::spawn(move || {
+                    let _ = server.serve(conn);
+                });
+            }
+        }
+    });
+    (port, server)
 }
 
 /// A port nothing listens on.
@@ -332,5 +401,130 @@ fn a_peer_that_goes_away_keeps_its_libraries_until_it_is_back() {
     assert_eq!(keys(&refreshed.retired), ["flaky/shapes"]);
     assert!(refreshed.refused.is_empty());
     assert_eq!(greet(&registry, "flaky"), "hello, flaky");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Six peers that each take a second to refuse, beside one that answers:
+/// listed one after another they would hold the refresh six seconds.
+#[test]
+fn peers_slow_to_refuse_are_listed_at_once() {
+    let dir = scratch("slow");
+    write(&dir, "near.guatiao.toml", &peer("near", device(), ""));
+    for i in 0..6 {
+        let port = slow_to_refuse(Duration::from_secs(1));
+        write(
+            &dir,
+            &format!("slow{i}.guatiao.toml"),
+            &peer(&format!("slow{i}"), port, ""),
+        );
+    }
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("peers", source(&dir)).unwrap();
+    let started = Instant::now();
+    let refreshed = registry.refresh();
+    let took = started.elapsed();
+    assert_eq!(keys(&refreshed.loaded), ["near/shapes"], "{refreshed:?}");
+    assert_eq!(refreshed.refused.len(), 6, "{refreshed:?}");
+    assert!(took < Duration::from_secs(4), "the refresh took {took:?}");
+    assert_eq!(greet(&registry, "near"), "hello, near");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `disconnect` from another thread does not wait for a connection under
+/// way, and that connection is not kept.
+#[test]
+fn disconnecting_never_waits_for_a_connection_under_way() {
+    let (port, arrivals) = slow_device(Duration::from_millis(1500));
+    let source = RemoteSource::new(
+        Box::new(TcpConnect::new(&format!("127.0.0.1:{port}"))),
+        LinkOptions::new(Trust::Trusted).key(KEY.as_bytes()),
+    );
+    let connecting = {
+        let source = source.clone();
+        std::thread::spawn(move || source.link())
+    };
+    arrivals
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the connection arrives");
+    let started = Instant::now();
+    source.disconnect();
+    let took = started.elapsed();
+    assert!(
+        took < Duration::from_millis(500),
+        "disconnect waited {took:?}"
+    );
+    let linked = connecting.join().unwrap();
+    assert_eq!(
+        linked.map(|_| ()).unwrap_err().status,
+        Status::GUATIAO_ERR_GONE
+    );
+    // The next connection is kept.
+    assert!(source.link().unwrap().alive());
+}
+
+/// An edited manifest naming a peer that cannot be reached leaves the
+/// peer it replaced listed and answering.
+#[test]
+fn a_replaced_peer_serves_on_while_its_successor_cannot_be_reached() {
+    let dir = scratch("successor");
+    write(&dir, "lab.guatiao.toml", &peer("lab", device(), ""));
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("peers", source(&dir)).unwrap();
+    let refreshed = registry.refresh();
+    assert_eq!(keys(&refreshed.loaded), ["lab/shapes"], "{refreshed:?}");
+
+    write(&dir, "lab.guatiao.toml", &peer("lab", nobody(), ""));
+    let refreshed = registry.refresh();
+    assert!(
+        refreshed.loaded.is_empty() && refreshed.retired.is_empty(),
+        "{refreshed:?}"
+    );
+    assert!(why(&refreshed, "lab.guatiao.toml").contains("could not be reached"));
+    assert_eq!(greet(&registry, "lab"), "hello, lab");
+    assert!(registry.refresh().is_empty(), "reported once");
+
+    write(
+        &dir,
+        "lab.guatiao.toml",
+        &peer("lab", device(), "timeout_ms = 5000\n"),
+    );
+    let refreshed = registry.refresh();
+    assert_eq!(keys(&refreshed.loaded), ["lab/shapes"], "{refreshed:?}");
+    assert_eq!(keys(&refreshed.retired), ["lab/shapes"]);
+    assert_eq!(greet(&registry, "lab"), "hello, lab");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A successor that listed once and then cannot be listed keeps what it
+/// listed: the peer it replaced is not listed again, even while the
+/// registry still holds that peer's library.
+#[test]
+fn a_successor_that_listed_once_never_brings_back_the_peer_it_replaced() {
+    let dir = scratch("listed-once");
+    write(&dir, "lab.guatiao.toml", &peer("lab", device(), ""));
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("peers", source(&dir)).unwrap();
+    assert_eq!(keys(&registry.refresh().loaded), ["lab/shapes"]);
+    let held = registry
+        .offers::<dyn Greeter>()
+        .next()
+        .unwrap()
+        .shared()
+        .unwrap();
+
+    let down = Arc::new(AtomicBool::new(false));
+    let (port, empty) = empty_device(Arc::clone(&down));
+    write(&dir, "lab.guatiao.toml", &peer("lab", port, ""));
+    let refreshed = registry.refresh();
+    assert_eq!(keys(&refreshed.retired), ["lab/shapes"], "{refreshed:?}");
+    assert!(refreshed.loaded.is_empty());
+
+    down.store(true, Ordering::Relaxed);
+    empty.end_links();
+    let refreshed = registry.refresh();
+    assert!(refreshed.loaded.is_empty(), "{refreshed:?}");
+    assert_eq!(refreshed.refused.len(), 1, "{refreshed:?}");
+    assert!(why(&refreshed, "lab.guatiao.toml").contains("the peer `lab`"));
+    drop(held);
     let _ = std::fs::remove_dir_all(&dir);
 }

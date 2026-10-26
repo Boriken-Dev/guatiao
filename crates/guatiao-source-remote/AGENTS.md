@@ -36,11 +36,15 @@ source.disconnect(); source.objects_out() -> usize  // every peer's
   there, a peer per manifest, named by its `name`. A peer's libraries and
   providers are `<name>/<id>`, so identical devices sit in one registry
   under the default keys. A manifest that changed (or whose key file did:
-  its path and a hash of its bytes) is a new peer over a new link, the
-  old link ended at once; one that vanished takes its peer's libraries
-  with it. The source's own settings are checked once, by `from_config`.
-  Peers are listed one after another, each connecting under its link's
-  lock.
+  its path and a hash of its bytes) is a new peer over a new link; the
+  peer it replaced keeps its link until the registry closed every library
+  it opened, so a new peer that cannot be listed or opened leaves the old
+  library listed and answering. One that vanished takes its peer's
+  libraries with it. The source's own settings are checked once, by
+  `from_config`. Peers are listed at once, up to 16 on threads of their
+  own; a connection and its handshake run outside the peer's lock, so
+  `disconnect()` never waits for one (a `connect` peer's connection under
+  way when it is called is ended, its `link()` answering `GONE`).
 - A manifest describing no peer, and a peer that cannot be listed, are
   listed under the manifest's path as a candidate whose open refuses in
   words naming the file: a refresh reports a manifest once per content
