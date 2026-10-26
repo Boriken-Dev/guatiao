@@ -1140,6 +1140,14 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: threads calling at once over one link share its
+  writes.** Each frame was one write under the link's writer and each
+  hand-off of the writer a wake-up, which held TCP from 32 threads near
+  20 000 calls a second on Linux. Now a frame is queued and the thread
+  that finds the writer free writes every queued frame, a stream in one
+  vectored write (`FrameWrite::write_frames`, new, one `write_frame` each
+  by default): TCP from 32 threads 2.0x on Linux and 1.6x on Windows,
+  locally. A call that times out takes back a frame not yet written.
 - **guatiao-source-remote: a peer that takes nothing in holds up no call
   past its timeout.** A write blocked on a full ring or socket held the
   link's writer, so every other call waited behind it, and a call that
