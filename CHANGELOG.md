@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **guatiao-source-remote: a client verifies its server by the web PKI.**
+  `roots` beside `pins` in a source file's configuration and a peer
+  manifest: `"platform"` (the operating system's certificate authorities
+  and verifier, feature `platform-roots`, off by default) or a CA
+  bundle's path; `TlsConfig::roots(Roots)` in Rust. A certificate one of
+  them issued for the host dialled, within its dates, is trusted with
+  nothing pinned; with pins as well, a pinned certificate is still taken
+  under any name. A refusal names the name dialled or the missing
+  authority. `docs/remote.md` has "A server by its authority".
 - **A page's remote link over WebTransport, in Dart and TypeScript.**
   `RemoteLink.connect('https://...')` opens the browser's WebTransport,
   the server's certificate pinned by hash (`pins` in TypeScript,
@@ -1350,6 +1359,11 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote's clients name the host they dial** in the TLS
+  handshake on `tls://`, `wss://` and `quic://`, as WebTransport
+  already did, rather than `coqui-peer.invalid`: the name a certificate
+  an authority issued is checked for. A pinned server is taken whatever
+  its certificate names, as before.
 - **guatiao-source-remote: large calls, and frames sent together, cost
   fewer copies and writes.** A large last text or bytes argument, and a
   large tree answered, go as their frame's tail from where they lie

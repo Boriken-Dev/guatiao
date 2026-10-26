@@ -45,6 +45,7 @@ configuration map:
 | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 | `identity_file` | TLS: the identity file instead of `state_dir` (made when absent) |
 | `pins` | TLS: a list of the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
+| `roots` | TLS: also trust a server whose certificate an authority issued for the host dialled ([A server by its authority](#a-server-by-its-authority)): `"platform"`, the operating system's, or a CA bundle's path |
 | `policy` | TLS: the TLS policy, a map (below, [Mutual TLS](#mutual-tls)); strict when absent |
 | `timeout_ms` | how long a call waits for its answer; `0` waits as long as the link lives (default 30 000) |
 | `max_frame`, `max_calls` | the link's bounds (defaults 64 MiB and 64) |
@@ -102,7 +103,8 @@ answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed at once
 (up to 16 connecting together), so a peer slow to refuse a connection
 costs a refresh one wait, not one per peer.
 A manifest names its key by file, never inline, since it lies in a
-search path; a TLS peer's manifest names its `pins` and `policy`, and
+search path; a TLS peer's manifest names its `pins`, `roots` and
+`policy`, and
 the identity this host presents to it by `identity_file` or `state_dir`,
 paths beside the manifest. The source's own `security` (like its other
 keys) is every manifest's that names none: a host whose peers all sit on
@@ -454,7 +456,7 @@ every client. Nothing listens on a network unless told where.
   by a `token` the server requires. No client certificate, so a browser
   page and a host with no identity of its own can use it. The HELLO
   names trust `server-tls`. A client needs the server's `pins` (or a
-  trust store) and a `key` or `token`, and no identity; a server needs
+  trust store, or `roots`) and a `key` or `token`, and no identity; a server needs
   its identity and a key or token (`--key-file`, `--token-file`), and
   lists "client_auth = none" among the settings weaker than strict. A
   server's token is required at mutual TLS as well; with no TLS the
@@ -645,6 +647,52 @@ the cost of sealing and opening every byte on top of the link's own
 copies. Small calls stay near their idle time while large ones stream
 beside them on the same link (`small_calls_stay_quick_while_large_ones_stream`).
 
+### A server by its authority
+
+A client may also trust a server the way a browser does, by the
+web PKI: one of the authorities it names issued the server's
+certificate for the host the client dials, and the certificate is
+within its dates. Nothing is pinned, so a server can renew its
+certificate without telling its clients, and one server serves pages
+and hosts alike.
+
+```toml
+connect = "tls://device.example.net:7443"
+security = "server-tls"
+key_file = "device.key"
+roots = "platform"          # or a CA bundle: roots = "lab-ca.pem"
+```
+
+- `roots = "platform"` is the operating system's authorities and
+  verifier (Windows, macOS, iOS, Android; elsewhere the system's CA
+  bundle), in a build with the `platform-roots` feature; without it,
+  `GUATIAO_ERR_UNSUPPORTED`. On Android the host initialises
+  rustls-platform-verifier from its JVM before the first link.
+- Any other text is a PEM file of authorities' certificates, read when
+  the source is built (beside the manifest, in a peer manifest); a
+  replaced bundle is a new peer, as a replaced key is.
+- With `pins` (or a trust store) as well, a pinned certificate is taken
+  whatever it names, and any other is checked against the roots. A
+  pinned certificate the server presents with its chain is refused
+  under the strict policy, as on every pinned link, unless the policy
+  says `allow_chain_when_pinned`.
+- The client dials by the host in `connect`, on every transport: a
+  certificate for `device.example.net` is refused when the client dials
+  `192.0.2.21`, in words naming the name dialled. A certificate no
+  root issued, or one past its dates, is refused naming that. Each is
+  `GUATIAO_ERR_BAD_VALUE`.
+- Only a client verifies by roots; a listener trusts clients by pins or
+  its store, and a server's identity is the certificate and chain the
+  authority issued (`--identity`).
+
+In Rust, `TlsConfig::roots(Roots::bundle_file(path))` (or
+`Roots::bundle_pem(text)`, `Roots::platform()`), beside `pins` or
+alone, on `TlsConnect`, `QuicConnect`, `WsConnect::tls` and
+`WtConnect`. The tests run a test authority's certificates over every
+transport; the platform's roots are tested refusing a self-issued
+certificate only, since no publicly trusted server is reachable
+offline.
+
 ### Over QUIC
 
 `quic://host:port` (feature `quic`) is the same mutual TLS inside QUIC
@@ -772,9 +820,8 @@ another, and `certificate_hashes()` answers what a page pins;
 no security. A source file's configuration names `connect =
 "https://host:port/path"` with the keys of `quic://`. Not measured.
 
-Not in this build: clients verifying a server by a certificate authority
-(a host pins the server instead), CA-signed client certificates
-(coqui-peer-tls's `ca` feature) and TLS 1.2.
+Not in this build: CA-signed client certificates (coqui-peer-tls's `ca`
+feature) and TLS 1.2.
 
 ## The protocol
 
