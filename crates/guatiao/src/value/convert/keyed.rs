@@ -157,7 +157,7 @@ fn entries_to_value<'a, K: MapKey + 'a, V: ToValue + 'a>(
     alloc: Alloc,
 ) -> Result<Value, ValueError> {
     // Two keys may write one text, so a key is looked for, not appended.
-    let mut out = Filling::new(Map::new_in(alloc));
+    let mut out = Filling::with_room(Map::new_in(alloc), entries.size_hint().0);
     for (key, value) in entries {
         out.set_in(&key.to_key()?, value.to_value_in(alloc)?, alloc)?;
     }
