@@ -22,7 +22,7 @@ interface LinkOptions {
   pins?: readonly string[];           // https:// only: 'sha256:<hex>' of the server's certificate, the browser's serverCertificateHashes
   key?: Uint8Array | string;          // the pre-shared key (a string is UTF-8): required with none; at server TLS proved when the server asks
   token?: string;                     // what this side presents when the server requires a token (server TLS: key or token required)
-  timeout?: number | null;            // ms a call waits; default 30 000; null: as long as the link lives
+  timeout?: number | null;            // ms a call waits, for a place under the peer's max_calls and then its answer; default 30 000; null: as long as the link lives
   handshakeTimeout?: number;          // ms; default 10 000 (also bounds the WebSocket's opening)
   maxFrame?: number;                  // the largest message read; default 64 MiB
   maxCalls?: number;                  // the peer's calls run at once; default 64, past it BUSY
@@ -53,7 +53,9 @@ link.trust: RemoteTrust
   handshake rejects with its status's error.
 - Losing the link rejects every open call `Gone` and drops every object
   either side held. A call past its timeout rejects `Gone` and is
-  cancelled; an object its late answer carries is released.
+  cancelled; an object its late answer carries is released. A call still
+  waiting for a place under the peer's `max_calls` when its timeout runs
+  out rejects `Busy` and is never sent.
 - A frame larger than the peer's `max_frame` is refused (`BadValue`), not
   sent. A malformed frame from the peer ends the link with GOODBYE 7.
 
@@ -113,6 +115,12 @@ call: InboundCall     // call.running
   refuses with its status and message, a `TypeError`/`RangeError` (an
   answer the slot does not take) with `BAD_VALUE`, anything else with
   `INTERNAL`.
+- A call of the peer's refused before its handler runs (made during a call
+  that has returned, past `maxCalls`, a slot the `Served` does not fill,
+  an argument that cannot be taken) releases the peer's objects handed in
+  it and drops this side's own given back. An object lent for a call
+  cannot come back handed over, in a call or as an answer: `WrongKind`,
+  and it stays lent.
 - **A call made from inside a handler names it with `{ during: call }`**:
   the peer then runs it as part of that call, which a call back into an
   object busy with that call needs. Named only while the handler still
