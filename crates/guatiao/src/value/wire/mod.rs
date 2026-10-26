@@ -34,17 +34,18 @@
 #![forbid(unsafe_code)]
 
 pub mod channel;
+mod keys;
 mod stream;
 
 pub use stream::{Decoder, Encoded, Encoder, decode_as, encode_of, to_bytes_of};
 
 use alloc::fmt;
-use std::collections::HashSet;
 
 use super::alloc::Alloc;
 use super::convert::TryAsRef;
 use super::error::ValueError;
 use super::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
+use keys::{KeySet, LINEAR, Seeded};
 
 /// Why bytes are not a value. Every variant says where, as a byte offset
 /// into what was given.
@@ -299,6 +300,17 @@ pub fn decode_in(alloc: Alloc, bytes: &[u8]) -> Result<Value, WireError> {
 /// Decodes `bytes`, reporting offsets as if they began at `base` — what a
 /// frame's payload does, so an offset names a byte of the whole frame.
 pub(crate) fn decode_at(alloc: Alloc, bytes: &[u8], base: usize) -> Result<Value, WireError> {
+    decode_seeded(alloc, bytes, base, None)
+}
+
+/// [`decode_at`], hashing a wide map's keys under `seeds`, else under
+/// seeds drawn for this read when its first wide map opens.
+fn decode_seeded(
+    alloc: Alloc,
+    bytes: &[u8],
+    base: usize,
+    mut seeds: Option<Seeded>,
+) -> Result<Value, WireError> {
     let mut r = Reader { bytes, at: 0, base };
     let mut stack: Vec<Frame<'_>> = Vec::new();
     loop {
@@ -330,7 +342,7 @@ pub(crate) fn decode_at(alloc: Alloc, bytes: &[u8], base: usize) -> Result<Value
                             map: Map::new_in(alloc),
                             left,
                             key: None,
-                            seen: (left > stream::LINEAR as u64).then(HashSet::new),
+                            seen: (left > LINEAR as u64).then(|| KeySet::new(&mut seeds, 0, left)),
                         });
                         continue;
                     }
@@ -357,7 +369,8 @@ pub(crate) fn decode_at(alloc: Alloc, bytes: &[u8], base: usize) -> Result<Value
             }) => {
                 let (key, key_at) = key.take().expect("a map's value is read after its key");
                 let repeated = match seen {
-                    Some(seen) => !seen.insert(key),
+                    // A hash seen before is a repeat only if the key itself is.
+                    Some(seen) => !seen.insert(key.as_bytes()) && map.contains_key(key),
                     None => map.contains_key(key),
                 };
                 if repeated {
@@ -381,10 +394,10 @@ enum Frame<'a> {
         map: Map,
         left: u64,
         key: Option<(&'a str, usize)>,
-        /// The keys read so far, for a map declaring more than
-        /// [`stream::LINEAR`] entries: bytes anyone wrote can make a map as
+        /// The hashes of the keys read so far, for a map declaring more
+        /// than [`LINEAR`] entries: bytes anyone wrote can make a map as
         /// large as they like, and a scan per key is quadratic in it.
-        seen: Option<HashSet<&'a str>>,
+        seen: Option<KeySet>,
     },
 }
 
@@ -568,5 +581,33 @@ impl<'a> Reader<'a> {
             Ok(Tag::GUATIAO_MAP) => Token::Map(self.count()?),
             Err(_) => return Err(WireError::UnknownTag { at, tag }),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::collections::BTreeMap;
+
+    use super::{Alloc, Seeded, WireError, decode_seeded, to_bytes_of};
+
+    /// Seeds that send every key shorter than eight bytes to one hash: the
+    /// tree decoder then tells a wide map's keys apart by their bytes.
+    #[test]
+    fn the_tree_decoder_tells_colliding_keys_apart_by_their_bytes() {
+        let seeds = || Some(Seeded([7, 0]));
+        let map: BTreeMap<String, i64> = (0..40).map(|i| (format!("k{i:02}"), i)).collect();
+        let bytes = to_bytes_of(&map).expect("encodes");
+        assert!(decode_seeded(Alloc::rust(), &bytes, 0, seeds()).is_ok());
+
+        // `k39` made `k17`: refused at its length's byte, as with drawn seeds.
+        let mut repeated = bytes.clone();
+        let at = repeated
+            .windows(3)
+            .position(|w| w == b"k39")
+            .expect("there");
+        repeated[at..at + 3].copy_from_slice(b"k17");
+        let error = decode_seeded(Alloc::rust(), &repeated, 0, seeds()).unwrap_err();
+        assert_eq!(error, WireError::DuplicateKey { at: at - 1 });
+        assert_eq!(decode_seeded(Alloc::rust(), &repeated, 0, None), Err(error));
     }
 }

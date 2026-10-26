@@ -10,10 +10,7 @@
 
 #![forbid(unsafe_code)]
 
-use core::hash::{BuildHasher, BuildHasherDefault};
-use std::collections::HashSet;
-use std::hash::RandomState;
-
+use super::keys::{KeySet, LINEAR, Seeded};
 use super::{Reader, Token, WireError, put_len};
 use crate::value::convert::MapError;
 use crate::value::error::{MAX_DEPTH, ValueError};
@@ -23,14 +20,6 @@ use crate::value::visit::{
     Build, Flat, FromWalk, ListVisitor, ListWalker, MapVisitor, MapWalker, Seed, Sink, Visitor,
     Walk, Walker,
 };
-
-/// A map counting more than this many keys checks each against a set
-/// rather than comparing it with every earlier key.
-pub(super) const LINEAR: usize = 16;
-
-/// How many more keys a map's count may reserve room for: a count is
-/// bounded only by the bytes that remain.
-const RESERVE: usize = 1024;
 
 /// The keys of every map open while reading, innermost last, each map's
 /// from where it started. A map counting more than [`LINEAR`] keys also
@@ -42,66 +31,9 @@ struct OpenKeys<'b> {
     list: Vec<&'b str>,
     /// The key hashes of each open map counting more than `LINEAR` keys,
     /// with where its keys start.
-    sets: Vec<(usize, HashSet<u64, BuildHasherDefault<Prehashed>>)>,
+    sets: Vec<(usize, KeySet)>,
     /// Drawn with the first set, so bytes cannot be written to collide.
     seeds: Option<Seeded>,
-}
-
-/// Hashes keys under seeds drawn from the standard library's random
-/// state: a multiply-and-fold per eight bytes, a few nanoseconds for a
-/// short key where SipHash takes several times that. A collision costs a
-/// comparison with the earlier keys, never a wrong answer.
-#[derive(Debug)]
-struct Seeded([u64; 2]);
-
-impl Seeded {
-    fn new() -> Seeded {
-        let state = RandomState::new();
-        Seeded([state.hash_one(1u64), state.hash_one(2u64)])
-    }
-
-    fn hash_one(&self, key: &str) -> u64 {
-        const M: u64 = 0x9e37_79b9_7f4a_7c15;
-        let fold = |a: u64, b: u64| {
-            let p = u128::from(a) * u128::from(b);
-            (p as u64) ^ ((p >> 64) as u64)
-        };
-        let [s0, s1] = self.0;
-        let bytes = key.as_bytes();
-        let mut h = s0 ^ (bytes.len() as u64).wrapping_mul(M);
-        let (words, rest) = bytes.as_chunks::<8>();
-        for &w in words {
-            h = fold(h ^ u64::from_le_bytes(w), s1 ^ M);
-        }
-        if !rest.is_empty() {
-            let mut last = [0u8; 8];
-            last[..rest.len()].copy_from_slice(rest);
-            h = fold(h ^ u64::from_le_bytes(last), s1);
-        }
-        fold(h, s0 ^ M)
-    }
-}
-
-/// The set's hasher: its elements are hashes already.
-#[derive(Debug, Default)]
-struct Prehashed(u64);
-
-impl core::hash::Hasher for Prehashed {
-    fn finish(&self) -> u64 {
-        self.0
-    }
-
-    // Only `write_u64` is reached, by `HashSet<u64>`; this keeps the
-    // trait's contract for anything else.
-    fn write(&mut self, bytes: &[u8]) {
-        for &b in bytes {
-            self.0 = self.0.rotate_left(8) ^ u64::from(b);
-        }
-    }
-
-    fn write_u64(&mut self, n: u64) {
-        self.0 = n;
-    }
 }
 
 impl<'b> OpenKeys<'b> {
@@ -115,10 +47,9 @@ impl<'b> OpenKeys<'b> {
     fn insert(&mut self, start: usize, key: &'b str, left: u64) -> bool {
         let hashed = matches!(self.sets.last(), Some((s, _)) if *s == start);
         if hashed {
-            let seeds = self.seeds.as_ref().expect("drawn with the first set");
             let set = &mut self.sets.last_mut().expect("checked above").1;
             // A hash seen before is a repeat only if the key itself is.
-            if !set.insert(seeds.hash_one(key)) && self.list[start..].contains(&key) {
+            if !set.insert(key.as_bytes()) && self.list[start..].contains(&key) {
                 return false;
             }
         } else if self.list[start..].contains(&key) {
@@ -127,10 +58,10 @@ impl<'b> OpenKeys<'b> {
         self.list.push(key);
         let held = self.list.len() - start;
         if !hashed && held as u64 + left > LINEAR as u64 {
-            let seeds = self.seeds.get_or_insert_with(Seeded::new);
-            let room = usize::try_from(left).unwrap_or(usize::MAX).min(RESERVE);
-            let mut set = HashSet::with_capacity_and_hasher(held + room, Default::default());
-            set.extend(self.list[start..].iter().map(|k| seeds.hash_one(k)));
+            let mut set = KeySet::new(&mut self.seeds, held, left);
+            for k in &self.list[start..] {
+                set.insert(k.as_bytes());
+            }
             self.sets.push((start, set));
         }
         true
@@ -159,12 +90,12 @@ struct Open {
     map: Option<Keys>,
 }
 
-/// A map's keys, as ranges of the output, and their hashes once there
-/// are enough of them to need one.
+/// A map's keys, as ranges of the output, and their hashes once it
+/// counts, or was promised, more than [`LINEAR`].
 #[derive(Debug, Default)]
 struct Keys {
     ranges: Vec<(usize, usize)>,
-    hashes: Option<HashSet<u64>>,
+    hashes: Option<KeySet>,
     keyed: bool,
 }
 
@@ -183,6 +114,8 @@ pub struct Encoder<'a> {
     out: &'a mut Vec<u8>,
     open: Vec<Open>,
     done: bool,
+    /// Drawn with the first key set, so a walk cannot be made to collide.
+    seeds: Option<Seeded>,
 }
 
 impl<'a> Encoder<'a> {
@@ -192,6 +125,7 @@ impl<'a> Encoder<'a> {
             out,
             open: Vec::new(),
             done: false,
+            seeds: None,
         }
     }
 
@@ -287,16 +221,6 @@ impl<'a> Encoder<'a> {
     }
 }
 
-/// A key's hash, for the repeated-key check of a large map.
-fn hash_of(key: &[u8]) -> u64 {
-    use core::hash::Hasher;
-    // A fixed-key hasher: the set only speeds up a check that compares
-    // bytes on every hit, so a collision costs time, never correctness.
-    let mut h = std::hash::DefaultHasher::new();
-    h.write(key);
-    h.finish()
-}
-
 impl Sink for Encoder<'_> {
     type Error = ValueError;
 
@@ -343,7 +267,9 @@ impl Sink for Encoder<'_> {
 
     fn key(&mut self, key: &str) -> Result<(), ValueError> {
         let Some(Open {
-            map: Some(keys), ..
+            map: Some(keys),
+            promised,
+            ..
         }) = self.open.last_mut()
         else {
             return Err(ValueError::WrongKind);
@@ -355,7 +281,8 @@ impl Sink for Encoder<'_> {
         let out = &*self.out;
         let same = |&(at, len): &(usize, usize)| &out[at..at + len] == bytes;
         let repeated = match &mut keys.hashes {
-            Some(hashes) => !hashes.insert(hash_of(bytes)) && keys.ranges.iter().any(same),
+            // A hash seen before is a repeat only if the key itself is.
+            Some(hashes) => !hashes.insert(bytes) && keys.ranges.iter().any(same),
             None => keys.ranges.iter().any(same),
         };
         if repeated {
@@ -365,14 +292,14 @@ impl Sink for Encoder<'_> {
         let at = self.out.len();
         self.out.extend_from_slice(bytes);
         keys.ranges.push((at, bytes.len()));
-        if keys.hashes.is_none() && keys.ranges.len() > LINEAR {
-            let out = &*self.out;
-            keys.hashes = Some(
-                keys.ranges
-                    .iter()
-                    .map(|&(at, len)| hash_of(&out[at..at + len]))
-                    .collect(),
-            );
+        let held = keys.ranges.len();
+        let left = promised.map_or(0, |n| n.saturating_sub(held as u64));
+        if keys.hashes.is_none() && held as u64 + left > LINEAR as u64 {
+            let mut set = KeySet::new(&mut self.seeds, held, left);
+            for &(at, len) in &keys.ranges {
+                set.insert(&self.out[at..at + len]);
+            }
+            keys.hashes = Some(set);
         }
         keys.keyed = true;
         Ok(())
@@ -828,14 +755,16 @@ impl Walk for Encoded<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{OpenKeys, Seeded};
+    use super::{Encoder, OpenKeys, Seeded};
+    use crate::value::error::ValueError;
+    use crate::value::visit::Sink;
 
     /// Seeds that send every key shorter than eight bytes to one hash: the
     /// set then says "seen" for each, and only the bytes tell them apart.
     #[test]
     fn keys_whose_hashes_collide_are_told_apart_by_their_bytes() {
         let seeds = Seeded([7, 0]);
-        assert_eq!(seeds.hash_one("a"), seeds.hash_one("bcd"));
+        assert_eq!(seeds.hash_one(b"a"), seeds.hash_one(b"bcd"));
         let names: Vec<String> = (0..40).map(|i| format!("k{i}")).collect();
         let mut keys = OpenKeys {
             seeds: Some(seeds),
@@ -847,5 +776,24 @@ mod tests {
         assert!(!keys.insert(0, "k17", 0));
         assert!(!keys.insert(0, "k0", 0));
         assert!(keys.insert(0, "k40", 0));
+    }
+
+    /// The same seeds in the encoder, for a map promised wide (its set made
+    /// at the first key) and one given no count (made at the seventeenth).
+    #[test]
+    fn the_encoder_tells_colliding_keys_apart_by_their_bytes() {
+        for promised in [Some(43), None] {
+            let mut out = Vec::new();
+            let mut e = Encoder::new(&mut out);
+            e.seeds = Some(Seeded([7, 0]));
+            e.map_begin(promised).unwrap();
+            for i in 0..40 {
+                e.key(&format!("k{i}")).unwrap();
+                e.null().unwrap();
+            }
+            assert_eq!(e.key("k17"), Err(ValueError::DuplicateKey), "{promised:?}");
+            assert_eq!(e.key("k0"), Err(ValueError::DuplicateKey), "{promised:?}");
+            e.key("k40").unwrap();
+        }
     }
 }
