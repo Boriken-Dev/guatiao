@@ -9,7 +9,7 @@
  * @module
  */
 
-import { SIZE } from './abi.js';
+import { SIZE, VIEW, WORD } from './abi.js';
 import { NotFound, raiseForStatus } from './errors.js';
 import { type KindLike, type KindsDocument, type Remote, asKind } from './kinds.js';
 import * as n from './native.js';
@@ -220,8 +220,8 @@ export class Registry implements Disposable {
     const reason = Buffer.alloc(SIZE.str);
     const ok = n.core().fn.guatiao_registry_provider_available!(this.#open(), n.str(key), reason) as boolean;
     if (ok) return { available: true };
-    const len = Number(reason.readBigUInt64LE(8));
-    const text = len ? Buffer.from(n.bytesAt(reason.readBigUInt64LE(0), len)).toString('utf8') : '';
+    const len = Number(n.wordOf(reason, VIEW.len));
+    const text = len ? Buffer.from(n.bytesAt(n.wordOf(reason, VIEW.ptr), len)).toString('utf8') : '';
     return { available: false, reason: text };
   }
 
@@ -256,13 +256,13 @@ export class Registry implements Disposable {
   providerTable(key: string, kind?: string): ProviderTable {
     const handle = this.#open();
     const fn = n.core().fn;
-    const size = Buffer.alloc(8);
+    const size = Buffer.alloc(WORD);
     const table =
       kind === undefined
         ? (fn.guatiao_registry_provider_vtable!(handle, n.str(key), size) as bigint | null)
         : (fn.guatiao_registry_provider_table!(handle, n.str(key), n.str(kind), size) as bigint | null);
     const ctx = fn.guatiao_registry_provider_ctx!(handle, n.str(key)) as bigint | null;
-    return { table: table ?? 0n, size: Number(size.readBigUInt64LE(0)), ctx: ctx ?? 0n };
+    return { table: table ?? 0n, size: Number(n.wordOf(size)), ctx: ctx ?? 0n };
   }
 
   /**
@@ -354,7 +354,7 @@ export class Registry implements Disposable {
     const handle = this.#open();
     const owned = config instanceof Ref ? undefined : new Value(config, { alloc: this.#alloc });
     const node = (owned ?? (config as Ref)).requireNode();
-    const out = Buffer.alloc(8);
+    const out = Buffer.alloc(WORD);
     const err = n.alloc(SIZE.providerError);
     try {
       const status = n.core().fn.guatiao_registry_provider_create!(handle, n.str(key), node, out, err) as number;
@@ -363,7 +363,7 @@ export class Registry implements Disposable {
       n.release(err);
       owned?.close();
     }
-    return new Instance(this, key, out.readBigUInt64LE(0));
+    return new Instance(this, key, n.wordOf(out));
   }
 
   /** @internal */

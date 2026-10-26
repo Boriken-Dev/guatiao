@@ -36,7 +36,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { ABI_VERSION, KIND_TABLE, LIBRARY_INFO, PROVIDER_INFO, SIZE, Status, Tag, VALUE } from './abi.js';
+import { ABI_VERSION, KIND_TABLE, LIBRARY_INFO, PROVIDER_INFO, SIZE, Status, Tag, VALUE, VIEW } from './abi.js';
 import * as s from './config.js';
 import { NullArgument } from './errors.js';
 import { type KindImpl, type ProviderKindLike, asKind, hold, inCall, refuseInsideACall, release, statusOf, tableFor, writeErr } from './kinds.js';
@@ -217,8 +217,8 @@ export class Library {
     writeStr(info + BigInt(LIBRARY_INFO.id), id);
     writeStr(info + BigInt(LIBRARY_INFO.version), version);
     n.setPtr(info, LIBRARY_INFO.providers, infos);
-    n.setU64(info, LIBRARY_INFO.providers + 8, BigInt(providers.length));
-    n.setU64(info, LIBRARY_INFO.providers + 16, BigInt(SIZE.providerInfo));
+    n.setSize(info, LIBRARY_INFO.providers + VIEW.len, providers.length);
+    n.setSize(info, LIBRARY_INFO.providers + VIEW.stride, SIZE.providerInfo);
     n.setPtr(info, LIBRARY_INFO.meta, this.#map(meta));
     n.setPtr(info, LIBRARY_INFO.unload, k.register(() => (this.#instances.size ? Status.ERR_BUSY : Status.OK), p.unload as never));
     this.infoAddress = info;
@@ -241,7 +241,7 @@ export class Library {
     const names = n.alloc(SIZE.str * Math.max(1, spec.kinds.length));
     spec.kinds.forEach((kind, i) => writeStr(names + BigInt(i * SIZE.str), kind.name));
     n.setPtr(info, PROVIDER_INFO.kinds, names);
-    n.setU64(info, PROVIDER_INFO.kinds + 8, BigInt(spec.kinds.length));
+    n.setSize(info, PROVIDER_INFO.kinds + VIEW.len, spec.kinds.length);
     writeStr(info + BigInt(PROVIDER_INFO.id), providerId);
     writeStr(info + BigInt(PROVIDER_INFO.displayName), spec.displayName);
     writeStr(info + BigInt(PROVIDER_INFO.version), spec.version);
@@ -256,8 +256,8 @@ export class Library {
       n.setPtr(at, KIND_TABLE.vtable, tableFor(kind, cls.prototype as object, cls.name));
     });
     n.setPtr(info, PROVIDER_INFO.tables, tables);
-    n.setU64(info, PROVIDER_INFO.tables + 8, BigInt(spec.kinds.length));
-    n.setU64(info, PROVIDER_INFO.tables + 16, BigInt(SIZE.kindTable));
+    n.setSize(info, PROVIDER_INFO.tables + VIEW.len, spec.kinds.length);
+    n.setSize(info, PROVIDER_INFO.tables + VIEW.stride, SIZE.kindTable);
 
     if (spec.asksAvailable) {
       const ask = available(cls);
@@ -347,7 +347,7 @@ function writeStr(at: bigint, text: string): void {
     n.write(ptr, bytes);
     n.setPtr(at, 0, ptr);
   }
-  n.setU64(at, 8, BigInt(bytes.length));
+  n.setSize(at, VIEW.len, bytes.length);
 }
 
 function available(cls: ProviderClass): (ctx: unknown, reason: bigint | null) => boolean {
@@ -370,7 +370,7 @@ function available(cls: ProviderClass): (ctx: unknown, reason: bigint | null) =>
     }
     if (reason) {
       n.setPtr(reason, 0, kept.ptr);
-      n.setU64(reason, 8, BigInt(kept.len));
+      n.setSize(reason, VIEW.len, kept.len);
     }
     return false;
   };

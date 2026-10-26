@@ -5,7 +5,7 @@ https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships inside the npm package, so it names no
 repository path.
 
-ESM only, typed, Node 22 or later, 64-bit platforms. One dependency,
+ESM only, typed, Node 22 or later, 64-bit platforms and 32-bit ARM. One dependency,
 `guatiao`, at the same version: its `Value`, errors and koffi
 (`guatiao/ffi`). This package ships no native code and loads no koffi of
 its own.

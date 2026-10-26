@@ -301,6 +301,7 @@ describe('channels', () => {
       expect(header).toContain(`#define GUATIAO_WIRE_${name} ${code}\n`);
     }
     expect(WIRE_EVENT.message - WIRE_EVENT.value).toBe(SIZE.value);
-    expect(WIRE_EVENT.detail + SIZE.value).toBe(SIZE.wireEvent);
+    // The event ends at its last value, padded to the 8-byte alignment of its channel.
+    expect(SIZE.wireEvent).toBe(Math.ceil((WIRE_EVENT.detail + SIZE.value) / 8) * 8);
   });
 });

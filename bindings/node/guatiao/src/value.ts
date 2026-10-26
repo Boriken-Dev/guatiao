@@ -98,8 +98,8 @@ function mapFind(node: bigint | null, key: Uint8Array): bigint | null {
   const table = n.view(entries, len * SIZE.entry);
   for (let i = 0; i < len; i++) {
     const at = i * SIZE.entry + ENTRY.key;
-    const keyPtr = table.getBigUint64(at + OWNED.ptr, true);
-    const keyLen = Number(table.getBigUint64(at + OWNED.len, true));
+    const keyPtr = n.wordIn(table, at + OWNED.ptr);
+    const keyLen = Number(n.wordIn(table, at + OWNED.len));
     if (sameBytes(keyPtr, keyLen, key)) return entries + BigInt(i * SIZE.entry + ENTRY.value);
   }
   return null;

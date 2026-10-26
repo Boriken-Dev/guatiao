@@ -13,7 +13,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Registry, Value } from '../src/index.js';
-import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE } from '../src/abi.js';
+import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE, WORD } from '../src/abi.js';
 import { kind, liveObjects, t } from '../src/kinds.js';
 import * as n from '../src/native.js';
 import { Provider, library, libraryOf } from '../src/provide.js';
@@ -38,7 +38,7 @@ afterAll(() => reg.close());
 /** The slot at `index` of the greeter table, as koffi calls it. */
 function slot(index: number, args: string[]): (...a: unknown[]) => number {
   const k = n.koffi();
-  return k.decode(n.ptrAt(table, 8 + index * 8), k.proto('uint32_t', ['void *', ...args])) as (...a: unknown[]) => number;
+  return k.decode(n.ptrAt(table, 8 + index * WORD), k.proto('uint32_t', ['void *', ...args])) as (...a: unknown[]) => number;
 }
 
 describe('a provider written here', () => {

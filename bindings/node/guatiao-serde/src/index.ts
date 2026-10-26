@@ -23,6 +23,7 @@ import {
   Status,
   Tag,
   VALUE,
+  WORD,
   type Value,
   adopt,
   jsToWire,
@@ -34,8 +35,11 @@ import {
 /** `GUATIAO_FORMAT_*`: which format a parse error names. */
 const FORMAT_NAMES: Readonly<Record<number, string>> = { 0: 'json', 1: 'toml', 2: 'yaml' };
 
-/** `guatiao_parse_error`: three `uint32_t`, then an owned string value. */
-const PARSE_ERROR = { format: 0, line: 4, column: 8, message: 16, size: 56 } as const;
+/** `guatiao_parse_error`: three `uint32_t`, then an owned string value at its alignment (a word, or 4). */
+const PARSE_ERROR = (() => {
+  const message = WORD === 8 ? 16 : 12;
+  return { format: 0, line: 4, column: 8, message, size: message + SIZE.value } as const;
+})();
 
 /**
  * A document that does not parse, and where it stopped. `format` is

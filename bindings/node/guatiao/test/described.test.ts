@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { WORD } from '../src/abi.js';
 import { BadValue, Registry } from '../src/index.js';
 import { generate } from '../src/generate.js';
 import { Kind, type KindsDocument, type Remote, describeKinds, kind, kindOf, kindsOf, slot, t } from '../src/kinds.js';
@@ -42,11 +43,11 @@ describe('a kind loaded from its description', () => {
       expect(Number(hash?.[1]), table).toBe(described.floorHash);
       const body = new RegExp(`typedef struct ${table} \\{([\\s\\S]*?)\\} ${table};`).exec(header)![1]!;
       const slots = body.match(/\(\*\w+\)/g)!;
-      expect(described.tableSize, table).toBe(8 + slots.length * 8);
+      expect(described.tableSize, table).toBe(8 + slots.length * WORD);
       expect(described.isObject, table).toBe(body.includes('(*destroy)'));
     }
     expect(Object.keys(kinds.greeter!.methods)).toEqual(['greet', 'shout', 'start', 'greetInto', 'greetFrom', 'check']);
-    expect(kinds.greeter!.floor).toBe(16);
+    expect(kinds.greeter!.floor).toBe(8 + WORD);
   });
 
   it('takes the JSON text as well, and one kind alone', () => {
