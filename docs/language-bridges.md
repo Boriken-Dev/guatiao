@@ -169,6 +169,27 @@ closures do:
   kind's default body; a required one left out refuses the library,
   naming it.
 
+A provider can also be built from a configuration and asked whether it
+can run, as one written in Rust or C can:
+
+```rust,ignore
+Provided::new("greeters_custom")
+    .serves("greeter", ["greet"])
+    .config(schema)          // a JSON Schema, as a value
+    .instances_only()        // offered only through what it builds
+    .may_be_unavailable()    // a host asks the engine before using it
+```
+
+- **an instance**: a host's `Offer::instantiate(&config)` checks the
+  configuration against the schema, then calls `Engine::create(library,
+  provider, config)`; the id the engine answers is what the instance's
+  slots name (`Target::Instance(id)`), and `Engine::destroy(library, id)`
+  hears once when its last owner drops it.
+- **availability**: every time a host asks, `Engine::available(library,
+  provider)` answers `Ok` or the words a person reads (`no device
+  attached`). Every distinct reason is kept until the library closes, so
+  answer with words that do not change from one call to the next.
+
 The tables come from the kinds' descriptions, the same documents the
 bindings read. Core offers them to any Rust code, bridge or not, with no
 feature: `ServedTable` builds a table of a described kind over one
