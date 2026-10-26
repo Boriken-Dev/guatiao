@@ -39,7 +39,15 @@ import (
 )
 
 doc, err := serde.Parse(`{"port": 5900}`, serde.JSON) // a *guatiao.Value
+
+var cfg struct{ Port uint16 `guatiao:"port"` }
+err = serde.Unmarshal(`{"port": 5900}`, serde.JSON, &cfg) // straight into Go data
 ```
+
+`serde.Unmarshal` and `serde.Emit` of Go data build no tree: the document
+crosses as wire bytes once, read and written in Go
+(`guatiao.UnmarshalWire`, `guatiao.MarshalWire`), where a tree costs a
+call per node to build.
 
 The serde and intake modules find their libraries through their own
 variable first, then `GUATIAO_LIBRARY` (a directory, or a file that

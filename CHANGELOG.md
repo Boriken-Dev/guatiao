@@ -14,6 +14,19 @@ write now.
 
 ### Added
 
+- **Node and Go: a document straight to the language's own data and
+  back.** Node's `guatiao-serde` gains `parse(text, { format, how,
+  numbers, maps })`, answering what `loads(...).toJS()` does, and
+  `render(data, { format, pretty, how })`, writing what `dumps` of plain
+  data does, with no `Value` built. Go's `serde.Unmarshal(text, format,
+  &dst)` reads a document into a struct, a map or `any` as `Parse` then
+  `Decode` would, and `serde.Emit` of Go data (not a `Value`) now goes
+  the same way. The document crosses once as wire bytes, read and written
+  in the binding's own language: Node's `wireToJS`/`jsToWire` in
+  `guatiao/ffi`, Go's `guatiao.MarshalWire`/`UnmarshalWire`. Measured
+  locally on a structured document: 8x to 25x faster in Node, 1.5x to
+  4.5x in Go; slower for a document that is one large string, which is
+  copied once more.
 - **Providers a language bridge or a remote peer serves carry their
   kinds' descriptions.** A provider guatiao-bridge builds from an
   engine's declaration (the Lua, Rhai, JavaScript and WebAssembly
@@ -1237,6 +1250,15 @@ write now.
 
 ### Fixed
 
+- **Go: Go data nests as deep as the library allows.** Converting Go data
+  counted each interface and pointer on the way as a level of its own, so
+  `[]any` nested 64 deep was refused as deeper than 128. Only values count
+  now; a value a `Marshaler` answers takes the level of the type it
+  stands for.
+- **Go: a map whose keys write the same text is refused.** Two keys of a
+  Go map that write one text (two `TextMarshaler` keys, say) made a tree
+  keep one of them, which one depending on the map's order; it is now an
+  `ErrBadValue` naming the key.
 - **guatiao-source-remote: a link ended while a write is under way still
   tells the peer.** GOODBYE went out only if the writer was free at that
   moment; over shared memory on Windows the peer then never saw the end.
