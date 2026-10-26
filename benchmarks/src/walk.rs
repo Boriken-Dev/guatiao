@@ -9,8 +9,9 @@
 
 use core::hint::black_box;
 
+use guatiao::value::visit::{Flat, Sink};
 use guatiao::value::wire;
-use guatiao::{Alloc, Bytes, FromValue, ToValue};
+use guatiao::{Alloc, Bytes, FromValue, ToValue, Value, ValueError, Walk};
 use guatiao_serde::Presentation;
 use guatiao_serde::text::json;
 
@@ -225,4 +226,176 @@ pub(crate) fn json_floats_tree(_: &Libraries) -> Run {
 
 pub(crate) fn json_floats_walk(_: &Libraries) -> Run {
     json_to_walk(floats())
+}
+
+// --- written from a tree or from its wire bytes ---------------------------------
+
+/// Two hundred keys in one map, each holding text, a number or a bool.
+fn keys() -> Value {
+    let entries: Vec<String> = (0..200)
+        .map(|i| match i % 3 {
+            0 => format!("\"setting-{i}\": \"value {i}\""),
+            1 => format!("\"setting-{i}\": {i}.5"),
+            _ => format!("\"setting-{i}\": {}", i % 2 == 0),
+        })
+        .collect();
+    let text = format!("{{{}}}", entries.join(", "));
+    json::from_str(&text, Alloc::rust(), Presentation::new()).expect("parsed")
+}
+
+/// Takes every event and keeps nothing: what a walk costs on its own.
+struct Discard;
+
+impl Sink for Discard {
+    type Error = ValueError;
+
+    fn absent(&mut self) -> Result<(), ValueError> {
+        Ok(())
+    }
+    fn null(&mut self) -> Result<(), ValueError> {
+        Ok(())
+    }
+    fn bool(&mut self, value: bool) -> Result<(), ValueError> {
+        black_box(value);
+        Ok(())
+    }
+    fn number(&mut self, text: &str) -> Result<(), ValueError> {
+        black_box(text);
+        Ok(())
+    }
+    fn string(&mut self, text: &str) -> Result<(), ValueError> {
+        black_box(text);
+        Ok(())
+    }
+    fn bytes(&mut self, bytes: &[u8]) -> Result<(), ValueError> {
+        black_box(bytes);
+        Ok(())
+    }
+    fn list_begin(&mut self, len: Option<usize>) -> Result<(), ValueError> {
+        black_box(len);
+        Ok(())
+    }
+    fn list_end(&mut self) -> Result<(), ValueError> {
+        Ok(())
+    }
+    fn map_begin(&mut self, len: Option<usize>) -> Result<(), ValueError> {
+        black_box(len);
+        Ok(())
+    }
+    fn key(&mut self, key: &str) -> Result<(), ValueError> {
+        black_box(key);
+        Ok(())
+    }
+    fn map_end(&mut self) -> Result<(), ValueError> {
+        Ok(())
+    }
+}
+
+fn tree_json(tree: Value) -> Run {
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(json::to_string_of(black_box(&tree), Presentation::new()).expect("written"));
+        })
+    })
+}
+
+fn bytes_json(tree: Value) -> Run {
+    let bytes = wire::to_bytes(&tree).expect("encoded");
+    Box::new(move |iters| {
+        batch(iters, || {
+            let walk = wire::Encoded(black_box(&bytes));
+            black_box(json::to_string_of(&walk, Presentation::new()).expect("written"));
+        })
+    })
+}
+
+fn tree_events(tree: Value) -> Run {
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(&tree).walk(Flat(&mut Discard)).expect("walked");
+        })
+    })
+}
+
+fn bytes_events(tree: Value) -> Run {
+    let bytes = wire::to_bytes(&tree).expect("encoded");
+    Box::new(move |iters| {
+        batch(iters, || {
+            wire::Encoded(black_box(&bytes))
+                .walk(Flat(&mut Discard))
+                .expect("walked");
+        })
+    })
+}
+
+fn config_tree() -> Value {
+    config().to_value().expect("built")
+}
+
+pub(crate) fn tree_json_config(_: &Libraries) -> Run {
+    tree_json(config_tree())
+}
+
+pub(crate) fn bytes_json_config(_: &Libraries) -> Run {
+    bytes_json(config_tree())
+}
+
+pub(crate) fn tree_json_keys(_: &Libraries) -> Run {
+    tree_json(keys())
+}
+
+pub(crate) fn bytes_json_keys(_: &Libraries) -> Run {
+    bytes_json(keys())
+}
+
+pub(crate) fn tree_events_config(_: &Libraries) -> Run {
+    tree_events(config_tree())
+}
+
+pub(crate) fn bytes_events_config(_: &Libraries) -> Run {
+    bytes_events(config_tree())
+}
+
+pub(crate) fn tree_events_keys(_: &Libraries) -> Run {
+    tree_events(keys())
+}
+
+pub(crate) fn bytes_events_keys(_: &Libraries) -> Run {
+    bytes_events(keys())
+}
+
+/// A tree to JSON through its own serde impl: what `guatiao_json_emit`
+/// runs, where `guatiao_json_from_wire` runs `bytes_json`.
+fn value_json(tree: Value) -> Run {
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(json::to_string(black_box(&tree), Presentation::new()).expect("written"));
+        })
+    })
+}
+
+/// One map holding a 1 MiB string.
+fn blob_tree() -> Value {
+    let text = format!("{{\"blob\": \"{}\"}}", "x".repeat(1 << 20));
+    json::from_str(&text, Alloc::rust(), Presentation::new()).expect("parsed")
+}
+
+pub(crate) fn value_json_config(_: &Libraries) -> Run {
+    value_json(config_tree())
+}
+
+pub(crate) fn value_json_keys(_: &Libraries) -> Run {
+    value_json(keys())
+}
+
+pub(crate) fn value_json_blob(_: &Libraries) -> Run {
+    value_json(blob_tree())
+}
+
+pub(crate) fn tree_json_blob(_: &Libraries) -> Run {
+    tree_json(blob_tree())
+}
+
+pub(crate) fn bytes_json_blob(_: &Libraries) -> Run {
+    bytes_json(blob_tree())
 }

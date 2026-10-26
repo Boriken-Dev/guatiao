@@ -89,6 +89,11 @@ sample, which is what `--merge` pools.
 | `config_json_tree`, `config_json_walk` | the configuration to JSON: `to_value` then `text::json::to_string`, against `to_string_of` |
 | `json_config_tree`, `json_config_walk` | that text back: `json::from_str` then `from_value`, against `json::from_str_as` |
 | `floats_json_*`, `json_floats_*` | the same for the ten thousand floats |
+| `tree_json_config`, `bytes_json_config` | the configuration's tree, built once, to JSON through its walk (`to_string_of(&tree)`), against its wire bytes walked (`to_string_of(&Encoded(bytes))`, what `guatiao_json_from_wire` runs) |
+| `value_json_config` | that tree to JSON through its own serde impl (`text::json::to_string`, what `guatiao_json_emit` runs) |
+| `*_json_keys` | the same three for one map of two hundred keys (text, numbers and bools) |
+| `*_json_blob` | the same three for one map holding a 1 MiB string |
+| `tree_events_*`, `bytes_events_*` | the configuration and the two hundred keys walked into a sink that keeps nothing, from the tree and from the wire bytes: what the walk costs alone |
 
 ## Results
 
