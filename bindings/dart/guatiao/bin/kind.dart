@@ -12,6 +12,10 @@
 /// writes this package's library identity from its `pubspec.yaml`
 /// (default `lib/src/library_identity.g.dart`).
 ///
+/// `dart run guatiao:kind describe FILE.dart -o DOCUMENT [--check]` writes
+/// the document of the kinds a Dart file declares
+/// (`package:guatiao/describe.dart`), which the first form then reads.
+///
 /// `--check` writes nothing and exits 1 when the file is not what it would
 /// write.
 library;
@@ -19,11 +23,13 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:guatiao/src/kind_describer.dart';
 import 'package:guatiao/src/kind_generator.dart';
 
 const _usage =
     'usage: dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]\n'
-    '       dart run guatiao:kind identity [-o FILE] [--pubspec FILE] [--check]';
+    '       dart run guatiao:kind identity [-o FILE] [--pubspec FILE] [--check]\n'
+    '       dart run guatiao:kind describe FILE.dart -o DOCUMENT [--check]';
 
 List<String> _segments(String path) =>
     File(path).absolute.uri.pathSegments.where((s) => s.isNotEmpty).toList();
@@ -77,6 +83,8 @@ void main(List<String> argv) {
   }
   final out = option('-o') ?? option('--out');
   final pubspec = option('--pubspec');
+  final describing = args.length == 2 && args.first == 'describe';
+  if (describing) args.removeAt(0);
   if (args.length != 1) {
     stderr.writeln(_usage);
     exit(2);
@@ -84,7 +92,19 @@ void main(List<String> argv) {
   final String target;
   final String text;
   try {
-    if (args.single == 'identity') {
+    if (describing) {
+      if (out == null) {
+        stderr.writeln(_usage);
+        exit(2);
+      }
+      target = out;
+      text = describedText(
+        describeDeclarations(
+          File(args.single).readAsStringSync(),
+          file: args.single,
+        ),
+      );
+    } else if (args.single == 'identity') {
       target = out ?? 'lib/src/library_identity.g.dart';
       final from = pubspec ?? 'pubspec.yaml';
       final here = _segments(target)..removeLast();

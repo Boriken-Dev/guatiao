@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A kind born in Dart** (`package:guatiao/describe.dart`): abstract
+  interface classes spelled with its marks (`U32`, `Lent<MapRef>`,
+  `Taken<Listener>`, `MapAnswer`, `implements ObjectKind`, `@fallible`,
+  `@appended`) are read by `dart run guatiao:kind describe FILE.dart -o
+  DOCUMENT` (or `describeDeclarations`) into the description document,
+  with the floor hash `#[guatiao::kind]` gives the same required slots;
+  `dart run guatiao:kind DOCUMENT -o FILE` then writes the kind's classes.
+
 - **A server's providers from plain Dart** (`package:guatiao/remote.dart`):
   `RemoteLink.connect(Uri.parse('ws://host:port/'), key: ...)` speaks
   guatiao's remote protocol over a WebSocket with no native library and
