@@ -7,7 +7,7 @@
 //!
 //! | key | holds |
 //! | --- | --- |
-//! | `connect` | `tcp://host:port`, `quic://host:port` (QUIC), `ws://host:port/path` and `wss://host:port/path` (WebSocket, as a browser connects, without and with TLS), `tls://host:port` (TCP with TLS), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
+//! | `connect` | `tcp://host:port`, `quic://host:port` (QUIC), `ws://host:port/path` and `wss://host:port/path` (WebSocket, as a browser connects, without and with TLS), `https://host:port/path` (WebTransport, HTTP/3 over QUIC, as a browser connects), `tls://host:port` (TCP with TLS), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
 //! | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `security` | `none`, `server-tls` or `mutual-tls`: none on a child, `local://` and `shm://` (the only one they run), mutual TLS on every network transport unless told |
@@ -348,6 +348,23 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
         "quic" => Err(ProviderError::new(
             Status::GUATIAO_ERR_UNSUPPORTED,
             "`quic://` is not in this build (guatiao-source-remote's `quic` feature)",
+        )),
+        // WebTransport runs QUIC's TLS at every security, as `quic://`.
+        #[cfg(feature = "webtransport")]
+        "https" => {
+            use crate::transport::webtransport::WtConnect;
+            let connect = if security == Security::None {
+                WtConnect::trusted(connect)
+            } else {
+                WtConnect::new(connect, &tls_config_of(map, security)?)
+            }
+            .map_err(|e| refused(e.to_string()))?;
+            Ok((Box::new(connect), options_of(map, trust)?))
+        }
+        #[cfg(not(feature = "webtransport"))]
+        "https" => Err(ProviderError::new(
+            Status::GUATIAO_ERR_UNSUPPORTED,
+            "`https://` (WebTransport) is not in this build (guatiao-source-remote's `webtransport` feature)",
         )),
         #[cfg(feature = "ws")]
         "ws" => {

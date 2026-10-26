@@ -66,20 +66,20 @@ use super::{Connect, Connection, Datagrams, FrameRead};
 /// The code a connection closes with when it ends without its stream
 /// finished: the peer reads an error, not an end. quinn closes a
 /// connection dropped unclosed with it too.
-const ABRUPT: u32 = 0;
+pub(super) const ABRUPT: u32 = 0;
 /// The code a connection closes with when its link ended as it should.
-const CLEAN: u32 = 1;
+pub(super) const CLEAN: u32 = 1;
 /// The code a server closes a connection with when its access control
 /// list or the application protocol refuses the peer.
-const REFUSED: u32 = 2;
+pub(super) const REFUSED: u32 = 2;
 
 /// How long ending a link waits for the peer to acknowledge what was
 /// sent: past it the rest is given up. A round trip or two on any path.
-const CLOSE_WAIT: Duration = Duration::from_secs(2);
+pub(super) const CLOSE_WAIT: Duration = Duration::from_secs(2);
 
 /// How long a connection dropped unclosed waits for its close to leave
 /// before the runtime under it may stop.
-const DROP_WAIT: Duration = Duration::from_millis(100);
+pub(super) const DROP_WAIT: Duration = Duration::from_millis(100);
 
 /// The runtime's worker threads: the endpoint's driver and the
 /// connections' drivers.
@@ -95,10 +95,10 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// The runtime quinn runs on, shut down without waiting when the last
 /// holder lets it go (which may be a thread inside another runtime).
-struct Rt(Option<Runtime>);
+pub(super) struct Rt(Option<Runtime>);
 
 impl Rt {
-    fn new() -> io::Result<Arc<Rt>> {
+    pub(super) fn new() -> io::Result<Arc<Rt>> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(WORKERS)
             .thread_name("guatiao-remote quic")
@@ -107,7 +107,7 @@ impl Rt {
         Ok(Arc::new(Rt(Some(rt))))
     }
 
-    fn handle(&self) -> &Handle {
+    pub(super) fn handle(&self) -> &Handle {
         self.0.as_ref().expect("a runtime until dropped").handle()
     }
 }
@@ -136,7 +136,7 @@ impl Wake for Unpark {
 /// Runs `work` to its end on this thread, inside `rt`'s context (its
 /// timers, its sockets), parking between polls. Unlike `block_on`, it may
 /// be called from a thread that is inside another runtime.
-fn wait<F: Future>(rt: &Handle, work: F) -> F::Output {
+pub(super) fn wait<F: Future>(rt: &Handle, work: F) -> F::Output {
     let _inside = rt.enter();
     let waker = Waker::from(Arc::new(Unpark(thread::current())));
     let mut cx = Context::from_waker(&waker);
@@ -150,7 +150,11 @@ fn wait<F: Future>(rt: &Handle, work: F) -> F::Output {
 }
 
 /// As [`wait`], giving up after `bound` (none: never).
-fn wait_at_most<F: Future>(rt: &Handle, bound: Option<Duration>, work: F) -> io::Result<F::Output> {
+pub(super) fn wait_at_most<F: Future>(
+    rt: &Handle,
+    bound: Option<Duration>,
+    work: F,
+) -> io::Result<F::Output> {
     match bound {
         None => Ok(wait(rt, work)),
         Some(bound) => {
@@ -165,7 +169,7 @@ fn wait_at_most<F: Future>(rt: &Handle, bound: Option<Duration>, work: F) -> io:
 }
 
 /// What is left of a deadline, or a timeout once it passed.
-fn left(until: Option<Instant>) -> io::Result<Option<Duration>> {
+pub(super) fn left(until: Option<Instant>) -> io::Result<Option<Duration>> {
     match until {
         None => Ok(None),
         Some(until) => match until.checked_duration_since(Instant::now()) {
@@ -179,6 +183,11 @@ fn left(until: Option<Instant>) -> io::Result<Option<Duration>> {
 }
 
 fn transport() -> Arc<quinn::TransportConfig> {
+    Arc::new(transport_config())
+}
+
+/// The transport settings every connection runs with.
+pub(super) fn transport_config() -> quinn::TransportConfig {
     let mut t = quinn::TransportConfig::default();
     // Room for a large frame in flight on a fast path.
     t.stream_receive_window(VarInt::from_u32(16 << 20));
@@ -187,11 +196,11 @@ fn transport() -> Arc<quinn::TransportConfig> {
     // An idle link stays up; a lost peer ends it after the idle timeout.
     t.keep_alive_interval(Some(Duration::from_secs(10)));
     t.datagram_receive_buffer_size(Some(1 << 20));
-    Arc::new(t)
+    t
 }
 
 /// The first refusal a connection's verifier returned, for the words.
-type Kept = Arc<OnceLock<Refusal>>;
+pub(super) type Kept = Arc<OnceLock<Refusal>>;
 
 fn keep(kept: &Kept, e: &rustls::Error) {
     if let Some(r) = Refusal::from_rustls(e) {
@@ -203,10 +212,10 @@ fn keep(kept: &Kept, e: &rustls::Error) {
 /// with that connection's address as the source a waiting entry records,
 /// and the first refusal is kept for the words.
 #[derive(Debug)]
-struct Sourced {
-    inner: Arc<dyn ClientCertVerifier>,
-    source: SocketAddr,
-    refusal: Kept,
+pub(super) struct Sourced {
+    pub(super) inner: Arc<dyn ClientCertVerifier>,
+    pub(super) source: SocketAddr,
+    pub(super) refusal: Kept,
 }
 
 impl Sourced {
@@ -281,9 +290,9 @@ impl ClientCertVerifier for Sourced {
 /// made for the words. One for every connection of a [`QuicConnect`]:
 /// rustls resumes a session only under the verifier that made it.
 #[derive(Debug)]
-struct Watched {
-    inner: Arc<dyn ServerCertVerifier>,
-    refusal: Mutex<Option<Refusal>>,
+pub(super) struct Watched {
+    pub(super) inner: Arc<dyn ServerCertVerifier>,
+    pub(super) refusal: Mutex<Option<Refusal>>,
 }
 
 impl Watched {
@@ -381,7 +390,7 @@ fn no_protocol(e: &ConnectionError) -> bool {
 }
 
 /// The fingerprint of the certificate the peer proved it holds.
-fn fingerprint(conn: &quinn::Connection) -> io::Result<PeerId> {
+pub(super) fn fingerprint(conn: &quinn::Connection) -> io::Result<PeerId> {
     conn.peer_identity()
         .and_then(|any| any.downcast::<Vec<CertificateDer<'static>>>().ok())
         .and_then(|chain| chain.first().map(|c| PeerId::of(c.as_ref())))
@@ -401,7 +410,7 @@ fn certificate_refused(e: &ConnectionError) -> bool {
 
 /// The TLS alert a QUIC connection ended with (a CRYPTO_ERROR, `0x100` and
 /// the alert), sent by the peer or raised here.
-fn alert(e: &ConnectionError) -> Option<u8> {
+pub(super) fn alert(e: &ConnectionError) -> Option<u8> {
     let code = match e {
         ConnectionError::ConnectionClosed(close) => close.error_code,
         ConnectionError::TransportError(e) => e.code,

@@ -32,14 +32,16 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         tls://ADDRESS:PORT the same, TLS required),
                         quic://ADDRESS:PORT (QUIC, UDP), ws://ADDRESS:PORT and
                         wss://ADDRESS:PORT (WebSocket, a browser's, without
-                        and with TLS), local://name (a socket path or a pipe
-                        name), shm://name, rdma://ADDRESS:PORT (RDMA,
-                        experimental, Linux only)
+                        and with TLS), https://ADDRESS:PORT (WebTransport,
+                        HTTP/3 over QUIC, a browser's), local://name (a
+                        socket path or a pipe name), shm://name,
+                        rdma://ADDRESS:PORT (RDMA, experimental, Linux only)
   --security MODE       none | server-tls | mutual-tls: none on --stdio,
                         local:// and shm:// (the only one they run), mutual-tls
                         on the network transports unless told; ws:// and
-                        rdma:// run none alone, wss:// and tls:// TLS alone;
-                        server-tls proves clients by --key-file
+                        rdma:// run none alone, wss:// and tls:// TLS alone,
+                        quic:// and https:// any; server-tls proves clients
+                        by --key-file
   --range CIDR          admit peers from this address range (repeatable): a
                         permit rule of the access control list, which denies
                         what no rule permits
@@ -51,7 +53,13 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         when absent) and its trust store (DIR/peers): unless
                         --pin is given, clients it does not know wait there
                         until accepted
-  --identity PATH       TLS: the identity file instead (made when absent)
+  --identity PATH       TLS: the identity file instead (made when absent);
+                        https:// presents certificates it makes itself, a
+                        new one every six days, which a page pins by hash,
+                        unless this or --state-dir names one
+  --hashes-file PATH    https://: write the hashes a page pins (a JSON list
+                        of sha256:<hex>, the certificate presented and the
+                        next) here, again at every new certificate
   --pin FINGERPRINT     TLS: trust this client (repeatable); with any, the
                         trust store no longer decides
   --policy PATH         TLS: the TLS policy, a TOML or JSON file (default
@@ -80,6 +88,7 @@ struct Args {
     key_file: Option<PathBuf>,
     state_dir: Option<PathBuf>,
     identity: Option<PathBuf>,
+    hashes_file: Option<PathBuf>,
     pins: Vec<String>,
     policy: Option<PathBuf>,
     waiting: bool,
@@ -106,6 +115,7 @@ fn parse() -> Result<Args, String> {
         key_file: None,
         state_dir: None,
         identity: None,
+        hashes_file: None,
         pins: Vec::new(),
         policy: None,
         waiting: false,
@@ -144,6 +154,7 @@ fn parse() -> Result<Args, String> {
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),
             "--state-dir" => a.state_dir = Some(need(&mut it, &flag)?.into()),
             "--identity" => a.identity = Some(need(&mut it, &flag)?.into()),
+            "--hashes-file" => a.hashes_file = Some(need(&mut it, &flag)?.into()),
             "--pin" => a.pins.push(need(&mut it, &flag)?),
             "--policy" => a.policy = Some(need(&mut it, &flag)?.into()),
             "--waiting" => a.waiting = true,
@@ -387,6 +398,8 @@ fn run() -> Result<(), String> {
         "quic" if !tls => serve_quic_trusted(&front, address, &a),
         #[cfg(feature = "quic")]
         "quic" => serve_quic(&front, address, &a),
+        #[cfg(feature = "webtransport")]
+        "https" => serve_wt(&front, address, &a),
         #[cfg(feature = "rdma")]
         "rdma" => serve_rdma(&front, address, &a),
         #[cfg(feature = "local")]
@@ -821,7 +834,7 @@ fn secure_config(
     ),
     String,
 > {
-    use guatiao_source_remote::transport::tls::{PeerId, TlsConfig, identity_at};
+    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig, identity_at};
     let mutual = match server.options().trust() {
         Trust::Secure => true,
         Trust::ServerTls => false,
@@ -844,6 +857,10 @@ fn secure_config(
         })?),
         (Some(_), Some(_)) => {
             return Err("name --state-dir or --identity, not both".to_string());
+        }
+        // It presents certificates it makes: this one is never shown.
+        (None, None) if scheme == "https" => {
+            TlsConfig::new(Identity::generate().map_err(|e| e.to_string())?)
         }
         (None, None) => {
             return Err(format!(
@@ -945,6 +962,98 @@ fn serve_quic_trusted(
         listener.local_addr().map_err(|e| e.to_string())?,
     );
     serve_accepted(front, || listener.accept())
+}
+
+/// WebTransport at the security `--security` names. Unless `--identity`
+/// or `--state-dir` names a certificate, it presents ones it makes, a new
+/// one every
+/// [`ROTATE_EVERY`](guatiao_source_remote::transport::webtransport::ROTATE_EVERY),
+/// and says (and writes to `--hashes-file`) the hashes a page pins.
+#[cfg(feature = "webtransport")]
+fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
+    use guatiao_source_remote::transport::tls::identity_at;
+    use guatiao_source_remote::transport::webtransport::{ROTATE_EVERY, WtListen};
+    let trusted = front.server.options().trust() == Trust::Trusted;
+    let listener = if trusted {
+        let acl = trusted_acl(&front.server, "https", a)?;
+        let said = listing(&acl);
+        let listener = WtListen::bind_trusted(address, acl).map_err(|e| e.to_string())?;
+        eprintln!(
+            "guatiao-remote-server: serving https://{}/ (WebTransport) with no certificate checked, admitting {said}",
+            listener.local_addr().map_err(|e| e.to_string())?,
+        );
+        listener
+    } else {
+        let (config, trusting, said) = secure_config(&front.server, "https", a)?;
+        let listener = WtListen::bind(address, &config).map_err(|e| e.to_string())?;
+        eprintln!(
+            "guatiao-remote-server: serving https://{}/ (WebTransport), trusting {trusting}, admitting {said}",
+            listener.local_addr().map_err(|e| e.to_string())?,
+        );
+        for w in config.weakened() {
+            eprintln!(
+                "guatiao-remote-server: weaker than strict: {} = {} (strict: {})",
+                w.setting, w.value, w.strict
+            );
+        }
+        listener
+    };
+    let listener = match (&a.identity, &a.state_dir) {
+        // With TLS the configuration already presents the one named.
+        (Some(_), _) | (None, Some(_)) if !trusted => listener,
+        (Some(path), _) => {
+            let identity = identity_at(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            listener.presenting(identity).map_err(|e| e.to_string())?
+        }
+        _ => listener.rotating(ROTATE_EVERY).map_err(|e| e.to_string())?,
+    };
+    let listener = alloc::sync::Arc::new(listener);
+    let mut said = Vec::new();
+    publish_hashes(&listener, a.hashes_file.as_deref(), &mut said)?;
+    let watching = alloc::sync::Arc::clone(&listener);
+    let file = a.hashes_file.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
+            if let Err(e) = publish_hashes(&watching, file.as_deref(), &mut said) {
+                eprintln!("guatiao-remote-server: {e}");
+            }
+        }
+    });
+    serve_accepted(front, || listener.accept())
+}
+
+/// Says the hashes a page pins when they differ from `said`, and writes
+/// them to `file` (whole, through a file beside it).
+#[cfg(feature = "webtransport")]
+fn publish_hashes(
+    listener: &guatiao_source_remote::transport::webtransport::WtListen,
+    file: Option<&std::path::Path>,
+    said: &mut Vec<String>,
+) -> Result<(), String> {
+    let hashes: Vec<String> = listener
+        .certificate_hashes()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|h| h.canonical())
+        .collect();
+    if *said == hashes {
+        return Ok(());
+    }
+    if let Some(file) = file {
+        let quoted: Vec<String> = hashes.iter().map(|h| format!("\"{h}\"")).collect();
+        let fresh = file.with_extension("partial");
+        std::fs::write(&fresh, format!("[{}]\n", quoted.join(", ")))
+            .and_then(|()| std::fs::rename(&fresh, file))
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+    }
+    // Said once the file holds them, so whoever reads the line finds them.
+    eprintln!(
+        "guatiao-remote-server: certificate hashes {}",
+        hashes.join(" ")
+    );
+    *said = hashes;
+    Ok(())
 }
 
 #[cfg(all(feature = "ws", feature = "tls"))]

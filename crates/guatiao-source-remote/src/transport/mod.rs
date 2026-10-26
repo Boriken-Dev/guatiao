@@ -30,6 +30,8 @@ pub mod stream;
 pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(feature = "webtransport")]
+pub mod webtransport;
 #[cfg(feature = "ws")]
 pub mod ws;
 

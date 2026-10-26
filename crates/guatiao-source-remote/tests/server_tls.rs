@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Server TLS on every transport that runs TLS (`tls://`, `quic://`,
-//! `wss://`): the server proven by its certificate, the client by the key
+//! `wss://`, WebTransport's `https://`): the server proven by its certificate, the client by the key
 //! or a token inside the link, presenting no certificate.
 
 #![cfg(feature = "tls")]
@@ -29,6 +29,8 @@ enum Over {
     Quic,
     #[cfg(feature = "ws")]
     Wss,
+    #[cfg(feature = "webtransport")]
+    Wt,
 }
 
 fn over_name(over: Over) -> &'static str {
@@ -38,6 +40,8 @@ fn over_name(over: Over) -> &'static str {
         Over::Quic => "quic",
         #[cfg(feature = "ws")]
         Over::Wss => "wss",
+        #[cfg(feature = "webtransport")]
+        Over::Wt => "https",
     }
 }
 
@@ -48,6 +52,8 @@ fn every() -> Vec<Over> {
     all.push(Over::Quic);
     #[cfg(feature = "ws")]
     all.push(Over::Wss);
+    #[cfg(feature = "webtransport")]
+    all.push(Over::Wt);
     all
 }
 
@@ -70,6 +76,16 @@ fn listen(over: Over, config: &TlsConfig, server: Server) -> String {
         Over::Wss => {
             let l = guatiao_source_remote::transport::ws::WsListen::bind_tls("127.0.0.1:0", config)
                 .unwrap();
+            let at = l.local_addr().unwrap().to_string();
+            spawn(at, Box::new(move || l.accept()), server)
+        }
+        #[cfg(feature = "webtransport")]
+        Over::Wt => {
+            let l = guatiao_source_remote::transport::webtransport::WtListen::bind(
+                "127.0.0.1:0",
+                config,
+            )
+            .unwrap();
             let at = l.local_addr().unwrap().to_string();
             spawn(at, Box::new(move || l.accept()), server)
         }
@@ -106,6 +122,14 @@ fn connect(over: Over, address: &str, config: &TlsConfig) -> Box<dyn Connect> {
             guatiao_source_remote::transport::ws::WsConnect::new(&format!("wss://{address}/"))
                 .tls(config)
                 .unwrap(),
+        ),
+        #[cfg(feature = "webtransport")]
+        Over::Wt => Box::new(
+            guatiao_source_remote::transport::webtransport::WtConnect::new(
+                &format!("https://{address}/"),
+                config,
+            )
+            .unwrap(),
         ),
     }
 }
@@ -162,7 +186,7 @@ fn a_client_with_no_certificate_links_by_the_key_on_every_transport() {
             Some(server.fingerprint().canonical().as_str()),
             "{over:?}: the client knows the server"
         );
-        assert!(link.datagrams().is_some() == matches!(over_name(over), "quic"));
+        assert!(link.datagrams().is_some() == matches!(over_name(over), "quic" | "https"));
 
         let wrong = RemoteSource::new(
             connect(over, &address, &client),

@@ -393,6 +393,16 @@ impl TlsConfig {
         &self.identity
     }
 
+    /// The same configuration presenting `identity` instead: a WebTransport
+    /// listener rotating short-lived certificates.
+    #[cfg(feature = "webtransport")]
+    pub(crate) fn presenting(&self, identity: Identity) -> TlsConfig {
+        TlsConfig {
+            identity,
+            ..self.clone()
+        }
+    }
+
     /// This side's fingerprint: what a peer pins or accepts.
     pub fn fingerprint(&self) -> PeerId {
         self.identity.fingerprint()
