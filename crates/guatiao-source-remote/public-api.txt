@@ -479,6 +479,7 @@ pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::set_timeout(&m
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frames(&mut self, &[&[u8]]) -> core::io::error::Result<()>
 pub mod guatiao_source_remote::transport::tcp
 #[non_exhaustive] pub enum guatiao_source_remote::transport::tcp::Accepted
 pub guatiao_source_remote::transport::tcp::Accepted::Connection(guatiao_source_remote::transport::Connection)
@@ -557,11 +558,13 @@ pub fn guatiao_source_remote::transport::FrameWrite::set_timeout(&mut self, core
 pub fn guatiao_source_remote::transport::FrameWrite::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::FrameWrite::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::FrameWrite::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_source_remote::transport::FrameWrite::write_frames(&mut self, &[&[u8]]) -> core::io::error::Result<()>
 impl<W: core::io::write::Write + core::marker::Send> guatiao_source_remote::transport::FrameWrite for guatiao_source_remote::transport::stream::StreamWriter<W>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
+pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frames(&mut self, &[&[u8]]) -> core::io::error::Result<()>
 #[non_exhaustive] pub enum guatiao_source_remote::LinkError
 pub guatiao_source_remote::LinkError::Io(core::io::error::Error)
 pub guatiao_source_remote::LinkError::Protocol(guatiao_source_remote::protocol::ProtocolError)

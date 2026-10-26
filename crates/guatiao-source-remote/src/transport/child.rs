@@ -80,6 +80,13 @@ impl FrameWrite for ChildWriter {
             .write_frame_parts(head, tail)
     }
 
+    fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
+        self.stdin
+            .as_mut()
+            .ok_or_else(|| io::Error::from(io::ErrorKind::BrokenPipe))?
+            .write_frames(frames)
+    }
+
     fn shutdown(&mut self) {
         // Closing stdin asks the child to leave; one that does not is ended.
         self.stdin = None;

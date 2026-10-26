@@ -89,7 +89,7 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 
 ```rust
 trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn set_timeout(..) }
-trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frame_parts(&mut self, head, tail); fn set_timeout(..); fn shutdown(&mut self) }
+trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frames(&mut self, &[&[u8]]); fn write_frame_parts(&mut self, head, tail); fn set_timeout(..); fn shutdown(&mut self) }
 struct Connection { reader, writer, peer: String, closer: Option<Box<dyn Fn()>> }
 trait Connect { fn connect(&self) -> io::Result<Connection>; fn describe(&self) -> String }
 memory::pair() -> (Connection, Connection)        // tests
@@ -111,7 +111,9 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   only an empty range list; `accept` closes a peer outside the ranges
   unread (`Accepted::Refused`).
 - A frame a writer gets already carries its 4-byte length; a message
-  transport drops it.
+  transport drops it. `write_frames` gets frames queued while another
+  thread wrote: by default one `write_frame` each, a stream writes them
+  in one vectored write; a wrapper around a writer forwards it.
 - **`FrameWrite::set_timeout`**: shared memory and RDMA fail a write
   that finds no room for that long; TCP and Unix sockets set the send
   timeout, which on Windows bounds a whole `send` once earlier bytes are

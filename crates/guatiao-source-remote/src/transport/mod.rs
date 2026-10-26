@@ -57,6 +57,12 @@ pub trait FrameWrite: Send {
         self.write_frame(&joined)
     }
 
+    /// Writes frames one after another, as `write_frame` each. A stream
+    /// writes them in one go.
+    fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
+        frames.iter().try_for_each(|f| self.write_frame(f))
+    }
+
     /// Bounds how long a write waits while the peer takes nothing in, or
     /// lifts the bound: past it the write fails and the link ends. A
     /// transport that cannot bound a write ignores it.
