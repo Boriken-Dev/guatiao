@@ -51,20 +51,20 @@ module guatiao_c
     type(c_ptr) :: alloc = c_null_ptr
   end type
 
-  !> `guatiao_value`: 40 bytes.
+  !> `guatiao_value`: 8 bytes and four words.
   type, bind(c) :: gt_value
     integer(c_int32_t) :: tag = GUATIAO_TAG_ABSENT
     integer(c_int32_t) :: pad = 0
     type(gt_owned) :: payload
   end type
 
-  !> `guatiao_entry`: 72 bytes.
+  !> `guatiao_entry`: 8 bytes and eight words.
   type, bind(c) :: gt_entry
     type(gt_owned) :: key
     type(gt_value) :: value
   end type
 
-  !> `guatiao_alloc`: 40 bytes.
+  !> `guatiao_alloc`: five words.
   type, bind(c) :: gt_alloc
     integer(c_int32_t) :: struct_size = 0
     type(c_ptr) :: ctx = c_null_ptr
@@ -73,19 +73,19 @@ module guatiao_c
     type(c_funptr) :: release = c_null_funptr
   end type
 
-  !> `guatiao_provider_error`: 40 bytes.
+  !> `guatiao_provider_error`: five words.
   type, bind(c) :: gt_provider_error
     integer(c_int32_t) :: status = GUATIAO_OK
     type(gt_owned) :: message
   end type
 
-  !> `guatiao_kinds`: 16 bytes.
+  !> `guatiao_kinds`: two words.
   type, bind(c) :: gt_kinds
     type(c_ptr) :: ptr = c_null_ptr
     integer(c_size_t) :: len = 0
   end type
 
-  !> `guatiao_kind_table`: 32 bytes.
+  !> `guatiao_kind_table`: 8 bytes and three words.
   type, bind(c) :: gt_kind_table
     integer(c_int32_t) :: struct_size = 0
     integer(c_int32_t) :: vtable_size = 0
@@ -93,14 +93,14 @@ module guatiao_c
     type(c_ptr) :: vtable = c_null_ptr
   end type
 
-  !> `guatiao_kind_tables`: 24 bytes.
+  !> `guatiao_kind_tables`: three words.
   type, bind(c) :: gt_kind_tables
     type(c_ptr) :: ptr = c_null_ptr
     integer(c_size_t) :: len = 0
     integer(c_size_t) :: stride = 0
   end type
 
-  !> `guatiao_provider_info`: 168 bytes.
+  !> `guatiao_provider_info`: 8 bytes and 20 words.
   type, bind(c) :: gt_provider_info
     integer(c_int32_t) :: struct_size = 0
     integer(c_int32_t) :: vtable_size = 0
@@ -119,7 +119,7 @@ module guatiao_c
     type(gt_str) :: kind_descriptions
   end type
 
-  !> `guatiao_host_services`: 72 bytes.
+  !> `guatiao_host_services`: nine words.
   type, bind(c) :: gt_host_services
     integer(c_int32_t) :: struct_size = 0
     type(c_ptr) :: ctx = c_null_ptr
@@ -132,7 +132,7 @@ module guatiao_c
     type(c_funptr) :: unpin = c_null_funptr
   end type
 
-  !> `guatiao_host_info`: 64 bytes.
+  !> `guatiao_host_info`: 8 bytes and seven words.
   type, bind(c) :: gt_host_info
     integer(c_int32_t) :: struct_size = 0
     integer(c_int32_t) :: abi_version = 0
@@ -143,14 +143,14 @@ module guatiao_c
     type(c_ptr) :: services = c_null_ptr
   end type
 
-  !> `guatiao_providers`: 24 bytes.
+  !> `guatiao_providers`: three words.
   type, bind(c) :: gt_providers
     type(c_ptr) :: ptr = c_null_ptr
     integer(c_size_t) :: len = 0
     integer(c_size_t) :: stride = 0
   end type
 
-  !> `guatiao_library_info`: 80 bytes.
+  !> `guatiao_library_info`: 8 bytes and nine words.
   type, bind(c) :: gt_library_info
     integer(c_int32_t) :: struct_size = 0
     integer(c_int32_t) :: abi_version = 0
@@ -168,7 +168,7 @@ module guatiao_c
     integer(c_int32_t) :: nanoseconds = 0
   end type
 
-  !> `guatiao_text_error`: 48 bytes.
+  !> `guatiao_text_error`: 8 bytes and five words.
   type, bind(c) :: gt_text_error
     integer(c_size_t) :: at = 0
     type(gt_value) :: expected
@@ -207,7 +207,7 @@ module guatiao_c
     integer(c_int32_t) :: floor_hash = 0
   end type
 
-  !> `guatiao_object`: 24 bytes; ownership crosses with it.
+  !> `guatiao_object`: three words; ownership crosses with it.
   type, bind(c) :: gt_object
     type(c_ptr) :: table = c_null_ptr
     integer(c_size_t) :: size = 0
