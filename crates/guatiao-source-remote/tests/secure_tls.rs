@@ -324,6 +324,73 @@ fn a_fingerprint_rule_refuses_a_trusted_peer_once_the_handshake_names_it() {
     let (registry, refused) = refresh(&source(&address, &no));
     assert_eq!(registry.offers::<dyn Greeter>().count(), 0);
     assert_eq!(refused.len(), 1, "{refused:?}");
+    assert!(
+        refused[0].contains("access control list refuses it"),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_list_permitting_one_fingerprint_admits_it_alone() {
+    let (server_id, one, other) = (
+        Identity::generate().unwrap(),
+        Identity::generate().unwrap(),
+        Identity::generate().unwrap(),
+    );
+    // Deferred for every address, then decided by the fingerprint.
+    let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
+    only.fingerprint = Some(one.fingerprint().canonical());
+    let mut policy = Policy::strict();
+    policy.acl = Some(acl(vec![only]));
+    let server = TlsConfig::new(server_id.clone())
+        .pins([one.fingerprint(), other.fingerprint()])
+        .policy(policy);
+    let address = listen(&server, secure_server());
+    let yes = TlsConfig::new(one).pins([server_id.fingerprint()]);
+    let (registry, refused) = refresh(&source(&address, &yes));
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, tls");
+    let no = TlsConfig::new(other).pins([server_id.fingerprint()]);
+    let (registry, refused) = refresh(&source(&address, &no));
+    assert_eq!(registry.offers::<dyn Greeter>().count(), 0, "{refused:?}");
+}
+
+#[test]
+fn a_client_has_no_access_control_list() {
+    let id = Identity::generate().unwrap();
+    let mut policy = Policy::strict();
+    policy.acl = Some(acl(Vec::new()));
+    let client = TlsConfig::new(id.clone())
+        .pins([id.fingerprint()])
+        .policy(policy);
+    let e = TlsConnect::new("127.0.0.1:9", &client).unwrap_err();
+    assert!(e.to_string().contains("a client has none"), "{e}");
+}
+
+/// A TLS server that pins the client but names no application protocol
+/// is not a guatiao server.
+#[test]
+fn a_server_agreeing_no_application_protocol_is_refused() {
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let trust =
+        coqui_peer_tls::Trust::Pinned(coqui_peer_tls::Pins::fixed([client_id.fingerprint()]));
+    let config = Arc::new(coqui_peer_tls::server_config(&server_id, &trust, &[]).unwrap());
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let serving = std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let _ = coqui_peer_tls::accept(config, socket);
+    });
+    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let e = TlsConnect::new(&address, &client)
+        .unwrap()
+        .connect()
+        .unwrap_err();
+    assert!(e.to_string().contains("application protocol"), "{e}");
+    serving.join().unwrap();
 }
 
 #[test]

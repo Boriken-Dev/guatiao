@@ -13,10 +13,12 @@
 //!
 //! The link reads on one thread and writes from others, and a TLS state is
 //! one object. The socket is read with no lock held; the state's lock is
-//! held only to feed it what was read, to decrypt, and to encrypt. The
-//! records leave in the order they were sealed under a second lock, which
-//! a writer holds across its socket write and the reader only tries: a
-//! write blocked on a peer that reads nothing never stops the reader.
+//! held only to feed it what was read, to decrypt, and to encrypt. Records
+//! leave in the order they were sealed, under a second lock a writer holds
+//! across its socket write. Once the handshake is through the reader never
+//! writes: what reading produces (a key update's answer) leaves with the
+//! next write, so a write blocked on a peer that reads nothing never stops
+//! the reader.
 
 #![forbid(unsafe_code)]
 
@@ -28,10 +30,11 @@ use std::io::{self, IoSlice, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::Instant;
 
 use coqui_net_acl::{Acl, Outcome};
 use coqui_peer::DriveError;
-use coqui_peer_tls::{PeerError, Pins, TlsHandshake, Trust};
+use coqui_peer_tls::{Digest, PeerError, Pins, TlsHandshake, Trust};
 use rustls::client::Resumption;
 use rustls::server::NoServerSessionStorage;
 use rustls::{ClientConfig, ServerConfig};
@@ -42,8 +45,8 @@ use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
 use super::{Connect, Connection, FrameRead};
 
-/// The application protocol both ends name, so a link never completes
-/// with a TLS server of something else.
+/// The application protocol both ends name and require, so a link never
+/// completes with a TLS endpoint of something else.
 const ALPN: &[u8] = b"guatiao-remote";
 
 /// The identity file [`TlsConfig::open`] keeps in its directory.
@@ -63,7 +66,7 @@ fn invalid(why: impl core::fmt::Display) -> io::Error {
 
 /// A coqui-peer-tls error in words, with what lies under it: its own
 /// words are generic ("storage or stream operation failed").
-fn words(e: &PeerError) -> String {
+pub(crate) fn words(e: &PeerError) -> String {
     match core::error::Error::source(e) {
         Some(under) => format!("{e}: {under}"),
         None => e.to_string(),
@@ -74,8 +77,18 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// The rustls error under a handshake's failure, if that is what it is.
+fn tls_error(e: &PeerError) -> Option<&rustls::Error> {
+    match e {
+        PeerError::Io(io) => io.get_ref()?.downcast_ref::<rustls::Error>(),
+        _ => None,
+    }
+}
+
 /// Rewrites every fingerprint an access control list names in its
-/// canonical text, the form a verified peer is decided by.
+/// canonical text, the form a verified peer is decided by. A peer is known
+/// by its certificate's SHA-256 fingerprint, so a rule naming another
+/// digest could never match: refused rather than left to fail open.
 fn canonical_acl(mut acl: Acl) -> io::Result<Acl> {
     for rule in &mut acl.rules {
         if let Some(text) = &rule.fingerprint {
@@ -84,10 +97,69 @@ fn canonical_acl(mut acl: Acl) -> io::Result<Acl> {
                     "`{text}` in the access control list is not a fingerprint"
                 ))
             })?;
+            if id.digest() != Digest::Sha256 {
+                return Err(invalid(format!(
+                    "`{text}` in the access control list is a {} fingerprint; a peer is known by its SHA-256 one, `sha256:<hex>`",
+                    id.digest().name()
+                )));
+            }
             rule.fingerprint = Some(id.canonical());
         }
     }
     Ok(acl)
+}
+
+/// The socket under a handshake, every read and write bounded by what is
+/// left of one deadline: a peer sending a byte at a time cannot hold the
+/// handshake past it.
+struct Bounded<'a> {
+    socket: &'a TcpStream,
+    until: Option<Instant>,
+}
+
+impl Bounded<'_> {
+    fn left(&self) -> io::Result<Option<Duration>> {
+        match self.until {
+            None => Ok(None),
+            Some(until) => match until.checked_duration_since(Instant::now()) {
+                Some(left) if !left.is_zero() => Ok(Some(left)),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "the TLS handshake did not finish in time",
+                )),
+            },
+        }
+    }
+}
+
+impl Read for Bounded<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.socket.set_read_timeout(self.left()?)?;
+        self.socket.read(buf)
+    }
+}
+
+impl Write for Bounded<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.socket.set_write_timeout(self.left()?)?;
+        self.socket.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Refuses a handshake that did not agree on this protocol.
+fn check_alpn(connection: &rustls::Connection) -> io::Result<()> {
+    if connection.alpn_protocol() == Some(ALPN) {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "the peer does not speak guatiao's remote protocol: the TLS handshake agreed no `guatiao-remote` application protocol",
+        ))
+    }
 }
 
 /// What one side of the secure level is: its identity, whom it trusts and
@@ -243,6 +315,8 @@ struct Core {
     /// Whether anything has come from the peer since the handshake: a
     /// client's link failing before that was refused by the server.
     heard: AtomicBool,
+    /// Whether this side ended the link.
+    closed: AtomicBool,
 }
 
 impl Core {
@@ -254,6 +328,7 @@ impl Core {
             peer: OnceLock::new(),
             client,
             heard: AtomicBool::new(false),
+            closed: AtomicBool::new(false),
         }
     }
 
@@ -262,10 +337,10 @@ impl Core {
         let _ = self.peer.set(peer.canonical());
     }
 
-    /// A failure in words a person can act on. A client's link that fails
-    /// before the server has said anything was most likely refused at the
-    /// server's end of the handshake: TLS 1.3 lets a client finish before
-    /// the server has checked its certificate.
+    /// A failure in words a person can act on. A client's link the server
+    /// ends before saying anything was most likely refused at the server's
+    /// end of the handshake: TLS 1.3 lets a client finish before the server
+    /// has checked its certificate.
     fn explain(&self, e: io::Error) -> io::Error {
         use io::ErrorKind::{
             BrokenPipe, ConnectionAborted, ConnectionReset, InvalidData, UnexpectedEof,
@@ -274,15 +349,22 @@ impl Core {
             e.kind(),
             BrokenPipe | ConnectionAborted | ConnectionReset | InvalidData | UnexpectedEof
         );
+        let early = !self.heard.load(Ordering::Acquire) && !self.closed.load(Ordering::Acquire);
         match &self.client {
-            Some(me) if ended && !self.heard.load(Ordering::Acquire) => io::Error::new(
+            Some(me) if ended && early => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "the server ended the link before answering ({e}): it does not trust this client, {me}; a server with a trust store keeps it waiting until an operator accepts it"
+                    "the server ended the link before answering ({e}): most likely it does not trust this client, {me}, or its access control list refuses it; a server with a trust store keeps an unknown client waiting until an operator accepts it"
                 ),
             ),
             _ => e,
         }
+    }
+
+    /// Ends the socket both ways, with nothing more said.
+    fn shut(&self) {
+        self.closed.store(true, Ordering::Release);
+        let _ = self.socket.shutdown(Shutdown::Both);
     }
 
     /// Seals `parts` and sends the records, one socket write per batch the
@@ -323,24 +405,13 @@ impl Core {
                 break;
             }
         }
-        drop(out);
-        // What the reader sealed while this side held `sending`.
-        self.flush(true)
+        Ok(())
     }
 
-    /// Sends what the state holds sealed: replies the reader produced,
-    /// alerts. Waits for a writer in progress when `wait`, else leaves the
-    /// records for it.
-    fn flush(&self, wait: bool) -> io::Result<()> {
-        let mut out = if wait {
-            lock(&self.sending)
-        } else {
-            match self.sending.try_lock() {
-                Ok(out) => out,
-                Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-                Err(std::sync::TryLockError::WouldBlock) => return Ok(()),
-            }
-        };
+    /// Sends what the state holds sealed and no write has taken yet: what
+    /// reading produced.
+    fn flush(&self) -> io::Result<()> {
+        let mut out = lock(&self.sending);
         out.clear();
         {
             let mut state = lock(&self.state);
@@ -360,6 +431,7 @@ impl Core {
     /// Tells the peer the link ends (when no write is in progress), then
     /// ends the socket both ways.
     fn close(&self) {
+        self.closed.store(true, Ordering::Release);
         if let Ok(mut out) = self.sending.try_lock() {
             out.clear();
             if let Some(tls) = lock(&self.state).as_mut() {
@@ -377,7 +449,7 @@ impl Core {
                 let _ = (&self.socket).write_all(&out);
             }
         }
-        let _ = self.socket.shutdown(Shutdown::Both);
+        self.shut();
     }
 }
 
@@ -393,9 +465,14 @@ impl Pending {
     fn run(self, core: &Core) -> io::Result<()> {
         let handshake =
             TlsHandshake::server(self.config, Some(self.source)).map_err(|e| invalid(words(&e)))?;
-        // The handshake's writes are bounded as its reads are.
-        core.socket.set_write_timeout(core.socket.read_timeout()?)?;
-        let established = coqui_peer::drive_stream(handshake, &mut &core.socket);
+        // The bound the link set on a read bounds the whole handshake.
+        let bound = core.socket.read_timeout()?;
+        let mut io = Bounded {
+            socket: &core.socket,
+            until: bound.map(|b| Instant::now() + b),
+        };
+        let established = coqui_peer::drive_stream(handshake, &mut io);
+        core.socket.set_read_timeout(bound)?;
         core.socket.set_write_timeout(None)?;
         let established = established.map_err(|e| match e {
             DriveError::Io(e) => e,
@@ -406,6 +483,10 @@ impl Pending {
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
         let peer = established.peer;
+        if let Err(e) = check_alpn(&established.session) {
+            core.shut();
+            return Err(e);
+        }
         if let Some(acl) = &self.acl {
             let decided = acl.decide_peer(self.source, self.local, &peer.canonical());
             if decided.outcome != Outcome::Permit {
@@ -459,10 +540,9 @@ impl TlsRead {
             pending.run(&self.core)?;
         }
         loop {
-            let replies = {
+            {
                 let mut state = lock(&self.core.state);
                 let tls = state.as_mut().ok_or(io::ErrorKind::NotConnected)?;
-                let mut replies = false;
                 loop {
                     if let Some(n) = plaintext(tls, out)? {
                         if n > 0 {
@@ -478,18 +558,9 @@ impl TlsRead {
                         return Err(io::ErrorKind::UnexpectedEof.into());
                     }
                     self.fed += tls.read_tls(&mut &self.raw[self.fed..self.filled])?;
-                    let processed = tls.process_new_packets();
-                    replies |= tls.wants_write();
-                    if let Err(e) = processed {
-                        drop(state);
-                        let _ = self.core.flush(false);
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, e));
-                    }
+                    tls.process_new_packets()
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                 }
-                replies
-            };
-            if replies {
-                self.core.flush(false)?;
             }
             // Read raw with no lock held: a writer seals meanwhile.
             let n = (&self.core.socket).read(&mut self.raw)?;
@@ -552,7 +623,7 @@ impl Write for TlsWrite {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.core.flush(true)
+        self.core.flush()
     }
 }
 
@@ -581,9 +652,7 @@ fn connection(core: Core, pending: Option<Pending>, peer: String) -> io::Result<
                 .bounded_by(|w: &mut TlsWrite, t| w.core.socket.set_write_timeout(t)),
         ),
         peer,
-        closer: Some(Box::new(move || {
-            let _ = closing.socket.shutdown(Shutdown::Both);
-        })),
+        closer: Some(Box::new(move || closing.shut())),
     })
 }
 
@@ -625,25 +694,47 @@ impl TlsConnect {
         self
     }
 
-    fn handshake(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Connection> {
-        socket.set_nodelay(true)?;
-        socket.set_read_timeout(Some(self.timeout))?;
-        socket.set_write_timeout(Some(self.timeout))?;
-        let handshake =
-            TlsHandshake::client(Arc::clone(&self.config)).map_err(|e| invalid(words(&e)))?;
-        let established = coqui_peer::drive_stream(handshake, &mut &socket).map_err(|e| match e {
-            DriveError::Io(e) => e,
-            DriveError::Handshake(e) => io::Error::new(
+    /// A client handshake's failure in words a person can act on.
+    fn refusal(&self, e: &PeerError, addr: SocketAddr) -> io::Error {
+        let (kind, why) = match tls_error(e) {
+            // coqui-peer-tls refuses a certificate with `General` and its reason.
+            Some(rustls::Error::InvalidCertificate(_) | rustls::Error::General(_)) => (
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "the server at {addr} is not one this client trusts (its certificate matches none of the pins or the trust store's peers): {}",
-                    words(&e)
+                    "the server at {addr} is not one this client trusts: its certificate matches none of the pins or the trust store's peers, or the policy refuses it"
                 ),
             ),
+            Some(rustls::Error::AlertReceived(alert)) => (
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "the server at {addr} refused the TLS handshake ({alert:?}): it may not trust this client, {}",
+                    self.me
+                ),
+            ),
+            _ => (
+                io::ErrorKind::InvalidData,
+                format!("the TLS handshake with the server at {addr} failed"),
+            ),
+        };
+        io::Error::new(kind, format!("{why}: {}", words(e)))
+    }
+
+    fn handshake(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Connection> {
+        socket.set_nodelay(true)?;
+        let handshake =
+            TlsHandshake::client(Arc::clone(&self.config)).map_err(|e| invalid(words(&e)))?;
+        let mut io = Bounded {
+            socket: &socket,
+            until: Some(Instant::now() + self.timeout),
+        };
+        let established = coqui_peer::drive_stream(handshake, &mut io).map_err(|e| match e {
+            DriveError::Io(e) => e,
+            DriveError::Handshake(e) => self.refusal(&e, addr),
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
         socket.set_read_timeout(None)?;
         socket.set_write_timeout(None)?;
+        check_alpn(&established.session)?;
         let core = Core::new(socket, Some(self.me.clone()));
         core.open(established.session, &established.peer);
         connection(core, None, format!("tls {addr}"))
@@ -862,5 +953,61 @@ mod tests {
             })
             .is_err()
         );
+        // Another digest could never match a peer known by SHA-256.
+        let mut other = Rule::new(Action::Deny, "any".parse().unwrap());
+        other.fingerprint = Some(format!("sha384:{}", "ab".repeat(48)));
+        let e = canonical_acl(Acl {
+            rules: vec![other],
+            default: Action::Permit,
+        })
+        .unwrap_err();
+        assert!(e.to_string().contains("sha384"), "{e}");
+    }
+
+    #[test]
+    fn an_end_without_close_notify_is_an_error_not_an_end() {
+        let (mut client, mut server) = pair();
+        server.writer.write_frame(&frame(b"heard")).unwrap();
+        let mut buf = Vec::new();
+        assert!(client.reader.read_frame(&mut buf, 1 << 10).unwrap());
+        // The socket alone ends: a truncation, which reads as one.
+        (server.closer.take().unwrap())();
+        let e = client.reader.read_frame(&mut buf, 1 << 10).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof, "{e}");
+    }
+
+    #[test]
+    fn a_handshake_has_one_deadline_however_slowly_the_peer_sends() {
+        let id = identity();
+        let config = TlsConfig::new(id.clone()).pins([id.fingerprint()]);
+        let listen = TlsListen::bind("127.0.0.1:0", &config).unwrap();
+        let mut raw = TcpStream::connect(listen.local_addr().unwrap()).unwrap();
+        let Accepted::Connection(mut server) = listen.accept().unwrap() else {
+            panic!("every source proceeds");
+        };
+        // A byte each 100 ms, each read well within its 300 ms bound.
+        let trickle = thread::spawn(move || {
+            let hello = [0x16u8, 3, 1, 0x40, 0];
+            for b in hello.iter().cycle().take(100) {
+                if raw.write_all(&[*b]).is_err() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
+        server
+            .reader
+            .set_timeout(Some(Duration::from_millis(300)))
+            .unwrap();
+        let started = Instant::now();
+        let mut buf = Vec::new();
+        assert!(server.reader.read_frame(&mut buf, 1 << 10).is_err());
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+        drop(server);
+        trickle.join().unwrap();
     }
 }

@@ -150,10 +150,14 @@ pub fn tls_config_of(map: &Map) -> Result<crate::transport::tls::TlsConfig, Prov
         (Some(dir), None) => {
             TlsConfig::open(Path::new(dir)).map_err(|e| refused(format!("`state_dir`: {e}")))?
         }
-        (None, Some(file)) => TlsConfig::new(
-            Identity::open_or_create(Path::new(file))
-                .map_err(|e| refused(format!("`identity_file` {file}: {e}")))?,
-        ),
+        (None, Some(file)) => {
+            TlsConfig::new(Identity::open_or_create(Path::new(file)).map_err(|e| {
+                refused(format!(
+                    "`identity_file` {file}: {}",
+                    crate::transport::tls::words(&e)
+                ))
+            })?)
+        }
         (Some(_), Some(_)) => {
             return Err(refused("name `state_dir` or `identity_file`, not both"));
         }
