@@ -92,8 +92,14 @@ final BigInt _u64Max = (BigInt.one << 64) - BigInt.one;
 final BigInt _i64Min = -(BigInt.one << 63);
 final BigInt _i64Max = (BigInt.one << 63) - BigInt.one;
 
-/// [big] as an int where the platform holds it exactly.
-Object narrow(BigInt big) => big.isValidInt ? big.toInt() : big;
+/// Under dart2js an int is a JavaScript number, exact to 2^53.
+const bool _jsNumbers = identical(1, 1.0);
+
+/// [big] as an int where the platform holds it exactly: within 53 bits
+/// under dart2js (where `isValidInt` also takes any number a double holds,
+/// 2^60 among them), within 64 elsewhere.
+Object narrow(BigInt big) =>
+    (_jsNumbers ? big.bitLength <= 53 : big.isValidInt) ? big.toInt() : big;
 
 /// [n] (an int or a BigInt) as a BigInt.
 BigInt bigOf(Object n) => n is BigInt ? n : BigInt.from(n as int);
@@ -269,7 +275,8 @@ final class FrameReader {
   /// A zigzagged LEB128: an int, or a BigInt past what an int holds.
   Object int_() {
     final z = uint();
-    if (z is int) return z.isEven ? z ~/ 2 : -((z + 1) ~/ 2);
+    // `z + 1` would wrap for the largest odd z an int holds.
+    if (z is int) return z.isEven ? z ~/ 2 : -(z ~/ 2) - 1;
     final big = z as BigInt;
     return narrow(big.isEven ? big >> 1 : -((big + BigInt.one) >> 1));
   }

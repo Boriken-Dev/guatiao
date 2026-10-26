@@ -111,8 +111,14 @@ Future<RemoteServer> startRemoteServer() async {
       }
     }),
   );
-  final url = await serving.future.timeout(const Duration(seconds: 30));
-  return RemoteServer._(url, process, dir);
+  try {
+    final url = await serving.future.timeout(const Duration(seconds: 30));
+    return RemoteServer._(url, process, dir);
+  } catch (_) {
+    process.kill();
+    dir.deleteSync(recursive: true);
+    rethrow;
+  }
 }
 
 /// For a browser suite: starts the server and sends its URL; `stop` ends

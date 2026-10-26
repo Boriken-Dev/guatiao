@@ -140,18 +140,17 @@ abstract base class RemoteCallee {
   /// map, list or `Uint8List` where it writes one back. Answers what the
   /// slot answers: plain Dart for a tree, a [RemoteObject] for an object
   /// of the peer's, the [Served] itself for one of this side's.
-  Future<Object?> call(String slot, [List<Object?> args = const []]) {
-    final s = kind.slot(slot);
-    if (!has(slot)) {
-      return Future.error(
-        Unsupported(
-          Status.unsupported.code,
-          'the far `${kind.name}` table does not fill `$slot`',
-        ),
-      );
-    }
-    return _link._call(_target, s, args);
-  }
+  Future<Object?> call(String slot, [List<Object?> args = const []]) =>
+      Future.sync(() {
+        final s = kind.slot(slot);
+        if (!has(slot)) {
+          throw Unsupported(
+            Status.unsupported.code,
+            'the far `${kind.name}` table does not fill `$slot`',
+          );
+        }
+        return _link._call(_target, s, args);
+      });
 }
 
 /// A provider's table of one kind.
@@ -267,7 +266,11 @@ final class RemoteLink {
   int _nextCall = 1;
   int _nextExport = 1;
   final _pending = <int, _Pending>{};
-  final _cancelled = <int, RemoteSlot?>{};
+
+  /// Calls given up on, whose late answer may carry an object to let go;
+  /// the oldest forgotten past [_maxCancelled].
+  final _cancelled = <int, RemoteSlot>{};
+  static const int _maxCancelled = 4096;
   final _running = <int, bool>{};
   int _runningTop = 0;
   int _inFlight = 0;
@@ -440,10 +443,12 @@ final class RemoteLink {
     await _channel.close();
   }
 
-  void _send(Frame frame) {
+  void _send(Frame frame) => _sendBody(frame.encode());
+
+  void _sendBody(Uint8List body) {
     if (!alive) return;
     try {
-      _channel.send(frame.encode());
+      _channel.send(body);
     } catch (e) {
       _end('a write failed: $e');
     }
@@ -557,10 +562,16 @@ final class RemoteLink {
     );
   }
 
-  /// The inbound call this one is made during, or 0.
+  /// The inbound call this one is made during, or 0. A zone outlives the
+  /// call it was made for (a timer a handler started runs in it), so the
+  /// call must still be running.
   int _parent() {
     final p = Zone.current[_parentKey];
-    return p is _Parent && identical(p.link, this) ? p.call : 0;
+    return p is _Parent &&
+            identical(p.link, this) &&
+            _running.containsKey(p.call)
+        ? p.call
+        : 0;
   }
 
   Future<void> _permit() async {
@@ -611,7 +622,12 @@ final class RemoteLink {
     if (timeout != null) {
       pending.timer = Timer(timeout, () {
         if (_pending.remove(id) == null) return;
-        _cancelled[id] = slot;
+        if (slot != null) {
+          if (_cancelled.length >= _maxCancelled) {
+            _cancelled.remove(_cancelled.keys.first);
+          }
+          _cancelled[id] = slot;
+        }
         _send(Cancel(id));
         pending.completer.completeError(
           Gone(Status.gone.code, 'no answer within the call\'s timeout'),
@@ -682,21 +698,11 @@ final class RemoteLink {
     final givenBack = <RemoteObject>[];
     try {
       final wire = List<Object?>.of(args);
-      for (var i = 0; i < wire.length; i++) {
-        final a = slot.args[i];
-        if (a.type != 'object') continue;
-        final v = wire[i];
-        if (v is Served) {
-          final id = _export(v, _kind(a.kind), lent: a.pass == 'lent');
-          (a.pass == 'lent' ? lent : handed).add(id);
-          wire[i] = ObjectRef(id);
-        } else if (v is RemoteObject && identical(v._link, this)) {
-          if (v._gone) {
-            throw Gone(Status.gone.code, 'the object has been let go');
-          }
-          wire[i] = ObjectRef(v.id, receivers: true);
-          if (a.pass == 'taken') givenBack.add(v);
-        }
+      try {
+        _objectsOut(slot, wire, lent, handed, givenBack);
+      } catch (_) {
+        handed.forEach(_exports.remove);
+        rethrow;
       }
       var sent = true;
       final Reply reply;
@@ -737,6 +743,34 @@ final class RemoteLink {
         _exports.remove(id);
       }
       if (parent == 0) _unpermit();
+    }
+  }
+
+  /// Puts each object argument in [wire] as it crosses: a [Served]
+  /// exported (its id in [lent] or [handed]), a handle on the peer's object
+  /// as the peer's own (in [givenBack] when taken).
+  void _objectsOut(
+    RemoteSlot slot,
+    List<Object?> wire,
+    List<int> lent,
+    List<int> handed,
+    List<RemoteObject> givenBack,
+  ) {
+    for (var i = 0; i < wire.length; i++) {
+      final a = slot.args[i];
+      if (a.type != 'object') continue;
+      final v = wire[i];
+      if (v is Served) {
+        final id = _export(v, _kind(a.kind), lent: a.pass == 'lent');
+        (a.pass == 'lent' ? lent : handed).add(id);
+        wire[i] = ObjectRef(id);
+      } else if (v is RemoteObject && identical(v._link, this)) {
+        if (v._gone) {
+          throw Gone(Status.gone.code, 'the object has been let go');
+        }
+        wire[i] = ObjectRef(v.id, receivers: true);
+        if (a.pass == 'taken') givenBack.add(v);
+      }
     }
   }
 
@@ -795,8 +829,9 @@ final class RemoteLink {
         if (pending != null) {
           pending.timer?.cancel();
           pending.completer.complete(frame);
-        } else if (_cancelled.containsKey(call)) {
-          _settleCancelled(_cancelled.remove(call), frame);
+        } else {
+          final slot = _cancelled.remove(call);
+          if (slot != null) _settleCancelled(slot, frame);
         }
       case Pong(:final n):
         final pending = _pending.remove(n);
@@ -829,13 +864,18 @@ final class RemoteLink {
     }
   }
 
-  /// A cancelled call's late answer: an object in it is let go.
-  void _settleCancelled(RemoteSlot? slot, Reply reply) {
-    if (slot == null || reply.status != 0) return;
-    if (slot.answer?.type != 'object') return;
+  /// A cancelled call's late answer: an object in it is let go, the
+  /// peer's released and one of this side's dropped.
+  void _settleCancelled(RemoteSlot slot, Reply reply) {
+    if (reply.status != 0 || slot.answer?.type != 'object') return;
     try {
       final answer = decodeAnswer(slot, reply.body).answer;
-      if (answer is ObjectRef && !answer.receivers) _send(Release(answer.id));
+      if (answer is! ObjectRef) return;
+      if (answer.receivers) {
+        _exports.remove(answer.id);
+      } else {
+        _send(Release(answer.id));
+      }
     } on MalformedFrame {
       // Nobody waits for it.
     }
@@ -950,27 +990,42 @@ final class RemoteLink {
       }
     }
     if (_running[c.call] == true || !alive) return;
+    int? exported;
     try {
       Object? wire = answer;
+      final givenBack = answer is RemoteObject && identical(answer._link, this)
+          ? answer
+          : null;
       if (answer is Served) {
-        wire = ObjectRef(
-          _export(answer, _kind(slot.answer?.kind), lent: false),
-        );
-      } else if (answer is RemoteObject && identical(answer._link, this)) {
-        answer._gone = true;
-        _finalizer.detach(answer);
-        wire = ObjectRef(answer.id, receivers: true);
+        exported = _export(answer, _kind(slot.answer?.kind), lent: false);
+        wire = ObjectRef(exported);
+      } else if (givenBack != null) {
+        wire = ObjectRef(givenBack.id, receivers: true);
       }
-      final body = encodeAnswer(slot, wire, args);
-      _send(Reply(c.call, 0, body));
-    } on ArgumentError catch (e) {
-      _refuse(c.call, Status.badValue, '${e.message}');
-    } on GuatiaoException catch (e) {
-      _refuse(
-        c.call,
-        Status.fromCode(e.code) ?? Status.internalError,
-        e.message,
-      );
+      final reply = Reply(c.call, 0, encodeAnswer(slot, wire, args)).encode();
+      if (reply.length > _sendMax) {
+        throw BadValue(
+          Status.badValue.code,
+          'an answer of ${reply.length} bytes is over the $_sendMax the peer '
+          'reads',
+        );
+      }
+      if (givenBack != null) {
+        givenBack._gone = true;
+        _finalizer.detach(givenBack);
+      }
+      _sendBody(reply);
+    } catch (e) {
+      if (exported != null) _exports.remove(exported);
+      final (status, words) = switch (e) {
+        GuatiaoException() => (
+          Status.fromCode(e.code) ?? Status.internalError,
+          e.message,
+        ),
+        ArgumentError() => (Status.badValue, '${e.message}'),
+        _ => (Status.internalError, '$e'),
+      };
+      _refuse(c.call, status, words);
     }
   }
 }
