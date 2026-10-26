@@ -8,6 +8,7 @@ pub fn guatiao_source_remote::client::RemoteSource::from_config(&guatiao::value:
 pub fn guatiao_source_remote::client::RemoteSource::link(&self) -> core::result::Result<alloc::sync::Arc<guatiao_source_remote::link::Link>, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::client::RemoteSource::new(alloc::boxed::Box<dyn guatiao_source_remote::transport::Connect>, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::objects_out(&self) -> usize
+pub fn guatiao_source_remote::client::RemoteSource::weakened(&self) -> alloc::vec::Vec<(alloc::string::String, coqui_peer_tls::policy::Weakening)>
 impl core::clone::Clone for guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::clone(&self) -> Self
 impl core::fmt::Debug for guatiao_source_remote::client::RemoteSource
@@ -811,6 +812,7 @@ pub fn guatiao_source_remote::client::RemoteSource::from_config(&guatiao::value:
 pub fn guatiao_source_remote::client::RemoteSource::link(&self) -> core::result::Result<alloc::sync::Arc<guatiao_source_remote::link::Link>, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::client::RemoteSource::new(alloc::boxed::Box<dyn guatiao_source_remote::transport::Connect>, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::objects_out(&self) -> usize
+pub fn guatiao_source_remote::client::RemoteSource::weakened(&self) -> alloc::vec::Vec<(alloc::string::String, coqui_peer_tls::policy::Weakening)>
 impl core::clone::Clone for guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::clone(&self) -> Self
 impl core::fmt::Debug for guatiao_source_remote::client::RemoteSource

@@ -77,6 +77,9 @@ struct Peer {
     /// Counts links across every peer of a source, so no stamp repeats
     /// within it.
     generations: Arc<AtomicU64>,
+    /// The settings of its TLS policy looser than strict.
+    #[cfg(feature = "tls")]
+    weakened: Vec<crate::transport::tls::Weakening>,
 }
 
 /// Peers' providers, served to a host's registry: one peer, or every peer
@@ -243,6 +246,18 @@ impl Peer {
             listed: Mutex::new(None),
             opened: Mutex::new(BTreeMap::new()),
             generations,
+            #[cfg(feature = "tls")]
+            weakened: Vec::new(),
+        }
+    }
+
+    /// The same peer, `map` being the configuration it was made from.
+    fn configured(self, map: &Map) -> Peer {
+        let _ = map;
+        Peer {
+            #[cfg(feature = "tls")]
+            weakened: config::weakened_in(map),
+            ..self
         }
     }
 
@@ -574,9 +589,10 @@ impl Described {
                         now.leaving.push((name.to_string(), peer));
                     }
                     match config::peer_of(&self.defaults, m.table(), m.path()) {
-                        Ok((connect, options)) => {
-                            Arc::new(Peer::new(connect, options, Arc::clone(&self.generations)))
-                        }
+                        Ok((connect, options, merged)) => Arc::new(
+                            Peer::new(connect, options, Arc::clone(&self.generations))
+                                .configured(&merged),
+                        ),
                         Err(e) => {
                             let why = format!("{at}: {}", e.message());
                             now.refuse(&mut listed, at, &stamp, e.status, why);
@@ -715,7 +731,11 @@ impl RemoteSource {
     pub fn from_config(config: &Map) -> Result<RemoteSource, ProviderError> {
         if !config.contains_key("dirs") && !config.contains_key("manifests") {
             let (connect, options) = config::client_of(config)?;
-            return Ok(RemoteSource::new(connect, options));
+            return Ok(RemoteSource {
+                inner: Arc::new(Peers::One(
+                    Peer::new(connect, options, Arc::new(AtomicU64::new(0))).configured(config),
+                )),
+            });
         }
         if config.contains_key("connect") || config.contains_key("child") {
             return Err(ProviderError::new(
@@ -755,6 +775,31 @@ impl RemoteSource {
         match &*self.inner {
             Peers::One(peer) => peer.proxies.live(),
             Peers::Described(d) => d.peers().iter().map(|p| p.proxies.live()).sum(),
+        }
+    }
+
+    /// Every setting looser than strict in the TLS policy a configuration
+    /// or a peer manifest names, by peer: its name, or empty for the one
+    /// peer of a `connect` or `child` configuration. What a host shows or
+    /// logs, as `guatiao-remote-server` prints its own. Described peers
+    /// are those the last refresh found. Empty when every peer is held to
+    /// the strict policy, and for a source made by [`RemoteSource::new`],
+    /// whose `TlsConfig::weakened` its host holds already.
+    #[cfg(feature = "tls")]
+    pub fn weakened(&self) -> Vec<(String, crate::transport::tls::Weakening)> {
+        let each = |name: &str, peer: &Peer| {
+            peer.weakened
+                .iter()
+                .map(|w| (name.to_string(), w.clone()))
+                .collect::<Vec<_>>()
+        };
+        match &*self.inner {
+            Peers::One(peer) => each("", peer),
+            Peers::Described(d) => lock(&d.state)
+                .named
+                .iter()
+                .flat_map(|(name, (peer, _))| each(name, peer))
+                .collect(),
         }
     }
 

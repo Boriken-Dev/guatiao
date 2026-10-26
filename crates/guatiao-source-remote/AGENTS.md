@@ -32,6 +32,7 @@ RemoteSource::from_config(&Map) -> Result<RemoteSource, ProviderError>  // as th
 impl Source for RemoteSource                       // registry.add_source(name, source)
 source.link() -> Result<Arc<Link>, ProviderError> // connects unless connected; NOT_FOUND for described peers
 source.disconnect(); source.objects_out() -> usize  // every peer's
+source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured policy's settings looser than strict, by peer name ("" for one peer); described peers after a refresh
 ```
 
 - **Peers described by manifests** (`dirs`, `manifests` in the
