@@ -1767,8 +1767,9 @@ drop(s);                                                             // the libr
   runs. Before the call the proxy reads the allocator the tree records
   (`Alloc::rust()` for one that records none); after it, answered or
   refused, it calls `make_local_in` with it, so nothing in the caller's
-  tree needs the callee's allocator. A key a foreign slot wrote that is
-  not UTF-8 is removed and freed, and the call answers
+  tree needs the callee's allocator. A top-level key a foreign slot
+  wrote into a lent map that is not UTF-8 is removed and freed, and the
+  call answers
   `GUATIAO_ERR_BAD_VALUE` (a panic for an infallible method), its own
   error winning when it refused. **The fast path**: build what goes in
   with the tree's allocator (`let alloc = config.alloc()?;` then
@@ -2428,7 +2429,9 @@ pub trait Store: Send + Sync {
 - `&mut Map`, `&mut List`, `&mut Value`: the caller's tree, lent to be
   changed in place. Build what goes in with `config.alloc()?` and the
   `_in` forms; the proxy moves anything built elsewhere into the tree's
-  allocator once the call returns (`make_local_in`).
+  allocator once the call returns (`make_local_in`), and removes a
+  top-level key a foreign slot wrote into a lent map that is not UTF-8
+  (`GUATIAO_ERR_BAD_VALUE`).
 - A returned `Map`/`Value`/`List` is the caller's. A borrowed return is
   refused: nothing on the caller's side owns what it would borrow.
 - A type of yours by value crosses through `ToValue`/`FromValue`: built
@@ -2504,7 +2507,13 @@ the slot grew, into `alloc` where it stands (a map or list inside a value
 with its tag, copied back after), so it outlives the library: what the
 Rust proxy does on arrival, for a slot that built elsewhere. Call it while
 the library is loaded; it allocates nothing when the tree is already
-there.
+there. For a lent map, call `guatiao_map_settle_lent(node, home)`
+instead, `home` the allocator the map recorded when it was lent: it moves
+the map as `guatiao_value_make_local` does and removes and frees every
+top-level entry whose key the slot wrote that is not UTF-8, answering
+`GUATIAO_ERR_BAD_VALUE` when it removed one (whatever the move answered),
+else the move's status; a node that is not a map is
+`GUATIAO_ERR_WRONG_KIND`.
 
 ---
 

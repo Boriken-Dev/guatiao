@@ -28,6 +28,17 @@ write now.
   plain `http://` page where WebCrypto does not. It passes the shared
   vectors, and its suites run in Node and in headless Chrome against the
   server. `docs/remote.md` has "A page".
+- **`guatiao_map_settle_lent(node, home)`: a lent map settled as a kind's
+  Rust proxy settles it.** Once a slot it was lent to returns, the map
+  moves into the allocator it recorded (as `guatiao_value_make_local`
+  moves a tree), and every top-level entry whose key the slot wrote that
+  is not UTF-8 is removed and freed: `GUATIAO_ERR_BAD_VALUE`, the call's
+  error. Every binding's caller (Python, Dart, Node, Go, Julia, R, MATLAB and
+  Octave, Fortran, C++) now settles a lent map through it, so such a key
+  no longer stays in the caller's map to fail when read; with a core
+  older than the export they only move it. Fortran's
+  `guatiao_lent_refusal(stat, slot, arg)` words either refusal for a
+  kind module's remote.
 - **guatiao-remote-server: a bound on handshakes in flight.** At most
   `--max-handshakes` connections (64 by default) are in their handshake
   at once; past it a new connection is closed unread. A source the access

@@ -98,8 +98,10 @@ The remote's method per slot moves what it keeps home: a tree answer with
 `guatiao_settle_lent` once the call returns, into the allocator the tree
 recorded when `guatiao_lend_tree` lent it. Otherwise a slot that built
 in its own allocator leaves blocks of its library in the caller's tree,
-freed through code that is gone once the library unloads. A refused move
-of the lent tree (its `stat`) is the call's error when the slot itself
+freed through code that is gone once the library unloads. A lent map
+also loses any key the slot wrote that is not UTF-8. A refused move of
+the lent tree, or a removed key (its `stat`, worded by
+`guatiao_lent_refusal`), is the call's error when the slot itself
 answered, after the remote frees what the slot answered. The binding's
 `AGENTS.md` lists every helper a remote uses.
 

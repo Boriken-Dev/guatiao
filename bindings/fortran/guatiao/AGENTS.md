@@ -524,7 +524,8 @@ its answer with the remote-side helpers:
 | --- | --- |
 | `guatiao_string_in(text)` | a `guatiao_str` argument, a view of `text` for the call |
 | `guatiao_lend_tree(v, tag, ptr, stat, home)` | a lent tree: `ptr` the arm to pass, `home` the allocator it records now |
-| `guatiao_settle_lent(v, tag, home, stat)` | right after the call, answered or refused: the lent tree moved into `home`; a non-zero `stat` (optional) is the error to report when the slot itself answered, after freeing what it answered (a tree's carrier, an object) unread |
+| `guatiao_settle_lent(v, tag, home, stat)` | right after the call, answered or refused: the lent tree moved into `home`, and a lent map's keys the callee wrote that are not UTF-8 removed (`GUATIAO_ERR_BAD_VALUE`); a non-zero `stat` (optional) is the error to report when the slot itself answered, after freeing what it answered (a tree's carrier, an object) unread |
+| `guatiao_lent_refusal(stat, slot, arg)` | the words of the call's error for that `stat`: a removed key, or a refused move |
 | `guatiao_hand_over(v, tag, node, stat)` | a tree handed over: moved out of `v` (or copied), `node`'s arm passed |
 | `guatiao_object_arg(impl, remote, kind, obj, stat)` | an object handed to the other side: a remote this side owns given, any other object served |
 | `guatiao_map_out(answer, out, alloc)` | a tree answer's carrier: an empty map naming `alloc` (the remote's `self%r%alloc`) |
