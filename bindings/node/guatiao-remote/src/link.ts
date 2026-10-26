@@ -35,7 +35,7 @@ import {
   Welcome,
 } from './codec.js';
 import { RemoteKind, type RemoteSlot } from './described.js';
-import { BadValue, Gone, GuatiaoError, NotFound, Status, Unsupported, WrongKind, errorFor } from './errors.js';
+import { BadValue, Busy, Gone, GuatiaoError, NotFound, Status, Unsupported, WrongKind, errorFor } from './errors.js';
 import * as proof from './proof.js';
 import { openWebSocket } from './socket.js';
 import { openWebTransport } from './webtransport.js';
@@ -313,6 +313,13 @@ interface Pending {
   timer: ReturnType<typeof setTimeout> | undefined;
 }
 
+/** A call waiting for a place under the peer's `max_calls`, with the timer that gives it up. */
+interface Permit {
+  resolve: () => void;
+  reject: (e: unknown) => void;
+  timer: ReturnType<typeof setTimeout> | undefined;
+}
+
 /** Messages before the link routes them: what the handshake reads. */
 class Inbox {
   private readonly queue: Uint8Array[] = [];
@@ -408,7 +415,7 @@ export class RemoteLink {
   private readonly running = new Map<number, boolean>();
   private runningTop = 0;
   private inFlight = 0;
-  private readonly permits: { resolve: () => void; reject: (e: unknown) => void }[] = [];
+  private readonly permits: Permit[] = [];
   private readonly exports = new Map<number, Export>();
   private readonly kinds = new Map<string, RemoteKind>();
   private readonly finalizer = new FinalizationRegistry<number>((id) => {
@@ -602,7 +609,10 @@ export class RemoteLink {
     }
     this.pending.clear();
     this.exports.clear();
-    for (const waiting of this.permits.splice(0)) waiting.reject(new Gone(why));
+    for (const waiting of this.permits.splice(0)) {
+      if (waiting.timer !== undefined) clearTimeout(waiting.timer);
+      waiting.reject(new Gone(why));
+    }
     this.resolveDone(why);
     try {
       this.channel.close();
@@ -702,29 +712,44 @@ export class RemoteLink {
     this.finalizer.unregister(handle);
   }
 
-  private async permit(): Promise<void> {
+  /** A place under the peer's `max_calls`, waiting at most `within` ms (`null`: as long as the link lives), else `Busy`. */
+  private permit(within: number | null): Promise<void> {
     if (this.inFlight < this.theirCalls) {
       this.inFlight++;
-      return;
+      return Promise.resolve();
     }
-    await new Promise<void>((resolve, reject) => this.permits.push({ resolve, reject }));
+    return new Promise<void>((resolve, reject) => {
+      const waiting: Permit = { resolve, reject, timer: undefined };
+      if (within !== null) {
+        waiting.timer = setTimeout(() => {
+          const at = this.permits.indexOf(waiting);
+          if (at < 0) return;
+          this.permits.splice(at, 1);
+          reject(new Busy("the peer's limit of calls in flight was not freed in time"));
+        }, within);
+      }
+      this.permits.push(waiting);
+    });
   }
 
   private unpermit(): void {
     const next = this.permits.shift();
-    if (next !== undefined) next.resolve();
-    else this.inFlight--;
+    if (next !== undefined) {
+      if (next.timer !== undefined) clearTimeout(next.timer);
+      next.resolve();
+    } else this.inFlight--;
   }
 
   /**
-   * Sends the frame `build` makes for a new call id and answers its REPLY,
-   * refusing a failed one with its status. `unsent` runs when the frame
-   * never left.
+   * Sends the frame `build` makes for a new call id and answers its REPLY
+   * within `within` ms (`null`: as long as the link lives), refusing a
+   * failed one with its status. `unsent` runs when the frame never left.
    */
   private async request(
     build: (id: number) => Frame,
     slot: RemoteSlot | undefined,
     unsent?: () => void,
+    within: number | null = this.timeout,
   ): Promise<Reply> {
     let body: Uint8Array;
     let id: number;
@@ -742,7 +767,7 @@ export class RemoteLink {
     const answered = new Promise<Reply>((resolve, reject) => {
       const pending: Pending = { slot, resolve, reject, timer: undefined };
       this.pending.set(id, pending);
-      if (this.timeout !== null) {
+      if (within !== null) {
         pending.timer = setTimeout(() => {
           if (!this.pending.delete(id)) return;
           if (slot !== undefined) {
@@ -751,7 +776,7 @@ export class RemoteLink {
           }
           this.send(new Cancel(id));
           reject(new Gone("no answer within the call's timeout"));
-        }, this.timeout);
+        }, within);
       }
     });
     try {
@@ -809,7 +834,10 @@ export class RemoteLink {
       throw new TypeError(`${args.length} arguments for \`${slot.name}\`, which takes ${slot.args.length}`);
     }
     const parent = this.parentOf(during);
-    if (parent === 0) await this.permit();
+    // One bound for the whole call: waiting for a place, then the answer.
+    const started = performance.now();
+    if (parent === 0) await this.permit(this.timeout);
+    const left = this.timeout === null ? null : Math.max(0, this.timeout - (performance.now() - started));
     const lent: number[] = [];
     const handed: number[] = [];
     const givenBack: RemoteObject[] = [];
@@ -831,6 +859,7 @@ export class RemoteLink {
             sent = false;
             for (const id of handed) this.exports.delete(id);
           },
+          left,
         );
       } finally {
         // Handed back to its owner, who keeps it: nothing to release.
@@ -888,13 +917,44 @@ export class RemoteLink {
 
   private answerOf(slot: RemoteSlot, answer: unknown): unknown {
     if (!(answer instanceof ObjectRef)) return answer;
-    if (answer.receivers) {
-      const own = this.exports.get(answer.id);
-      this.exports.delete(answer.id);
-      if (own === undefined) throw new Gone('the object has been let go');
-      return own.served;
-    }
+    if (answer.receivers) return this.takeOwn(answer.id).served;
     return this.handle(this.kindNamed(slot.answer?.kind), answer.id, false);
+  }
+
+  /** An object of this side's the peer hands back as itself. One lent for a call stays lent: it cannot be handed over. */
+  private takeOwn(id: number): Export {
+    const own = this.exports.get(id);
+    if (own === undefined) throw new Gone('the object has been let go');
+    if (own.lent) throw new WrongKind('an object lent for a call cannot be handed over');
+    this.exports.delete(id);
+    return own;
+  }
+
+  /** Lets go one object the peer handed over in a call that will not take it: the peer's is released, this side's own given back dropped. */
+  private letGo(ref: ObjectRef): void {
+    if (!ref.receivers) this.send(new Release(ref.id));
+    else if (this.exports.get(ref.id)?.lent === false) this.exports.delete(ref.id);
+  }
+
+  /**
+   * Lets go what a call of the peer's handed over when it is refused before
+   * running; a lent object ends with the call on the peer's side. A call on
+   * an object this side does not hold, or a slot past its kind's, cannot be
+   * read: what it handed stays until the link ends.
+   */
+  private letGoHanded(c: Call): void {
+    const exported = c.target.object ? this.exports.get(c.target.id) : undefined;
+    const slot = exported?.kind.slots[c.slot];
+    if (slot === undefined) return;
+    let args: unknown[];
+    try {
+      args = decodeArgs(slot, c.args);
+    } catch {
+      return;
+    }
+    args.forEach((ref, i) => {
+      if (ref instanceof ObjectRef && slot.args[i]!.pass !== 'lent') this.letGo(ref);
+    });
   }
 
   private handle(kind: RemoteKind, id: number, lent: boolean): RemoteObject {
@@ -958,9 +1018,7 @@ export class RemoteLink {
     if (reply.status !== 0 || slot.answer?.type !== 'object') return;
     try {
       const answer = decodeAnswer(slot, reply.body).answer;
-      if (!(answer instanceof ObjectRef)) return;
-      if (answer.receivers) this.exports.delete(answer.id);
-      else this.send(new Release(answer.id));
+      if (answer instanceof ObjectRef) this.letGo(answer);
     } catch {
       // Nobody waits for it.
     }
@@ -974,11 +1032,13 @@ export class RemoteLink {
 
   private inbound(c: Call): void {
     if (c.parent !== 0 && !this.pending.has(c.parent)) {
+      this.letGoHanded(c);
       this.refuse(c.call, Status.ERR_GONE, 'the call it was made during has returned');
       return;
     }
     const top = c.parent === 0;
     if (top && this.runningTop >= this.maxCalls) {
+      this.letGoHanded(c);
       this.refuse(c.call, Status.ERR_BUSY, 'the peer is running as many calls as it allows');
       return;
     }
@@ -1010,6 +1070,7 @@ export class RemoteLink {
     }
     const handler = exported.served.slots[slot.name];
     if (handler === undefined) {
+      this.letGoHanded(c);
       this.refuse(
         c.call,
         Status.ERR_UNSUPPORTED,
@@ -1018,24 +1079,46 @@ export class RemoteLink {
       return;
     }
     let args: unknown[];
-    const lentHandles: RemoteObject[] = [];
     try {
       args = decodeArgs(slot, c.args);
-      args.forEach((ref, i) => {
-        if (!(ref instanceof ObjectRef)) return;
-        const a = slot.args[i]!;
+    } catch (e) {
+      if (e instanceof GuatiaoError) this.refuse(c.call, e.status, e.message);
+      else this.refuse(c.call, Status.ERR_INTERNAL, String(e));
+      return;
+    }
+    // Every object handed over is taken before a refusal is answered, so
+    // none is left held for a call that never ran.
+    const lentHandles: RemoteObject[] = [];
+    const takenHandles: RemoteObject[] = [];
+    let refused: { error: unknown } | undefined;
+    for (let i = 0; i < args.length; i++) {
+      const ref = args[i];
+      if (!(ref instanceof ObjectRef)) continue;
+      const a = slot.args[i]!;
+      const lent = a.pass === 'lent';
+      if (refused !== undefined) {
+        if (!lent) this.letGo(ref);
+        continue;
+      }
+      try {
         if (ref.receivers) {
-          const own = this.exports.get(ref.id);
-          if (a.pass !== 'lent') this.exports.delete(ref.id);
+          const own = lent ? this.exports.get(ref.id) : this.takeOwn(ref.id);
           if (own === undefined) throw new Gone('the object has been let go');
           args[i] = own.served;
         } else {
-          const handle = this.handle(this.kindNamed(a.kind), ref.id, a.pass === 'lent');
-          if (a.pass === 'lent') lentHandles.push(handle);
+          const handle = this.handle(this.kindNamed(a.kind), ref.id, lent);
+          (lent ? lentHandles : takenHandles).push(handle);
           args[i] = handle;
         }
-      });
-    } catch (e) {
+      } catch (e) {
+        refused = { error: e };
+        if (!lent && !ref.receivers) this.send(new Release(ref.id));
+      }
+    }
+    if (refused !== undefined) {
+      for (const h of lentHandles) h.gone = true;
+      for (const h of takenHandles) h.release();
+      const e = refused.error;
       if (e instanceof GuatiaoError) this.refuse(c.call, e.status, e.message);
       else this.refuse(c.call, Status.ERR_INTERNAL, String(e));
       return;

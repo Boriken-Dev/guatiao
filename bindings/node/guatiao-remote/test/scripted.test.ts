@@ -5,9 +5,9 @@
 // The link against a peer the suite plays itself, for what a well-behaved
 // server never does.
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { ObjectRef, decodeArgs, encodeAnswer } from '../src/args.js';
+import { ObjectRef, decodeArgs, encodeAnswer, encodeArgs } from '../src/args.js';
 import {
   type AnyFrame,
   Call,
@@ -25,7 +25,8 @@ import {
   Target,
   Welcome,
 } from '../src/codec.js';
-import { Gone, GuatiaoError, NotFound, Unsupported, WrongKind } from '../src/errors.js';
+import { RemoteKind } from '../src/described.js';
+import { Busy, Gone, GuatiaoError, NotFound, Unsupported, WrongKind } from '../src/errors.js';
 import { type RemoteChannel, type RemoteProvider, RemoteLink, RemoteTrust, Served } from '../src/link.js';
 import { CLIENT_LABEL, SERVER_LABEL, proofOf } from '../src/proof.js';
 import { kindsDocument } from './support.js';
@@ -81,7 +82,11 @@ class Pipe implements RemoteChannel {
   }
 }
 
-/** Kinds of the suite's own: `maker` hands the peer an `echo` this side serves, or two listeners. */
+/**
+ * Kinds of the suite's own: `maker` hands the peer an `echo` this side
+ * serves, or two listeners, or lends it an `echo` and is answered one; an
+ * `echo` takes listeners handed over.
+ */
 const OWN_KINDS = [
   {
     name: 'maker',
@@ -95,6 +100,11 @@ const OWN_KINDS = [
           { name: 'b', type: 'object', kind: 'listener', pass: 'taken' },
         ],
       },
+      {
+        name: 'wrap',
+        args: [{ name: 'e', type: 'object', kind: 'echo', pass: 'lent' }],
+        answer: { type: 'object', kind: 'echo' },
+      },
     ],
   },
   {
@@ -103,20 +113,35 @@ const OWN_KINDS = [
     slots: [
       { name: 'big', answer: { type: 'text' } },
       { name: 'fill', args: [{ name: 'dst', type: 'bytes_mut' }], answer: { type: 'i64' } },
+      { name: 'take', args: [{ name: 'l', type: 'object', kind: 'listener', pass: 'taken' }] },
+      {
+        name: 'take2',
+        args: [
+          { name: 'a', type: 'object', kind: 'listener', pass: 'taken' },
+          { name: 'b', type: 'object', kind: 'listener', pass: 'taken' },
+        ],
+      },
     ],
   },
 ];
 
+const ECHO = RemoteKind.fromDescription(OWN_KINDS[1]);
+
 /**
  * A link at the local level over a `Pipe`, its catalog listed: one
- * provider whose greeter table fills only `greet` and `start`, and whose
- * `maker` table fills both its slots. `welcome` is what the peer offers.
+ * provider whose greeter table fills only `greet`, `start` and
+ * `greet_into`, and whose `maker` table fills every slot. `welcome` is what
+ * the peer offers, `maxCalls` how many of its calls this side runs.
  */
 async function scripted(
-  options: { timeout?: number | null; welcome?: Record<string, unknown> } = {},
+  options: { timeout?: number | null; welcome?: Record<string, unknown>; maxCalls?: number } = {},
 ): Promise<[RemoteLink, Pipe, RemoteProvider]> {
   const pipe = new Pipe();
-  const linking = RemoteLink.over(pipe, { trust: RemoteTrust.LOCAL, timeout: options.timeout ?? null });
+  const linking = RemoteLink.over(pipe, {
+    trust: RemoteTrust.LOCAL,
+    timeout: options.timeout ?? null,
+    maxCalls: options.maxCalls ?? 64,
+  });
   expect(await pipe.next()).toBeInstanceOf(Hello);
   pipe.reply(new Welcome(new Uint8Array(16), new Uint8Array(0), options.welcome ?? {}));
   const link = await linking;
@@ -134,8 +159,8 @@ async function scripted(
             id: 'p',
             name: 'P',
             tables: [
-              { kind: 'greeter', table: 1, slots: ['greet', 'start'] },
-              { kind: 'maker', table: 2, slots: ['make', 'pair'] },
+              { kind: 'greeter', table: 1, slots: ['greet', 'start', 'greet_into'] },
+              { kind: 'maker', table: 2, slots: ['make', 'pair', 'wrap'] },
             ],
           },
         ],
@@ -144,6 +169,23 @@ async function scripted(
   };
   pipe.reply(new Reply(ask.call, 0, new FrameWriter().value(catalog).done()));
   return [link, pipe, (await listing).providers[0]!];
+}
+
+/** Hands the peer `echo` through `maker.make`; the id the peer holds it by. */
+async function handEcho(pipe: Pipe, provider: RemoteProvider, echo: Served): Promise<number> {
+  const maker = provider.table('maker')!;
+  const making = maker.call('make', [echo]);
+  const make = (await pipe.next()) as Call;
+  const ref = decodeArgs(maker.kind.slot('make'), make.args)[0] as ObjectRef;
+  pipe.reply(new Reply(make.call, 0, new Uint8Array(0)));
+  await making;
+  return ref.id;
+}
+
+/** The peer's `echo.take` (one ref) or `echo.take2` (two) on `echo`, handing `refs` over. */
+function take(call: number, parent: number, echo: number, refs: ObjectRef[]): Call {
+  const slot = ECHO.slot(refs.length === 1 ? 'take' : 'take2');
+  return new Call(call, parent, Target.object(echo), slot.index, encodeArgs(slot, refs));
 }
 
 describe('against a scripted peer', () => {
@@ -319,6 +361,123 @@ describe('against a scripted peer', () => {
     const refused = (await pipe.next()) as Reply;
     expect([refused.call, refused.status, refused.words()]).toEqual([80, 100, 'not a status']);
     expect(link.alive).toBe(true);
+    link.close();
+  });
+
+  test('a call refused before it runs lets go of what it handed over', async () => {
+    const [link, pipe, provider] = await scripted({ maxCalls: 1 });
+    const echo = await handEcho(
+      pipe,
+      provider,
+      new Served('echo', { big: () => new Promise(() => undefined), take: () => undefined }),
+    );
+    // Two listeners of this side's the peer holds.
+    const maker = provider.table('maker')!;
+    const pairing = maker.call('pair', [new Served('listener', {}), new Served('listener', {})]);
+    const pair = (await pipe.next()) as Call;
+    const mine = decodeArgs(maker.kind.slot('pair'), pair.args) as ObjectRef[];
+    pipe.reply(new Reply(pair.call, 0, new Uint8Array(0)));
+    await pairing;
+    expect(link.objectsHeld).toBe(3);
+
+    // Made during a call that has returned.
+    pipe.reply(take(70, 4, echo, [new ObjectRef(5)]));
+    expect(((await pipe.next()) as Release).object).toBe(5);
+    expect(((await pipe.next()) as Reply).call).toBe(70);
+    // A slot the echo does not fill.
+    pipe.reply(take(71, 0, echo, [new ObjectRef(6), new ObjectRef(7)]));
+    expect(((await pipe.next()) as Release).object).toBe(6);
+    expect(((await pipe.next()) as Release).object).toBe(7);
+    const unfilled = (await pipe.next()) as Reply;
+    expect([unfilled.call, unfilled.status]).toEqual([71, 13]);
+    // Past this side's maxCalls: the one place runs `big`, forever.
+    pipe.reply(new Call(72, 0, Target.object(echo), 0, new Uint8Array(0)));
+    pipe.reply(take(73, 0, echo, [new ObjectRef(8)]));
+    expect(((await pipe.next()) as Release).object).toBe(8);
+    const busy = (await pipe.next()) as Reply;
+    expect([busy.call, busy.status]).toEqual([73, 14]);
+    // This side's own, given back in a refused call, is dropped.
+    pipe.reply(take(74, 4, echo, [new ObjectRef(mine[0]!.id, true)]));
+    expect(((await pipe.next()) as Reply).call).toBe(74);
+    expect(link.objectsHeld).toBe(2);
+    link.close();
+  });
+
+  test('a call refused while its arguments are received lets each go', async () => {
+    const [link, pipe, provider] = await scripted();
+    const echo = await handEcho(pipe, provider, new Served('echo', { take2: () => undefined }));
+    // The first is no object of this side's; the second is the peer's.
+    pipe.reply(take(80, 0, echo, [new ObjectRef(99, true), new ObjectRef(9)]));
+    expect(((await pipe.next()) as Release).object).toBe(9);
+    const refused = (await pipe.next()) as Reply;
+    expect([refused.call, refused.status]).toEqual([80, 12]);
+    link.close();
+  });
+
+  test('an object lent for a call cannot come back handed over', async () => {
+    const [link, pipe, provider] = await scripted();
+    const echo = await handEcho(pipe, provider, new Served('echo', { take: () => undefined }));
+    const table = provider.table('greeter')!;
+    const heard: unknown[] = [];
+    const listener = new Served('listener', { heard: (args) => void heard.push(args[0]) });
+    const greeting = table.call('greet_into', ['x', listener]);
+    const greet = (await pipe.next()) as Call;
+    const lent = decodeArgs(table.kind.slot('greet_into'), greet.args)[1] as ObjectRef;
+    pipe.reply(take(90, greet.call, echo, [new ObjectRef(lent.id, true)]));
+    const refused = (await pipe.next()) as Reply;
+    expect([refused.call, refused.status]).toEqual([90, 9]);
+    // Still lent: the call it was lent for can call it.
+    pipe.reply(new Call(91, greet.call, Target.object(lent.id), 0, new FrameWriter().text('still').done()));
+    const called = (await pipe.next()) as Reply;
+    expect([called.call, called.status]).toEqual([91, 0]);
+    expect(heard).toEqual(['still']);
+    pipe.reply(new Reply(greet.call, 0, new Uint8Array(0)));
+    await greeting;
+
+    // Nor come back as an answer.
+    const maker = provider.table('maker')!;
+    const wrapSlot = maker.kind.slot('wrap');
+    const wrapping = maker.call('wrap', [new Served('echo', {})]);
+    const wrap = (await pipe.next()) as Call;
+    const mine = decodeArgs(wrapSlot, wrap.args)[0] as ObjectRef;
+    pipe.reply(new Reply(wrap.call, 0, encodeAnswer(wrapSlot, new ObjectRef(mine.id, true), [undefined])));
+    await expect(wrapping).rejects.toBeInstanceOf(WrongKind);
+    link.close();
+  });
+
+  test("a call waiting for a place under the peer's max_calls gives up Busy at its timeout", async () => {
+    const [link, pipe, provider] = await scripted({ timeout: 300, welcome: { max_calls: 1 } });
+    // Every timer of one instant runs in the order it was set, so which
+    // call gives up first is the clock's to say, not the machine's load.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    try {
+      const table = provider.table('greeter')!;
+      const greet = table.kind.slot('greet');
+      const first = expect(table.call('greet', ['a'])).rejects.toBeInstanceOf(Gone);
+      const a = (await pipe.next()) as Call;
+      // Both wait for the one place the first holds.
+      const second = expect(table.call('greet', ['b'])).rejects.toBeInstanceOf(Gone);
+      const third = expect(table.call('greet', ['c'])).rejects.toBeInstanceOf(Busy);
+      await vi.advanceTimersByTimeAsync(300);
+      // The first times out and its place goes to the second, with none of
+      // its time left; the third has waited its whole timeout by then.
+      expect(((await pipe.next()) as Cancel).call).toBe(a.call);
+      await first;
+      const b = (await pipe.next()) as Call;
+      expect(decodeArgs(greet, b.args)).toEqual(['b']);
+      await third;
+      // A timer set for no time while the clock ticks runs a millisecond on.
+      await vi.advanceTimersByTimeAsync(1);
+      expect(((await pipe.next()) as Cancel).call, 'the wait counts against the call').toBe(b.call);
+      await second;
+    } finally {
+      vi.useRealTimers();
+    }
+    const ping = link.ping();
+    const asked = await pipe.next();
+    expect(asked, 'the third was never sent').toBeInstanceOf(Ping);
+    pipe.reply(new Pong((asked as Ping).n));
+    await ping;
     link.close();
   });
 
