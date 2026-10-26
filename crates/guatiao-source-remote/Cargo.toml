@@ -35,6 +35,11 @@ default = []
 # (HMAC-SHA256).
 tcp = ["dep:hmac", "dep:sha2", "dep:getrandom", "dep:coqui-net-acl"]
 
+# TLS 1.3 over TCP, the secure level: mutual TLS through coqui-peer-tls
+# (rustls, ring), each side known by its certificate's fingerprint,
+# unknown clients waiting in a trust store until an operator accepts them.
+tls = ["tcp", "dep:coqui-peer", "dep:coqui-peer-tls", "dep:rustls"]
+
 # The same machine by name, at the local level: a Unix socket (std) on
 # Unix, a named pipe on Windows.
 local = ["dep:interprocess"]
@@ -65,9 +70,15 @@ hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 # The handshake's nonces.
 getrandom = { version = "0.3", optional = true }
-# Admission by ordered permit/deny rules, before anything is read. A git
-# dependency: crates.io refuses this crate while it is one.
+# Admission by ordered permit/deny rules, before anything is read. Git
+# dependencies, here and below: crates.io refuses this crate while they are.
 coqui-net-acl = { git = "https://github.com/Boriken-Dev/coqui-net-acl", rev = "ef48f2564ab3193d5204f52b8607f25bea1050c5", optional = true, features = ["serde"] }
+# Peer ids, the trust store and the sans-IO handshake driver.
+coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "ed5a5c401bc2da942c5c1f0de42c38e90927a8a9", optional = true }
+# Mutual TLS: identities, pinned and stored trust, the TLS policy.
+coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "fa409d770baf5086619480d68fadfc9dc7cfa6dd", optional = true, features = ["generate", "serde", "acl"] }
+# The TLS state the link's threads share; coqui-peer-tls's version.
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
 # The shared rings' file, mapped.
 memmap2 = { version = "0.9", optional = true }
 # WebSocket framing and its HTTP upgrade; no TLS.
@@ -91,6 +102,11 @@ guatiao = { path = "../guatiao", features = ["provider", "load"] }
 greeter_kind = { path = "../../examples/greeter_kind" }
 # Reads the shared vectors.
 serde_json = "1"
+# The secure level's tests: a client that presents a certificate it holds
+# no key for, written against rustls itself.
+coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "ed5a5c401bc2da942c5c1f0de42c38e90927a8a9" }
+coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "fa409d770baf5086619480d68fadfc9dc7cfa6dd", features = ["generate"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 
 [lints]
 workspace = true

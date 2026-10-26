@@ -209,9 +209,19 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["good/shapes"], "{refreshed:?}");
     assert!(why(&refreshed, "inline.guatiao.toml").contains("`key` is a secret"));
-    assert!(
-        why(&refreshed, "secure.guatiao.toml").contains("the secure level is not in this build")
-    );
+    // The secure level runs over `tls://` alone, in a build that has it.
+    let secure = why(&refreshed, "secure.guatiao.toml");
+    if cfg!(feature = "tls") {
+        assert!(
+            secure.contains("`tcp://` runs the trusted level"),
+            "{secure}"
+        );
+    } else {
+        assert!(
+            secure.contains("the secure level is not in this build"),
+            "{secure}"
+        );
+    }
     assert!(
         why(&refreshed, "typo.guatiao.toml").contains("`keyfile` is not a key of a peer manifest")
     );
@@ -269,7 +279,11 @@ fn one_peer_and_manifests_of_peers_are_one_or_the_other() {
     secure.set("connect", "tcp://127.0.0.1:7000");
     secure.set("trust", "secure");
     let refused = RemoteSource::from_config(&secure).unwrap_err();
-    assert_eq!(refused.status, Status::GUATIAO_ERR_UNSUPPORTED);
+    if cfg!(feature = "tls") {
+        assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    } else {
+        assert_eq!(refused.status, Status::GUATIAO_ERR_UNSUPPORTED);
+    }
 }
 
 /// A peer that goes away keeps its libraries listed as they were (calls

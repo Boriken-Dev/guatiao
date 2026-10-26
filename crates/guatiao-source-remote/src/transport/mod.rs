@@ -23,6 +23,8 @@ pub mod shm;
 pub mod stream;
 #[cfg(feature = "tcp")]
 pub mod tcp;
+#[cfg(feature = "tls")]
+pub mod tls;
 #[cfg(feature = "ws")]
 pub mod ws;
 
@@ -41,6 +43,13 @@ pub trait FrameRead: Send {
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
         let _ = timeout;
         Ok(())
+    }
+
+    /// The peer's identity as the transport proved it, `sha256:<hex>` (a
+    /// TLS certificate's fingerprint), once the first read has run the
+    /// transport's own handshake; `None` on a transport that proves none.
+    fn peer_id(&self) -> Option<String> {
+        None
     }
 }
 
