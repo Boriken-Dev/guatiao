@@ -101,6 +101,18 @@ write now.
   imports the object kinds a separate document describes instead of
   refusing them. Node's `kindsOf` loads an object kind that names itself
   through its slots, or one naming it back, which it refused before.
+- **Fortran: a kind module is written from its description.**
+  `guatiao-kind DOCUMENT -o FILE.F90` (the Fortran package's executable,
+  `fpm run guatiao-kind --`, also built by its CMake project) writes the
+  module a kind author wrote by hand before: per kind the abstract type,
+  the remote, the description, the serving function and a `bind(c)`
+  procedure per slot, with flang's by-value workarounds; `--check` fails
+  when a committed module is stale. The document is read by the library
+  (`guatiao_kind_document_read`). The greeter kinds' module is now its
+  output. `guatiao_kinds` gains the list and value helpers such modules
+  call (`guatiao_list_carrier`, `guatiao_settle_list`, `guatiao_lent_list`,
+  `guatiao_end_lent_list`, `guatiao_taken_list`, `guatiao_list_out`,
+  `guatiao_value_out`, `guatiao_borrow_tree`).
 - **MATLAB and Octave write a kind's classes from its description.**
   `guatiao.write_kinds(document, '+pkg')` writes a `guatiao.Kind` class
   per kind of a kinds document into a package folder, the description's
