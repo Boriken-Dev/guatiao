@@ -33,7 +33,7 @@ abstract interface class Greeter {
 /// Appended after `greet`: a library built before it existed makes
 /// the proxy run this body instead.
 ///
-/// `shout` of the `greeter` kind: a slot appended after its first ones, which an older table may lack.
+/// `shout` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterShout {
   String shout(String name);
 }
@@ -42,7 +42,7 @@ abstract interface class GreeterShout {
 /// listener the caller handed in. A greeter built before this slot
 /// existed, or one that holds no conversations, answers the default.
 ///
-/// `start` of the `greeter` kind: a slot appended after its first ones, which an older table may lack.
+/// `start` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterStart {
   Conversation start(ListenerRemote listener);
 }
@@ -52,7 +52,7 @@ abstract interface class GreeterStart {
 /// allocated to pass it and nothing is destroyed after. A greeter
 /// built before this slot existed greets through `greet`.
 ///
-/// `greet_into` of the `greeter` kind: a slot appended after its first ones, which an older table may lack.
+/// `greet_into` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterGreetInto {
   void greetInto(String name, ListenerRemote listener);
 }
@@ -63,7 +63,7 @@ abstract interface class GreeterGreetInto {
 /// it. A greeter built before this slot existed greets the name
 /// through `greet`.
 ///
-/// `greet_from` of the `greeter` kind: a slot appended after its first ones, which an older table may lack.
+/// `greet_from` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterGreetFrom {
   Object greetFrom(Value config);
 }
@@ -74,7 +74,7 @@ abstract interface class GreeterGreetFrom {
 /// be greeted. A greeter built before this slot existed changes
 /// nothing.
 ///
-/// `check` of the `greeter` kind: a slot appended after its first ones, which an older table may lack.
+/// `check` of the `greeter` kind: an optional slot, which a provider may leave null.
 abstract interface class GreeterCheck {
   bool check(MapRef config);
 }
@@ -114,7 +114,7 @@ final class GreeterRemote extends KindRemote
   /// Appended after `greet`: a library built before it existed makes
   /// the proxy run this body instead.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('shout')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('shout')` asks first.
   @override
   String shout(String name) {
     final c = CallScope();
@@ -137,7 +137,7 @@ final class GreeterRemote extends KindRemote
   /// listener the caller handed in. A greeter built before this slot
   /// existed, or one that holds no conversations, answers the default.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('start')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('start')` asks first.
   @override
   ConversationRemote start(Listener listener) {
     final c = CallScope();
@@ -162,7 +162,7 @@ final class GreeterRemote extends KindRemote
   /// allocated to pass it and nothing is destroyed after. A greeter
   /// built before this slot existed greets through `greet`.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('greet_into')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('greet_into')` asks first.
   @override
   void greetInto(String name, Listener listener) {
     final c = CallScope();
@@ -187,7 +187,7 @@ final class GreeterRemote extends KindRemote
   /// it. A greeter built before this slot existed greets the name
   /// through `greet`.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('greet_from')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('greet_from')` asks first.
   @override
   Value greetFrom(Object config) {
     final c = CallScope();
@@ -213,7 +213,7 @@ final class GreeterRemote extends KindRemote
   /// be greeted. A greeter built before this slot existed changes
   /// nothing.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('check')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('check')` asks first.
   @override
   bool check(Ref config) {
     final c = CallScope();

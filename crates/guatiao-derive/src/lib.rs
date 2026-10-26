@@ -257,8 +257,8 @@ pub fn derive_from_value(input: TokenStream) -> TokenStream {
 /// by value through `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
 /// or any other type through `FromValue`; each optionally inside
 /// `Result<_, ProviderError>`, which a method that converts must use. A
-/// method with a default body is an appended slot; a required method may
-/// not follow one.
+/// method with a default body is an optional slot a provider may leave
+/// null; a required method may not follow one.
 #[cfg(feature = "provider")]
 #[proc_macro_attribute]
 pub fn kind(attr: TokenStream, item: TokenStream) -> TokenStream {

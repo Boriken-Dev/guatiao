@@ -51,10 +51,10 @@ impl LendsVtable {
             fill: ::core::option::Option::Some(Self::__guatiao_shim_fill::<__T>),
         }
     }
-    /// One past the last required slot. Frozen.
+    /// The smallest table a reader accepts: every slot.
     #[doc(hidden)]
     pub const fn floor() -> usize {
-        Self::fill_end()
+        ::core::mem::size_of::<Self>()
     }
     /// FNV-1a over the shape and the required signatures, as a
     /// literal, so a C header generator can render it: what a C
@@ -70,14 +70,6 @@ impl LendsVtable {
             "{\"name\":\"lends\",\"floor_hash\":2814562052,\"object\":false,\"slots\":[{\"name\":\"check\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"config\",\"type\":\"map\",\"pass\":\"lent\"}],\"answer\":{\"type\":\"bool\"}},{\"name\":\"fill\",\"required\":true,\"fallible\":false,\"args\":[{\"name\":\"v\",\"type\":\"value\",\"pass\":\"lent\"},{\"name\":\"l\",\"type\":\"list\",\"pass\":\"lent\"},{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"i64\"}}]}",
         );
         out
-    }
-    #[doc(hidden)]
-    pub const fn check_end() -> usize {
-        ::core::mem::offset_of!(Self, check) + ::core::mem::size_of::<usize>()
-    }
-    #[doc(hidden)]
-    pub const fn fill_end() -> usize {
-        ::core::mem::offset_of!(Self, fill) + ::core::mem::size_of::<usize>()
     }
     /// # Safety
     ///
@@ -162,8 +154,14 @@ impl ::guatiao::library::Kind for dyn Lends {
     const FLOOR: usize = LendsVtable::floor();
     const FLOOR_HASH: u32 = LendsVtable::FLOOR_HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[
-        ("check", LendsVtable::check_end()),
-        ("fill", LendsVtable::fill_end()),
+        (
+            "check",
+            ::core::mem::offset_of!(LendsVtable, check) + ::core::mem::size_of::<usize>(),
+        ),
+        (
+            "fill",
+            ::core::mem::offset_of!(LendsVtable, fill) + ::core::mem::size_of::<usize>(),
+        ),
     ];
     const OBJECT: bool = false;
     fn live_objects(
@@ -214,10 +212,7 @@ impl Lends for ::guatiao::library::Remote<dyn Lends> {
             out: *mut bool,
             err: *mut ::guatiao::library::ProviderError,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(LendsVtable, check),
-                LendsVtable::check_end(),
-            )
+            self.slot(::core::mem::offset_of!(LendsVtable, check))
         }
             .expect("validated: a required slot is present and non-null");
         let __home_config = ::guatiao::library::kind::lent_home(&*config);
@@ -245,10 +240,7 @@ impl Lends for ::guatiao::library::Remote<dyn Lends> {
             name: ::guatiao::Str,
             out: *mut i64,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(LendsVtable, fill),
-                LendsVtable::fill_end(),
-            )
+            self.slot(::core::mem::offset_of!(LendsVtable, fill))
         }
             .expect("validated: a required slot is present and non-null");
         let __home_v = ::guatiao::library::kind::lent_home(&*v);

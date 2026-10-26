@@ -47,7 +47,7 @@ describe('a kind loaded from its description', () => {
       expect(described.isObject, table).toBe(body.includes('(*destroy)'));
     }
     expect(Object.keys(kinds.greeter!.methods)).toEqual(['greet', 'shout', 'start', 'greetInto', 'greetFrom', 'check']);
-    expect(kinds.greeter!.floor).toBe(8 + WORD);
+    expect(kinds.greeter!.floor, 'every slot, optional ones too').toBe(kinds.greeter!.tableSize);
   });
 
   it('takes the JSON text as well, and one kind alone', () => {

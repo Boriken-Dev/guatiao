@@ -47,10 +47,10 @@ impl MovesVtable {
             take: ::core::option::Option::Some(Self::__guatiao_shim_take::<__T>),
         }
     }
-    /// One past the last required slot. Frozen.
+    /// The smallest table a reader accepts: every slot.
     #[doc(hidden)]
     pub const fn floor() -> usize {
-        Self::take_end()
+        ::core::mem::size_of::<Self>()
     }
     /// FNV-1a over the shape and the required signatures, as a
     /// literal, so a C header generator can render it: what a C
@@ -66,14 +66,6 @@ impl MovesVtable {
             "{\"name\":\"moves\",\"floor_hash\":2716657938,\"object\":false,\"slots\":[{\"name\":\"keep\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"v\",\"type\":\"value\",\"pass\":\"taken\"},{\"name\":\"name\",\"type\":\"str\"},{\"name\":\"m\",\"type\":\"map\",\"pass\":\"taken\"}],\"answer\":{\"type\":\"i64\"}},{\"name\":\"take\",\"required\":true,\"fallible\":false,\"args\":[{\"name\":\"l\",\"type\":\"list\",\"pass\":\"taken\"}],\"answer\":{\"type\":\"i64\"}}]}",
         );
         out
-    }
-    #[doc(hidden)]
-    pub const fn keep_end() -> usize {
-        ::core::mem::offset_of!(Self, keep) + ::core::mem::size_of::<usize>()
-    }
-    #[doc(hidden)]
-    pub const fn take_end() -> usize {
-        ::core::mem::offset_of!(Self, take) + ::core::mem::size_of::<usize>()
     }
     /// # Safety
     ///
@@ -166,8 +158,14 @@ impl ::guatiao::library::Kind for dyn Moves {
     const FLOOR: usize = MovesVtable::floor();
     const FLOOR_HASH: u32 = MovesVtable::FLOOR_HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[
-        ("keep", MovesVtable::keep_end()),
-        ("take", MovesVtable::take_end()),
+        (
+            "keep",
+            ::core::mem::offset_of!(MovesVtable, keep) + ::core::mem::size_of::<usize>(),
+        ),
+        (
+            "take",
+            ::core::mem::offset_of!(MovesVtable, take) + ::core::mem::size_of::<usize>(),
+        ),
     ];
     const OBJECT: bool = false;
     fn live_objects(
@@ -220,10 +218,7 @@ impl Moves for ::guatiao::library::Remote<dyn Moves> {
             out: *mut i64,
             err: *mut ::guatiao::library::ProviderError,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(MovesVtable, keep),
-                MovesVtable::keep_end(),
-            )
+            self.slot(::core::mem::offset_of!(MovesVtable, keep))
         }
             .expect("validated: a required slot is present and non-null");
         let __arg_name = ::guatiao::Str::new(name);
@@ -249,10 +244,7 @@ impl Moves for ::guatiao::library::Remote<dyn Moves> {
             l: *mut ::guatiao::List,
             out: *mut i64,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(MovesVtable, take),
-                MovesVtable::take_end(),
-            )
+            self.slot(::core::mem::offset_of!(MovesVtable, take))
         }
             .expect("validated: a required slot is present and non-null");
         let mut __own_l = ::core::mem::ManuallyDrop::new(l);

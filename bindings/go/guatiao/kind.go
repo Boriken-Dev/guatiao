@@ -66,8 +66,7 @@ type SlotSpec struct {
 type kindDesc struct {
 	spec   KindSpec
 	first  uintptr // offset of the first slot after the header (and destroy)
-	size   uintptr // the table's size
-	floor  uintptr // the smallest table: up to the last required slot
+	size   uintptr // the table's size: the smallest a remote accepts
 	tables sync.Map
 }
 
@@ -75,12 +74,6 @@ func newKindDesc(spec KindSpec) *kindDesc {
 	d := &kindDesc{spec: spec, first: native.SizeKindHeader}
 	if spec.Object {
 		d.first += native.Word
-	}
-	d.floor = d.first
-	for i, s := range spec.Slots {
-		if s.Required {
-			d.floor = d.first + uintptr(i+1)*native.Word
-		}
 	}
 	d.size = d.first + uintptr(len(spec.Slots))*native.Word
 	return d
@@ -204,10 +197,11 @@ func newRemote(d *kindDesc, table unsafe.Pointer, size, ctx uintptr, owned bool,
 	if table == nil {
 		return Remote{}, &FloorMismatch{Message: "no " + d.spec.Name + " table"}
 	}
-	if size < d.floor {
-		return Remote{}, &FloorMismatch{Message: fmt.Sprintf("the %s table is %d bytes, its required slots need %d", d.spec.Name, size, d.floor)}
+	declared, hash := native.TableHeader(table)
+	if smaller := min(size, uintptr(declared)); smaller < d.size {
+		return Remote{}, &FloorMismatch{Message: fmt.Sprintf("the %s table is %d bytes, smaller than the kind's %d", d.spec.Name, smaller, d.size)}
 	}
-	if _, hash := native.TableHeader(table); hash != d.spec.FloorHash {
+	if hash != d.spec.FloorHash {
 		return Remote{}, &FloorMismatch{Message: fmt.Sprintf("the table's floor hash %d is not the %s kind's %d", hash, d.spec.Name, d.spec.FloorHash)}
 	}
 	rs := &remoteState{kind: d, table: table, size: size, ctx: ctx, owned: owned, open: open}
@@ -232,14 +226,10 @@ func (r Remote) check() error {
 }
 
 func (r Remote) slotFn(i int) unsafe.Pointer {
-	off := r.r.kind.offset(i)
-	if off+native.Word > r.r.size {
-		return nil
-	}
-	return native.SlotAt(r.r.table, off)
+	return native.SlotAt(r.r.table, r.r.kind.offset(i))
 }
 
-// Has reports whether the table carries the slot the header calls name.
+// Has reports whether the table fills the slot the header calls name.
 func (r Remote) Has(name string) bool {
 	if r.check() != nil {
 		return false

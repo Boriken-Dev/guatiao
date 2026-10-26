@@ -248,7 +248,7 @@ GUATIAO_KIND(greeter, greeter_vtable,
 `GUATIAO_KIND(name, table, slots...)` (a provider kind) and
 `GUATIAO_OBJECT_KIND` (its table starts with `destroy`, which is not
 listed) declare a struct `name` (`kind_name`, `floor_hash` from
-`<table>_FLOOR_HASH`, `floor_size()`); `GUATIAO_KIND_NAMED(name,
+`<table>_FLOOR_HASH`, `floor_size()`, the whole table); `GUATIAO_KIND_NAMED(name,
 "kind-name", ...)` names the kind otherwise. A slot is `(required |
 optional, <C field>, <C++ signature>)`. **A signature that does not stand
 for its C field is a compile error.** The C++ types and the C types they
@@ -300,9 +300,9 @@ hand alone.
 `try_bind_table<K>(table, size, ctx, alloc)`), `object<K>` (an object
 this side owns) and `lent<K>` have a method per slot — `g.greet("ana")`,
 `g.try_greet("ana")` (a `result`), `g.has_shout()`. A table of another
-kind (another floor hash, or too short for its required slots) is
-WRONG_KIND; a slot past the table's size, or empty, answers UNSUPPORTED
-(C++ cannot run the kind's default body, as Rust does). A refusal is the
+kind (another floor hash, or smaller than the kind's whole table) is
+WRONG_KIND; a slot the provider left empty answers UNSUPPORTED (C++
+cannot run the kind's default body, as Rust does). A refusal is the
 status's `error` with the provider's words. What a call hands over is
 moved in (`std::move`); when the call never happens (no slot) it is freed
 here. An answer arrives in the remote's allocator (the registry's), moved

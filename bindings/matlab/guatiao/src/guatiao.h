@@ -1562,7 +1562,8 @@ typedef struct guatiao_entries {
  */
 typedef struct guatiao_kind_header {
   /*
-   `sizeof` the table as the library compiled it. Always first.
+   `sizeof` the table as the library compiled it. Always first; a
+   table declaring less than its kind's whole table is refused.
    */
   uint32_t struct_size;
   /*

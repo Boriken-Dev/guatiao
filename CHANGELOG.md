@@ -1399,6 +1399,14 @@ write now.
   refused, naming both sizes, and so is a provider or table array whose
   stride is; a larger one is still read up to this build's fields. Each
   `floor()` is the whole struct, and the `*_end()` guards are gone.
+- **A kind's table covers every slot it has.** `Kind::FLOOR`,
+  `<Trait>Vtable::floor()` and `KindDescription::floor()` are the whole
+  table, and a table smaller than it, by its descriptor or its header (one
+  declaring 0 included), is refused as `BelowFloor` naming both sizes, in
+  Rust and in every binding. An optional slot is one a provider leaves
+  null: the proxy runs the trait's default body, and a binding's remote
+  answers Unsupported. The generated `<method>_end()` functions are gone,
+  as is Fortran's `guatiao_kind%floor_size`.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate

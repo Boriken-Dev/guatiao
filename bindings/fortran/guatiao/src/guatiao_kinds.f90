@@ -51,13 +51,12 @@ module guatiao_kinds
   end interface
 
   !> A kind, as its module describes it: the name, the header's floor
-  !> hash (its uint32 bits), the size of the header and the required
-  !> slots, the whole table's size, whether it is an object kind (its
-  !> first slot `destroy`), and the table every served object of it uses.
+  !> hash (its uint32 bits), the whole table's size (the smallest table a
+  !> remote accepts), whether it is an object kind (its first slot
+  !> `destroy`), and the table every served object of it uses.
   type :: guatiao_kind
     character(:), allocatable :: name
     integer(c_int32_t) :: floor_hash = 0
-    integer(c_size_t) :: floor_size = 0
     integer(c_size_t) :: size = 0
     logical :: object = .false.
     type(c_ptr) :: object_table = c_null_ptr
@@ -172,8 +171,8 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  !> Any table as `kind`: GUATIAO_STAT_FLOOR_MISMATCH when it is smaller
-  !> than the kind's required slots or carries another floor hash.
+  !> Any table as `kind`: GUATIAO_STAT_FLOOR_MISMATCH when it, or its
+  !> header, is smaller than the kind's table or carries another floor hash.
   recursive subroutine guatiao_bind_table(table, size, ctx, kind, r, stat, errmsg)
     type(c_ptr), intent(in) :: table, ctx
     integer(c_size_t), intent(in) :: size
@@ -183,12 +182,17 @@ contains
     character(:), allocatable, intent(inout), optional :: errmsg
     type(table_head), pointer :: head
     character(24) :: a, b
-    if (.not. c_associated(table) .or. size < kind%floor_size) then
+    if (.not. c_associated(table) .or. size < kind%size) then
       call gt_report(GUATIAO_STAT_FLOOR_MISMATCH, 'guatiao: the table is smaller than the ' // kind%name // &
-                     ' kind''s required slots', stat, errmsg)
+                     ' kind''s', stat, errmsg)
       return
     end if
     call c_f_pointer(table, head)
+    if (int(head%header%struct_size, c_size_t) < kind%size) then
+      call gt_report(GUATIAO_STAT_FLOOR_MISMATCH, 'guatiao: the table declares a size smaller than the ' // &
+                     kind%name // ' kind''s', stat, errmsg)
+      return
+    end if
     if (head%header%floor_hash /= kind%floor_hash) then
       write (a, '(i0)') iand(int(head%header%floor_hash, int64), 4294967295_int64)
       write (b, '(i0)') iand(int(kind%floor_hash, int64), 4294967295_int64)
@@ -202,8 +206,8 @@ contains
     call gt_report(GUATIAO_OK, '', stat, errmsg)
   end subroutine
 
-  !> The `i`th slot after the header (from 1), or null when the table is
-  !> too small for it or leaves it empty.
+  !> The `i`th slot after the header (from 1), or null when the table
+  !> leaves it empty or has no such slot.
   recursive function remote_slot(self, i) result(f)
     class(guatiao_remote), intent(in) :: self
     integer, intent(in) :: i

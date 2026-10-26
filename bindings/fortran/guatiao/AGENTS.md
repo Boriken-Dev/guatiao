@@ -492,8 +492,8 @@ A module per document: a
 `bind(c)` mirror of each table; per kind an abstract type extending
 `guatiao_impl` (a deferred procedure per required slot, an ordinary one
 answering `GUATIAO_ERR_UNSUPPORTED` per optional slot), a `guatiao_kind`
-description (`name`, `floor_hash` as the uint32's bits, `floor_size`, the
-table's `size`, `object`, `object_table`, and an `accepts` function doing
+description (`name`, `floor_hash` as the uint32's bits, the table's
+`size`, the smallest table a remote accepts, `object`, `object_table`, and an `accepts` function doing
 a `select type`), a remote type extending the kind with a `guatiao_remote`
 component and a method per slot calling the slot through
 `c_f_procpointer`, a `<kind>_serving` function filling a table per set of

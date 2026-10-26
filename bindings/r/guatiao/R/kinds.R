@@ -278,13 +278,12 @@ print.guatiao_kind <- function(x, ...) {
   kind$ptr
 }
 
-# What a kind's table needs to be: its size in bytes with every slot, and
-# with its required ones.
+# What a kind's table is: its size in bytes with every slot, which is
+# also the smallest table a remote accepts.
 .gt_kind_sizes <- function(kind) {
   n <- length(kind$slots) + if (kind$object) 1L else 0L
-  req <- sum(vapply(kind$slots, function(s) s$required, logical(1))) + if (kind$object) 1L else 0L
   word <- .Machine$sizeof.pointer
-  c(full = 8 + word * n, floor = 8 + word * req)
+  c(full = 8 + word * n, floor = 8 + word * n)
 }
 
 # ---- remotes -----------------------------------------------------------------

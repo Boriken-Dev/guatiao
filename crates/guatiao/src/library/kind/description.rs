@@ -583,15 +583,9 @@ impl KindDescription {
             + (self.slots.len() + usize::from(self.object)) * size_of::<usize>()
     }
 
-    /// One past the end of the last required slot: the smallest table a
-    /// caller accepts.
+    /// The smallest table a caller accepts: every slot, [`size`](Self::size).
     pub fn floor(&self) -> usize {
-        let last = self.slots.iter().rposition(|s| s.required);
-        let words = match last {
-            Some(i) => self.word_of(i) + 1,
-            None => usize::from(self.object),
-        };
-        size_of::<super::KindHeader>() + words * size_of::<usize>()
+        self.size()
     }
 }
 
@@ -782,7 +776,7 @@ mod tests {
         assert_eq!(check.answer(), Some(&AnswerType::Scalar(Scalar::Bool)));
         let word = size_of::<usize>();
         assert_eq!(kind.size(), 8 + 2 * word);
-        assert_eq!(kind.floor(), 8 + word, "only greet is required");
+        assert_eq!(kind.floor(), kind.size(), "every slot, optional ones too");
     }
 
     #[test]

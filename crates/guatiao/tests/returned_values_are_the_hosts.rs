@@ -329,7 +329,7 @@ fn a_tree_built_where_the_caller_asked_is_not_copied() {
     assert!(is_the_hosts(trees.list().alloc()));
 }
 
-/// A table that ignores the carrier, as an older library's does: its `map` slot
+/// A table that ignores the carrier, as a careless one does: its `map` slot
 /// writes a map from its own allocator over the out slot without reading
 /// it. The caller copies that one, and frees the original.
 #[test]
@@ -398,8 +398,8 @@ fn a_library_that_ignores_the_carrier_is_copied() {
     assert!(OLD_COUNT.made() > 0);
 }
 
-/// A caller that carries no allocator -- an older host, or a slot it
-/// zeroed -- has the shim build through its own side's; one
+/// A caller that carries no allocator -- a slot it zeroed -- has the
+/// shim build through its own side's; one
 /// that carries one gets its answer there.
 #[test]
 fn a_caller_that_carries_nothing_gets_the_providers_allocator() {

@@ -24,8 +24,8 @@ def table(table_ptr: Any, size: int, struct_type: Any, *, floor_hash: int) -> An
     `struct_type` is a `ctypes.Structure` whose first field is a
     `guatiao_kind_header` -- the shape a kind's own C header declares
     (`greeter_vtable` and friends). Checked before the cast: `size`
-    against `sizeof(struct_type)` (a shorter table is an older library,
-    refused here rather than read past its end), and the header's
+    against `sizeof(struct_type)` (a smaller table is refused here rather
+    than read past its end), and the header's
     `floor_hash` against the one the kind's header names
     (`<table>_FLOOR_HASH`).
     """

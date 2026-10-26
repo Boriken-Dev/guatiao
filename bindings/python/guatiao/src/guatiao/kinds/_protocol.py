@@ -68,8 +68,8 @@ _FALLIBLE = "__guatiao_fallible__"
 
 
 def required(fn: F) -> F:
-    """Marks a slot every table fills: one the kind was born with, which
-    its `FLOOR_HASH` covers. A method appended later is not required."""
+    """Marks a slot every table fills, which its `FLOOR_HASH` covers. A
+    provider may leave any other slot null."""
     setattr(fn, _REQUIRED, True)
     return fn
 

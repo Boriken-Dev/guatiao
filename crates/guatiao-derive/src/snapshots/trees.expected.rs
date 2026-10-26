@@ -90,10 +90,10 @@ impl TreesVtable {
             list: ::core::option::Option::Some(Self::__guatiao_shim_list::<__T>),
         }
     }
-    /// One past the last required slot. Frozen.
+    /// The smallest table a reader accepts: every slot.
     #[doc(hidden)]
     pub const fn floor() -> usize {
-        Self::value_end()
+        ::core::mem::size_of::<Self>()
     }
     /// FNV-1a over the shape and the required signatures, as a
     /// literal, so a C header generator can render it: what a C
@@ -109,18 +109,6 @@ impl TreesVtable {
             "{\"name\":\"trees\",\"floor_hash\":3903901445,\"object\":false,\"slots\":[{\"name\":\"map\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"map\"}},{\"name\":\"value\",\"required\":true,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"value\"}},{\"name\":\"list\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"list\"}}]}",
         );
         out
-    }
-    #[doc(hidden)]
-    pub const fn map_end() -> usize {
-        ::core::mem::offset_of!(Self, map) + ::core::mem::size_of::<usize>()
-    }
-    #[doc(hidden)]
-    pub const fn value_end() -> usize {
-        ::core::mem::offset_of!(Self, value) + ::core::mem::size_of::<usize>()
-    }
-    #[doc(hidden)]
-    pub const fn list_end() -> usize {
-        ::core::mem::offset_of!(Self, list) + ::core::mem::size_of::<usize>()
     }
     /// # Safety
     ///
@@ -234,8 +222,14 @@ impl ::guatiao::library::Kind for dyn Trees {
     const FLOOR: usize = TreesVtable::floor();
     const FLOOR_HASH: u32 = TreesVtable::FLOOR_HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[
-        ("map", TreesVtable::map_end()),
-        ("value", TreesVtable::value_end()),
+        (
+            "map",
+            ::core::mem::offset_of!(TreesVtable, map) + ::core::mem::size_of::<usize>(),
+        ),
+        (
+            "value",
+            ::core::mem::offset_of!(TreesVtable, value) + ::core::mem::size_of::<usize>(),
+        ),
     ];
     const OBJECT: bool = false;
     fn live_objects(
@@ -287,7 +281,7 @@ impl Trees for ::guatiao::library::Remote<dyn Trees> {
             out: *mut ::guatiao::Map,
             err: *mut ::guatiao::library::ProviderError,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(::core::mem::offset_of!(TreesVtable, map), TreesVtable::map_end())
+            self.slot(::core::mem::offset_of!(TreesVtable, map))
         }
             .expect("validated: a required slot is present and non-null");
         let __arg_name = ::guatiao::Str::new(name);
@@ -319,10 +313,7 @@ impl Trees for ::guatiao::library::Remote<dyn Trees> {
             ctx: *mut ::core::ffi::c_void,
             out: *mut ::guatiao::Value,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(TreesVtable, value),
-                TreesVtable::value_end(),
-            )
+            self.slot(::core::mem::offset_of!(TreesVtable, value))
         }
             .expect("validated: a required slot is present and non-null");
         let mut __out = <::guatiao::Value as ::guatiao::library::kind::Carrier>::carrier(
@@ -356,7 +347,7 @@ impl Trees for ::guatiao::library::Remote<dyn Trees> {
                         ctx: *mut ::core::ffi::c_void,
                         out: *mut ::guatiao::List,
                     ) -> ::guatiao::Status,
-                >(::core::mem::offset_of!(TreesVtable, list), TreesVtable::list_end())
+                >(::core::mem::offset_of!(TreesVtable, list))
         } {
             ::core::option::Option::Some(__f) => {
                 let mut __out = <::guatiao::List as ::guatiao::library::kind::Carrier>::carrier(

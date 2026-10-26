@@ -136,14 +136,9 @@ impl<K: ?Sized + Kind> Remote<K> {
         }
         // SAFETY: the header lies within `size` bytes, checked above.
         let header = unsafe { table.cast::<KindHeader>().read_unaligned() };
-        // The table's own size and the descriptor's agree or the smaller
-        // wins: nothing past what either side declares is read.
-        let declared = header.struct_size as usize;
-        let size = if declared == 0 {
-            size
-        } else {
-            size.min(declared)
-        };
+        // The table's own size and the descriptor's: the smaller is what
+        // both sides declare, and it covers every slot or is refused.
+        let size = size.min(header.struct_size as usize);
         if size < K::FLOOR {
             return Err(KindMismatch::BelowFloor {
                 size,
@@ -198,7 +193,7 @@ impl<K: ?Sized + Kind> Remote<K> {
     }
 
     /// The table's size as validated: the smaller of what the library
-    /// declared on the table and on the descriptor.
+    /// declared on the table and on the descriptor, at least the kind's.
     pub fn size(&self) -> usize {
         self.size
     }
@@ -208,20 +203,16 @@ impl<K: ?Sized + Kind> Remote<K> {
         K::as_dyn(self)
     }
 
-    /// One slot, read under the table's size: `None` when the table ends
-    /// before `end`, or the slot is null.
+    /// One slot: `None` when the provider left it null.
     ///
     /// # Safety
     ///
     /// `F` is the function-pointer type of the slot at `offset` in
-    /// [`K::Vtable`](Kind::Vtable), and `end` is `offset` plus its size.
+    /// [`K::Vtable`](Kind::Vtable).
     #[doc(hidden)]
-    pub unsafe fn slot<F: Copy>(&self, offset: usize, end: usize) -> Option<F> {
-        if self.size < end {
-            return None;
-        }
-        // SAFETY: the caller states `F` is the slot's type and the guard
-        // established it lies within the table.
+    pub unsafe fn slot<F: Copy>(&self, offset: usize) -> Option<F> {
+        // SAFETY: the caller states `F` is the slot's type, and validation
+        // established the table covers every slot of `K::Vtable`.
         unsafe {
             self.table
                 .cast::<u8>()

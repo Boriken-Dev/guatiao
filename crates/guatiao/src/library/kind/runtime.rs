@@ -1619,22 +1619,19 @@ impl Caller {
                 "the table was not built for this kind",
             ));
         }
-        // The table's own size and the one given agree, or the smaller wins.
-        let declared = match header.struct_size as usize {
-            0 => size,
-            own => own.min(size),
-        };
+        // The table's own size and the one given: the smaller covers every
+        // slot of the kind's, or the table is refused.
+        let declared = (header.struct_size as usize).min(size);
         if declared < kind.floor() {
             return Err(ProviderError::new(
                 Status::GUATIAO_ERR_WRONG_KIND,
-                "the table is shorter than the kind's last required slot",
+                &format!(
+                    "the table is {declared} bytes, smaller than the {} bytes of the kind's",
+                    kind.floor()
+                ),
             ));
         }
         let word = kind.word_of(slot);
-        let end = size_of::<KindHeader>() + (word + 1) * size_of::<usize>();
-        if declared < end {
-            return Err(ProviderError::from(Status::GUATIAO_ERR_UNSUPPORTED));
-        }
         // SAFETY: within the declared size, a pointer-sized slot.
         let f = unsafe {
             table
@@ -2011,6 +2008,13 @@ impl DescribedRemote {
         // SAFETY: a table the registry read under its checks, at least a
         // header long.
         let header = unsafe { table.cast::<KindHeader>().read_unaligned() };
+        let size = size.min(header.struct_size as usize);
+        if size < kind.floor() {
+            return Err(KindMismatch::BelowFloor {
+                size,
+                floor: kind.floor(),
+            });
+        }
         if header.floor_hash != kind.floor_hash() {
             return Err(KindMismatch::HashMismatch {
                 expected: kind.floor_hash(),
@@ -2031,26 +2035,17 @@ impl DescribedRemote {
         self.caller.kind()
     }
 
-    /// Whether the table fills slot `slot`: within its size and not null.
-    /// A slot it leaves out answers `GUATIAO_ERR_UNSUPPORTED` when called,
-    /// so a caller that has a default for it runs that instead.
+    /// Whether the table fills slot `slot`: not null. A slot it leaves
+    /// out answers `GUATIAO_ERR_UNSUPPORTED` when called, so a caller that
+    /// has a default for it runs that instead.
     pub fn implements(&self, slot: usize) -> bool {
         let kind = self.caller.kind();
         if slot >= kind.slots().len() {
             return false;
         }
-        // SAFETY: a table the registry read under its checks, at least a
-        // header long (`new`).
-        let header = unsafe { self.table.cast::<KindHeader>().read_unaligned() };
-        let declared = match header.struct_size as usize {
-            0 => self.size,
-            own => own.min(self.size),
-        };
         let word = kind.word_of(slot);
-        if declared < size_of::<KindHeader>() + (word + 1) * size_of::<usize>() {
-            return false;
-        }
-        // SAFETY: within the declared size, a pointer-sized slot.
+        // SAFETY: `new` established the table covers every slot of the
+        // kind's; a pointer-sized slot.
         let f = unsafe {
             self.table
                 .cast::<u8>()

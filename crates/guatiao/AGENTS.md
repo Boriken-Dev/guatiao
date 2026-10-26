@@ -1610,9 +1610,9 @@ host.snapshot() -> HostInfo                   // a copy
 - The C side: `guatiao_registry_host(reg)` hands a host the same block,
   to pass to a `guatiao_library_entry` it drives itself; a library reads
   `host->services->list(ctx, kind, out, cap, &total)` (call with `cap = 0`
-  to size), `->get(ctx, key, &out)` and `->alloc(ctx)`, guarded by
-  `host->struct_size >= offsetof(services) + sizeof` and
-  `services->struct_size`. An answer from `get`/`list` is valid until its
+  to size), `->get(ctx, key, &out)` and `->alloc(ctx)`, after checking
+  `host->struct_size >= sizeof(guatiao_host_info)` and
+  `services->struct_size >= sizeof(guatiao_host_services)`. An answer from `get`/`list` is valid until its
   library is retired; `get_pinned`/`list_pinned` answer one valid until
   the library passes it to `unpin` (`pin` holds it again), and the host
   does not unload its library meanwhile. A library that keeps an answer
@@ -1628,7 +1628,7 @@ against it. The table, the shims and the proxy are generated, and every
 #[guatiao::kind]                       // name defaults to "greeter"; #[kind(name = "..")]
 pub trait Greeter: Send + Sync {
     fn greet(&self, name: &str) -> Result<Map, ProviderError>;   // required
-    fn shout(&self, name: &str) -> String { .. }                  // default body = appended slot
+    fn shout(&self, name: &str) -> String { .. }                  // default body = optional slot
 }
 
 #[derive(Default, Provider)]
@@ -1777,10 +1777,12 @@ drop(s);                                                             // the libr
   a handed-over tree are the same pointer type. A C caller lending a map
   gets back whatever the callee built; a Rust callee that follows the
   fast path builds in the map's allocator.
-- **Versioning.** Slots follow declaration order; a defaulted method is an
-  appended slot an older table may lack (the proxy runs the default). The
-  table header `KindHeader { struct_size, floor_hash }` carries FNV-1a
-  over the required signatures; a mismatch is refused, never called. The
+- **Slots.** Slots follow declaration order, the required ones first; a
+  defaulted method is an optional slot a provider may leave null (the
+  proxy runs the default). A table smaller than the kind's whole table is
+  refused (`BelowFloor`). The table header `KindHeader { struct_size,
+  floor_hash }` carries FNV-1a over the required signatures; a mismatch
+  is refused, never called. The
   signatures are hashed as spelled, with `std`/`core`/`alloc` paths of
   `Vec`, `String`, `Option`, `Result`, `Box` and `guatiao` paths of
   `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`, `Status`
@@ -1811,7 +1813,8 @@ drop(s);                                                             // the libr
   `K`, so a future holding one stays `Send` and can be spawned. (`Object`
   is `Sync` only for a kind whose trait names `Sync`.)
 - **`KindMismatch`** (`#[non_exhaustive]`): `NoTable`, `BelowFloor {
-  size, floor }`, `HashMismatch { expected, found }`,
+  size, floor }` (smaller than the kind's whole table, by the descriptor
+  or the header; a header declaring 0 included), `HashMismatch { expected, found }`,
   `NullRequiredSlot(name)`, `ObjectKind`, `Misaligned` (the table's
   address is not aligned for the kind's table type), `Unreadable(reason)`
   (`ProviderInfo::{as_kind, offer}` over a descriptor the checks refuse).

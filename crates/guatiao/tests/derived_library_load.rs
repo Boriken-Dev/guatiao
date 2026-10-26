@@ -335,25 +335,31 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
         "the host's listener was destroyed by the library"
     );
 
-    // 6. A greeter built before `start` existed: the table ends before
-    // the slot, so the PROXY runs the default body here, and the listener
-    // it was handed is dropped on this side. Nothing crossed.
+    // 6. A greeter leaving `start` null, an optional slot: the PROXY
+    // runs the default body here, and the listener it was handed is
+    // dropped on this side. Nothing crossed.
     let remote = offer
         .remote()
         .expect("the default greeter is its own instance");
-    let truncated: &'static [u8] = Box::leak(
-        // SAFETY: the table is `GreeterVtable`-sized bytes the library
-        // keeps for the process; copying them is a read.
-        unsafe { core::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
-            .to_vec()
-            .into_boxed_slice(),
-    );
-    // SAFETY: a byte-for-byte copy of a validated table, presented as
-    // ending after `greet`; `ctx` is the library's instance.
+    let word = core::mem::size_of::<usize>();
+    let mut words = vec![0usize; remote.size().div_ceil(word)];
+    // SAFETY: the table is `remote.size()` bytes the library keeps for the
+    // process, and `words` holds at least as many; copying them is a read.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            remote.table().cast::<u8>(),
+            words.as_mut_ptr().cast::<u8>(),
+            remote.size(),
+        );
+    }
+    words[core::mem::offset_of!(GreeterVtable, start) / word] = 0;
+    let quiet: &'static [usize] = Box::leak(words.into_boxed_slice());
+    // SAFETY: a copy of a validated table with one optional slot nulled;
+    // `ctx` is the library's instance.
     let old = unsafe {
         Remote::<dyn Greeter>::from_raw(
-            truncated.as_ptr().cast::<c_void>(),
-            GreeterVtable::floor(),
+            quiet.as_ptr().cast::<c_void>(),
+            remote.size(),
             remote.ctx(),
         )
     }

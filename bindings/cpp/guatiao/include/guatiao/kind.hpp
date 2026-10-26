@@ -109,12 +109,8 @@
     static constexpr std::uint32_t floor_hash = table_##_FLOOR_HASH;                                         \
     static constexpr bool is_object = object_;                                                               \
     GUATIAO_PP_FOR_EACH(GUATIAO_DETAIL_SLOT, __VA_ARGS__)                                                    \
-    /* The table's size up to its last required slot: a smaller one is not of this kind. */                 \
-    static constexpr std::size_t floor_size() noexcept {                                                     \
-      std::size_t f = sizeof(guatiao_kind_header) + (object_ ? sizeof(void (*)(void*)) : 0);                 \
-      GUATIAO_PP_FOR_EACH(GUATIAO_DETAIL_SLOT_FLOOR, __VA_ARGS__)                                            \
-      return f;                                                                                              \
-    }                                                                                                        \
+    /* Every slot: a smaller table is not of this kind. */                                                  \
+    static constexpr std::size_t floor_size() noexcept { return sizeof(table_type); }                        \
     template <class Served, int Mode>                                                                        \
     static constexpr table_type make_table() noexcept {                                                      \
       table_type t{};                                                                                        \
@@ -179,10 +175,6 @@
   };                                                                                                         \
   static_assert(::guatiao::detail::shape<slot_##n_>::fits_table,                                             \
                 "guatiao: the C++ signature of `" #n_ "` does not stand for its field in the C table");
-
-#define GUATIAO_DETAIL_SLOT_FLOOR(req_, n_, ...)                                       \
-  f = ::guatiao::detail::floor_with(f, GUATIAO_PP_CAT(GUATIAO_DETAIL_REQ_, req_), \
-                                    offsetof(table_type, n_) + sizeof(void (*)(void*)));
 
 #define GUATIAO_DETAIL_SLOT_FILL(req_, n_, ...) slot_##n_::template fill<Served, Mode>(t);
 
@@ -379,11 +371,6 @@ struct sig_arity;
 template <class R, class... A>
 struct sig_arity<R(A...)> : std::integral_constant<std::size_t, sizeof...(A)> {};
 
-/// The floor grown to reach the end of a required slot.
-constexpr std::size_t floor_with(std::size_t f, bool required, std::size_t end) noexcept {
-  return required && f < end ? end : f;
-}
-
 /// A slot's C++ signature against its C field: whether they stand for one
 /// another, and whether the slot can refuse with words.
 template <class Slot, class Sig = typename Slot::signature>
@@ -414,11 +401,12 @@ struct fits<Slot, P, R(A...), std::void_t<typename Slot::template answer_of<P, A
 // ---- reading a table ---------------------------------------------------------
 
 /// The slot's function in the table `self` calls through, or null when
-/// the table is too short to hold it or leaves it empty.
+/// the table leaves it empty. Called once `usable()` established the
+/// table covers every slot.
 template <class Slot, class Self>
 typename Slot::c_type slot_fn(const Self& self) noexcept {
   typename Slot::c_type f = nullptr;
-  if (!self.table() || self.table_size() < Slot::offset + sizeof f) return nullptr;
+  if (!self.table()) return nullptr;
   std::memcpy(&f, static_cast<const char*>(self.table()) + Slot::offset, sizeof f);
   return f;
 }
@@ -428,14 +416,14 @@ bool has_slot(const Self& self) noexcept {
   return self.usable() && slot_fn<Slot>(self) != nullptr;
 }
 
-/// Whether a table is one of kind `K`: its header's hash, and a size
-/// reaching its last required slot.
+/// Whether a table is one of kind `K`: its header's hash, and a size,
+/// given and declared, covering every slot.
 template <class K>
 bool table_of(const void* table, std::size_t size) noexcept {
   if (!table || size < K::floor_size()) return false;
   guatiao_kind_header h;
   std::memcpy(&h, table, sizeof h);
-  return h.floor_hash == K::floor_hash;
+  return h.struct_size >= K::floor_size() && h.floor_hash == K::floor_hash;
 }
 
 inline bool usable_alloc(const guatiao_alloc* a) noexcept {
@@ -1283,7 +1271,7 @@ result<object<K>> receive<object<K>>::take(const guatiao_alloc*) {
 }  // namespace detail
 
 /// A table of kind `K` and its `ctx`; WRONG_KIND for a table of another
-/// kind (another floor hash, or too short for its required slots).
+/// kind (another floor hash, or smaller than the kind's whole table).
 template <class K>
 result<remote<K>> try_bind_table(const void* table, std::size_t size, void* ctx,
                                  const guatiao_alloc* alloc = default_alloc()) {

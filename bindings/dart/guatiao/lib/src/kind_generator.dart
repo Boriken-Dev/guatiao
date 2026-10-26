@@ -606,7 +606,7 @@ final class _Generator {
         appended
           ..addAll(
             doc(slot['doc'], '', [
-              '`$slotName` of the `$kindName` kind: a slot appended after its first ones, which an older table may lack.',
+              '`$slotName` of the `$kindName` kind: an optional slot, which a provider may leave null.',
             ]),
           )
           ..add('abstract interface class $iface {')
@@ -624,7 +624,7 @@ final class _Generator {
         ..addAll(
           doc(slot['doc'], '  ', [
             if (!isRequired)
-              'Throws `Unsupported` when the table lacks it: `has(\'$slotName\')` asks first.',
+              'Throws `Unsupported` when the provider left it null: `has(\'$slotName\')` asks first.',
           ]),
         )
         ..add('  @override')

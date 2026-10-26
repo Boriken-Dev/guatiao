@@ -141,8 +141,8 @@ final class FloorHash {
 /// Marks a slot that can refuse (`fallible`).
 const Object fallible = _Mark('fallible');
 
-/// Marks a slot appended after the kind's first ones, which an older
-/// table may lack.
+/// Marks an optional slot, after the kind's required ones: a provider may
+/// leave it null.
 const Object appended = _Mark('appended');
 
 final class _Mark {
