@@ -168,6 +168,51 @@ pub(super) fn wait_at_most<F: Future>(
     }
 }
 
+/// Whether a link was ended, and who to wake when it is: what a server's
+/// handshake waits on beside its own work.
+#[derive(Default)]
+struct Ending {
+    ended: AtomicBool,
+    waiting: Mutex<Option<Waker>>,
+}
+
+impl Ending {
+    fn end(&self) {
+        self.ended.store(true, Ordering::Release);
+        if let Some(waker) = lock(&self.waiting).take() {
+            waker.wake();
+        }
+    }
+
+    fn ended(&self) -> bool {
+        self.ended.load(Ordering::Acquire)
+    }
+
+    /// `work`'s output, or `None` once the link is ended.
+    async fn or_ended<F: Future>(&self, work: F) -> Option<F::Output> {
+        let mut work = pin!(work);
+        core::future::poll_fn(|cx| {
+            if self.ended() {
+                return Poll::Ready(None);
+            }
+            *lock(&self.waiting) = Some(cx.waker().clone());
+            // Ended between the check and the waker being left: seen here.
+            if self.ended() {
+                return Poll::Ready(None);
+            }
+            work.as_mut().poll(cx).map(Some)
+        })
+        .await
+    }
+}
+
+fn ended_in_handshake() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::ConnectionAborted,
+        "the link was ended during its QUIC handshake",
+    )
+}
+
 /// What is left of a deadline, or a timeout once it passed.
 pub(super) fn left(until: Option<Instant>) -> io::Result<Option<Duration>> {
     match until {
@@ -451,6 +496,9 @@ struct Shared {
     client: Option<String>,
     /// Whether anything has come from the peer since the handshake.
     heard: AtomicBool,
+    /// Ended by the closer or the writer: a server's handshake not yet
+    /// through stops at once.
+    ending: Ending,
     /// The endpoint the connection runs on (a client's is its own).
     endpoint: Option<quinn::Endpoint>,
     /// Last, so it stops only once the connection has been let go.
@@ -490,6 +538,7 @@ impl Shared {
     /// delivers what was sent before its end, unless a write is under way,
     /// when the connection closes at once as an error.
     fn shut(&self) {
+        self.ending.end();
         match self.send.try_lock() {
             Ok(mut send) => self.finish(send.as_mut()),
             Err(_) => {
@@ -503,6 +552,7 @@ impl Shared {
     /// Finishes the stream, waits for the peer to acknowledge it, then
     /// closes the connection as a clean end.
     fn close(&self) {
+        self.ending.end();
         self.finish(lock(&self.send).as_mut());
     }
 
@@ -587,6 +637,10 @@ impl Pending {
     }
 
     fn run(self, shared: &Shared, bound: Option<Duration>) -> io::Result<RecvStream> {
+        if shared.ending.ended() {
+            self.incoming.refuse();
+            return Err(ended_in_handshake());
+        }
         let until = bound.map(|b| Instant::now() + b);
         let refusal = Kept::default();
         let config = self.config(&refusal)?;
@@ -598,15 +652,15 @@ impl Pending {
             self.incoming.accept_with(config)
         }
         .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
-        let conn =
-            wait_at_most(shared.handle(), left(until)?, connecting)?.map_err(|e| {
-                match (refusal.get().copied(), alert(&e)) {
-                    (None, None) => io::Error::new(
-                        io::ErrorKind::ConnectionAborted,
-                        format!("the client's QUIC handshake did not finish: {e}"),
-                    ),
-                    (refused, _) => untrusted_by_server(refused, &e),
-                }
+        let handshake = shared.ending.or_ended(connecting);
+        let conn = wait_at_most(shared.handle(), left(until)?, handshake)?
+            .ok_or_else(ended_in_handshake)?
+            .map_err(|e| match (refusal.get().copied(), alert(&e)) {
+                (None, None) => io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    format!("the client's QUIC handshake did not finish: {e}"),
+                ),
+                (refused, _) => untrusted_by_server(refused, &e),
             })?;
         let refuse = |e: io::Error| {
             conn.close(VarInt::from_u32(REFUSED), b"refused");
@@ -629,10 +683,21 @@ impl Pending {
                 return Err(refuse(denied_by_acl(peer, source, decided.rule_index)));
             }
         }
-        let accepting = conn.accept_bi();
+        let accepting = shared.ending.or_ended(conn.accept_bi());
+        let ended = |conn: &quinn::Connection| {
+            conn.close(VarInt::from_u32(ABRUPT), b"ended");
+            ended_in_handshake()
+        };
         let (send, recv) = wait_at_most(shared.handle(), left(until)?, accepting)?
+            .ok_or_else(|| ended(&conn))?
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+        let opened = conn.clone();
         shared.open(conn, send, peer.as_ref());
+        // Ended between the stream arriving and the connection being kept,
+        // when the closer found nothing to close.
+        if shared.ending.ended() {
+            return Err(ended(&opened));
+        }
         Ok(recv)
     }
 }
@@ -984,6 +1049,7 @@ impl QuicConnect {
             proves: self.proves,
             client: Some(self.me.clone()),
             heard: AtomicBool::new(false),
+            ending: Ending::default(),
             endpoint: Some(endpoint),
             rt: Arc::clone(&self.rt),
         };
@@ -1176,6 +1242,7 @@ impl QuicListen {
             proves: self.listener.proves,
             client: None,
             heard: AtomicBool::new(false),
+            ending: Ending::default(),
             endpoint: Some(self.endpoint.clone()),
             rt: Arc::clone(&self.rt),
         };
@@ -1453,6 +1520,39 @@ mod tests {
             server.reader.read_frame(&mut buf, 1 << 10).is_err(),
             "a frame from the new address arrived"
         );
+    }
+
+    #[test]
+    fn the_closer_ends_a_handshake_in_flight_at_once() {
+        let id = Identity::generate().unwrap();
+        let config = TlsConfig::new(id.clone()).pins([id.fingerprint()]);
+        let listen = QuicListen::bind("127.0.0.1:0", &config).unwrap();
+        // A client that connects and never opens its stream: the server's
+        // handshake waits for it.
+        let connect = QuicConnect::new(&listen.local_addr().unwrap().to_string(), &config).unwrap();
+        let dialing = thread::spawn(move || {
+            let c = connect.connect().unwrap();
+            thread::sleep(Duration::from_secs(3));
+            drop(c);
+        });
+        let Accepted::Connection(server) = listen.accept().unwrap() else {
+            panic!("every source proceeds");
+        };
+        let Connection {
+            mut reader, closer, ..
+        } = server;
+        reader.set_timeout(Some(Duration::from_secs(10))).unwrap();
+        let reading = thread::spawn(move || {
+            let started = Instant::now();
+            let read = reader.read_frame(&mut Vec::new(), 1 << 10);
+            (read.map_err(|e| e.kind()), started.elapsed())
+        });
+        thread::sleep(Duration::from_millis(300));
+        (closer.unwrap())();
+        let (read, took) = reading.join().unwrap();
+        assert_eq!(read, Err(io::ErrorKind::ConnectionAborted));
+        assert!(took < Duration::from_secs(2), "{took:?}");
+        dialing.join().unwrap();
     }
 
     #[test]

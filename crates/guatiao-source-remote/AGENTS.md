@@ -78,7 +78,7 @@ Server::new(registry: Registry, described: Described, options: LinkOptions) -> S
 server.serve(conn: Connection) -> Result<Arc<Link>, LinkError>   // handshake here, then threads; kept until it ends
 server.refresh() -> Refreshed        // a library that loads again gets a new stamp
 server.registry() -> MutexGuard<Registry>
-server.end_links(); server.links(); server.links_holding(); server.objects_out()
+server.end_links(); server.links(); server.links_holding(); server.objects_out()   // end_links: every connection in its handshake too (on Windows a TCP or TLS one at its read bound)
 ```
 
 Serves every provider of a kind described either by `described` or by a
@@ -275,7 +275,9 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   acknowledge it, then closes with code 1; code 0 (a `closer` during a
   write, or a connection dropped unclosed) the peer reads as an error. A
   server refusing after the handshake closes with code 2; any TLS alert
-  is a refusal (`PermissionDenied`, so `BAD_VALUE`), never `GONE`.
+  is a refusal (`PermissionDenied`, so `BAD_VALUE`), never `GONE`. The
+  `closer` (or `shutdown`) before a server's handshake is through ends it
+  at once (`ConnectionAborted`).
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it. `write_frames` gets frames queued while another
   thread wrote: by default one `write_frame` each, a stream writes them
