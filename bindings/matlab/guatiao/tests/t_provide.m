@@ -14,6 +14,7 @@ function cases = t_provide()
     'what a provider answers lands in the caller''s allocator', @answers_in_carrier
     'a lent map grows in the allocator it records', @lent_map
     'a map handed over is freed, whatever the provider answers', @handed_over
+    'a map handed over and kept is all the provider''s own', @kept_handed_over
     'nothing crosses when an argument is refused before the call', @refused_before
     'an instance per configuration, closed when its host destroys it', @configured
     'create builds nothing when it has nowhere to put the instance', @create_null_out
@@ -138,6 +139,25 @@ function handed_over()
   refused = guatiao.Value(struct('name', ''), 'Alloc', c);
   expect_error(@() g.greet_from(refused), 'guatiao:BadValue');
   expect_equal(c.live(), 0, 'freed after a refusal');
+end
+
+function kept_handed_over()
+  % Handed over in the caller's allocator, it is moved into this binding's
+  % before the method keeps it.
+  global GTT_KEPT
+  GTT_KEPT = {};
+  reg = preg();
+  c = guatiao.Allocator.counting();
+  reg.register_library(guatiao.Library('m_keeper', '0.1.0', {'gtt.Keeper'}));
+  g = reg.bind('m_keeper_keeper', 'greeterkind.Greeter');
+  answer = g.greet_from(guatiao.Value(struct('name', 'ivy'), 'Alloc', c));
+  expect_equal(answer.data(), struct('greeting', 'kept'), 'it answers');
+  answer.close();
+  expect_equal(c.live(), 0, 'none of it in the caller''s allocator');
+  expect_equal(numel(GTT_KEPT), 1, 'kept');
+  expect_equal(GTT_KEPT{1}.data(), struct('name', 'ivy'), 'what it keeps reads');
+  GTT_KEPT{1}.close();
+  GTT_KEPT = {};
 end
 
 function refused_before()

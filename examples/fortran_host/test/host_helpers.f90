@@ -16,7 +16,16 @@ module host_helpers
   private
 
   public :: check, check_text, skip, finish, setup, env, library_dir, library_file, build_c, ear, ear_state, &
-            new_ear, upper_of, require_all, echo, refusing, refusing_new, refusing_allocator
+            new_ear, upper_of, require_all, echo, refusing, refusing_new, refusing_allocator, keeper, &
+            keeper_library
+
+  !> A greeter that keeps every map handed to it.
+  type, extends(greeter) :: keeper
+    type(guatiao_value), allocatable :: kept(:)
+  contains
+    procedure :: greet => keeper_greet
+    procedure :: greet_from => keeper_greet_from
+  end type
 
   !> An allocator that counts the blocks it has out and refuses every
   !> allocation while `refuse` is set: the guatiao_alloc first.
@@ -124,6 +133,38 @@ contains
     call c_f_pointer(ctx, r)
     r%live = r%live - 1
   end subroutine
+
+  subroutine keeper_greet(self, name, answer, error)
+    class(keeper), intent(inout) :: self
+    character(*), intent(in) :: name
+    type(guatiao_value), intent(inout) :: answer
+    type(guatiao_error), allocatable, intent(out) :: error
+    call answer%set('greeting', name)
+  end subroutine
+
+  subroutine keeper_greet_from(self, config, answer, error)
+    class(keeper), intent(inout) :: self
+    type(guatiao_value), intent(inout) :: config
+    type(guatiao_value), intent(inout) :: answer
+    type(guatiao_error), allocatable, intent(out) :: error
+    type(guatiao_value), allocatable :: grown(:)
+    integer :: n
+    n = 0
+    if (allocated(self%kept)) n = size(self%kept)
+    allocate(grown(n + 1))
+    if (n > 0) grown(1:n) = self%kept
+    grown(n + 1) = config
+    call move_alloc(grown, self%kept)
+    call answer%set('greeting', 'kept')
+  end subroutine
+
+  !> A library serving `k` as `fortran_keepers_keeper`.
+  function keeper_library(k) result(lib)
+    type(keeper), pointer, intent(in) :: k
+    type(guatiao_library) :: lib
+    lib = guatiao_new_library('fortran_keepers', '1.0.0')
+    call lib%single('keeper', [greeter_serving(k, greet_from=.true.)])
+  end function
 
   !> A new refusing allocator, not refusing yet; kept for the process.
   function refusing_new() result(r)

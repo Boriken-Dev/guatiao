@@ -523,6 +523,36 @@ void main() {
     });
   });
 
+  test('a tree handed over to a Dart provider, and kept, is all its own', () {
+    // Handed over in the caller's allocator, it is moved into this
+    // binding's before the method keeps it.
+    final keeper = _Keeper();
+    final library = Library(
+      'dart_keepers',
+      '1.0.0',
+      offers: [
+        Offer.single(keeper, named: 'keeper', kinds: [Greeter.kind]),
+      ],
+    );
+    final reg = Registry('dart-keepers', '0.1');
+    addTearDown(() {
+      for (final kept in keeper.kept) {
+        kept.close();
+      }
+      reg.close();
+      library.close();
+    });
+    reg.registerLibrary(library);
+    final alloc = _refusingAlloc();
+    final answer = reg
+        .bind('dart_keepers_keeper', Greeter.kind)
+        .greetFrom(Value.fromDart({'name': 'ivy'}, alloc: alloc));
+    expect(answer.toDart(), {'greeting': 'kept'});
+    answer.close();
+    expect(_refusingLive, 0, reason: "none of it in the caller's allocator");
+    expect(keeper.kept.single.toDart(), {'name': 'ivy'});
+  });
+
   group('a provider written in Dart', () {
     late Registry reg;
     late Library library;
@@ -721,4 +751,18 @@ Pointer<guatiao_alloc> _refusingAlloc() {
   a.ref.alloc = Pointer.fromFunction(_refusingAllocFn);
   a.ref.free = Pointer.fromFunction(_refusingFreeFn);
   return a;
+}
+
+/// A greeter that keeps every map handed to it.
+final class _Keeper extends Provider implements Greeter, GreeterGreetFrom {
+  final List<Value> kept = <Value>[];
+
+  @override
+  Map<String, Object?> greet(String name) => {'greeting': name};
+
+  @override
+  Map<String, Object?> greetFrom(Value config) {
+    kept.add(config);
+    return {'greeting': 'kept'};
+  }
 }

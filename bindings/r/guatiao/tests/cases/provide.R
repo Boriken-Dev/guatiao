@@ -8,6 +8,7 @@
 # was handed is freed.
 
 PREG <- NULL
+KEPT <- new.env()
 
 case("a package is its library", with_examples({
   lib <- library_of("rgreeter")
@@ -110,6 +111,30 @@ case("a map handed over is freed, whatever the provider answers", with_examples(
   expect_error(greet_from(g, refused), "guatiao_error")
   invisible(gc())
   expect_equal(live(c), 0)
+}))
+
+case("a map handed over and kept is all the provider's own", with_examples({
+  # Handed over in the caller's allocator, it is moved into this binding's
+  # before the method keeps it.
+  methods::setClass("GtKeeper", contains = "Greeter", where = globalenv())
+  methods::setMethod("greet", "GtKeeper", function(self, name) list(greeting = name), where = globalenv())
+  methods::setMethod("greet_from", "GtKeeper", function(self, config) {
+    KEPT$maps <- c(KEPT$maps, list(config))
+    list(greeting = "kept")
+  }, where = globalenv())
+  KEPT$maps <- list()
+  reg <- registry("r-keeper", "0.1")
+  reg$register_library(guatiao_library("r_keeper", "0.1.0", providers = list("GtKeeper")))
+  c <- counting()
+  answer <- greet_from(reg$bind("r_keeper_gt_keeper", Greeter), value(list(name = "ivy"), alloc = c))
+  expect_equal(value_data(answer), list(greeting = "kept"))
+  close(answer)
+  expect_equal(live(c), 0)
+  expect_equal(length(KEPT$maps), 1L)
+  expect_equal(value_data(KEPT$maps[[1]]), list(name = "ivy"))
+  close(KEPT$maps[[1]])
+  KEPT$maps <- list()
+  reg$close()
 }))
 
 case("nothing crosses when an argument is refused before the call", with_examples({

@@ -816,31 +816,55 @@ struct take<list_view> {
   list_view get() noexcept { return list_view(c); }
   void finish() noexcept {}
 };
+/// `raw`, a tree handed over, moved into this side's default allocator
+/// out of the caller's, which may go with the caller's library while the
+/// method keeps it; `moved` answers a refusal, which leaves it whole.
+inline guatiao_value& homed(guatiao_value& raw, guatiao_status& moved) noexcept {
+  moved = settle(raw, default_alloc());
+  return raw;
+}
+inline guatiao_map homed(guatiao_map& m, guatiao_status& moved) noexcept {
+  guatiao_value v = blank();
+  v.tag = GUATIAO_MAP;
+  v.payload.map = m;
+  return m = homed(v, moved).payload.map;
+}
+inline guatiao_list homed(guatiao_list& l, guatiao_status& moved) noexcept {
+  guatiao_value v = blank();
+  v.tag = GUATIAO_LIST;
+  v.payload.list = l;
+  return l = homed(v, moved).payload.list;
+}
 /// A tree handed over: owned from the first moment, so a refused call
-/// frees it.
+/// frees it, and in this side's allocator, so the method may keep it.
 template <>
 struct take<value> {
+  guatiao_status moved = GUATIAO_OK;
   value v;
-  explicit take(guatiao_value* p) noexcept : v(p ? value::adopt(*p) : value()) {}
-  guatiao_status check() const noexcept { return GUATIAO_OK; }
+  explicit take(guatiao_value* p) noexcept : v(p ? value::adopt(homed(*p, moved)) : value()) {}
+  guatiao_status check() const noexcept { return moved; }
   value&& get() noexcept { return std::move(v); }
   void finish() noexcept {}
 };
 template <>
 struct take<map> {
+  guatiao_status moved = GUATIAO_OK;
   map v;
   bool given;
-  explicit take(guatiao_map* p) noexcept : v(p ? map::adopt(*p) : map(nullptr)), given(p != nullptr) {}
-  guatiao_status check() const noexcept { return given ? GUATIAO_OK : GUATIAO_ERR_NULL; }
+  explicit take(guatiao_map* p) noexcept
+      : v(p ? map::adopt(homed(*p, moved)) : map(nullptr)), given(p != nullptr) {}
+  guatiao_status check() const noexcept { return given ? moved : GUATIAO_ERR_NULL; }
   map&& get() noexcept { return std::move(v); }
   void finish() noexcept {}
 };
 template <>
 struct take<list> {
+  guatiao_status moved = GUATIAO_OK;
   list v;
   bool given;
-  explicit take(guatiao_list* p) noexcept : v(p ? list::adopt(*p) : list(nullptr)), given(p != nullptr) {}
-  guatiao_status check() const noexcept { return given ? GUATIAO_OK : GUATIAO_ERR_NULL; }
+  explicit take(guatiao_list* p) noexcept
+      : v(p ? list::adopt(homed(*p, moved)) : list(nullptr)), given(p != nullptr) {}
+  guatiao_status check() const noexcept { return given ? moved : GUATIAO_ERR_NULL; }
   list&& get() noexcept { return std::move(v); }
   void finish() noexcept {}
 };
@@ -1045,8 +1069,9 @@ guatiao_status serve(void* ctx, std::tuple<C...> c, sig_tag<R(A...)>, std::index
   ((refused = refused != GUATIAO_OK ? refused : std::get<I>(args).check()), ...);
   if (refused != GUATIAO_OK) {
     write_words(err, refused,
-                refused == GUATIAO_ERR_BAD_VALUE ? "text that is not UTF-8"
+                refused == GUATIAO_ERR_BAD_VALUE    ? "text that is not UTF-8"
                 : refused == GUATIAO_ERR_WRONG_KIND ? "an object that is not of its kind"
+                : refused == GUATIAO_ERR_ALLOC      ? "a tree handed over could not be moved into this side's allocator"
                                                     : "a required argument was null");
     return refused;
   }

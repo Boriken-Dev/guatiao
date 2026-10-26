@@ -174,9 +174,15 @@ func (s *Served) Lent(p unsafe.Pointer, class TreeClass) (Ref, error) {
 	return s.view(node, alloc), nil
 }
 
-// Taken is a tree handed over, as a Value the method owns: closed for it
-// if the method never runs.
+// Taken is a tree handed over, as a Value the method owns and may keep:
+// moved into this binding's allocator, out of the caller's, which may go
+// with the caller's library; closed for it if the method never runs.
 func (s *Served) Taken(p unsafe.Pointer, class TreeClass) (*Value, error) {
+	return s.receiveTaken(p, class, true)
+}
+
+// receiveTaken is Taken, the tree left in the caller's allocators unless home.
+func (s *Served) receiveTaken(p unsafe.Pointer, class TreeClass, home bool) (*Value, error) {
 	if p == nil {
 		return nil, &Error{Status: NullArgument, Message: "the " + class.String() + " argument is null"}
 	}
@@ -192,15 +198,21 @@ func (s *Served) Taken(p unsafe.Pointer, class TreeClass) (*Value, error) {
 		native.Copy(native.Payload(node), p, native.SizeMap)
 	}
 	v := adopt(node, alloc)
+	if home {
+		if err := check(native.ValueMakeLocal(node, alloc), "moving a tree handed over into this binding's allocator"); err != nil {
+			v.Close()
+			return nil, err
+		}
+	}
 	s.taken = append(s.taken, func() { v.Close() })
 	return v, nil
 }
 
 // Decode reads a borrowed or handed-over tree into dst; one handed over is
-// freed once read.
+// freed once read, where it stands.
 func (s *Served) Decode(p unsafe.Pointer, class TreeClass, taken bool, dst any) error {
 	if taken {
-		v, err := s.Taken(p, class)
+		v, err := s.receiveTaken(p, class, false)
 		if err != nil {
 			return err
 		}

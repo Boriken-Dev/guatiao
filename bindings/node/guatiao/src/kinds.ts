@@ -437,6 +437,22 @@ function makeLocal(node: bigint, alloc: bigint): number {
   return n.core().fn.guatiao_value_make_local!(node, alloc);
 }
 
+/**
+ * The root at `node`, from `n.alloc`, moved into this binding's allocator
+ * so it outlives the library that built it: a slot's answer, or a tree a
+ * caller handed over. Freed, and the refusal thrown, when the move fails.
+ */
+function homed(node: bigint, what: string): bigint {
+  if (!makesLocal()) return node;
+  const status = makeLocal(node, binding());
+  if (status !== Status.OK) {
+    n.freeNode(node);
+    n.release(node);
+    throw errorFor(status, `moving ${what} into this binding's allocator`);
+  }
+  return node;
+}
+
 /** Fills a `guatiao_provider_error *` with `status` and owned `message`. */
 function writeErr(err: bigint | null, status: number, message: string): void {
   if (!err) return;
@@ -807,16 +823,7 @@ class Tree extends ShapeImpl {
   }
 
   override answer(out: bigint): unknown {
-    const node = this.#nodeOver(out, n.alloc(SIZE.value));
-    if (makesLocal()) {
-      const status = makeLocal(node, binding());
-      if (status !== Status.OK) {
-        n.freeNode(node);
-        n.release(node);
-        throw errorFor(status, "moving the answer into this binding's allocator");
-      }
-    }
-    return adopt(node, binding());
+    return adopt(homed(this.#nodeOver(out, n.alloc(SIZE.value)), 'the answer'), binding());
   }
 
   override drop(out: bigint): void {
@@ -834,7 +841,9 @@ class Tree extends ShapeImpl {
       throw new NullArgument(`the ${this.name} argument is null`);
     }
     if (this.mode === 'take') {
-      return adopt(this.#nodeOver(ptr, n.alloc(SIZE.value)), binding());
+      // Still in the caller's allocators, which may go with the caller's
+      // library while the method keeps the tree.
+      return adopt(homed(this.#nodeOver(ptr, n.alloc(SIZE.value)), 'a tree handed over'), binding());
     }
     let node: bigint;
     if (this.tag === undefined) {

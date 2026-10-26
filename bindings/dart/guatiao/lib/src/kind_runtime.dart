@@ -419,10 +419,14 @@ void _free(Pointer<guatiao_value> node) {
 /// `guatiao_value_make_local` leaves an answer as the slot built it.
 final bool _makesLocal = native.core().provides('guatiao_value_make_local');
 
-/// [node], a tree a slot answered, moved into this binding's allocator so
-/// it outlives the library: a slot that ignored the carrier built it in
-/// its own. Freed, and the refusal thrown, when the move fails.
-Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
+/// [node] moved into this binding's allocator so it outlives the library
+/// that built it: a tree a slot answered, which a slot that ignored the
+/// carrier built in its own, or one a caller handed over ([what] says
+/// which). Freed, and the refusal thrown, when the move fails.
+Pointer<guatiao_value> _homed(
+  Pointer<guatiao_value> node, [
+  String what = 'the answer',
+]) {
   if (!_makesLocal) return node;
   final status = native.core().bindings.guatiao_value_make_local(
     node,
@@ -430,10 +434,7 @@ Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
   );
   if (status != Status.ok.code) {
     _free(node);
-    throw statusException(
-      status,
-      "moving the answer into this binding's allocator",
-    );
+    throw statusException(status, "moving $what into this binding's allocator");
   }
   return node;
 }
@@ -998,14 +999,21 @@ final class ServeScope extends SlotCall {
   MapRef borrowedMap(Pointer<guatiao_map> p) =>
       _borrowedView(_nodeIn(_nonNull(p, 'map'), Tag.map), this).asMap();
 
-  Value takenValue(Pointer<guatiao_value> p) =>
-      _keep(Value.adopt(_nodeOver(_nonNull(p, 'value'), null)));
+  /// A tree handed over, which the method owns and may keep: moved out of
+  /// the caller's allocators, which may go with the caller's library.
+  Value takenValue(Pointer<guatiao_value> p) => _keep(
+    Value.adopt(_homed(_nodeOver(_nonNull(p, 'value'), null), _handedOver)),
+  );
 
-  Value takenMap(Pointer<guatiao_map> p) =>
-      _keep(Value.adopt(_nodeOver(_nonNull(p, 'map'), Tag.map)));
+  Value takenMap(Pointer<guatiao_map> p) => _keep(
+    Value.adopt(_homed(_nodeOver(_nonNull(p, 'map'), Tag.map), _handedOver)),
+  );
 
-  Value takenList(Pointer<guatiao_list> p) =>
-      _keep(Value.adopt(_nodeOver(_nonNull(p, 'list'), Tag.list)));
+  Value takenList(Pointer<guatiao_list> p) => _keep(
+    Value.adopt(_homed(_nodeOver(_nonNull(p, 'list'), Tag.list), _handedOver)),
+  );
+
+  static const _handedOver = 'a tree handed over';
 
   Value _keep(Value v) {
     _received.add(v);

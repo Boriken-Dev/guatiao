@@ -123,6 +123,29 @@ struct replacer {
   }
 };
 
+/// What `keeper::greet_from` was handed, kept past the call.
+std::vector<guatiao::map>& kept() {
+  static std::vector<guatiao::map> maps;
+  return maps;
+}
+
+/// Keeps every map handed to it.
+struct keeper {
+  guatiao::result<guatiao::map> greet(std::string_view name) {
+    return guatiao::map::try_of({{"greeting", std::string(name)}});
+  }
+  guatiao::result<guatiao::map> greet_from(guatiao::map config) {
+    kept().push_back(std::move(config));
+    return guatiao::map::try_of({{"greeting", "kept"}});
+  }
+};
+
+guatiao::library cpp_keepers() {
+  guatiao::library lib("cpp_keepers", "1.0.0");
+  lib.single<keeper, gk::greeter>("keeper");
+  return lib;
+}
+
 guatiao::library cpp_kinds() {
   guatiao::library lib("cpp_kinds", "1.0.0");
   lib.meta(item::map({{"summary", "greeters written in C++, in a test"}}));
@@ -267,6 +290,35 @@ void the_library_says_when_it_may_go() {
   CHECK(info->providers.len == 3 && info->meta != nullptr);
 }
 
+/// Handed over in the caller's allocator, a map is moved into this side's
+/// before the method keeps it.
+void a_map_handed_over_and_kept_is_the_providers_own() {
+  gt_test::counting caller;
+  {
+    guatiao::registry reg = MUST(guatiao::registry::try_open("cpp-keepers", "0.1", counted().get()));
+    guatiao::value loaded = MUST(reg.try_register_library<&cpp_keepers>("cpp_keepers"));
+    CHECK(loaded.contains("loaded"));
+    auto g = MUST(gk::greeter::try_bind(reg, "cpp_keepers_keeper"));
+    guatiao::map handed = MUST(guatiao::map::try_of({{"name", "ivy"}}, caller.get()));
+    guatiao::map answer = MUST(g.try_greet_from(std::move(handed)));
+    CHECK(answer["greeting"].string_or("") == "kept");
+    CHECK_MSG(caller.live() == 0,
+              "what the provider keeps holds " + std::to_string(caller.live()) + " blocks of the caller's allocator");
+    CHECK(kept().size() == 1 && kept()[0]["name"].string_or("") == "ivy");
+    kept().clear();
+
+    // This side's allocator refusing, the move is refused: the call with it,
+    // and the tree freed through the caller's.
+    guatiao::map refused = MUST(guatiao::map::try_of({{"name", "ivy"}}, caller.get()));
+    counted().fail_after(0);
+    auto moved = g.try_greet_from(std::move(refused));
+    counted().fail_after(-1);
+    CHECK(!moved.ok() && moved.code() == guatiao::status::alloc);
+    CHECK_MSG(caller.live() == 0, "a refused move leaves " + std::to_string(caller.live()) + " blocks");
+    CHECK(kept().empty());
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -283,6 +335,7 @@ int main() {
     CHECK(providers.size() == 3);
   }
   the_library_says_when_it_may_go();
+  a_map_handed_over_and_kept_is_the_providers_own();
   CHECK(guatiao::detail::live().load() == 0);
   CHECK_NONE_LEFT("every call, refusal, object and instance");
   return gt_test::finish("kinds");

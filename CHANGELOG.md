@@ -210,6 +210,16 @@ write now.
   non-zero `stat` as the call's error; it reads a
   refused move of an answer from `guatiao_settle_home(answer, stat)`;
   the binding's `AGENTS.md` lists every helper a remote uses.
+- **A provider written in another language may keep a tree it was handed.**
+  Every binding serving a kind (Python, Dart, Node, Go, Julia, R, MATLAB
+  and Octave, Fortran and C++) moves a tree handed over to a method into
+  its own allocator before the method sees it, copying what the caller
+  built elsewhere (C++ copies the whole tree then), so a provider that
+  keeps it no longer frees it
+  through a calling library's allocator after that library is unloaded.
+  A refused move frees the tree and refuses the call. Fortran's
+  `guatiao_taken_map(ptr, stat)` reports it through an optional `stat`,
+  which a kind module's serving glue turns into the slot's status.
 - **C++: `guatiao_check_kinds` holds a kind's declaration to its
   description.** A CMake function the package defines adds a test that
   reads the `GUATIAO_KIND` and `GUATIAO_OBJECT_KIND` lines of a header

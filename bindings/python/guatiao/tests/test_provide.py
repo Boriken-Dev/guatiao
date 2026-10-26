@@ -8,6 +8,7 @@ and what a provider class and a module library are checked for."""
 
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
 import threading
@@ -32,7 +33,10 @@ sys.path.insert(0, str(native.REPO / "examples" / "python_provider" / "py_greete
 import py_greeter  # noqa: E402
 from greeter_kind import Conversation, Counter, Greeter, Listener  # noqa: E402
 
-from guatiao import BadValue, Internal, Unsupported, Value, WrongKind, kinds, provide  # noqa: E402
+from counting import Counting  # noqa: E402
+
+from guatiao import BadValue, Internal, Map, Unsupported, Value, WrongKind, _abi, kinds, provide  # noqa: E402
+from guatiao.value import _make_str  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 
 _TARGET_DEBUG = native.library_dir()
@@ -140,6 +144,76 @@ def test_a_conversation_it_starts_tells_the_listener_handed_in(greeter: Any) -> 
             conversation.say("")
     assert ear.heard_so_far == ["hi", "again"]
     assert kinds.live_objects() == before
+
+
+# ---- a provider keeps what it was handed -------------------------------------
+
+#: What `Keeper.greet_from` was handed, kept past the call.
+KEPT: List[Map] = []
+
+
+class Keeper(provide.Provider, Greeter):
+    def greet(self, name: str) -> Dict[str, str]:
+        return {"greeting": name}
+
+    def greet_from(self, config: Map) -> Dict[str, str]:
+        KEPT.append(config)
+        return {"greeting": "kept"}
+
+
+def _keepers() -> types.ModuleType:
+    return _module("keepers", __version__="1", __all__=["Keeper"], Keeper=Keeper)
+
+
+def test_a_tree_handed_over_and_kept_is_in_this_bindings_allocator() -> None:
+    # Handed over in the caller's allocator, it is moved into this
+    # binding's before the method keeps it.
+    counting = Counting()
+    KEPT.clear()
+    with Registry("py-provide", "0.1") as reg:
+        reg.register_library(_keepers())
+        keeper = reg.bind("keepers_keeper", Greeter)
+        with keeper.greet_from(Value({"name": "ivy"}, alloc=counting.alloc)) as answer:
+            assert answer.to_python() == {"greeting": "kept"}
+        assert counting.live == 0, "nothing the provider keeps is in the caller's allocator"
+        (kept,) = KEPT
+        assert kept.to_python() == {"name": "ivy"}
+        kept.owner.close()
+    KEPT.clear()
+
+
+def _unload(lib: Any) -> None:
+    import _ctypes
+
+    if sys.platform == "win32":
+        _ctypes.FreeLibrary(lib._handle)  # type: ignore[attr-defined]
+    else:
+        _ctypes.dlclose(lib._handle)  # type: ignore[attr-defined]
+
+
+def test_a_tree_a_c_library_handed_over_outlives_that_library(tmp_path: Any) -> None:
+    # A C library hands a map built through its own allocator to a Python
+    # provider that keeps it, through the host's services, and is then
+    # unloaded: the kept tree is read and freed with nothing of it left.
+    built = native.build_c_greeter(tmp_path)
+    if built is None:
+        pytest.skip("no C compiler: the greeter written in C is not built")
+    KEPT.clear()
+    with Registry("py-provide", "0.1") as reg:
+        reg.register_library(_keepers())
+        lib = ctypes.CDLL(str(built / native.library_name("c_greeter")))
+        hand_over = lib.c_greeter_hand_over
+        hand_over.argtypes = [ctypes.c_void_p, _abi.Str, _abi.Str]
+        hand_over.restype = ctypes.c_uint32
+        (key, key_buf), (name, name_buf) = _make_str(b"keepers_keeper"), _make_str(b"ivy")
+        status = hand_over(reg.host(), key, name)
+        assert status == _abi.Status.OK
+        _unload(lib)
+        del lib, hand_over
+        (kept,) = KEPT
+        assert kept.to_python() == {"name": "ivy"}
+        kept.owner.close()
+    KEPT.clear()
 
 
 # ---- a module is a library --------------------------------------------------

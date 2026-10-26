@@ -45,6 +45,7 @@ program test_greeters
   call an_answer_built_in_the_librarys_allocator_outlives_the_unload()
   call what_a_slot_grew_a_lent_map_with_outlives_the_unload()
   call a_refused_move_of_a_lent_tree_is_the_calls_error()
+  call a_map_handed_over_and_kept_is_the_providers_own()
   call a_table_that_is_not_the_kinds_is_refused()
   call a_configured_provider_builds_instances()
   call native_threads_call_the_fortran_greeter()
@@ -303,6 +304,41 @@ contains
     call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map stands whole')
     call config%close()
     call check(r%live == 0, 'every block of the refusing allocator is back')
+    call own%close()
+  end subroutine
+
+  subroutine a_map_handed_over_and_kept_is_the_providers_own()
+    type(guatiao_registry) :: own
+    type(greeter_remote) :: g
+    type(guatiao_value) :: config, answer
+    type(guatiao_error), allocatable :: error
+    type(refusing), pointer :: r
+    type(keeper), pointer :: k
+    character(:), allocatable :: text
+    integer :: st
+    ! Handed over in the caller's allocator, it is moved into this
+    ! binding's before the method keeps it.
+    own = guatiao_open_registry('fortran-keeper', '0.1')
+    allocate(k)
+    call guatiao_register_library(own, keeper_library(k))
+    call greeter_bind(own, 'fortran_keepers_keeper', g, st)
+    call check(st == GUATIAO_OK, 'the keeper binds')
+    if (st /= GUATIAO_OK) return
+    r => refusing_new()
+    config = guatiao_map(refusing_allocator(r))
+    call config%set('name', 'ivy')
+    call g%greet_from(config, answer, error)
+    call check(.not. allocated(error), 'the keeper greets from a map handed over')
+    call answer%close()
+    call config%close()
+    call check(r%live == 0, 'none of what it keeps is in the caller''s allocator')
+    call check(allocated(k%kept), 'it kept the map')
+    if (allocated(k%kept)) then
+      call guatiao_emit(k%kept(1), GUATIAO_FORMAT_JSON, text)
+      call check_text(text, '{"name":"ivy"}', 'what it keeps reads')
+      call k%kept(1)%close()
+      deallocate(k%kept)
+    end if
     call own%close()
   end subroutine
 
