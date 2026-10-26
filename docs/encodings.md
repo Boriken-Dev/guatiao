@@ -560,6 +560,10 @@ JavaScript classes (`describeKinds`), and Python `KindProtocol` classes
 (`kinds.describe_kinds`), into the same document, and a floor
 hash it is not given is the FNV-1a of the shape and the required slots
 spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
+`crates/guatiao-derive/tests/vectors/floor_hash.json` holds kinds as
+their description says them, beside the Rust trait declaring the same
+slots, that input and the hash: the derive and every language computing
+the hash check themselves against it.
 
 A provider carries the same document in its descriptor
 (`guatiao_provider_info.kind_descriptions`, JSON text): the kinds it

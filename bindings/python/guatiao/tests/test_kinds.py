@@ -177,6 +177,14 @@ def test_kind_classes_describe_as_the_document_they_were_written_from():
         assert _description.floor_hash_of(kind["object"], kind["slots"]) == kind["floor_hash"], kind["name"]
 
 
+def test_the_floor_hash_is_the_one_rust_gives_the_shared_vectors():
+    path = native.REPO / "crates" / "guatiao-derive" / "tests" / "vectors" / "floor_hash.json"
+    vectors = json.loads(path.read_text(encoding="utf-8"))["vectors"]
+    assert len(vectors) >= 6
+    for v in vectors:
+        assert _description.floor_hash_of(v["object"], v["slots"]) == v["floor_hash"], v["name"]
+
+
 def test_a_kind_born_in_python_is_written_as_its_description():
     import tally_kinds
 

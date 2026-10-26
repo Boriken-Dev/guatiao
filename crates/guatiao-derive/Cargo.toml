@@ -43,6 +43,8 @@ form = []
 [dev-dependencies]
 # Renders the kind expansion for its snapshot test.
 prettyplease = "0.2"
+# Reads the floor hash vectors (`tests/vectors/floor_hash.json`).
+serde_json = "1"
 
 [lints]
 workspace = true
