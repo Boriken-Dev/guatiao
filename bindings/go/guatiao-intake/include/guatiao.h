@@ -1765,6 +1765,32 @@ guatiao_status guatiao_wire_receiver_accept(struct guatiao_wire_receiver *recv,
                                             struct guatiao_wire_event *out_event);
 
 /*
+ Reads a kinds document from its JSON text: what a kind crate commits as
+ `<crate>.kinds.json` beside its header, `{"format": 1, "kinds": [...]}`
+ as `docs/encodings.md` states it ("A kind, described"). On
+ `GUATIAO_OK`, `out` holds the document as a value built in `alloc`, a
+ map a caller reads each kind from; the caller frees it with
+ `guatiao_value_free`. The same document comes, already read, from
+ `guatiao_registry_kind_descriptions` for a provider that carries it.
+
+ `GUATIAO_ERR_BAD_VALUE` for text that is not JSON (`why` then names the
+ byte where it stops) or not a description (`why` names the place, such
+ as `kinds[0].slots[2].args[1]`, and what is wrong there); `why`, which
+ may be null, holds that text as a string built in `alloc`, else stays
+ ABSENT. `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
+
+ # Safety
+
+ The view's bytes are readable for the call; `alloc` is null or valid;
+ `out` and `why` are null or address writable storage for one value
+ holding nothing the caller still owns.
+ */
+guatiao_status guatiao_kind_document_read(struct guatiao_str text,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out,
+                                          struct guatiao_value *why);
+
+/*
  A new registry introducing its host as `id`/`version`.
 
  `alloc` may be null, and is the allocator offered to every library, so

@@ -74,6 +74,7 @@ use crate::value::status::Status;
 // AUTHOR takes no dependency at all. The artifact a host links turns it
 // on. A `//` comment, never a `///`.
 pub mod channel;
+pub mod kind;
 #[cfg(feature = "load")]
 pub mod library;
 pub mod merge;

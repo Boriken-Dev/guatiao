@@ -1927,6 +1927,8 @@ learns at run time, and call one -- is a `Mechanism`'s, and
 KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"format": 1, "kinds": [..]}
 KindDescription::document_json(text)?               // the same from JSON text; an error at "byte N"
                                                     // where it stops being JSON
+// C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;
+//    BAD_VALUE with `why` (a string, or null) naming the byte or the place
 kind.name() .floor_hash() .object() .slots() .slot("greet") -> Option<(usize, &SlotDescription)>
      .size() .floor() .word_of(slot)
 slot.name() .required() .fallible() .args() .answer() .doc()
