@@ -589,6 +589,28 @@ was tried and lost: on shared memory a thread polling just past a 2 µs
 round trip missed often enough to pay wake-ups, and the Linux VM's p99
 went from 8 to 120-180 µs at four times the CPU.
 
+TLS, the secure level (`remote-tls-windows.jsonl`,
+`remote-tls-wsl.jsonl`): `tls://ADDRESS:PORT --identity PATH` on both
+ends, each pinning the one identity, beside trusted TCP; five runs each,
+alternating, medians. The Windows workstation was quiet (busy 8-48 %),
+WSL less so (8-20 %, and its runs moved the most).
+
+| link, loopback | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- |
+| Windows ARM64, trusted TCP | 30.2 | 67.0 | 95 276 | 1 301 | 35.9 / 38.3 |
+| Windows ARM64, TLS | 32.8 | 65.9 | 121 606 | 662 | 41.4 / 37.5 |
+| WSL (aarch64), trusted TCP | 56.2 | 172.8 | 59 866 | 1 807 | 59.5 / 58.6 |
+| WSL (aarch64), TLS | 37.4 | 171.7 | 80 360 | 931 | 49.7 / 50.3 |
+
+- rustls alone seals and opens about 2 GB/s on one thread of the Windows
+  machine; a 4 MiB frame one way between two threads crosses 750-1 080
+  MB/s since the reader grows its reads to 1 MiB (280-400 MB/s at 64
+  KiB), so the round trip's gap to TCP is the extra pass over every byte
+  on each side.
+- More calls a second than TCP with 32 threads: the writer seals every
+  frame queued in one go and the reader opens what one read brought, so
+  fewer system calls carry the same calls. Not explained further.
+
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
 set-up. One x86-64 Linux VM with one rxe device, both ends on it, beside
