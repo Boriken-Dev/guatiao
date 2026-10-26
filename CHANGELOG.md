@@ -25,6 +25,23 @@ write now.
   in one registry that way. `Loaded::source` and `Provider::source()`
   answer it in Rust, and the C library and provider maps carry
   `"source"`, so every binding sees it.
+- **A library carries its kinds' descriptions, so a host needs no file
+  for them.** `guatiao_provider_info` gains `kind_descriptions`, appended:
+  one JSON document (the format of `<crate>.kinds.json`) describing every
+  kind the provider serves and every object kind their slots take or
+  answer, each once. `#[derive(Provider)]` fills it from the kinds'
+  `#[guatiao::kind]` (`kind_document`, `ProviderPartsBuilder::kind_descriptions`
+  for a provider built by hand); a C provider may leave it empty, and a
+  library built before it reads as carrying none.
+  `guatiao_registry_kind_descriptions(reg, key, alloc, out)` answers the
+  document as a value (ABSENT for none, `NOT_FOUND` for an unknown key,
+  `BAD_VALUE` for text that is not a description), and
+  `Provider::kind_descriptions()` the descriptions in Rust
+  (`KindDescription::document_json` reads the text). Node's
+  `Registry.kindDescriptions(key)` answers what `kindsOf` binds, Python's
+  `Registry.kind_descriptions(key)` and Dart's `kindDescriptions(key)` the
+  document as plain data. The mirrors of `guatiao_provider_info` in Python,
+  Node, Julia and Fortran gain the field.
 - **guatiao-source-remote: RDMA, experimental and Linux only** (feature `rdma`,
   off by default). `rdma://host:port` sets a link up over a trusted TCP
   connection, admitted by address range as TCP's is, then carries every
