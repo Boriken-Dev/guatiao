@@ -284,6 +284,12 @@ const guatiao_r_api *api =
   `take_text(&v)`: a string node's text, freed; `view_at(arg, root,
   found, &tmp)`: a view of what a lookup found inside a value or view
   argument, a copy for R data.
+- `wire_of(x, &bytes, msg, n)`: R data as wire bytes, with no tree, in
+  memory R frees when the `.Call` returns (a status; why in `msg`), for a
+  `*_from_wire` export; `read_wire_and_free(&v, numbers)`: the wire bytes a
+  `*_to_wire` export answered as a BYTES value, read as R data as
+  `read_and_free` reads a tree (`numbers` 0 `"auto"`, 1 `"text"`, 2
+  `"double"`, 3 `"integer64"`), the value freed either way.
 
 A tree crosses libraries as its root node: built by one library, it is
 read and freed by any other, since a value records its own allocator;

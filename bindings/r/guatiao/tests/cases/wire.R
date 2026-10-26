@@ -178,3 +178,46 @@ case("a receiver keeps its schemas through refusals", with_library({
   close(ev$value)
   rcv$close()
 }))
+
+case("wire bytes read as R data and written from it, with no tree", with_library(with_repo({
+  for (v in wire_vectors()$values) {
+    bytes <- wire_hex(v$hex)
+    decoded <- from_wire(bytes)
+    for (numbers in 0:2) {
+      if (wire_has_nul(v$tree)) {
+        expect_error(.Call(gt$C_wire_read, bytes, numbers), "guatiao_error", paste("refuses:", v$name))
+        next
+      }
+      tree <- value_data(decoded, numbers = c("auto", "text", "double")[numbers + 1L])
+      expect_true(identical(.Call(gt$C_wire_read, bytes, numbers), tree), paste("reads:", v$name, numbers))
+      built <- value(tree)
+      expect_true(identical(.Call(gt$C_wire_of, tree), to_wire(built)), paste("writes:", v$name, numbers))
+      close(built)
+    }
+    close(decoded)
+  }
+  for (end in seq_len(6L) - 1L) {
+    expect_error(.Call(gt$C_wire_read, wire_hex("0702016103")[seq_len(end)], 0L), "guatiao_error")
+  }
+  expect_error(.Call(gt$C_wire_read, as.raw(c(1, 1)), 0L), "guatiao_error")
+  expect_error(.Call(gt$C_wire_read, as.raw(c(6, 0xff, 0xff, 0xff, 0x0f)), 0L), "guatiao_error")
+})))
+
+case("R data writes as wire bytes what it builds as a tree, refusals included", with_library({
+  kept <- value(list(k = list(1L, 2L)))
+  data <- list(s = "\u00fc\u20ac", n = number("1.10"), i = -3L, f = 0.1, b = TRUE, na = NA, none = NULL,
+    bytes = as.raw(1:2), v = c(1.5, 2), named = c(x = 1L, y = 2L), asis = I("one"), f2 = factor("lo"),
+    absent = absent, ref = kept, nested = list(list(a = list())))
+  built <- value(data)
+  expect_true(identical(.Call(gt$C_wire_of, data), to_wire(built)))
+  close(built)
+  close(kept)
+  deep <- list(1)
+  for (i in 1:200) deep <- list(deep)
+  for (bad in list(NaN, number("1."), list(a = 1, a = 2), list(1, b = 2), deep, quote(x), sum)) {
+    tree <- tryCatch({ value(bad); NULL }, error = function(e) conditionMessage(e))
+    tape <- tryCatch({ .Call(gt$C_wire_of, bad); NULL }, error = function(e) conditionMessage(e))
+    expect_true(identical(tape, tree), paste("refuses", deparse(bad)[1L]))
+  }
+}))
+

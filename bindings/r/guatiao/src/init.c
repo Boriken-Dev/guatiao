@@ -41,6 +41,8 @@ SEXP C_node_names(SEXP);
 SEXP C_node_pointer(SEXP);
 SEXP C_node_push(SEXP, SEXP);
 SEXP C_node_read(SEXP, SEXP);
+SEXP C_wire_read(SEXP, SEXP);
+SEXP C_wire_of(SEXP);
 SEXP C_node_set(SEXP, SEXP, SEXP);
 SEXP C_node_tag(SEXP);
 SEXP C_number_read(SEXP);
@@ -130,6 +132,8 @@ static const R_CallMethodDef calls[] = {
     {"C_node_pointer", (DL_FUNC)(void (*)(void)) & C_node_pointer, 1},
     {"C_node_push", (DL_FUNC)(void (*)(void)) & C_node_push, 2},
     {"C_node_read", (DL_FUNC)(void (*)(void)) & C_node_read, 2},
+    {"C_wire_read", (DL_FUNC)(void (*)(void)) & C_wire_read, 2},
+    {"C_wire_of", (DL_FUNC)(void (*)(void)) & C_wire_of, 1},
     {"C_node_set", (DL_FUNC)(void (*)(void)) & C_node_set, 3},
     {"C_node_tag", (DL_FUNC)(void (*)(void)) & C_node_tag, 1},
     {"C_number_read", (DL_FUNC)(void (*)(void)) & C_number_read, 1},

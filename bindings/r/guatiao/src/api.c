@@ -123,6 +123,8 @@ static const guatiao_r_api gt_r_api = {
     gt_read_and_free,
     gt_take_text,
     api_view_at,
+    gt_wire_of,
+    gt_read_wire_and_free,
 };
 
 static const guatiao_r_api *gt_r_api_table(void) { return &gt_r_api; }
