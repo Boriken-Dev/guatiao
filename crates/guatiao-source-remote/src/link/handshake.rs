@@ -57,13 +57,57 @@ pub(crate) fn proves(
     mac.verify_slice(given).is_ok()
 }
 
-/// Whether two tokens are the same, in time that does not depend on where
-/// they first differ.
-pub(crate) fn same_token(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+/// The token a server requires, kept as it compares a client's with it:
+/// with `tcp` (every transport a peer on another machine reaches) its
+/// SHA-256 digest, made once, so a comparison runs over 32 bytes whatever
+/// either token's length; without, the token itself, every peer being on
+/// this machine.
+#[derive(Clone)]
+pub(crate) struct Required {
+    #[cfg(feature = "tcp")]
+    digest: [u8; 32],
+    #[cfg(not(feature = "tcp"))]
+    token: alloc::sync::Arc<[u8]>,
+}
+
+#[cfg(feature = "tcp")]
+fn digest(token: &[u8]) -> [u8; 32] {
+    use sha2::Digest;
+    sha2::Sha256::digest(token).into()
+}
+
+/// Whether two byte strings are the same, every byte compared whatever
+/// they hold.
+fn same(a: &[u8], b: &[u8]) -> bool {
+    let alike = a.len() == b.len();
+    #[cfg(test)]
+    COMPARED.with(|c| c.set(if alike { a.len() } else { 0 }));
+    alike && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// How many bytes the last comparison on this thread went over.
+    static COMPARED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+impl Required {
+    pub(crate) fn new(token: &str) -> Required {
+        Required {
+            #[cfg(feature = "tcp")]
+            digest: digest(token.as_bytes()),
+            #[cfg(not(feature = "tcp"))]
+            token: alloc::sync::Arc::from(token.as_bytes()),
+        }
     }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+
+    /// Whether `given` is the token required.
+    pub(crate) fn is(&self, given: &[u8]) -> bool {
+        #[cfg(feature = "tcp")]
+        return same(&digest(given), &self.digest);
+        #[cfg(not(feature = "tcp"))]
+        same(given, &self.token)
+    }
 }
 
 /// What one side offers in its HELLO or WELCOME.
@@ -145,8 +189,33 @@ mod offer_tests {
             token: None,
         };
         assert_eq!(Offer::from_value(&Value::null(), &fallback), fallback);
-        assert!(same_token(b"abc", b"abc"));
-        assert!(!same_token(b"abc", b"abd"));
-        assert!(!same_token(b"abc", b"ab"));
+    }
+
+    #[test]
+    fn a_token_is_the_one_required_and_no_other() {
+        let required = Required::new("abc");
+        assert!(required.is(b"abc"));
+        assert!(!required.is(b"abd"));
+        assert!(!required.is(b"ab"));
+        assert!(!required.is(b"abcd"));
+        assert!(!required.is(b""));
+    }
+
+    /// A network peer timing its refusals learns nothing of the token's
+    /// length: every comparison runs over as many bytes.
+    #[cfg(feature = "tcp")]
+    #[test]
+    fn every_comparison_runs_over_as_many_bytes_whatever_the_lengths() {
+        let required = Required::new("a token of some length");
+        for given in [
+            "",
+            "a",
+            "a token",
+            "a token of some length",
+            &"x".repeat(1000),
+        ] {
+            let _ = required.is(given.as_bytes());
+            assert_eq!(COMPARED.with(core::cell::Cell::get), 32, "{given:?}");
+        }
     }
 }

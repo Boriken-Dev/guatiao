@@ -87,6 +87,8 @@ pub struct LinkOptions {
     trust: Trust,
     key: Option<Arc<[u8]>>,
     token: Option<Arc<str>>,
+    /// `token`, as a server compares a client's with it.
+    required: Option<handshake::Required>,
     max_frame: usize,
     max_calls: usize,
     timeout: Option<Duration>,
@@ -126,6 +128,7 @@ impl LinkOptions {
             trust,
             key: None,
             token: None,
+            required: None,
             max_frame: DEFAULT_MAX_FRAME,
             max_calls: DEFAULT_MAX_CALLS,
             timeout: Some(DEFAULT_TIMEOUT),
@@ -151,6 +154,7 @@ impl LinkOptions {
     /// server requires of every client.
     pub fn token(mut self, token: &str) -> LinkOptions {
         self.token = Some(Arc::from(token));
+        self.required = Some(handshake::Required::new(token));
         self
     }
 
@@ -720,9 +724,9 @@ impl Link {
                 ));
             }
         };
-        if let Some(token) = &options.token {
+        if let Some(required) = &options.required {
             let given = theirs.token.as_deref().unwrap_or_default();
-            if !handshake::same_token(given.as_bytes(), token.as_bytes()) {
+            if !required.is(given.as_bytes()) {
                 return Err(refuse_link(
                     &mut *writer,
                     Status::GUATIAO_ERR_BAD_VALUE,
