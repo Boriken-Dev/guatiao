@@ -93,3 +93,15 @@ Future<(Uri, String?, Future<void> Function())> serverTlsServer() async {
   final server = await startRemoteServer(listen: serverTlsArguments);
   return (server.url, server.fingerprint, server.stop);
 }
+
+/// The same over WebTransport at [security] (`server-tls`, `none`,
+/// `mutual-tls`): its URL, the certificate hashes a page pins, and what
+/// stops it.
+Future<(Uri, List<String>, Future<void> Function())> webTransportServer(
+  String security,
+) async {
+  final server = await startRemoteServer(
+    listen: webTransportArguments(security),
+  );
+  return (server.url, server.hashes, server.stop);
+}

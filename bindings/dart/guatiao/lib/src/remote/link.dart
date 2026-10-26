@@ -18,6 +18,7 @@ import 'codec.dart';
 import 'described.dart';
 import 'proof.dart' as proof;
 import 'socket.dart';
+import 'webtransport.dart';
 
 /// How far a link trusts its peer: the level both sides must name.
 enum RemoteTrust {
@@ -42,6 +43,8 @@ enum RemoteTrust {
 }
 
 /// A link's security, the same choice on every transport and client.
+/// WebTransport (`https://`) runs any of the three: QUIC always encrypts,
+/// and the browser always checks the server's certificate.
 enum RemoteSecurity {
   /// No TLS (`ws://`): the pre-shared key proved both ways, peers admitted
   /// by the server's access control list. No encryption, and no defence
@@ -61,8 +64,11 @@ enum RemoteSecurity {
 /// How the Dart VM's TLS knows the server, and what it presents: the
 /// fingerprints (`sha256:<hex>`) of the servers it trusts, and its own
 /// identity, a PEM file's text holding one certificate and its PKCS#8 key.
-/// A page has none of this: its browser trusts the web's certificate
-/// authorities and presents what the user installed.
+/// A page's WebSocket has none of this: its browser trusts the web's
+/// certificate authorities and presents what the user installed. A page's
+/// WebTransport (`https://`) takes [pins] alone, as the browser's
+/// `serverCertificateHashes`: what guatiao-remote-server says as its
+/// `certificate hashes`.
 final class RemoteTls {
   const RemoteTls({this.pins = const [], this.identity});
 
@@ -337,9 +343,12 @@ final class RemoteLink {
     if (alive) _send(Release(id));
   });
 
-  /// Connects to a server's WebSocket URL at [security], mutual TLS
-  /// unless told: `ws://host:port/path` runs [RemoteSecurity.none] alone,
-  /// `wss://` the two TLS modes. With none, [key] is proved both ways; with
+  /// Connects to a server's WebSocket or WebTransport URL at [security],
+  /// mutual TLS unless told: `ws://host:port/path` runs
+  /// [RemoteSecurity.none] alone, `wss://` the two TLS modes, and
+  /// `https://host:port/path` (WebTransport, a page's only) any of the
+  /// three, the server's certificate pinned by [tls]'s pins or trusted as
+  /// the browser trusts any. With none, [key] is proved both ways; with
   /// server TLS this side proves [key] when the server asks for it, or
   /// presents [token]; with mutual TLS a [token] goes with the
   /// certificate when the server requires one. [tls] (the Dart VM only)
@@ -359,13 +368,37 @@ final class RemoteLink {
     int maxFrame = 64 << 20,
     int maxCalls = 64,
   }) async {
+    final trust = switch (security) {
+      RemoteSecurity.none => RemoteTrust.trusted,
+      RemoteSecurity.serverTls => RemoteTrust.serverTls,
+      RemoteSecurity.mutualTls => RemoteTrust.secure,
+    };
+    if (url.scheme == 'https') {
+      _checkProof(trust, key, token);
+      final channel = await openWebTransport(
+        url,
+        handshakeTimeout,
+        tls,
+        maxFrame,
+      );
+      return over(
+        channel,
+        trust: trust,
+        key: key,
+        token: token,
+        timeout: timeout,
+        handshakeTimeout: handshakeTimeout,
+        maxFrame: maxFrame,
+        maxCalls: maxCalls,
+      );
+    }
     final encrypted = switch (url.scheme) {
       'ws' => false,
       'wss' => true,
       _ => throw ArgumentError.value(
         url,
         'url',
-        'a WebSocket URL is ws:// or wss://',
+        'a remote URL is ws://, wss:// or https:// (WebTransport)',
       ),
     };
     if (encrypted != (security != RemoteSecurity.none)) {
@@ -378,11 +411,6 @@ final class RemoteLink {
                   'security: RemoteSecurity.none, or connect to wss://',
       );
     }
-    final trust = switch (security) {
-      RemoteSecurity.none => RemoteTrust.trusted,
-      RemoteSecurity.serverTls => RemoteTrust.serverTls,
-      RemoteSecurity.mutualTls => RemoteTrust.secure,
-    };
     _checkProof(trust, key, token);
     final channel = await openWebSocket(url, handshakeTimeout, tls);
     return over(
