@@ -135,10 +135,22 @@ function leb!(io::Vector{UInt8}, n::Integer)
     return nothing
 end
 
+# `append!` of `codeunits(s)` copies a byte at a time, about ten times
+# slower than one block copy on a large string.
+function put_bytes!(io::Vector{UInt8}, data::Union{String,Vector{UInt8}})
+    n = sizeof(data)
+    at = length(io)
+    resize!(io, at + n)
+    GC.@preserve io data unsafe_copyto!(pointer(io, at + 1), pointer(data), n)
+    return nothing
+end
+put_bytes!(io::Vector{UInt8}, data::Base.CodeUnits{UInt8,String}) = put_bytes!(io, data.s)
+put_bytes!(io::Vector{UInt8}, data) = (append!(io, data); nothing)
+
 function body!(io::Vector{UInt8}, tag::UInt8, s::String)
     push!(io, tag)
     leb!(io, ncodeunits(s))
-    append!(io, codeunits(s))
+    put_bytes!(io, s)
     return nothing
 end
 
@@ -200,7 +212,7 @@ function wire_map!(io, pairs, n::Int, depth::Int)
         key = map_key_text(k)
         isvalid(key) || throw(GuatiaoError(BadValue, ""))
         leb!(io, ncodeunits(key))
-        append!(io, codeunits(key))
+        put_bytes!(io, key)
         write_wire!(io, v, depth + 1)
     end
 end
@@ -247,7 +259,7 @@ function write_wire!(io::Vector{UInt8}, x, depth::Int)
     elseif x isa Union{Vector{UInt8},Base.CodeUnits{UInt8}}
         push!(io, WIRE_BYTES)
         leb!(io, length(x))
-        append!(io, x)
+        put_bytes!(io, x)
     elseif x isa Node
         append!(io, to_wire(x))
     elseif x isa AbstractDict
