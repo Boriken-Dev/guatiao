@@ -20,7 +20,8 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 | `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; the wire encoding and channels (`guatiao_wire`); `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
 | `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
 | `guatiao_kind_writer` | `guatiao_write_kinds(document, path, module, check, stat, errmsg)` and `guatiao_kinds_source(document_text, module, source, text, stat, errmsg)`: a kind module written from a kinds document (what `guatiao-kind` runs) |
-| `guatiao_serde` | over the `guatiao_serde` library: `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML; `guatiao_serde_use_library` |
+| `guatiao_serde` | over the `guatiao_serde` library: `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML; `guatiao_visit`, `guatiao_emit_walker`: a document into and out of a derived type of your own, no value built; `guatiao_serde_use_library` |
+| `guatiao_visitors` | `guatiao_visitor`, `guatiao_walker`, `guatiao_sink`: what `guatiao_visit` and `guatiao_emit_walker` drive |
 | `guatiao_intake` | over the `guatiao_intake` library: forms, paths, the flat store; `guatiao_intake_use_library` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths |
 | `guatiao_c`, `guatiao_serde_c`, `guatiao_intake_c` | the headers in Fortran: `bind(c)` mirrors (`gt_value`, `gt_entry`, `gt_provider_info`, ...) and a procedure pointer per export (`gt_value_free`, ...), resolved once the library is open |
@@ -585,6 +586,60 @@ it was, and `where` (`type(guatiao_parse_error)`: `format`, `line`,
 never quotes the document) says where. `guatiao_emit(value, format, text,
 pretty, how, stat, errmsg)`: `pretty` indents JSON; a TOML document is a
 map (`GUATIAO_ERR_WRONG_KIND` otherwise). A number keeps its exact text.
+
+### A document into a derived type of your own, and back
+
+No value is built either way: a visitor receives the document's events,
+and a walker hands its own data over (module `guatiao_visitors`, its
+types re-exported by `guatiao_serde`).
+
+```fortran
+type, extends(guatiao_visitor) :: reader
+  integer :: port = 0
+  character(:), allocatable :: at_key
+contains
+  procedure :: on_key => rd_key          ! integer function rd_key(self, text) result(st)
+  procedure :: on_number => rd_number    ! integer function rd_number(self, text) result(st)
+  procedure :: on_map_begin => rd_open   ! integer function rd_open(self, len) result(st)
+  procedure :: on_map_end => rd_close    ! integer function rd_close(self) result(st)
+end type
+call guatiao_visit('{"port": 5900}', GUATIAO_FORMAT_JSON, r, stat=st)
+
+type, extends(guatiao_walker) :: writer
+contains
+  procedure :: walk => wr_walk           ! integer function wr_walk(self, into) result(st)
+end type                                 ! st = into%map_begin(1_int64); st = into%key('port'); ...
+call guatiao_emit_walker(w, GUATIAO_FORMAT_JSON, text, stat=st)
+```
+
+- `guatiao_visitor`: abstract; its events are type-bound functions
+  answering a status, `GUATIAO_OK` to go on: `on_absent()`, `on_null()`,
+  `on_boolean(value)` (`logical`), `on_number(text)` (its text in the JSON
+  number grammar), `on_string(text)`, `on_bytes(bytes)`
+  (`integer(c_int8_t)(:)`), `on_list_begin(len)` / `on_map_begin(len)`
+  (`integer(int64)`, or `GUATIAO_LEN_UNKNOWN`), `on_key(text)`,
+  `on_list_end()`, `on_map_end()`; the dummy arguments keep these names
+  when overridden. An event left as it is answers `GUATIAO_ERR_WRONG_KIND`.
+  A component of the extending type cannot share a binding's name.
+- `guatiao_visit(text, format, visitor, how, where, stat, errmsg)`: the
+  document's events into `visitor`. A document that does not parse is
+  `GUATIAO_ERR_BAD_VALUE` with `where`, as for `guatiao_parse`; a status an
+  event answered stops the walk and is answered (the message says the
+  visitor stopped it).
+- `guatiao_walker`: abstract, with a deferred `walk(self, into)` answering
+  a status; `into` is a `type(guatiao_sink)`, valid only during `walk`,
+  whose functions `absent`, `null`, `boolean`, `number`, `string`, `bytes`,
+  `list_begin(len)`, `list_end`, `map_begin(len)`, `key`, `map_end` each
+  answer the receiving side's status, which `walk` stops at and answers.
+- `guatiao_emit_walker(walker, format, text, pretty, how, stat, errmsg)`:
+  the walk as a document. Events out of order, a walk that gave no one
+  complete value and a TOML document that is not a map are
+  `GUATIAO_ERR_WRONG_KIND`; text that is not UTF-8, a number outside the
+  grammar, a key repeated in its map and an absent value (a document
+  has no spelling for one: leave the key out) `GUATIAO_ERR_BAD_VALUE`; a
+  status the walk answered is answered.
+- `gt_visitor` and `gt_walker` in `guatiao_c` mirror the C tables for
+  code that writes its own `bind(c)` functions.
 
 ## guatiao_intake
 

@@ -191,6 +191,13 @@ call guatiao_parse('{"port": 5900}', GUATIAO_FORMAT_JSON, v)
 call guatiao_emit(v, GUATIAO_FORMAT_YAML, text)
 ```
 
+A document also reads straight into a derived type of your own, with no
+value built: extend `guatiao_visitor`, override the events your data
+takes (`on_key`, `on_number`, `on_map_begin`, ...), and pass it to
+`guatiao_visit(text, format, visitor)`. The way back is a
+`guatiao_walker` whose `walk` writes its events into a sink, and
+`guatiao_emit_walker(walker, format, text)`.
+
 ### Dates and spans
 
 ```fortran
@@ -244,7 +251,8 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 | --- | --- |
 | `guatiao` | `guatiao_value` and its constructors, statuses, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`, `guatiao_validate`, `guatiao_redact`, `guatiao_schema_builder`, `guatiao_config`; `guatiao_to_wire`, `guatiao_from_wire`, the channel frames and `guatiao_receiver`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library`, `guatiao_register_library` |
 | `guatiao_kinds` | the helpers a kind's module writes its glue with |
-| `guatiao_serde` | `guatiao_parse` / `guatiao_emit` for JSON, TOML, YAML |
+| `guatiao_serde` | `guatiao_parse` / `guatiao_emit` for JSON, TOML, YAML; `guatiao_visit` / `guatiao_emit_walker` into and out of your own types |
+| `guatiao_visitors` | `guatiao_visitor`, `guatiao_walker`, `guatiao_sink` |
 | `guatiao_intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths, `guatiao_normalize` |
 | `guatiao_c`, `guatiao_serde_c`, `guatiao_intake_c` | the C headers as `bind(c)` mirrors and procedure pointers |

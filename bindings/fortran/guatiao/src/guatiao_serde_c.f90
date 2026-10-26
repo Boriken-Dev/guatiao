@@ -27,14 +27,20 @@ module guatiao_serde_c
     type(gt_value) :: message
   end type
 
-  type(gt_export), parameter :: gt_serde_exports(7) = [ &
+  type(gt_export), parameter :: gt_serde_exports(13) = [ &
     gt_export('guatiao_json_parse_ex   ', 5, ''), &
     gt_export('guatiao_json_emit       ', 4, ''), &
     gt_export('guatiao_json_emit_pretty', 4, ''), &
     gt_export('guatiao_toml_parse_ex   ', 5, 'toml'), &
     gt_export('guatiao_toml_emit       ', 4, 'toml'), &
     gt_export('guatiao_yaml_parse_ex   ', 5, 'yaml'), &
-    gt_export('guatiao_yaml_emit       ', 4, 'yaml') ]
+    gt_export('guatiao_yaml_emit       ', 4, 'yaml'), &
+    gt_export('guatiao_json_visit      ', 5, ''), &
+    gt_export('guatiao_json_emit_walker', 4, ''), &
+    gt_export('guatiao_toml_visit      ', 5, 'toml'), &
+    gt_export('guatiao_toml_emit_walker', 4, 'toml'), &
+    gt_export('guatiao_yaml_visit      ', 5, 'yaml'), &
+    gt_export('guatiao_yaml_emit_walker', 4, 'yaml') ]
 
   abstract interface
     function guatiao_json_parse_ex_i(text, how, alloc, out, out_error) bind(c) result(r)
@@ -96,6 +102,57 @@ module guatiao_serde_c
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
+    function guatiao_json_visit_i(text, how, alloc, visitor, out_error) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(gt_str), value :: text
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: visitor
+      type(c_ptr), value :: out_error
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_json_emit_walker_i(walker, how, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: walker
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_toml_visit_i(text, how, alloc, visitor, out_error) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(gt_str), value :: text
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: visitor
+      type(c_ptr), value :: out_error
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_toml_emit_walker_i(walker, how, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: walker
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_yaml_visit_i(text, how, alloc, visitor, out_error) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(gt_str), value :: text
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: visitor
+      type(c_ptr), value :: out_error
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_yaml_emit_walker_i(walker, how, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: walker
+      integer(c_int32_t), value :: how
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
   end interface
 
   procedure(guatiao_json_parse_ex_i), pointer :: gt_json_parse_ex => null()
@@ -105,6 +162,12 @@ module guatiao_serde_c
   procedure(guatiao_toml_emit_i), pointer :: gt_toml_emit => null()
   procedure(guatiao_yaml_parse_ex_i), pointer :: gt_yaml_parse_ex => null()
   procedure(guatiao_yaml_emit_i), pointer :: gt_yaml_emit => null()
+  procedure(guatiao_json_visit_i), pointer :: gt_json_visit => null()
+  procedure(guatiao_json_emit_walker_i), pointer :: gt_json_emit_walker => null()
+  procedure(guatiao_toml_visit_i), pointer :: gt_toml_visit => null()
+  procedure(guatiao_toml_emit_walker_i), pointer :: gt_toml_emit_walker => null()
+  procedure(guatiao_yaml_visit_i), pointer :: gt_yaml_visit => null()
+  procedure(guatiao_yaml_emit_walker_i), pointer :: gt_yaml_emit_walker => null()
 
 contains
 
@@ -118,6 +181,12 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_toml_emit'), gt_toml_emit)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_yaml_parse_ex'), gt_yaml_parse_ex)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_yaml_emit'), gt_yaml_emit)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_json_visit'), gt_json_visit)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_json_emit_walker'), gt_json_emit_walker)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_toml_visit'), gt_toml_visit)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_toml_emit_walker'), gt_toml_emit_walker)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_yaml_visit'), gt_yaml_visit)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_yaml_emit_walker'), gt_yaml_emit_walker)
   end subroutine
 
 end module guatiao_serde_c

@@ -316,6 +316,8 @@ contains
     type(gt_str) :: s
     type(gt_owned) :: ow
     type(gt_wire_event) :: we
+    type(gt_visitor) :: vi
+    type(gt_walker) :: wk
     type(c_ptr) :: word
     integer :: w
     w = int(c_sizeof(word))
@@ -344,6 +346,8 @@ contains
     call size_is(c_sizeof(s), 2 * w, 'guatiao_str')
     call size_is(c_sizeof(ow), 4 * w, 'guatiao_string')
     call size_is(c_sizeof(we), (16 + w + 3 * (8 + 4 * w) + 7) / 8 * 8, 'guatiao_wire_event')
+    call size_is(c_sizeof(vi), 13 * w, 'guatiao_visitor')
+    call size_is(c_sizeof(wk), 3 * w, 'guatiao_walker')
   end subroutine
 
   subroutine size_is(got, want, what)
