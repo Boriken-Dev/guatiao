@@ -14,6 +14,37 @@ write now.
 
 ### Added
 
+- **guatiao-source-remote: the secure level, mutual TLS 1.3** (feature
+  `tls`, off by default). `tls://host:port` runs the `secure` trust
+  level through coqui-peer-tls: each side presents a certificate of its
+  own and knows the other by its fingerprint, `sha256:<hex>`, answered by
+  the new `Link::peer_id()`. A side trusts fixed pins or the peers a
+  coqui-peer trust store has accepted; a server with a store records a
+  client it does not know as waiting, with the address it came from, once
+  the client has proved its key, and `guatiao-remote-server --state-dir
+  DIR --waiting` / `--accept FINGERPRINT` pair it. coqui-peer-tls's TLS
+  policy, strict by default, is part of the configuration (`policy`, in
+  its text form), and every setting looser than strict is listed. TLS
+  session resumption is off, so a peer removed from the store is refused
+  at its next link. `transport::tls::{TlsConfig, TlsConnect, TlsListen}`
+  in Rust; `connect: tls://...` with `state_dir` or `identity_file`,
+  `pins` and `policy` in a source file's configuration and in a peer
+  manifest; `--listen tls://`, `--state-dir`, `--identity`, `--pin`,
+  `--policy` on the server; `tls://` in `guatiao-remote-bench`. The
+  protocol is unchanged (the HELLO already carried trust 2). coqui-peer
+  and coqui-peer-tls are git dependencies pinned by commit, so the crate
+  cannot be published to crates.io until they are (`cargo publish` and
+  `cargo package` refuse it meanwhile). `docs/remote.md` has "Trust".
+- **guatiao-source-remote: network peers admitted by an access control
+  list.** The trusted listeners (`tcp`, `ws`, `rdma`) and the TLS one take
+  a coqui-net-acl `Acl` (ordered permit and deny rules on the source, the
+  local address and port, and at the secure level a peer's fingerprint;
+  first match wins, deny by default), re-exported as
+  `guatiao_source_remote::acl`. A denied peer is closed unread; nothing
+  about where a listener binds is refused. `guatiao-remote-server --acl
+  PATH` reads one (TOML or JSON); `--range CIDR` still adds a permit rule.
+  coqui-net-acl is a git dependency of the `tcp` feature, pinned by
+  commit.
 - **A provider a language bridge declares can be built from a
   configuration and asked whether it can run.** guatiao-bridge's
   `Provided::config(schema)` serves `create` and `destroy` for it

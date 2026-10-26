@@ -1160,6 +1160,14 @@ checkout, or a pin on a git revision, since `0.0.0-alpha.1`.
 | `crates/guatiao-rhai`, `guatiao_rhai` | `crates/guatiao-source-rhai`, `guatiao_source_rhai` |
 | `guatiao-remote`, `use guatiao_remote::..` | `guatiao-source-remote`, `use guatiao_source_remote::..` |
 
+guatiao-source-remote's listeners admit peers by an access control list
+since then: `TcpListen::bind(addr, &[Range::parse("10.0.0.0/8")?])`
+becomes `TcpListen::bind(addr, acl)` with an `acl::Acl` permitting that
+source (`acl.push(Rule::new(Action::Permit, "10.0.0.0/8".parse()?))`),
+and the same for `WsListen` and `RdmaListen`; `from_listener` of the TCP
+and WebSocket listeners no longer returns a `Result`.
+`guatiao-remote-server --range` is unchanged.
+
 The server is still `guatiao-remote-server`, the guest crate still
 `guatiao-wasm-guest`, and the environment variables naming a build
 (`GUATIAO_PY_BRIDGE`, `GUATIAO_WASM_SOURCE`, ...) are unchanged.

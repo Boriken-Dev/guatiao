@@ -30,8 +30,10 @@ library it loaded itself, in any language.
   server in the tests.
 - **Transports** — a server in a child process (isolation); the same
   machine through a Unix socket or a named pipe, or through shared memory
-  (a few microseconds a call); TCP at the trusted level: a configured
-  address range, a pre-shared key proved both ways.
+  (a few microseconds a call); TCP at the trusted level: peers admitted
+  by an access control list, a pre-shared key proved both ways; TLS 1.3
+  at the secure level: mutual TLS, each side known by its certificate's
+  fingerprint, unknown clients waiting until an operator accepts them.
 
 ## Installation
 
@@ -42,13 +44,15 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 
 | Flag | Adds | Needed for |
 | --- | --- | --- |
-| `tcp` | `hmac`, `sha2`, `getrandom` | TCP at the trusted level |
+| `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP at the trusted level |
+| `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3 at the secure level |
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
 | `ws` | `tcp`, `tungstenite` | WebSocket at the trusted level: what a browser page connects to |
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
-from C).
+from C). `coqui-net-acl`, `coqui-peer` and `coqui-peer-tls` are git
+dependencies pinned by commit until they are on crates.io.
 
 ## Usage
 
@@ -81,7 +85,14 @@ A server:
 guatiao-remote-server --listen tcp://192.0.2.21:7000 --trust trusted \
     --range 192.0.2.0/24 --key-file link.key \
     --kinds greeter_kind.kinds.json --scan /opt/providers
+guatiao-remote-server --listen tls://0.0.0.0:7000 --trust secure \
+    --state-dir /var/lib/guatiao-remote --kinds greeter_kind.kinds.json --scan /opt/providers
 ```
+
+A host reaches the secure one with `{"connect": "tls://192.0.2.21:7000",
+"trust": "secure", "state_dir": "state", "pins": ["sha256:..."]}`; the
+server lists it as waiting (`--state-dir DIR --waiting`) until accepted
+(`--accept sha256:...`).
 
 ## License
 
