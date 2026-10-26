@@ -6,7 +6,7 @@ Self-contained — this file ships inside the npm package, so it names no
 repository path.
 
 ESM only, typed (`.d.ts` beside every module), Node 22 or later, 64-bit
-platforms. The one runtime dependency is `koffi`, a foreign-function
+platforms and 32-bit ARM (`WORD` in `guatiao/ffi` is the pointer width). The one runtime dependency is `koffi`, a foreign-function
 interface whose native part comes prebuilt per platform; this package
 ships no native code of its own.
 
@@ -598,9 +598,12 @@ using value = n.adopt(out, lib.alloc);       // a Value; it frees the tree and `
   `str(text)` and `bytesArg(data)` (`guatiao_str` and `guatiao_bytes`
   arguments), readers `u8`, `u32`, `i32`,
   `u64`, `i64`, `ptrAt`, `size`, `bytesAt`, `textAt`, `stringText` (an
-  owned `guatiao_string`), writers `setU8`, `setU32`, `setU64`, `setPtr`;
+  owned `guatiao_string`), writers `setU8`, `setU32`, `setU64`, `setPtr`,
+  `setSize` (`ptrAt`, `size`, `setPtr` and `setSize` are a word wide);
   `freeNode(node)` frees what a node owns through the core library. The
-  layout: `SIZE`, `VALUE`, `ENTRY`, `OWNED`, `ALLOC`; `Status`, `Tag`.
+  layout, in bytes for this platform: `WORD`, `SIZE`, `VALUE`, `ENTRY`,
+  `OWNED`, `VIEW` (a borrowed array's `ptr`, `len`, `stride`), `ALLOC`;
+  `Status`, `Tag`.
   `koffi()` is the one koffi, for a package's own callbacks.
 - Trees: `adopt(root, alloc?) -> Value` takes over a root a call wrote
   into memory from `alloc()`; `withNodes(items, body)` lends `Ref`s as

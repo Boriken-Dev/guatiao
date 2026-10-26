@@ -35,7 +35,7 @@
  * @module
  */
 
-export { ALLOC, ENTRY, OWNED, SIZE, Status, Tag, VALUE } from './abi.js';
+export { ALLOC, ENTRY, OWNED, SIZE, Status, Tag, VALUE, VIEW, WORD } from './abi.js';
 export { BadValue, GuatiaoError, LibraryNotFound, MissingSymbol, raiseForStatus } from './errors.js';
 export {
   type Declared,
@@ -55,6 +55,7 @@ export {
   ptrAt,
   release,
   setPtr,
+  setSize,
   setU8,
   setU32,
   setU64,

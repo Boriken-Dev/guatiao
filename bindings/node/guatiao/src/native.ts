@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 import type KoffiModule from 'koffi';
 
-import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE } from './abi.js';
+import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE, WORD } from './abi.js';
 import { LibraryNotFound, MissingSymbol, raiseForStatus } from './errors.js';
 
 /** The koffi module, as its CommonJS entry exports it. */
@@ -33,6 +33,12 @@ let koffiModule: Koffi | undefined;
 export function koffi(): Koffi {
   if (koffiModule === undefined) {
     const loaded = createRequire(import.meta.url)('koffi') as Koffi;
+    if (loaded.sizeof('void *') !== WORD || loaded.sizeof('size_t') !== WORD || loaded.alignof('uint64_t') !== 8) {
+      throw new Error(
+        `this platform (${process.arch}) has ${loaded.sizeof('void *')}-byte pointers and ` +
+          `${loaded.alignof('uint64_t')}-aligned 64-bit integers; the binding laid its structs out for ${WORD} and 8`,
+      );
+    }
     loaded.struct('guatiao_str', { ptr: 'void *', len: 'size_t' });
     loaded.struct('guatiao_bytes', { ptr: 'void *', len: 'size_t' });
     loaded.struct('guatiao_bytes_mut', { ptr: 'void *', len: 'size_t' });
@@ -64,13 +70,21 @@ export function u64(ptr: bigint, at = 0): bigint {
 export function i64(ptr: bigint, at = 0): bigint {
   return view(ptr + BigInt(at), 8).getBigInt64(0, true);
 }
-/** A pointer field; `0n` for null. */
+/** A pointer field, a word wide; `0n` for null. */
 export function ptrAt(ptr: bigint, at = 0): bigint {
-  return u64(ptr, at);
+  return WORD === 8 ? u64(ptr, at) : BigInt(u32(ptr, at));
 }
-/** A `size_t` field, which this binding reads as a number. */
+/** A `size_t` field, a word wide, which this binding reads as a number. */
 export function size(ptr: bigint, at = 0): number {
-  return Number(u64(ptr, at));
+  return WORD === 8 ? Number(u64(ptr, at)) : u32(ptr, at);
+}
+/** A pointer at `at` in a byte view, a word wide. */
+export function wordIn(view: DataView, at: number): bigint {
+  return WORD === 8 ? view.getBigUint64(at, true) : BigInt(view.getUint32(at, true));
+}
+/** A pointer at `at` in a buffer a call wrote, a word wide. */
+export function wordOf(buf: Buffer, at = 0): bigint {
+  return WORD === 8 ? buf.readBigUInt64LE(at) : BigInt(buf.readUInt32LE(at));
 }
 export function setU8(ptr: bigint, at: number, value: number): void {
   view(ptr + BigInt(at), 1).setUint8(0, value);
@@ -88,7 +102,13 @@ export function setI64(ptr: bigint, at: number, value: bigint): void {
   view(ptr + BigInt(at), 8).setBigInt64(0, value, true);
 }
 export function setPtr(ptr: bigint, at: number, value: bigint | null): void {
-  setU64(ptr, at, value ?? 0n);
+  if (WORD === 8) setU64(ptr, at, value ?? 0n);
+  else setU32(ptr, at, Number(value ?? 0n));
+}
+/** Writes a `size_t` field, a word wide. */
+export function setSize(ptr: bigint, at: number, value: number): void {
+  if (WORD === 8) setU64(ptr, at, BigInt(value));
+  else setU32(ptr, at, value);
 }
 
 /** `len` bytes at `ptr`, copied out. */

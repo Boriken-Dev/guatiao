@@ -64,6 +64,8 @@ export interface CLibraries {
   shelfB: string;
   /** `test/fixtures/foreign_thread.c`, which calls a slot from a thread of its own. */
   foreignThread: string;
+  /** `layout.c`: the header's structs as this platform's C compiler lays them out. */
+  layout: string;
 }
 
 /** Every C library the suite calls, or `null` without a C compiler. */
@@ -90,5 +92,6 @@ export function buildCLibraries(): CLibraries | null {
       path.join(root, 'foreign'),
       'foreign_thread',
     ),
+    layout: buildC(cc, path.join(C_CONSUMER, 'layout.c'), path.join(root, 'layout'), 'c_layout'),
   };
 }

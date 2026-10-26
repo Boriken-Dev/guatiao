@@ -523,6 +523,7 @@ class Scalar extends ShapeImpl {
   override readonly answers = true;
   readonly #kind: 'bool' | 'int' | 'float';
   readonly #wide: boolean;
+  readonly #bits: number;
   readonly #lo: bigint;
   readonly #hi: bigint;
   readonly #width: Width;
@@ -533,11 +534,13 @@ class Scalar extends ShapeImpl {
     kind: 'bool' | 'int' | 'float',
     bits = 0,
     signed = false,
+    wide = bits === 64,
   ) {
     super();
     this.cArg = cType;
     this.#kind = kind;
-    this.#wide = bits === 64;
+    this.#bits = bits;
+    this.#wide = wide;
     this.#lo = signed ? -(1n << BigInt(bits - 1)) : 0n;
     this.#hi = signed ? (1n << BigInt(bits - 1)) - 1n : (1n << BigInt(bits)) - 1n;
     this.#width = widthOf(cType);
@@ -573,7 +576,7 @@ class Scalar extends ShapeImpl {
     // koffi hands a 64-bit integer back as a number or a bigint, and an
     // unsigned one past 2^63 as negative: bring it to the declared width.
     const big = BigInt(value as number | bigint);
-    return this.#lo < 0n ? BigInt.asIntN(64, big) : BigInt.asUintN(64, big);
+    return this.#lo < 0n ? BigInt.asIntN(this.#bits, big) : BigInt.asUintN(this.#bits, big);
   }
 
   override pass(value: unknown): unknown {
@@ -610,11 +613,15 @@ function widthOf(cType: string): Width {
       return { size: 4, read: (v) => v.getInt32(0, true), write: (v, x) => v.setInt32(0, x as number, true) };
     case 'uint32_t':
       return { size: 4, read: (v) => v.getUint32(0, true), write: (v, x) => v.setUint32(0, x as number, true) };
-    case 'int64_t':
     case 'intptr_t':
+      if (WORD === 4) return { size: 4, read: (v) => v.getInt32(0, true), write: (v, x) => v.setInt32(0, Number(x), true) };
       return { size: 8, read: (v) => v.getBigInt64(0, true), write: (v, x) => v.setBigInt64(0, big(x), true) };
-    case 'uint64_t':
+    case 'int64_t':
+      return { size: 8, read: (v) => v.getBigInt64(0, true), write: (v, x) => v.setBigInt64(0, big(x), true) };
     case 'size_t':
+      if (WORD === 4) return { size: 4, read: (v) => v.getUint32(0, true), write: (v, x) => v.setUint32(0, Number(x), true) };
+      return { size: 8, read: (v) => v.getBigUint64(0, true), write: (v, x) => v.setBigUint64(0, big(x), true) };
+    case 'uint64_t':
       return { size: 8, read: (v) => v.getBigUint64(0, true), write: (v, x) => v.setBigUint64(0, big(x), true) };
     case 'float':
       return { size: 4, read: (v) => v.getFloat32(0, true), write: (v, x) => v.setFloat32(0, x as number, true) };
@@ -1007,7 +1014,7 @@ function readRaw(at: bigint): RawObject {
 
 function writeRaw(at: bigint, raw: RawObject): void {
   n.setPtr(at, OBJECT.table, raw.table);
-  n.setU64(at, OBJECT.size, BigInt(raw.size));
+  n.setSize(at, OBJECT.size, raw.size);
   n.setPtr(at, OBJECT.ctx, raw.ctx);
 }
 
@@ -1038,8 +1045,18 @@ export const t = {
   u16: new Scalar('u16', 'uint16_t', 'int', 16) as unknown as Shape<number, number, number, number>,
   u32: new Scalar('u32', 'uint32_t', 'int', 32) as unknown as Shape<number, number, number, number>,
   u64: new Scalar('u64', 'uint64_t', 'int', 64) as unknown as Shape<number | bigint, bigint, bigint, number | bigint>,
-  usize: new Scalar('usize', 'size_t', 'int', 64) as unknown as Shape<number | bigint, bigint, bigint, number | bigint>,
-  isize: new Scalar('isize', 'intptr_t', 'int', 64, true) as unknown as Shape<number | bigint, bigint, bigint, number | bigint>,
+  usize: new Scalar('usize', 'size_t', 'int', WORD * 8, false, true) as unknown as Shape<
+    number | bigint,
+    bigint,
+    bigint,
+    number | bigint
+  >,
+  isize: new Scalar('isize', 'intptr_t', 'int', WORD * 8, true, true) as unknown as Shape<
+    number | bigint,
+    bigint,
+    bigint,
+    number | bigint
+  >,
   f32: new Scalar('f32', 'float', 'float') as unknown as Shape<number, number, number, number>,
   f64: new Scalar('f64', 'double', 'float') as unknown as Shape<number, number, number, number>,
   /** `guatiao_str`: borrowed text. */
