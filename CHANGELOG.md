@@ -1097,6 +1097,18 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a peer that takes nothing in holds up no call
+  past its timeout.** A write blocked on a full ring or socket held the
+  link's writer, so every other call waited behind it, and a call that
+  timed out could not send its CANCEL. Now a call waits for the writer at
+  most until its deadline (answering `GONE` unsent), a frame nobody waits
+  on (CANCEL, RELEASE, a refusal) is queued for the thread holding the
+  writer, and a write the peer takes nothing of for the link's timeout
+  ends the link: shared memory and RDMA bound their wait for room, TCP
+  and Unix sockets set the socket's send timeout. New:
+  `FrameWrite::set_timeout` (ignored by a transport that cannot bound a
+  write: a named pipe, a child's stdio, memory) and
+  `StreamWriter::bounded_by`.
 - **Go: a tree a kind call borrows or lends stays alive until the call
   ends.** Glue that did not use its argument again let the collector
   free a `Value` while the slot was reading or changing it; the call now
