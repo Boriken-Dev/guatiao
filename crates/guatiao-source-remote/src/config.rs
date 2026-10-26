@@ -16,6 +16,7 @@
 //! | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 //! | `identity_file` | TLS: the identity file instead (made when absent) |
 //! | `pins` | TLS: the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
+//! | `roots` | TLS: also trust a server whose certificate an authority issued for the host dialled: `"platform"` (the operating system's, feature `platform-roots`) or a CA bundle's path (PEM) |
 //! | `policy` | TLS: the TLS policy, a map in coqui-peer-tls's text form (default strict) |
 //! | `timeout_ms` | how long a call waits; `0` waits as long as the link lives |
 //! | `max_frame`, `max_calls` | the link's bounds |
@@ -32,7 +33,7 @@
 //! ```
 //!
 //! It may also name `timeout_ms`, `max_frame`, `max_calls`,
-//! `rdma_device`, and for TLS `pins`, `policy`,
+//! `rdma_device`, and for TLS `pins`, `roots`, `policy`,
 //! `identity_file` and `state_dir` (paths relative to it), and nothing
 //! else: never `key` or `token` (a secret in a search path), never `child`
 //! (a manifest names a peer that listens).
@@ -218,9 +219,33 @@ pub fn policy_of(value: &guatiao::Value) -> Result<crate::transport::tls::Policy
     guatiao_serde::adapt::from_value(value).map_err(|e| refused(format!("not a TLS policy: {e}")))
 }
 
+/// The authorities `roots` names: `platform`, or a CA bundle's path.
+#[cfg(feature = "tls")]
+pub fn roots_of(text: &str) -> Result<crate::transport::tls::Roots, ProviderError> {
+    use crate::transport::tls::Roots;
+    if text == "platform" {
+        #[cfg(feature = "platform-roots")]
+        return Ok(Roots::platform());
+        #[cfg(not(feature = "platform-roots"))]
+        return Err(ProviderError::new(
+            Status::GUATIAO_ERR_UNSUPPORTED,
+            "`roots = \"platform\"` is not in this build (guatiao-source-remote's `platform-roots` feature): name a CA bundle file instead",
+        ));
+    }
+    let bundle =
+        std::fs::read_to_string(text).map_err(|e| refused(format!("`roots` {text}: {e}")))?;
+    if !bundle.contains("-----BEGIN CERTIFICATE-----") {
+        return Err(refused(format!(
+            "`roots` {text} holds no certificate: name a PEM bundle of the authorities' certificates, or `platform`"
+        )));
+    }
+    Ok(Roots::bundle_pem(bundle))
+}
+
 /// What a client's TLS runs as, from a configuration's `state_dir` or
-/// `identity_file`, `pins` and `policy`, at `security`: mutual TLS names
-/// this side's identity, server TLS needs none (and presents none).
+/// `identity_file`, `pins`, `roots` and `policy`, at `security`: mutual
+/// TLS names this side's identity, server TLS needs none (and presents
+/// none).
 #[cfg(feature = "tls")]
 pub fn tls_config_of(
     map: &Map,
@@ -266,6 +291,9 @@ pub fn tls_config_of(
             })
             .collect::<Result<Vec<_>, _>>()?;
         config = config.pins(pins);
+    }
+    if let Some(roots) = text(map, "roots")? {
+        config = config.roots(roots_of(roots)?);
     }
     if let Some(policy) = map.get("policy") {
         config = config.policy(policy_of(policy)?);
@@ -450,6 +478,7 @@ const PEER_KEYS: &[&str] = &[
     "max_calls",
     "rdma_device",
     "pins",
+    "roots",
     "policy",
     "identity_file",
     "state_dir",
@@ -490,13 +519,20 @@ fn peer_file(defaults: &Map, manifest: &Map, path: &Path, key: &str) -> Option<P
     }
 }
 
-/// What changes when a secret file a peer uses does (the key file, the
-/// identity file or the one in its state directory): each one's path and a
-/// hash of its bytes, so a replaced key or identity is a new peer.
+/// What changes when a file a peer's trust rests on does (the key file,
+/// the identity file or the one in its state directory, the CA bundle):
+/// each one's path and a hash of its bytes, so a replaced key, identity or
+/// bundle is a new peer.
 pub(crate) fn key_stamp(defaults: &Map, manifest: &Map, path: &Path) -> String {
     let mut files = Vec::new();
     files.extend(peer_file(defaults, manifest, path, "key_file"));
     files.extend(peer_file(defaults, manifest, path, "identity_file"));
+    let roots = [manifest, defaults]
+        .into_iter()
+        .find_map(|map| text(map, "roots").ok().flatten());
+    if roots != Some("platform") {
+        files.extend(peer_file(defaults, manifest, path, "roots"));
+    }
     #[cfg(feature = "tls")]
     files.extend(
         peer_file(defaults, manifest, path, "state_dir")
@@ -573,6 +609,12 @@ pub(crate) fn peer_of(
         if let Some(file) = manifest_path(manifest, path, key)? {
             merged.set(key, file.display().to_string().as_str());
         }
+    }
+    // A CA bundle is a path beside the manifest; `platform` is no file.
+    if text(manifest, "roots")?.is_some_and(|roots| roots != "platform")
+        && let Some(file) = manifest_path(manifest, path, "roots")?
+    {
+        merged.set("roots", file.display().to_string().as_str());
     }
     // The manifest's own secret replaces the source's in any form.
     let named = |key: &str| manifest.contains_key(key);

@@ -379,13 +379,16 @@ impl WsConnect {
         }
     }
 
-    /// Over TLS as `config` says (a `wss://` URL): mutual TLS, the server
-    /// known by its pins or the trust store, this side presenting its
-    /// identity. The TLS offers HTTP's application protocol, as a browser
-    /// does, and requires none.
+    /// Over TLS as `config` says (a `wss://` URL): mutual or server TLS,
+    /// the server known by its pins, the trust store or the roots (for the
+    /// URL's host). The TLS offers HTTP's application protocol, as a
+    /// browser does, and requires none.
     #[cfg(feature = "tls")]
     pub fn tls(mut self, config: &TlsConfig) -> io::Result<WsConnect> {
         self.tls = Some(TlsConnect::for_websocket(config)?);
+        if config.by_roots() {
+            super::tls::server_name(super::tls::host_of(&self.address()?), true)?;
+        }
         Ok(self)
     }
 
@@ -472,7 +475,11 @@ impl Connect for WsConnect {
                     io::Error::other("the socket is shared before its TLS handshake")
                 })?;
                 over(Raw::Tls(Arc::new(
-                    tls.clone().timeout(self.timeout).duplex(stream, addr)?,
+                    tls.clone().timeout(self.timeout).duplex(
+                        stream,
+                        addr,
+                        super::tls::host_of(&address),
+                    )?,
                 )))
             }
             (_, raw) => over(raw),

@@ -53,9 +53,9 @@ use super::quic::{
 };
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
-use super::tls::refused;
 use super::tls::{
-    TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, untrusted_by_server, words,
+    TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, host_of, server_name,
+    untrusted_by_server, untrusted_server, words,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
 
@@ -668,9 +668,11 @@ impl WtConnect {
     /// configuration as [`QuicConnect`](super::quic::QuicConnect)), within
     /// [`CONNECT_TIMEOUT`].
     pub fn new(url: &str, config: &TlsConfig) -> io::Result<WtConnect> {
-        authority(url)?;
+        // The URL's host is the name the server's certificate is checked
+        // for under roots: wtransport dials by it.
+        server_name(host_of(authority(url)?), config.by_roots())?;
         let verifier = config
-            .trust()?
+            .server_trust()?
             .server_cert_verifier_with(config.tls_policy())
             .map_err(|e| invalid(words(&e)))?;
         let watched = Arc::new(Watched {
@@ -710,13 +712,7 @@ impl WtConnect {
     fn refusal(&self, e: ConnectingError) -> io::Error {
         let addr = authority(&self.url).unwrap_or(&self.url);
         if let Some(r) = *lock(&self.watched.refusal) {
-            return io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "the server at {addr} is not one this client trusts: {}",
-                    refused(r, "it")
-                ),
-            );
+            return untrusted_server(r, addr, host_of(addr));
         }
         match e {
             ConnectingError::ConnectionError(ConnectionError::TimedOut) => io::Error::new(
@@ -868,7 +864,7 @@ impl WtListen {
         let verifier: Option<Arc<dyn ClientCertVerifier>> = if config.is_mutual() {
             Some(
                 config
-                    .trust()?
+                    .client_trust()?
                     .client_cert_verifier_with(config.tls_policy())
                     .map_err(|e| invalid(words(&e)))?,
             )

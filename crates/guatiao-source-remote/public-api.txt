@@ -40,6 +40,7 @@ pub fn guatiao_source_remote::config::acl_of(&guatiao::value::value::Value) -> c
 pub fn guatiao_source_remote::config::client_of(&guatiao::value::types::map::Map) -> core::result::Result<(alloc::boxed::Box<dyn guatiao_source_remote::transport::Connect>, guatiao_source_remote::link::LinkOptions), guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::options_of(&guatiao::value::types::map::Map, guatiao_source_remote::protocol::Trust) -> core::result::Result<guatiao_source_remote::link::LinkOptions, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::policy_of(&guatiao::value::value::Value) -> core::result::Result<coqui_peer_tls::policy::Policy, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::config::roots_of(&str) -> core::result::Result<coqui_peer_tls::roots::Roots, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::security_of(&str) -> core::result::Result<guatiao_source_remote::config::Security, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::tls_config_of(&guatiao::value::types::map::Map, guatiao_source_remote::config::Security) -> core::result::Result<guatiao_source_remote::transport::tls::TlsConfig, guatiao::library::kind::ProviderError>
 pub mod guatiao_source_remote::link
@@ -563,6 +564,7 @@ pub mod guatiao_source_remote::transport::tls
 pub use guatiao_source_remote::transport::tls::Identity
 pub use guatiao_source_remote::transport::tls::PeerId
 pub use guatiao_source_remote::transport::tls::Policy
+pub use guatiao_source_remote::transport::tls::Roots
 pub use guatiao_source_remote::transport::tls::TrustStore
 pub use guatiao_source_remote::transport::tls::WaitingEntry
 pub use guatiao_source_remote::transport::tls::Weakening
@@ -575,6 +577,7 @@ pub fn guatiao_source_remote::transport::tls::TlsConfig::new(coqui_peer_tls::ide
 pub fn guatiao_source_remote::transport::tls::TlsConfig::open(&std::path::Path) -> core::io::error::Result<guatiao_source_remote::transport::tls::TlsConfig>
 pub fn guatiao_source_remote::transport::tls::TlsConfig::pins(self, impl core::iter::traits::collect::IntoIterator<Item = coqui_peer::id::PeerId>) -> guatiao_source_remote::transport::tls::TlsConfig
 pub fn guatiao_source_remote::transport::tls::TlsConfig::policy(self, coqui_peer_tls::policy::Policy) -> guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::roots(self, coqui_peer_tls::roots::Roots) -> guatiao_source_remote::transport::tls::TlsConfig
 pub fn guatiao_source_remote::transport::tls::TlsConfig::server_tls(self) -> guatiao_source_remote::transport::tls::TlsConfig
 pub fn guatiao_source_remote::transport::tls::TlsConfig::store(self, coqui_peer::store::TrustStore) -> guatiao_source_remote::transport::tls::TlsConfig
 pub fn guatiao_source_remote::transport::tls::TlsConfig::trust_store(&self) -> core::option::Option<&coqui_peer::store::TrustStore>

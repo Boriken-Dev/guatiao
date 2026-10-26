@@ -58,8 +58,8 @@ use tokio::runtime::{Handle, Runtime};
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
 use super::tls::{
-    ALPN, TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, untrusted_by_server,
-    untrusted_client, untrusted_server,
+    ALPN, TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, host_of, server_name,
+    untrusted_by_server, untrusted_client, untrusted_server,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
 
@@ -935,6 +935,8 @@ struct Dial {
     /// kept is that connection's.
     resuming: Option<Resuming>,
     me: String,
+    /// The name the server is dialled by: its certificate's, under roots.
+    name: String,
     /// Whether the server's certificate is checked: false at no security.
     proves: bool,
     rt: Arc<Rt>,
@@ -975,8 +977,11 @@ impl QuicConnect {
     /// [`TlsConnect`](super::tls::TlsConnect)), within [`CONNECT_TIMEOUT`]
     /// for each address tried.
     pub fn new(address: &str, config: &TlsConfig) -> io::Result<QuicConnect> {
+        let name = server_name(host_of(address), config.by_roots())?
+            .to_str()
+            .into_owned();
         let verifier: Arc<dyn ServerCertVerifier> = config
-            .trust()?
+            .server_trust()?
             .server_cert_verifier_with(config.tls_policy())
             .map_err(|e| invalid(super::tls::words(&e)))?;
         let client = config.client()?;
@@ -1009,6 +1014,7 @@ impl QuicConnect {
                 verifier,
                 resuming,
                 me: config.me(),
+                name,
                 proves: config.proves_peers(),
                 rt: Rt::new()?,
             }),
@@ -1146,7 +1152,7 @@ impl Dial {
             let _inside = handle.enter();
             let endpoint = quinn::Endpoint::client(bind)?;
             let connecting = endpoint
-                .connect_with(config, addr, coqui_peer_tls::SERVER_NAME)
+                .connect_with(config, addr, &self.name)
                 .map_err(invalid)?;
             (endpoint, connecting)
         };
@@ -1165,7 +1171,7 @@ impl Dial {
             })?
             .map_err(|e| {
             if let Some(r) = *lock(&watched.refusal) {
-                return untrusted_server(r, addr);
+                return untrusted_server(r, addr, &self.name);
             }
             if certificate_refused(&e) {
                 return untrusted_client(&self.me);
@@ -1323,7 +1329,7 @@ impl QuicListen {
         let verifier: Option<Arc<dyn ClientCertVerifier>> = if config.is_mutual() {
             Some(
                 config
-                    .trust()?
+                    .client_trust()?
                     .client_cert_verifier_with(config.tls_policy())
                     .map_err(|e| invalid(super::tls::words(&e)))?,
             )

@@ -16,6 +16,7 @@ until they are published there.
 | --- | --- |
 | `tcp` | TCP with no TLS: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`), admission by access control list (`coqui-net-acl`, re-exported as `acl`) |
 | `tls` | `tcp` and `transport::tls`: TLS 1.3 over TCP, mutual TLS (`coqui-peer`, `coqui-peer-tls`, `rustls` with ring); with `ws`, `wss://` |
+| `platform-roots` | `tls` and coqui-peer-tls's `platform-roots` (rustls-platform-verifier): `Roots::platform()`, `roots = "platform"`, a server verified by the operating system's authorities and verifier |
 | `quic` | `tls` and `transport::quic`: QUIC, at mutual TLS or no security, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
@@ -183,12 +184,13 @@ acl::{Acl { rules, default }, Rule::new(Action::Permit, "10.0.0.0/8".parse()?), 
 tcp::{TcpConnect::new("host:port").timeout(d), TcpListen::bind(addr, Acl)?, listen.acl()}   // tcp
 tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr)}>
 tcp::{TcpListen::from_listener(TcpListener, Acl), from_stream(TcpStream)?}   // sockets the caller set up
-tls::TlsConfig::{new(Identity), open(dir)?}.pins(ids).store(TrustStore).policy(Policy)   // tls
+tls::TlsConfig::{new(Identity), open(dir)?}.pins(ids).store(TrustStore).roots(Roots).policy(Policy)   // tls
 tls::{TlsConfig::fingerprint(), weakened(), identity(), trust_store()}
 tls::TlsConfig::{server_tls(self), is_mutual(), without_identity()?}   // server TLS: the client presents no certificate
 tls::{TlsConnect::new("host:port", &TlsConfig)?.timeout(d), TlsListen::bind(addr, &TlsConfig)?, TlsListen::from_listener(TcpListener, &TlsConfig)?}
 tls::TlsListen::accept() -> io::Result<tcp::Accepted>      // the handshake runs on the first read
-tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening, IDENTITY_FILE}   // coqui-peer-tls's
+tls::{Identity, PeerId, Policy, Roots, TrustStore, WaitingEntry, Weakening, IDENTITY_FILE}   // coqui-peer-tls's
+tls::Roots::{bundle_file(path), bundle_pem(text), platform()}   // platform() with `platform-roots`
 quic::{QuicConnect::new("host:port", &TlsConfig)?.timeout(d), QuicListen::bind(addr, &TlsConfig)?, QuicListen::from_socket(UdpSocket, &TlsConfig)?}   // quic
 quic::{QuicConnect::trusted("host:port")?, QuicListen::bind_trusted(addr, Acl)?, QuicListen::from_socket_trusted(UdpSocket, Acl)?}   // quic, no security
 quic::QuicListen::accept() -> io::Result<tcp::Accepted>    // the handshake runs on the first read
@@ -217,7 +219,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 - **Server TLS** (`TlsConfig::server_tls`): a server presents its
   certificate and asks for none (coqui-peer-tls's configuration without
   client authentication, listed by `weakened()` as `client_auth`); a
-  client presents none and verifies the server by its pins or store; on
+  client presents none and verifies the server by its pins, store or roots; on
   `tls://`, `quic://` and `wss://`. A server's link then has no
   `peer_id()`, and its access control list decides by address alone. A
   mutual-TLS server refuses a client with no certificate.
@@ -230,6 +232,18 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   removed from the store is refused at its next link. A refusal names its
   reason (not pinned, not accepted, a chain where a pinned peer presents
   one certificate), and a refused link is `BAD_VALUE`, never `GONE`.
+  A client may also trust a server by the web PKI (`roots(Roots)`,
+  coqui-peer-tls's `Trust::Roots`, or `PinnedOrRoots` beside pins or a
+  store): the chain to one of the roots, the dates and the name dialled
+  are checked, a pinned certificate is taken under any name (served
+  alone, or with its chain under `allow_chain_when_pinned`). Every
+  client dials by the host it was given (`tls://`, `wss://` and
+  `quic://` too, not coqui-peer-tls's placeholder name); under roots a
+  host no certificate can name is refused when the connect is built.
+  The roots' refusals name what to change: the name dialled
+  (`NameMismatch`), an authority the roots do not hold (`NotTrusted`).
+  A mutual-TLS listener given roots and no pins or store is refused:
+  roots verify only a server this side dials.
   Strict policy by default (TLS 1.3); this build has no TLS 1.2, so
   `compatible` and `legacy` policies are refused when the configuration
   is built; a client's policy may hold no `acl`. ALPN `guatiao-remote` is required at both
@@ -364,6 +378,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 | `token` | a client's token, for a server that requires one |
 | `state_dir`, `identity_file` | TLS: this side's identity (and trust store), made when absent; one of them |
 | `pins` | TLS: list of the server fingerprints trusted |
+| `roots` | TLS: also trust a server an authority issued a certificate for the host dialled: `"platform"` (feature `platform-roots`, else `UNSUPPORTED`) or a PEM CA bundle's path, read when the source is built (`config::roots_of`) |
 | `policy` | TLS: map, coqui-peer-tls's `Policy` text form v1 (`config::policy_of`) |
 | `timeout_ms` | per call; `0` none |
 | `max_frame`, `max_calls` | the link's bounds |
@@ -371,16 +386,17 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 
 A scheme this build lacks is `GUATIAO_ERR_UNSUPPORTED`, naming it, as is
 a TLS security in a build without `tls`. At server TLS a client names
-`pins` (or a store) and needs no identity.
+`pins`, a store or `roots`, and needs no identity.
 `ws://`, `rdma://`, `local://`, `shm://` and a child run `none` alone,
 `wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix,
 as is the former `trust` key. `tcp://`, `quic://` and `https://` run any.
 `config::{security_of, Security::default_for, Security::trust, acl_of,
-policy_of, tls_config_of}` read those values.
+policy_of, roots_of, tls_config_of}` read those values.
 
 A peer manifest (`docs/encodings.md`, "A peer"): `type = "remote"`,
 `name` (no `/`), `connect`, `security`, `key_file` (beside the manifest),
-`timeout_ms`, `max_frame`, `max_calls`, `rdma_device`, `pins`, `policy`,
+`timeout_ms`, `max_frame`, `max_calls`, `rdma_device`, `pins`, `roots`
+(a bundle beside the manifest, or `platform`), `policy`,
 `identity_file` and `state_dir` (beside the manifest); any other key is
 refused, `key` and `token` (secrets) and `child` with words of their own.
 
