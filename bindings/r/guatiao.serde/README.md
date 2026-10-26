@@ -57,6 +57,7 @@ value_data(doc)                                   # list(name = "ana", n = 1.1)
 serde_emit(doc, format = "yaml")
 serde_emit(list(port = 5900L), pretty = TRUE)
 close(doc)
+serde_data('{"name": "ana", "n": 1.10}')          # the same data, no value built
 
 e <- tryCatch(serde_parse("{"), guatiao_parse_error = function(e) e)
 c(e$format, e$line, e$column)
@@ -72,6 +73,7 @@ c(e$format, e$line, e$column)
 | Name | Purpose |
 | --- | --- |
 | `serde_parse(text, format, read_data_uris, alloc)` | a document as a value |
+| `serde_data(text, format, read_data_uris, numbers)` | a document as R data, no value built |
 | `serde_emit(x, format, pretty, bytes)` | a value, view or R data as text |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao.serde/inst/AGENTS.md)

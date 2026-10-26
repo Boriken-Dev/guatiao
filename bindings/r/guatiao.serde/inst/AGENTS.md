@@ -44,3 +44,13 @@ the document). TOML writes only a map, and no null. TOML and YAML need a
 `guatiao_serde` built with them (`guatiao_missing_symbol` naming the
 feature otherwise). A number keeps its exact text, except that an
 exponent is read back with its sign.
+
+`serde_data(text, format = "json", read_data_uris = FALSE, numbers =
+c("auto", "text", "double", "integer64"))` answers the R data
+`guatiao::value_data(serde_parse(text), numbers = numbers)` answers, with
+no value built: the document crosses once, as wire bytes read in C, and
+the same `guatiao_parse_error` is signalled. `"integer64"` needs the
+`bit64` package. R data given to `serde_emit` is written the same way,
+as wire bytes in C with no value built, and refused as `guatiao::value`
+refuses it. Either is faster than the value for a document of many small
+items; a single string of megabytes is faster through the value.

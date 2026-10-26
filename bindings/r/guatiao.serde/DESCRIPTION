@@ -13,5 +13,6 @@ URL: https://github.com/Boriken-Dev/guatiao, https://boriken-dev.github.io/guati
 BugReports: https://github.com/Boriken-Dev/guatiao/issues
 Depends: R (>= 4.2), guatiao (>= 0.0.0.1)
 LinkingTo: guatiao
+Suggests: bit64
 Encoding: UTF-8
 NeedsCompilation: yes
