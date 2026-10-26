@@ -249,7 +249,7 @@ type Time struct {
 
 func (t Time) fields() (native.Time, error) {
 	if t.Hour < 0 || t.Hour > 255 || t.Minute < 0 || t.Minute > 255 || t.Second < 0 || t.Second > 255 ||
-		t.Nanosecond < 0 || t.Nanosecond > math.MaxUint32 {
+		t.Nanosecond < 0 || uint64(t.Nanosecond) > math.MaxUint32 {
 		return native.Time{}, &guatiao.Error{Status: guatiao.BadValue, Message: "the fields are not a time"}
 	}
 	return native.Time{Hour: uint8(t.Hour), Minute: uint8(t.Minute), Second: uint8(t.Second), Nanosecond: uint32(t.Nanosecond)}, nil

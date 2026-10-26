@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	gogreeter "github.com/Boriken-Dev/guatiao/examples/go_provider/go_greeter"
@@ -237,7 +238,7 @@ func TestTheKindDescribedInGoIsTheHeaders(t *testing.T) {
 	if !bytes.Contains(header, []byte(fmt.Sprintf("#define greeter_vtable_FLOOR_HASH %d", greeterkind.GreeterKind.FloorHash()))) {
 		t.Fatal("the floor hash is not the header's")
 	}
-	if got := greeterkind.GreeterKind.TableSize(); got != 8+6*8 {
+	if got := greeterkind.GreeterKind.TableSize(); got != 8+6*unsafe.Sizeof(uintptr(0)) {
 		t.Fatalf("the greeter table is %d bytes", got)
 	}
 }

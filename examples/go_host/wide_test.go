@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	greeterkind "github.com/Boriken-Dev/guatiao/examples/greeter_kind/go"
@@ -85,7 +86,7 @@ func wideEach(t *testing.T, body func(t *testing.T, which string, w *greeterkind
 }
 
 func TestTheWideKindDescribedInGoIsTheHeaders(t *testing.T) {
-	if got := greeterkind.WideKind.TableSize(); got != 8+2*8 {
+	if got := greeterkind.WideKind.TableSize(); got != 8+2*unsafe.Sizeof(uintptr(0)) {
 		t.Fatalf("the wide table is %d bytes", got)
 	}
 	if got := greeterkind.WideKind.FloorHash(); got != 3673689684 {

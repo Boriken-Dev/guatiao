@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 )
@@ -197,7 +198,7 @@ func TestServingAnObjectNeedsItsRequiredSlots(t *testing.T) {
 		Name: "go-probe-object", FloorHash: 1, Object: true,
 		Slots: []guatiao.SlotSpec{{Name: "ping", Required: true, Iface: reflect.TypeFor[pinger]()}},
 	}, func(r guatiao.Remote) guatiao.Remote { return r })
-	if objectKind.TableSize() != 8+8+8 {
+	if word := unsafe.Sizeof(uintptr(0)); objectKind.TableSize() != 8+2*word {
 		t.Fatalf("an object kind's table: the header, destroy, ping: %d", objectKind.TableSize())
 	}
 	if _, err := guatiao.NewLibrary("go_probe", "1.0.0", guatiao.Single("p", &listened{}, objectKind)); err == nil {
