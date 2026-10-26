@@ -87,6 +87,14 @@ typedef struct guatiao_r_api {
    * `tmp`), a copy of `found`, and `tmp` freed. R_NilValue when `found`
    * is NULL. */
   SEXP (*view_at)(SEXP arg, const guatiao_value *root, const guatiao_value *found, guatiao_value *tmp);
+
+  /* A document with no tree in between: R data as wire bytes, what
+   * tree_arg would build, written with no tree, in memory R keeps until
+   * the .Call returns (a status, and why in `msg`); and the wire bytes of a
+   * BYTES value read as R data, as read_and_free reads the tree they hold,
+   * the value freed either way. */
+  guatiao_status (*wire_of)(SEXP x, guatiao_bytes *out, char *msg, size_t msglen);
+  SEXP (*read_wire_and_free)(guatiao_value *bytes, int numbers);
 } guatiao_r_api;
 
 #endif

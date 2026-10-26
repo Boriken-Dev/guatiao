@@ -120,6 +120,19 @@ SEXP gt_read(const guatiao_value *v, int numbers);
 /* gt_read, freeing `v` whether reading finishes or signals. */
 SEXP gt_read_and_free(guatiao_value *v, int numbers);
 
+/* R data as wire bytes: what gt_build would build, written with no tree,
+ * in memory R_alloc keeps until the .Call returns. A status and `msg` as
+ * gt_build's. */
+guatiao_status gt_wire_of(SEXP x, guatiao_bytes *out, char *msg, size_t msglen);
+
+/* Wire bytes as R data, as gt_read reads the tree they hold; an R error for
+ * bytes that are not one value. */
+SEXP gt_read_wire(guatiao_bytes data, int numbers);
+
+/* gt_read_wire of a BYTES value's bytes, freeing it whether reading
+ * finishes or signals. */
+SEXP gt_read_wire_and_free(guatiao_value *bytes, int numbers);
+
 /* gt_node_ptr without raising: 0 found, 1 closed, 2 no longer there. */
 int gt_node_try(SEXP node, gt_owner **owner_out, guatiao_value **out);
 
