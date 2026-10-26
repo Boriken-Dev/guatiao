@@ -511,6 +511,50 @@ pub(crate) fn equal(first: Pair<'_>) -> bool {
     true
 }
 
+/// Feeds `value`, and everything under it, to `state` so that two values
+/// [`equal`] calls the same feed it the same input: kinds, lengths, keys
+/// in order, the bytes of a text, number or buffer. A hash of the result
+/// finds equal values without comparing every pair.
+pub(crate) fn hash<H: core::hash::Hasher>(value: &Value, state: &mut H) {
+    let mut stack = Vec::new();
+    let mut next = Some(value);
+    while let Some(node) = next.take().or_else(|| stack.pop()) {
+        state.write_u32(node.tag);
+        match node.tag() {
+            Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) | Err(_) => {}
+            Ok(Tag::GUATIAO_BOOL) => {
+                state.write_u8(TryAsRef::<bool>::try_as_ref(node).map_or(2, |b| u8::from(*b)));
+            }
+            Ok(tag @ (Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER)) => {
+                bytes(node.text_bytes(tag).unwrap_or(&[]), state);
+            }
+            Ok(Tag::GUATIAO_BYTES) => {
+                bytes(TryAsRef::<[u8]>::try_as_ref(node).unwrap_or(&[]), state);
+            }
+            Ok(Tag::GUATIAO_LIST) => {
+                let items = arm::<List>(node).map_or(&[][..], |list| &list[..]);
+                state.write_usize(items.len());
+                stack.extend(items.iter().rev());
+            }
+            Ok(Tag::GUATIAO_MAP) => {
+                let entries = node.map_arm().map_or(&[][..], Map::entries);
+                state.write_usize(entries.len());
+                for entry in entries {
+                    bytes(entry.key_bytes(), state);
+                }
+                stack.extend(entries.iter().rev().map(Entry::value));
+            }
+        }
+    }
+
+    /// Bytes with their length first, so where one run ends is part of
+    /// the input.
+    fn bytes<H: core::hash::Hasher>(bytes: &[u8], state: &mut H) {
+        state.write_usize(bytes.len());
+        state.write(bytes);
+    }
+}
+
 /// Compares two nodes, leaving any children on `stack` to compare next.
 fn values<'a>(a: &'a Value, b: &'a Value, stack: &mut Vec<Pair<'a>>) -> bool {
     /// Both as `T`, by `T`'s own equality.
