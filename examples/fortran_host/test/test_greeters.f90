@@ -473,9 +473,11 @@ contains
     if (.not. c_associated(lib)) return
     call c_f_procpointer(gt_dl_sym(lib, 'threads_call_on_threads'), on_threads)
     call host%provider_table('fortran_greeter_hello', 'greeter', table, size)
-    call c_f_pointer(table, slots, [size / 8])
+    ! The first slot follows the 8-byte header: one pointer in, or two on 32-bit.
+    call c_f_pointer(table, slots, [size / c_sizeof(c_null_funptr)])
     tids = 0
-    st = on_threads(slots(2), guatiao_value_free_ptr(), host%provider_ctx('fortran_greeter_hello'), 8, 500, &
+    st = on_threads(slots(8 / c_sizeof(c_null_funptr) + 1), guatiao_value_free_ptr(), &
+                    host%provider_ctx('fortran_greeter_hello'), 8, 500, &
                     c_loc(tids))
     call check(st == GUATIAO_OK, '8 native threads x 500 greetings, all answered')
     call check(all(tids /= 0), 'each thread ran')

@@ -209,14 +209,16 @@ contains
     integer, intent(in) :: i
     type(c_funptr) :: f
     type(c_funptr), pointer :: slots(:)
-    integer(c_size_t) :: n
+    integer(c_size_t) :: n, header
     f = c_null_funptr
     if (self%hold%is_closed() .and. associated(self%hold%box)) return
     if (.not. c_associated(self%table)) return
+    ! The 8-byte header is one pointer on a 64-bit platform, two on a 32-bit one.
+    header = 8 / c_sizeof(c_null_funptr)
     n = self%size / c_sizeof(c_null_funptr)
-    if (int(i, c_size_t) + 1 > n) return
+    if (int(i, c_size_t) + header > n) return
     call c_f_pointer(self%table, slots, [n])
-    f = slots(i + 1)
+    f = slots(header + i)
   end function
 
   recursive logical function remote_has(self, i)
