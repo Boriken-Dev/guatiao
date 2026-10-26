@@ -11,8 +11,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { BadValue, Busy, NotFound, Registry, Tag, WrongKind } from '../src/index.js';
+import { type Remote, kindsOf } from '../src/kinds.js';
 import * as n from '../src/native.js';
-import { Counter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
+import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
 import { libraryName } from './helpers.js';
 import { cLibraries, scratch, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
@@ -77,6 +78,21 @@ describe('Registry', () => {
     expect(data.sections.map((s) => s.id)).toEqual(['words', 'volume']);
     expect(reg.providerMeta('derived_greeter_hello')).toBe(undefined);
     expect(() => reg.providerMeta('nobody')).toThrow(NotFound);
+  });
+
+  it('binds a kind from the descriptions a library carries, with no file for it', () => {
+    using reg = scanned();
+    const document = reg.kindDescriptions('derived_greeter_hello')!;
+    expect(document.kinds.map((k) => k.name)).toEqual(['greeter', 'listener', 'conversation', 'counter', 'wide']);
+    const { greeter, counter } = kindsOf(document);
+    // A kind loaded at run time has no static type; the generated module's says the same.
+    const remote = reg.bind('derived_greeter_hello', greeter!) as unknown as Remote<typeof Greeter>;
+    using answer = remote.greet('ana');
+    expect(answer.toJS()).toEqual({ greeting: 'hello, ana' });
+    expect(counter!.floorHash).toBe(Counter.floorHash);
+    // The library whose envelope is written by hand carries none.
+    expect(reg.kindDescriptions('hello_library_greeter')).toBe(undefined);
+    expect(() => reg.kindDescriptions('nobody')).toThrow(NotFound);
   });
 
   it('keys, ranks and re-keys', () => {

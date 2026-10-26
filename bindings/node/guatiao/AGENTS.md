@@ -131,7 +131,11 @@ ctx }`, `table` `0n` for none), `providerConfig(key)` (a borrowed,
 read-only `Ref` onto the schema, never closed), `providerMeta(key)` (a
 copy of the provider's `meta` as a `Value` you close, `undefined` when it
 declares none, `NotFound` for an unknown key; its form is under `'form'`,
-`providerFormKey` of `guatiao-intake`), `host()` (the
+`providerFormKey` of `guatiao-intake`), `kindDescriptions(key)` (the
+document of the kinds the provider serves and the object kinds they
+reach, what `kindsOf` binds, so no `.kinds.json` is needed; `undefined`
+when it carries none, `NotFound` for an unknown key, `BadValue` for one
+that is not a description), `host()` (the
 `guatiao_host_info *`), `close()` / `using`. Every answer that is data is
 a plain object or array, already freed.
 

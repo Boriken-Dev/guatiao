@@ -467,6 +467,47 @@ class Registry implements Finalizable {
     return Ref.borrowed(root);
   }
 
+  /// The descriptions of the kinds the provider filed under `key` serves,
+  /// and of every object kind their slots take or answer, as the document
+  /// a kind crate commits beside its header (`{"format": 1, "kinds":
+  /// [...]}`, plain data): what `dart run guatiao:kind` writes Dart from,
+  /// for a kind this side has no `.kinds.json` for. `null` when the
+  /// provider carries none (one written by hand, or a library built
+  /// before descriptors carried them).
+  ///
+  /// Throws `NotFound` when nothing answers to `key`, `BadValue` when what
+  /// it carries is not a description.
+  Map<String, Object?>? kindDescriptions(String key) {
+    _checkOpen();
+    final out = calloc<guatiao_value>();
+    var adopted = false;
+    try {
+      using((arena) {
+        checkStatus(
+          native.core().bindings.guatiao_registry_kind_descriptions(
+            _handle,
+            strOf(arena, key).ref,
+            _allocator,
+            out,
+          ),
+        );
+      });
+      if (out.ref.tag == Tag.absent.code) return null;
+      final document = Value.adopt(out, alloc: _allocator);
+      adopted = true;
+      try {
+        return (document.toDart()! as Map).cast<String, Object?>();
+      } finally {
+        document.close();
+      }
+    } finally {
+      if (!adopted) {
+        native.core().bindings.guatiao_value_free(out);
+        calloc.free(out);
+      }
+    }
+  }
+
   /// What the provider filed under `key` declared beyond its schema -- its
   /// legal notices, or its form under `'form'` (`providerFormKey` of
   /// package:guatiao_intake) -- as a

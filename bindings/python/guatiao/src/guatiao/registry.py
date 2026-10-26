@@ -330,6 +330,32 @@ class Registry:
             return None
         return value
 
+    def kind_descriptions(self, key: str) -> "dict[str, Any] | None":
+        """The descriptions of the kinds the provider filed under `key`
+        serves, and of every object kind their slots take or answer, as the
+        document a kind crate commits beside its header (`{"format": 1,
+        "kinds": [...]}`, plain data): how a host learns a kind it has no
+        `.kinds.json` for. `None` when the provider carries none (one written
+        by hand, or a library built before descriptors carried them). Raises
+        `NotFound` when nothing answers to `key`, `BadValue` when what it
+        carries is not a description."""
+        self._check_open()
+        view, _buf = _make_str(key.encode("utf-8"))
+        raw = _abi.Value()
+        check(
+            _lib.core().guatiao_registry_kind_descriptions(
+                self._handle, view, ctypes.byref(self._alloc), ctypes.byref(raw)
+            )
+        )
+        value = Value(_raw=raw, alloc=self._alloc)
+        try:
+            if value.is_absent():
+                return None
+            document: "dict[str, Any]" = value.to_python()
+            return document
+        finally:
+            value.close()
+
     def create(self, key: str, config: Any) -> Instance:
         """Builds an instance of the provider filed under `key` from
         `config` (a `Value`, or anything `Value.from_python` accepts)."""

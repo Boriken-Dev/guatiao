@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 
 import pytest
@@ -111,6 +112,27 @@ def test_a_providers_meta_is_a_copy_carrying_its_form():
         assert reg.provider_meta("derived_greeter_hello") is None
         with pytest.raises(errors.NotFound):
             reg.provider_meta("nobody")
+
+
+def test_a_provider_carries_its_kinds_descriptions():
+    committed = json.loads(
+        (native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.kinds.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    with _scanned() as reg:
+        document = reg.kind_descriptions("derived_greeter_hello")
+        assert document is not None
+        assert document["format"] == 1
+        names = [k["name"] for k in document["kinds"]]
+        assert names == ["greeter", "listener", "conversation", "counter", "wide"]
+        by_name = {k["name"]: k for k in committed["kinds"]}
+        for kind in document["kinds"]:
+            assert kind == by_name[kind["name"]]
+
+        assert reg.kind_descriptions("hello_library_greeter") is None
+        with pytest.raises(errors.NotFound):
+            reg.kind_descriptions("nobody")
 
 
 def test_retire_takes_a_librarys_providers_and_frees_its_key():

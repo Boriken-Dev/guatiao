@@ -313,6 +313,11 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         "load",
     ),
+    "guatiao_registry_kind_descriptions": (
+        [c_void_p, Str, _P(Alloc), _P(Value)],
+        c_uint32,
+        "load",
+    ),
     "guatiao_merge": (
         [
             c_uint32,

@@ -341,6 +341,7 @@ const CORE: readonly Declared[] = [
   ['void *guatiao_registry_provider_ctx(void *reg, guatiao_str key)', 'load'],
   ['void *guatiao_registry_provider_config(void *reg, guatiao_str key)', 'load'],
   ['uint32_t guatiao_registry_provider_meta(void *reg, guatiao_str key, void *alloc, void *out)', 'load'],
+  ['uint32_t guatiao_registry_kind_descriptions(void *reg, guatiao_str key, void *alloc, void *out)', 'load'],
   ['uint32_t guatiao_registry_provider_create(void *reg, guatiao_str key, void *config, void *out, void *err)', 'load'],
   ['void guatiao_registry_provider_destroy(void *reg, guatiao_str key, void *instance)', 'load'],
   ['uint32_t guatiao_registry_retire(void *reg, guatiao_str key)', 'load'],
