@@ -4,7 +4,8 @@
 
 """A Python host adding guatiao-source-remote as a source: a server in a child
 process serving a greeter written in Rust and one written in C, called as
-any provider is.
+any provider is; and two identical devices, each described by a manifest,
+served under their names.
 
 guatiao-source-remote is a workspace member: its library and its server are
 looked for beside the other libraries (`GUATIAO_LIBRARY`), and these skip,
@@ -13,6 +14,8 @@ saying so, when the workspace was not built."""
 from __future__ import annotations
 
 import platform
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -71,3 +74,54 @@ def test_a_remote_rust_and_a_remote_c_greeter_are_called(reg, tmp_path):
     assert c.greet("bo").to_python() == {"greeting": "hello from C, bo"}
     with pytest.raises(BadValue, match="nobody to greet, says C"):
         c.greet("")
+
+
+@pytest.fixture()
+def devices(tmp_path):
+    """Two identical devices on loopback, each a server of the Rust
+    greeter, and the key both hold; answers their ports."""
+    (tmp_path / "link.key").write_text("a key both devices hold")
+    servers = []
+    ports = []
+    for _ in range(2):
+        server = subprocess.Popen(
+            [str(_SERVER), "--listen", "tcp://127.0.0.1:0", "--trust", "trusted", "--range", "127.0.0.1",
+             "--key-file", str(tmp_path / "link.key"), "--kinds", str(_KINDS), "--load", str(_DERIVED)],
+            stderr=subprocess.PIPE, text=True,
+        )
+        servers.append(server)
+        assert server.stderr is not None
+        serving = server.stderr.readline()
+        found = re.search(r"serving tcp://127\.0\.0\.1:(\d+)", serving)
+        assert found, serving
+        ports.append(int(found.group(1)))
+    yield ports
+    for server in servers:
+        server.kill()
+        server.wait()
+
+
+def test_peers_described_by_manifests_are_served_under_their_names(reg, tmp_path, devices):
+    peers = tmp_path / "peers"
+    peers.mkdir()
+    for name, port in zip(("dev-a", "dev-b"), devices):
+        (peers / f"{name}.guatiao.toml").write_text(
+            f'type = "remote"\nname = "{name}"\nconnect = "tcp://127.0.0.1:{port}"\n'
+            f'trust = "trusted"\nkey_file = "../link.key"\n'
+        )
+    (peers / "inline.guatiao.toml").write_text(
+        'type = "remote"\nname = "inline"\nconnect = "tcp://127.0.0.1:1"\ntrust = "trusted"\nkey = "here"\n'
+    )
+    reg.add_source_file(_REMOTE, {"dirs": [str(peers)]})
+    changed = reg.refresh()
+    assert sorted(s["key"] for s in changed["loaded"]) == ["dev-a/derived_greeter", "dev-b/derived_greeter"], changed
+    [refused] = changed["refused"]
+    assert refused["id"].endswith("inline.guatiao.toml") and "`key` is a secret" in refused["why"], refused
+
+    for name in ("dev-a", "dev-b"):
+        greeter = reg.bind(f"{name}/derived_greeter_hello", Greeter)
+        assert greeter.greet(name).to_python() == {"greeting": f"hello, {name}"}
+    assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
+
+    (peers / "dev-b.guatiao.toml").unlink()
+    assert [s["key"] for s in reg.refresh()["retired"]] == ["dev-b/derived_greeter"]

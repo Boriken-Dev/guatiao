@@ -11,8 +11,7 @@ use guatiao::library::{Host, ProviderError};
 use crate::client::RemoteSource;
 
 fn start(_host: Host, config: &Map) -> Result<RemoteSource, ProviderError> {
-    let (connect, options) = crate::config::client_of(config)?;
-    Ok(RemoteSource::new(connect, options))
+    RemoteSource::from_config(config)
 }
 
 guatiao::source!(serves = "remote", make = start);

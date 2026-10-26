@@ -15,14 +15,31 @@
 //! | `token` | what a secure client presents |
 //! | `timeout_ms` | how long a call waits; `0` waits as long as the link lives |
 //! | `max_frame`, `max_calls` | the link's bounds |
+//! | `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above are then every peer's unless its manifest names them |
+//!
+//! A peer manifest is a `<name>.guatiao.toml` of `type = "remote"`:
+//!
+//! ```toml
+//! type = "remote"
+//! name = "lab-printer"             # its libraries and providers are `lab-printer/<id>`
+//! connect = "tcp://192.0.2.5:7000"
+//! trust = "trusted"
+//! key_file = "lab-printer.key"     # relative to this file
+//! ```
+//!
+//! It may also name `timeout_ms`, `max_frame`, `max_calls` and
+//! `rdma_device`, and nothing else: never `key` or `token` (a secret in a
+//! search path), never `child` (a manifest names a peer that listens).
 
 #![forbid(unsafe_code)]
 
 use core::time::Duration;
+use std::path::{Path, PathBuf};
 
 use guatiao::library::ProviderError;
 use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::{List, Map, Status};
+use guatiao_bridge::manifest::ManifestFormat;
 
 use crate::link::LinkOptions;
 use crate::protocol::Trust;
@@ -90,6 +107,14 @@ pub fn options_of(map: &Map, trust: Trust) -> Result<LinkOptions, ProviderError>
     Ok(options)
 }
 
+/// The secure level's refusal: its transports live outside this build.
+fn no_secure_level() -> ProviderError {
+    ProviderError::new(
+        Status::GUATIAO_ERR_UNSUPPORTED,
+        "the secure level is not in this build: reach a peer across an open network only through a link secured outside it",
+    )
+}
+
 /// Where a configuration says to connect, and how.
 pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderError> {
     if let Some(child) = map.get("child") {
@@ -118,14 +143,15 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
     let trust =
         text(map, "trust")?.ok_or_else(|| refused("a network link names its `trust` level"))?;
     let trust = trust_of(trust)?;
+    if trust == Trust::Secure {
+        return Err(no_secure_level());
+    }
     let _ = (rest, trust);
     match scheme {
         #[cfg(feature = "tcp")]
         "tcp" => {
             if trust != Trust::Trusted {
-                return Err(refused(
-                    "`tcp://` runs the trusted level; the secure level is `tls://` or `quic://`",
-                ));
+                return Err(refused("`tcp://` runs the trusted level"));
             }
             Ok((
                 Box::new(crate::transport::tcp::TcpConnect::new(rest)),
@@ -169,4 +195,133 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
             &format!("`{other}://` is not a transport this build of guatiao-source-remote has"),
         )),
     }
+}
+
+/// Peer manifests: `type = "remote"`, the peer's `name` their id, their
+/// stamp their content alone.
+pub(crate) const PEER_MANIFESTS: ManifestFormat = ManifestFormat {
+    serves: "remote",
+    id_key: "name",
+    code_extensions: &[],
+    skip_dirs: &[],
+};
+
+/// What a peer manifest may name besides its `type` and `name`.
+const PEER_KEYS: &[&str] = &[
+    "connect",
+    "trust",
+    "key_file",
+    "timeout_ms",
+    "max_frame",
+    "max_calls",
+    "rdma_device",
+];
+
+/// The paths a configuration lists under `key`, or none.
+pub(crate) fn paths(map: &Map, key: &str) -> Result<Vec<PathBuf>, ProviderError> {
+    let Some(value) = map.get(key) else {
+        return Ok(Vec::new());
+    };
+    let list = TryAsRef::<List>::try_as_ref(value)
+        .ok_or_else(|| refused(format!("`{key}` is not a list of paths")))?;
+    list.iter()
+        .map(|v| {
+            TryAsRef::<str>::try_as_ref(v)
+                .map(PathBuf::from)
+                .ok_or_else(|| refused(format!("`{key}` is not a list of paths")))
+        })
+        .collect()
+}
+
+/// The key file a peer manifest names, resolved against its directory.
+fn key_file_of(manifest: &Map, path: &Path) -> Result<Option<PathBuf>, ProviderError> {
+    let base = path.parent().unwrap_or(Path::new("."));
+    Ok(text(manifest, "key_file")?.map(|file| base.join(file)))
+}
+
+/// What changes when the key file a peer uses does (its manifest's, else
+/// the source's): its path and a hash of its bytes, so a replaced key is
+/// a new peer.
+pub(crate) fn key_stamp(defaults: &Map, manifest: &Map, path: &Path) -> String {
+    let file = match key_file_of(manifest, path) {
+        Ok(Some(file)) => file,
+        Ok(None) => match text(defaults, "key_file") {
+            Ok(Some(file)) => PathBuf::from(file),
+            _ => return String::new(),
+        },
+        Err(_) => return String::new(),
+    };
+    let hash = std::fs::read(&file).map_or_else(
+        |_| "absent".to_string(),
+        |bytes| {
+            let h = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+                (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+            format!("{h:016x}")
+        },
+    );
+    format!("{}={hash}", file.display())
+}
+
+/// Checks what a source of described peers gives every peer, once, so a
+/// mistake there is the configuration's refusal rather than every
+/// manifest's.
+pub(crate) fn check_defaults(defaults: &Map) -> Result<(), ProviderError> {
+    let trust = match text(defaults, "trust")? {
+        Some(name) => trust_of(name)?,
+        None => Trust::Trusted,
+    };
+    options_of(defaults, trust).map(|_| ())
+}
+
+/// The peer a manifest at `path` describes: its keys over the source's
+/// `defaults`, its `key_file` read from beside it.
+pub(crate) fn peer_of(
+    defaults: &Map,
+    manifest: &Map,
+    path: &Path,
+) -> Result<(Box<dyn Connect>, LinkOptions), ProviderError> {
+    for entry in manifest.iter() {
+        match entry.key() {
+            "type" | "name" => {}
+            key if PEER_KEYS.contains(&key) => {}
+            secret @ ("key" | "token") => {
+                return Err(refused(format!(
+                    "`{secret}` is a secret, and a manifest in a search path holds none: name the file holding the key with `key_file`"
+                )));
+            }
+            "child" => {
+                return Err(refused(
+                    "a peer manifest names a peer that listens, by `connect`; a child the host starts is the source's own configuration",
+                ));
+            }
+            other => {
+                return Err(refused(format!(
+                    "`{other}` is not a key of a peer manifest: type, name, {}",
+                    PEER_KEYS.join(", ")
+                )));
+            }
+        }
+    }
+    let mut merged = Map::new();
+    for entry in defaults.iter() {
+        if !matches!(entry.key(), "dirs" | "manifests" | "connect" | "child") {
+            merged.set(entry.key(), entry.value().clone());
+        }
+    }
+    for entry in manifest.iter() {
+        if PEER_KEYS.contains(&entry.key()) {
+            merged.set(entry.key(), entry.value().clone());
+        }
+    }
+    if let Some(file) = key_file_of(manifest, path)? {
+        merged.remove("key");
+        merged.set("key_file", file.display().to_string().as_str());
+    }
+    if !merged.contains_key("connect") {
+        return Err(refused(
+            "a peer manifest names where the peer is, `connect`",
+        ));
+    }
+    client_of(&merged)
 }

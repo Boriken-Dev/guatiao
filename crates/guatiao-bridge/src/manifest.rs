@@ -33,8 +33,9 @@ use guatiao::{Alloc, List, Map};
 pub const SUFFIX: &str = ".guatiao.toml";
 
 /// The `type`s guatiao's own sources serve: each the name its
-/// `guatiao::source!` declares.
-pub const TYPES: &[&str] = &["python", "js", "lua", "wasm", "rhai"];
+/// `guatiao::source!` declares. A `remote` manifest describes a peer, not
+/// a library.
+pub const TYPES: &[&str] = &["python", "js", "lua", "wasm", "rhai", "remote"];
 
 /// The most code files a stamp looks at under one library's paths, and
 /// how deep it walks: a library is a package, not a disk.
@@ -50,6 +51,8 @@ pub struct ManifestFormat {
     /// The key holding the library's id (`module`).
     pub id_key: &'static str,
     /// Extensions of the code files a stamp follows, without the dot.
+    /// None: the stamp is the manifest's content alone, and no directory
+    /// is walked.
     pub code_extensions: &'static [&'static str],
     /// Directory names a stamp's walk skips (`__pycache__`).
     pub skip_dirs: &'static [&'static str],
@@ -359,8 +362,10 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
             .collect();
         let mut budget = MOST_FILES;
         let mut newest = 0u128;
-        for p in &paths {
-            newest_code(format, Path::new(p), 0, &mut budget, &mut newest);
+        if !format.code_extensions.is_empty() {
+            for p in &paths {
+                newest_code(format, Path::new(p), 0, &mut budget, &mut newest);
+            }
         }
         Ok(Manifest {
             path: path.to_path_buf(),
@@ -529,7 +534,10 @@ mod tests {
                 .any(|f| matches!(f, Found::Library(m) if m.id() == "t"))
         );
         let why = broken_why(&found, "u.guatiao.toml");
-        assert!(why.contains("python, js, lua, wasm, rhai, toy"), "{why}");
+        assert!(
+            why.contains("python, js, lua, wasm, rhai, remote, toy"),
+            "{why}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
