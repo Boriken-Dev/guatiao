@@ -34,7 +34,9 @@ library it loaded itself, in any language.
   the client by the key or a token inside TLS: what a browser page can
   do) or `mutual-tls` (each side known by its certificate's fingerprint,
   unknown clients waiting until an operator accepts them): none on the
-  same machine and mutual TLS across a network unless named.
+  same machine and mutual TLS across a network unless named. A client
+  pins its server, or trusts it by the web PKI (`roots`: a CA bundle or
+  the operating system's authorities), or both.
 - **Transports** — a server in a child process (isolation); the same
   machine through a Unix socket or a named pipe, or through shared memory
   (a few microseconds a call); TCP, QUIC (with datagrams beside the
@@ -54,6 +56,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | --- | --- | --- |
 | `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP with no TLS |
 | `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3: server TLS and mutual TLS (over TCP, and `wss://` with `ws`) |
+| `platform-roots` | `tls`, `rustls-platform-verifier` | a server verified by the operating system's certificate authorities (`roots = "platform"`) |
 | `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |

@@ -37,9 +37,10 @@ use std::time::Instant;
 use coqui_net_acl::{Acl, Outcome};
 use coqui_peer::DriveError;
 use coqui_peer_tls::{Digest, PeerError, Pins, Refusal, TlsHandshake, Trust};
+use rustls::pki_types::ServerName;
 use rustls::{AlertDescription, ClientConfig, ServerConfig};
 
-pub use coqui_peer_tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening};
+pub use coqui_peer_tls::{Identity, PeerId, Policy, Roots, TrustStore, WaitingEntry, Weakening};
 
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
@@ -105,9 +106,36 @@ pub(crate) fn refused(refusal: Refusal, whose: &str) -> String {
             "{whose} presented a certificate chain: the policy holds a pinned peer to one certificate (`allow_chain_when_pinned`)"
         ),
         Refusal::NotTrusted => format!(
-            "{whose} is not trusted: its certificate matches no pin and the CA policy does not trust it"
+            "{whose} is not trusted: its certificate matches no pin, and no authority the roots (`roots`) hold issued it for a server"
         ),
         other => format!("{whose} is refused: {other}"),
+    }
+}
+
+/// The host of `host:port` or `host` (an IPv6 address in brackets).
+pub(crate) fn host_of(address: &str) -> &str {
+    if let Some(rest) = address.strip_prefix('[') {
+        return rest.split(']').next().unwrap_or(rest);
+    }
+    match address.rsplit_once(':') {
+        Some((host, _)) if !host.contains(':') => host,
+        _ => address,
+    }
+}
+
+/// The name a client dials `host` by, which a certificate the roots trust
+/// must hold: a DNS name or an address. A pinned certificate is taken
+/// whatever it names, so without roots a host no certificate could name
+/// is dialled as coqui-peer-tls's placeholder name instead.
+pub(crate) fn server_name(host: &str, by_roots: bool) -> io::Result<ServerName<'static>> {
+    match ServerName::try_from(host.to_string()) {
+        Ok(name) => Ok(name),
+        Err(_) if !by_roots => Ok(ServerName::try_from(coqui_peer_tls::SERVER_NAME)
+            .map_err(invalid)?
+            .to_owned()),
+        Err(_) => Err(invalid(format!(
+            "`{host}` is not a name a certificate can hold, and the server is verified by the roots (`roots`): dial it by its DNS name or address"
+        ))),
     }
 }
 
@@ -157,15 +185,22 @@ pub(crate) fn ended_before_answering(e: &io::Error, me: &str) -> io::Error {
     )
 }
 
-/// The client's refusal of the server at `addr`, in words naming what to
-/// change.
-pub(crate) fn untrusted_server(refusal: Refusal, addr: SocketAddr) -> io::Error {
+/// The client's refusal of the server at `addr`, dialled as `name`, in
+/// words naming what to change.
+pub(crate) fn untrusted_server(
+    refusal: Refusal,
+    addr: impl core::fmt::Display,
+    name: &str,
+) -> io::Error {
+    let why = match refusal {
+        Refusal::NameMismatch => format!(
+            "its certificate was issued by an authority the roots (`roots`) hold, but not for `{name}`, the name dialled: connect by a name the certificate holds"
+        ),
+        other => refused(other, "it"),
+    };
     io::Error::new(
         io::ErrorKind::PermissionDenied,
-        format!(
-            "the server at {addr} is not one this client trusts: {}",
-            refused(refusal, "it")
-        ),
+        format!("the server at {addr} is not one this client trusts: {why}"),
     )
 }
 
@@ -272,14 +307,17 @@ pub fn identity_at(path: &Path) -> Result<Identity, PeerError> {
 ///
 /// Trust is the fixed pins when any are given, else the peers the trust
 /// store has accepted; a server with a store records a client it does not
-/// know as waiting there. TLS session resumption is off at both ends unless
-/// the policy's `allow_resumption` keeps it, so a peer removed from the
-/// store is refused at its next link.
+/// know as waiting there. A client may also trust a server by the web PKI
+/// ([`roots`](TlsConfig::roots)). TLS session resumption is off at both
+/// ends unless the policy's `allow_resumption` keeps it, so a peer removed
+/// from the store is refused at its next link.
 #[derive(Clone)]
 pub struct TlsConfig {
     identity: Identity,
     pins: Vec<PeerId>,
     store: Option<TrustStore>,
+    /// The authorities a client verifies a server by, beside any pins.
+    roots: Option<Roots>,
     policy: Policy,
     /// Takes any certificate whose key the peer proves: QUIC at no
     /// security, where TLS encrypts and the link's key proof decides.
@@ -294,6 +332,7 @@ impl core::fmt::Debug for TlsConfig {
             .field("fingerprint", &self.identity.fingerprint().canonical())
             .field("pins", &self.pins.len())
             .field("store", &self.store.is_some())
+            .field("roots", &self.roots)
             .field("policy", &self.policy.name)
             .field("mutual", &self.mutual)
             .finish()
@@ -307,6 +346,7 @@ impl TlsConfig {
             identity,
             pins: Vec::new(),
             store: None,
+            roots: None,
             policy: Policy::strict(),
             checks_nobody: false,
             mutual: true,
@@ -382,6 +422,24 @@ impl TlsConfig {
         self
     }
 
+    /// As a client, also trusting a server whose certificate one of
+    /// `roots`' authorities issued for the name dialled, within its dates:
+    /// the web PKI, as a browser trusts a site. A certificate the pins or
+    /// the store name is still taken whatever it names. A CA bundle is
+    /// [`Roots::bundle_file`] or [`Roots::bundle_pem`]; the operating
+    /// system's authorities and verifier are `Roots::platform()` (feature
+    /// `platform-roots`). A listener trusts clients by pins or a store
+    /// alone.
+    pub fn roots(mut self, roots: Roots) -> TlsConfig {
+        self.roots = Some(roots);
+        self
+    }
+
+    /// Whether a server is checked against roots: its name then matters.
+    pub(crate) fn by_roots(&self) -> bool {
+        self.roots.is_some() && !self.checks_nobody
+    }
+
     /// Held to `policy` rather than the strict one.
     pub fn policy(mut self, policy: Policy) -> TlsConfig {
         self.policy = policy;
@@ -443,19 +501,51 @@ impl TlsConfig {
         }
     }
 
-    pub(crate) fn trust(&self) -> io::Result<Trust> {
+    /// The pins, else the store's accepted peers, if either is given.
+    fn pinned(&self) -> Option<Pins> {
+        if !self.pins.is_empty() {
+            return Some(Pins::fixed(self.pins.iter().copied()));
+        }
+        self.store.clone().map(Pins::store)
+    }
+
+    /// Whom a client trusts as its server: the pins or the store, the
+    /// roots, or either.
+    pub(crate) fn server_trust(&self) -> io::Result<Trust> {
         if self.checks_nobody {
             return Ok(Trust::AnyWithKeyProof);
         }
-        if !self.pins.is_empty() {
-            return Ok(Trust::Pinned(Pins::fixed(self.pins.iter().copied())));
+        // Built here once on their own, so a bundle that cannot be read or
+        // holds no usable certificate is named as the roots' failure.
+        if let Some(roots) = &self.roots {
+            Trust::Roots(roots.clone())
+                .server_cert_verifier_with(&self.policy)
+                .map_err(|e| {
+                    invalid(format!("the roots (`roots`) cannot be used: {}", words(&e)))
+                })?;
         }
-        match &self.store {
-            Some(store) => Ok(Trust::Pinned(Pins::store(store.clone()))),
-            None => Err(invalid(
-                "the secure level names whom it trusts: fingerprints to pin, or a trust store",
+        match (self.pinned(), self.roots.clone()) {
+            (Some(pins), Some(roots)) => Ok(Trust::PinnedOrRoots { pins, roots }),
+            (Some(pins), None) => Ok(Trust::Pinned(pins)),
+            (None, Some(roots)) => Ok(Trust::Roots(roots)),
+            (None, None) => Err(invalid(
+                "the secure level names whom it trusts: fingerprints to pin, a trust store, or the roots (`roots`) a server's certificate is issued by",
             )),
         }
+    }
+
+    /// Whom a listener trusts as its clients: the pins or the store.
+    pub(crate) fn client_trust(&self) -> io::Result<Trust> {
+        if self.checks_nobody {
+            return Ok(Trust::AnyWithKeyProof);
+        }
+        self.pinned().map(Trust::Pinned).ok_or_else(|| {
+            invalid(if self.roots.is_some() {
+                "a listener names the clients it trusts: fingerprints to pin, or a trust store (`roots` verify a server this side dials)"
+            } else {
+                "the secure level names whom it trusts: fingerprints to pin, or a trust store"
+            })
+        })
     }
 
     pub(crate) fn client(&self) -> io::Result<Arc<ClientConfig>> {
@@ -472,13 +562,13 @@ impl TlsConfig {
         let built = if self.mutual {
             coqui_peer_tls::client_config_with(
                 &self.identity,
-                &self.trust()?,
+                &self.server_trust()?,
                 &[alpn],
                 &self.policy,
             )
         } else {
             coqui_peer_tls::client_config_without_identity_with(
-                &self.trust()?,
+                &self.server_trust()?,
                 &[alpn],
                 &self.policy,
             )
@@ -496,7 +586,7 @@ impl TlsConfig {
         let built = if self.mutual {
             coqui_peer_tls::server_config_with(
                 &self.identity,
-                &self.trust()?,
+                &self.client_trust()?,
                 &[alpn],
                 &self.policy,
             )
@@ -955,6 +1045,8 @@ pub struct TlsConnect {
     timeout: Duration,
     /// Whether the server must agree on [`ALPN`].
     alpn: bool,
+    /// Whether roots verify the server, so the name dialled matters.
+    by_roots: bool,
 }
 
 impl core::fmt::Debug for TlsConnect {
@@ -967,15 +1059,19 @@ impl core::fmt::Debug for TlsConnect {
 }
 
 impl TlsConnect {
-    /// To `address`, as `config` says, within [`CONNECT_TIMEOUT`] for the
-    /// connect and the handshake each.
+    /// To `address` (`host:port`), as `config` says, within
+    /// [`CONNECT_TIMEOUT`] for the connect and the handshake each. The
+    /// host is the name the server's certificate is checked for under
+    /// [`roots`](TlsConfig::roots).
     pub fn new(address: &str, config: &TlsConfig) -> io::Result<TlsConnect> {
+        server_name(host_of(address), config.by_roots())?;
         Ok(TlsConnect {
             address: address.to_string(),
             config: config.client()?,
             me: config.me(),
             timeout: CONNECT_TIMEOUT,
             alpn: true,
+            by_roots: config.by_roots(),
         })
     }
 
@@ -989,6 +1085,7 @@ impl TlsConnect {
             me: config.me(),
             timeout: CONNECT_TIMEOUT,
             alpn: false,
+            by_roots: config.by_roots(),
         })
     }
 
@@ -998,10 +1095,11 @@ impl TlsConnect {
         self
     }
 
-    /// A client handshake's failure in words a person can act on.
-    fn refusal(&self, e: &PeerError, addr: SocketAddr) -> io::Error {
+    /// A client handshake's failure, dialled as `name`, in words a person
+    /// can act on.
+    fn refusal(&self, e: &PeerError, addr: SocketAddr, name: &ServerName<'_>) -> io::Error {
         if let Some(refusal) = e.refusal() {
-            return untrusted_server(refusal, addr);
+            return untrusted_server(refusal, addr, &name.to_str());
         }
         let (kind, why) = match tls_error(e) {
             // Its dates, its encoding or its signature.
@@ -1027,29 +1125,37 @@ impl TlsConnect {
     }
 
     fn handshake(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Connection> {
-        let core = self.established(socket, addr)?;
+        let core = self.established(socket, addr, host_of(&self.address))?;
         connection(core, None, format!("tls {addr}"))
     }
 
-    /// The TLS over `socket`, connected to `addr`, under a WebSocket.
+    /// The TLS over `socket`, connected to `addr` dialled as `host`, under
+    /// a WebSocket.
     #[cfg(feature = "ws")]
-    pub(crate) fn duplex(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<TlsDuplex> {
-        let core = self.established(socket, addr)?;
+    pub(crate) fn duplex(
+        &self,
+        socket: TcpStream,
+        addr: SocketAddr,
+        host: &str,
+    ) -> io::Result<TlsDuplex> {
+        let core = self.established(socket, addr, host)?;
         Ok(TlsDuplex::new(core, None))
     }
 
-    /// Runs the client's handshake over `socket` within the timeout.
-    fn established(&self, socket: TcpStream, addr: SocketAddr) -> io::Result<Core> {
+    /// Runs the client's handshake over `socket`, dialled as `host`, within
+    /// the timeout.
+    fn established(&self, socket: TcpStream, addr: SocketAddr, host: &str) -> io::Result<Core> {
         socket.set_nodelay(true)?;
-        let handshake =
-            TlsHandshake::client(Arc::clone(&self.config)).map_err(|e| invalid(words(&e)))?;
+        let name = server_name(host, self.by_roots)?;
+        let handshake = TlsHandshake::client_named(Arc::clone(&self.config), name.clone())
+            .map_err(|e| invalid(words(&e)))?;
         let mut io = Bounded {
             socket: &socket,
             until: Some(Instant::now() + self.timeout),
         };
         let established = coqui_peer::drive_stream(handshake, &mut io).map_err(|e| match e {
             DriveError::Io(e) => e,
-            DriveError::Handshake(e) => self.refusal(&e, addr),
+            DriveError::Handshake(e) => self.refusal(&e, addr, &name),
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
         socket.set_read_timeout(None)?;
