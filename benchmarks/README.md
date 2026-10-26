@@ -344,6 +344,43 @@ is why a list of floats gains least. Reading floats from JSON gains most:
 the format hands over an `f64` that the walk keeps, where the tree turns
 it into text and back.
 
+## Wire bytes walked against a tree (`wire-walk*.json`)
+
+What a document costs written from wire bytes (`guatiao_json_from_wire`,
+which every binding's tape path ends in) against written from a tree
+(`guatiao_json_emit`), in Rust alone: the tree built once and walked,
+against its wire bytes walked (`Encoded`). "Before" is the commit before
+a reader of wire bytes hashed each key of a wide map once, with seeds
+drawn for the read, into a set sized from the map's count; it hashed
+each with SipHash into a set grown four times on the way, hashing every
+key again each time. Local and provisional: the Windows ARM64 machine
+and its Linux (aarch64) environment, the two runners alternated five
+times, three rounds each, pooled; on Windows the runner started at high
+priority on a machine shared with other builds. Microseconds per call,
+median.
+
+| metric | Windows before | Windows after | Linux before | Linux after |
+| --- | --- | --- | --- | --- |
+| configuration walked, tree | 1.16 | 1.14 | 1.15 | 1.15 |
+| configuration walked, bytes | 3.12 | 3.11 | 2.75 | 2.80 |
+| 200 keys walked, tree | 1.95 | 1.93 | 1.96 | 1.96 |
+| 200 keys walked, bytes | 12.60 | 6.53 | 11.56 | 6.08 |
+| configuration to JSON, tree's serde impl | 2.66 | 2.65 | 2.54 | 2.53 |
+| configuration to JSON, bytes | 4.76 | 4.77 | 4.15 | 4.18 |
+| 200 keys to JSON, tree's serde impl | 4.95 | 4.94 | 4.54 | 4.50 |
+| 200 keys to JSON, bytes | 14.84 | 9.21 | 14.25 | 8.46 |
+| 1 MiB string to JSON, tree's serde impl | 810 | 803 | 304 | 302 |
+| 1 MiB string to JSON, bytes | 534 | 520 | 303 | 302 |
+
+A map of sixteen keys or fewer compares each key with those before it,
+as before; the configuration has no wider map. In a separate session on
+Windows the 200 keys walked from bytes went from 7.37 to 5.75. What
+still separates bytes from a tree, about 12 ns a node on either
+platform and the same on small maps, is reading them: a tag, a LEB128
+length and a bounds check per node, and the map's keys compared (taking
+the check out entirely saved 0.15 us of the configuration's 2.8).
+A large string costs the same either way.
+
 ## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
 
 A document to a binding's plain objects and back, three ways: through a
