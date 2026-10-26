@@ -8,6 +8,7 @@ function cases = t_values()
   cases = {
     'MATLAB data becomes a value and reads back', @round_trip
     'numbers keep their exact text', @numbers
+    'a double is written as its shortest text', @shortest
     'absent and null', @absent_null
     'arrays, cells and structs', @shapes
     'maps whose keys are not field names', @maps
@@ -18,6 +19,27 @@ function cases = t_values()
     'objects are written through their properties or guatiao_value', @objects
     'nesting stops past 128 containers', @depth
   };
+end
+
+function shortest()
+% The fewest significant digits that read back as the double, subnormals
+% among them; each made exactly, since parsers and libm are an ulp apart
+% between platforms.
+  cases = {
+    '0.30000000000000004', 0.1 + 0.2;  '5e-324', 2^-1074;  '1.7976931348623157e+308', realmax;
+    '1.5e-05', 1.5e-5;  '123456.75', 123456.75;  '1.5e-323', 3 * 2^-1074;  '1e-07', 1e-7;
+    '-1.4932217896051502e-300', -2^-996;  '3.141592653589793', pi;  '0.14285714285714285', 1 / 7;
+    '100.5', 100.5;  '1e+22', 1e22;  '8.691694759794e-311', 2^-1030;  '6.099e-320', 12345 * 2^-1074;
+    '-2.225073858507201e-308', -(2^52 - 1) * 2^-1074;  '9.313225746154785e-10', 2^-30;  '0.3', 0.3;
+    '0.9999999999999999', 1 - 2^-53;  '4.35', 4.35;  '1000000000000000.5', 1e15 + 0.5;
+    '1.0000000000000001e+21', 1e21 + 2^17
+  };
+  for i = 1:size(cases, 1)
+    expect_equal(guatiao.serde.emit(cases{i, 2}), cases{i, 1}, cases{i, 1});
+    v = guatiao.Value(cases{i, 2});
+    expect_equal(guatiao.serde.emit(v), cases{i, 1}, [cases{i, 1} ' through a value']);
+    v.close();
+  end
 end
 
 function round_trip()
