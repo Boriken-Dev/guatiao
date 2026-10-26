@@ -263,10 +263,10 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   after an idle period), `certificate_hashes()` names the one presented
   and the next. A server's handshake, HTTP/3 session and stream all run
   on the first read; a client's in `connect`. Chrome 155 refuses a
-  pinned certificate with no X.509v3 extension, which coqui-peer-tls
-  17426be's generated certificates are, so a page reaches a rotating
-  listener only once they carry one; `presenting` a certificate with
-  one works today.
+  pinned certificate with no X.509v3 extension: the ones `rotating`
+  makes carry a subjectAltName, a subject key identifier and
+  basicConstraints, and one given to `presenting` needs at least one
+  extension.
   Datagrams (`FrameRead::datagrams`, `Link::datagrams`) are
   the payload alone, one QUIC DATAGRAM frame each, lost or whole; before
   the server's handshake `send` is `NotConnected` and `max_size` `None`;
