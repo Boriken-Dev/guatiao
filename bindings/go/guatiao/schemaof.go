@@ -11,9 +11,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"unsafe"
-
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
 )
 
 // SchemaOf is the JSON Schema (2020-12) of the values a T encodes to and
@@ -241,19 +238,17 @@ type orderedMap struct {
 	values map[string]any
 }
 
-func (e *encoder) ordered(raw unsafe.Pointer, m orderedMap, at string) error {
-	if err := check(native.ValueMap(e.alloc, raw), ""); err != nil {
+func (e *encoder) ordered(m orderedMap) error {
+	if err := e.out.mapOf(len(m.keys)); err != nil {
 		return err
 	}
-	return withScratch(func(tmp unsafe.Pointer) error {
-		for _, k := range m.keys {
-			key := k.(string)
-			if err := e.set(raw, tmp, key, reflect.ValueOf(m.values[key]), at); err != nil {
-				return err
-			}
+	for _, k := range m.keys {
+		key := k.(string)
+		if err := e.entry(key, func() error { return e.writeAny(m.values[key]) }); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return e.out.end()
 }
 
 var typeOrderedMap = reflect.TypeFor[orderedMap]()

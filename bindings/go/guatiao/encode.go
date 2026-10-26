@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
@@ -58,8 +59,10 @@ type Schemer interface {
 // writeGo writes x into the node at raw, which holds nothing. On any
 // failure raw is freed and left absent, so nobody holds half a tree.
 func writeGo(raw unsafe.Pointer, x any, alloc unsafe.Pointer) error {
-	e := encoder{alloc: alloc, seen: map[uintptr]bool{}}
-	if err := e.write(raw, reflect.ValueOf(x), ""); err != nil {
+	s := &treeSink{alloc: alloc, root: raw}
+	e := encoder{out: s}
+	if err := e.writeAny(x); err != nil {
+		s.abandon()
 		native.ValueFree(raw)
 		native.Zero(raw, native.SizeValue)
 		return err
@@ -67,10 +70,153 @@ func writeGo(raw unsafe.Pointer, x any, alloc unsafe.Pointer) error {
 	return nil
 }
 
-type encoder struct {
+// sink takes one value's events from the encoder, in order: a list's or
+// map's count, then its items (each of a map's after its key), then end.
+// Text and keys arrive as UTF-8 and numbers in the JSON number grammar:
+// the encoder checks both. A number's text may be the encoder's scratch,
+// valid for the call only.
+type sink interface {
+	null() error
+	boolean(b bool) error
+	number(text string) error
+	text(s string) error
+	bytes(b []byte) error
+	// node writes the tree a Ref names, as it is.
+	node(r Ref) error
+	instant(t time.Time) error
+	list(n int) error
+	mapOf(n int) error
+	key(k string) error
+	end() error
+}
+
+// treeSink builds a tree in C memory: each item is built in its
+// container's scratch node, then moved in.
+type treeSink struct {
 	alloc unsafe.Pointer
-	seen  map[uintptr]bool
-	depth int
+	root  unsafe.Pointer
+	open  []treeFrame
+}
+
+type treeFrame struct {
+	node, tmp unsafe.Pointer
+	isMap     bool
+	key       string
+}
+
+// target is the node the next item is written into.
+func (s *treeSink) target() unsafe.Pointer {
+	if len(s.open) == 0 {
+		return s.root
+	}
+	return s.open[len(s.open)-1].tmp
+}
+
+// placed moves what target holds into the innermost open container.
+func (s *treeSink) placed(st uint32) error {
+	if err := check(st, ""); err != nil {
+		return err
+	}
+	if len(s.open) == 0 {
+		return nil
+	}
+	top := &s.open[len(s.open)-1]
+	if top.isMap {
+		st = native.MapSet(s.alloc, top.node, top.key, top.tmp)
+	} else {
+		st = native.ListPush(s.alloc, top.node, top.tmp)
+	}
+	native.ValueFree(top.tmp)
+	return check(st, "")
+}
+
+func (s *treeSink) null() error          { return s.placed(native.ValueNull(s.target())) }
+func (s *treeSink) boolean(b bool) error { return s.placed(native.ValueBool(b, s.target())) }
+func (s *treeSink) number(text string) error {
+	return s.placed(native.ValueNumber(s.alloc, text, s.target()))
+}
+func (s *treeSink) text(t string) error  { return s.placed(native.ValueString(s.alloc, t, s.target())) }
+func (s *treeSink) bytes(b []byte) error { return s.placed(native.ValueBytes(s.alloc, b, s.target())) }
+
+func (s *treeSink) node(r Ref) error {
+	node, err := r.requireNode()
+	if err != nil {
+		return err
+	}
+	return s.placed(native.ValueClone(s.alloc, node, s.target()))
+}
+
+func (s *treeSink) instant(t time.Time) error {
+	ts := native.Timestamp{Seconds: t.Unix(), Nanoseconds: uint32(t.Nanosecond())}
+	return s.placed(native.TimestampFormat(s.alloc, ts, s.target()))
+}
+
+func (s *treeSink) list(int) error { return s.opened(native.ValueList(s.alloc, s.target()), false) }
+
+func (s *treeSink) mapOf(int) error { return s.opened(native.ValueMap(s.alloc, s.target()), true) }
+
+func (s *treeSink) opened(st uint32, isMap bool) error {
+	if err := check(st, ""); err != nil {
+		return err
+	}
+	s.open = append(s.open, treeFrame{node: s.target(), tmp: native.Calloc(native.SizeValue), isMap: isMap})
+	return nil
+}
+
+func (s *treeSink) key(k string) error {
+	s.open[len(s.open)-1].key = k
+	return nil
+}
+
+func (s *treeSink) end() error {
+	top := s.open[len(s.open)-1]
+	s.open = s.open[:len(s.open)-1]
+	native.Free(top.tmp)
+	return s.placed(native.OK)
+}
+
+// abandon frees every item still in a scratch node, innermost first; the
+// root, which holds what was moved in, is the caller's to free.
+func (s *treeSink) abandon() {
+	for i := len(s.open) - 1; i >= 0; i-- {
+		native.ValueFree(s.open[i].tmp)
+		native.Free(s.open[i].tmp)
+	}
+	s.open = nil
+}
+
+// pathStep is a key into a map, or an index into a list when index >= 0.
+type pathStep struct {
+	key   string
+	index int
+}
+
+// spell is a path in the intake grammar's spelling: keys joined by dots,
+// indices in brackets.
+func spell(path []pathStep) string {
+	at := ""
+	for _, s := range path {
+		if s.index >= 0 {
+			at += "[" + strconv.Itoa(s.index) + "]"
+		} else {
+			at = joinKey(at, s.key)
+		}
+	}
+	return at
+}
+
+// encoder walks Go data with reflection and hands its events to out. The
+// path to the value being written is spelled only for an error.
+type encoder struct {
+	out     sink
+	seen    map[uintptr]bool
+	depth   int
+	path    []pathStep
+	scratch []byte
+}
+
+func (e *encoder) fail(format string, args ...any) error {
+	return encodeError(spell(e.path), format, args...)
 }
 
 func encodeError(at, format string, args ...any) error {
@@ -88,125 +234,238 @@ func joinKey(at, key string) string {
 	return at + "." + key
 }
 
-func (e *encoder) write(raw unsafe.Pointer, v reflect.Value, at string) error {
-	if !v.IsValid() {
-		return check(native.ValueNull(raw), "")
+// typeFlags are the interfaces a type implements, looked up once.
+type typeFlags struct {
+	marshaler, textMarshaler bool
+}
+
+var typeFlagCache sync.Map // reflect.Type -> typeFlags
+
+func flagsOf(t reflect.Type) typeFlags {
+	if f, ok := typeFlagCache.Load(t); ok {
+		return f.(typeFlags)
+	}
+	f := typeFlags{marshaler: t.Implements(typeMarshaler), textMarshaler: t.Implements(typeTextMarshaler)}
+	typeFlagCache.Store(t, f)
+	return f
+}
+
+// mark records a container about to be written, refusing one already open
+// on the way here.
+func (e *encoder) mark(ptr uintptr) error {
+	if e.seen == nil {
+		e.seen = map[uintptr]bool{}
+	}
+	if e.seen[ptr] {
+		return e.fail("the value refers to itself")
+	}
+	e.seen[ptr] = true
+	return nil
+}
+
+// writeAny writes x, taking the plain data a document holds (types with
+// no methods) without reflection: what it does with each is what write
+// does.
+func (e *encoder) writeAny(x any) error {
+	switch x.(type) {
+	case string, bool, float64, int, []any, map[string]any:
+	default:
+		if x == nil {
+			return e.out.null()
+		}
+		return e.write(reflect.ValueOf(x))
 	}
 	e.depth++
 	defer func() { e.depth-- }()
 	if e.depth > native.MaxDepth {
-		return encodeError(at, "the value nests deeper than %d", native.MaxDepth)
+		return e.fail("the value nests deeper than %d", native.MaxDepth)
+	}
+	switch v := x.(type) {
+	case string:
+		return e.str(v)
+	case bool:
+		return e.out.boolean(v)
+	case float64:
+		return e.float(v, 64)
+	case int:
+		e.scratch = strconv.AppendInt(e.scratch[:0], int64(v), 10)
+		return e.out.number(unsafe.String(unsafe.SliceData(e.scratch), len(e.scratch)))
+	case []any:
+		if len(v) > 0 {
+			ptr := uintptr(unsafe.Pointer(unsafe.SliceData(v)))
+			if err := e.mark(ptr); err != nil {
+				return err
+			}
+			defer delete(e.seen, ptr)
+		}
+		if err := e.out.list(len(v)); err != nil {
+			return err
+		}
+		e.path = append(e.path, pathStep{})
+		for i, item := range v {
+			e.path[len(e.path)-1].index = i
+			if err := e.writeAny(item); err != nil {
+				return err
+			}
+		}
+		e.path = e.path[:len(e.path)-1]
+		return e.out.end()
+	}
+	m := x.(map[string]any)
+	if m == nil {
+		if err := e.out.mapOf(0); err != nil {
+			return err
+		}
+		return e.out.end()
+	}
+	ptr := uintptr(reflect.ValueOf(m).UnsafePointer())
+	if err := e.mark(ptr); err != nil {
+		return err
+	}
+	defer delete(e.seen, ptr)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	// A Go map has no order; keys are written sorted.
+	slices.Sort(keys)
+	if err := e.out.mapOf(len(keys)); err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if err := e.entry(k, func() error { return e.writeAny(m[k]) }); err != nil {
+			return err
+		}
+	}
+	return e.out.end()
+}
+
+func (e *encoder) write(v reflect.Value) error {
+	if !v.IsValid() {
+		return e.out.null()
+	}
+	e.depth++
+	defer func() { e.depth-- }()
+	if e.depth > native.MaxDepth {
+		return e.fail("the value nests deeper than %d", native.MaxDepth)
 	}
 	t := v.Type()
 	switch t {
 	case typeValue, typeRef, typeMapRef, typeListRef:
-		return e.clone(raw, v, at)
+		return e.node(v)
 	case typeNumber:
-		return e.number(raw, v.String(), at)
+		return e.number(v.String())
 	case typeTime:
-		return e.instant(raw, v.Interface().(time.Time), at)
+		return e.out.instant(v.Interface().(time.Time))
 	case typeDuration:
-		return e.length(raw, time.Duration(v.Int()), at)
+		return e.length(time.Duration(v.Int()))
 	case typeBigInt:
 		b := v.Interface().(big.Int)
-		return e.number(raw, b.String(), at)
+		return e.number(b.String())
 	case typeOrderedMap:
-		return e.ordered(raw, v.Interface().(orderedMap), at)
+		return e.ordered(v.Interface().(orderedMap))
 	}
-	if t.Kind() == reflect.Pointer {
+	kind := t.Kind()
+	if kind == reflect.Pointer {
 		if v.IsNil() {
-			return check(native.ValueNull(raw), "")
+			return e.out.null()
 		}
 		switch t.Elem() {
 		case typeValue, typeBigInt:
-			return e.write(raw, v.Elem(), at)
+			return e.write(v.Elem())
 		}
 	}
-	if t.Kind() != reflect.Interface && t.Implements(typeMarshaler) && !(t.Kind() == reflect.Pointer && v.IsNil()) {
-		x, err := v.Interface().(Marshaler).MarshalGuatiao()
-		if err != nil {
-			return encodeError(at, "%v", err)
+	if kind != reflect.Interface {
+		flags := flagsOf(t)
+		if flags.marshaler {
+			x, err := v.Interface().(Marshaler).MarshalGuatiao()
+			if err != nil {
+				return e.fail("%v", err)
+			}
+			e.depth--
+			defer func() { e.depth++ }()
+			return e.writeAny(x)
 		}
-		return e.write(raw, reflect.ValueOf(x), at)
+		if flags.textMarshaler {
+			return e.text(v.Interface().(encoding.TextMarshaler))
+		}
 	}
-	if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface && t.Implements(typeTextMarshaler) {
-		return e.text(raw, v.Interface().(encoding.TextMarshaler), at)
-	}
-	if t.Kind() == reflect.Pointer && t.Implements(typeTextMarshaler) && !v.IsNil() {
-		return e.text(raw, v.Interface().(encoding.TextMarshaler), at)
-	}
-	switch t.Kind() {
+	switch kind {
 	case reflect.Bool:
-		return check(native.ValueBool(v.Bool(), raw), "")
+		return e.out.boolean(v.Bool())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return e.number(raw, strconv.FormatInt(v.Int(), 10), at)
+		e.scratch = strconv.AppendInt(e.scratch[:0], v.Int(), 10)
+		return e.out.number(unsafe.String(unsafe.SliceData(e.scratch), len(e.scratch)))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return e.number(raw, strconv.FormatUint(v.Uint(), 10), at)
-	case reflect.Float32, reflect.Float64:
-		f := v.Float()
-		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return encodeError(at, "%v is not a finite number", f)
-		}
-		bits := 64
-		if t.Kind() == reflect.Float32 {
-			bits = 32
-		}
-		text := strconv.FormatFloat(f, 'g', -1, bits)
-		if f == 0 && math.Signbit(f) {
-			text = "-0"
-		}
-		return e.number(raw, text, at)
+		e.scratch = strconv.AppendUint(e.scratch[:0], v.Uint(), 10)
+		return e.out.number(unsafe.String(unsafe.SliceData(e.scratch), len(e.scratch)))
+	case reflect.Float32:
+		return e.float(v.Float(), 32)
+	case reflect.Float64:
+		return e.float(v.Float(), 64)
 	case reflect.String:
-		return e.str(raw, v.String(), at)
+		return e.str(v.String())
 	case reflect.Interface:
 		if v.IsNil() {
-			return check(native.ValueNull(raw), "")
+			return e.out.null()
 		}
-		return e.write(raw, v.Elem(), at)
+		e.depth--
+		defer func() { e.depth++ }()
+		return e.writeAny(v.Elem().Interface())
 	case reflect.Pointer:
-		if v.IsNil() {
-			return check(native.ValueNull(raw), "")
-		}
 		ptr := v.Pointer()
-		if e.seen[ptr] {
-			return encodeError(at, "the value refers to itself")
+		if err := e.mark(ptr); err != nil {
+			return err
 		}
-		e.seen[ptr] = true
 		defer delete(e.seen, ptr)
-		return e.write(raw, v.Elem(), at)
+		e.depth--
+		defer func() { e.depth++ }()
+		return e.write(v.Elem())
 	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 && !t.Elem().Implements(typeTextMarshaler) {
-			return check(native.ValueBytes(e.alloc, v.Bytes(), raw), "")
+		if t.Elem().Kind() == reflect.Uint8 && !flagsOf(t.Elem()).textMarshaler {
+			return e.out.bytes(v.Bytes())
 		}
-		if !v.IsNil() {
+		if !v.IsNil() && v.Len() > 0 {
 			ptr := v.Pointer()
-			if v.Len() > 0 && e.seen[ptr] {
-				return encodeError(at, "the value refers to itself")
+			if err := e.mark(ptr); err != nil {
+				return err
 			}
-			e.seen[ptr] = true
 			defer delete(e.seen, ptr)
 		}
-		return e.list(raw, v, at)
+		return e.list(v)
 	case reflect.Array:
-		return e.list(raw, v, at)
+		return e.list(v)
 	case reflect.Map:
 		if v.IsNil() {
-			return check(native.ValueMap(e.alloc, raw), "")
+			if err := e.out.mapOf(0); err != nil {
+				return err
+			}
+			return e.out.end()
 		}
 		ptr := v.Pointer()
-		if e.seen[ptr] {
-			return encodeError(at, "the value refers to itself")
+		if err := e.mark(ptr); err != nil {
+			return err
 		}
-		e.seen[ptr] = true
 		defer delete(e.seen, ptr)
-		return e.mapOf(raw, v, at)
+		return e.mapOf(v)
 	case reflect.Struct:
-		return e.record(raw, v, at)
+		return e.record(v)
 	}
-	return encodeError(at, "a %s has no value form", t)
+	return e.fail("a %s has no value form", t)
 }
 
-func (e *encoder) clone(raw unsafe.Pointer, v reflect.Value, at string) error {
+func (e *encoder) float(f float64, bits int) error {
+	if math.IsInf(f, 0) || math.IsNaN(f) {
+		return e.fail("%v is not a finite number", f)
+	}
+	if f == 0 && math.Signbit(f) {
+		return e.out.number("-0")
+	}
+	e.scratch = strconv.AppendFloat(e.scratch[:0], f, 'g', -1, bits)
+	return e.out.number(unsafe.String(unsafe.SliceData(e.scratch), len(e.scratch)))
+}
+
+func (e *encoder) node(v reflect.Value) error {
 	var r Ref
 	switch x := v.Interface().(type) {
 	case Value:
@@ -218,80 +477,63 @@ func (e *encoder) clone(raw unsafe.Pointer, v reflect.Value, at string) error {
 	case ListRef:
 		r = x.Ref
 	}
-	node, err := r.requireNode()
-	if err != nil {
-		return err
-	}
-	return check(native.ValueClone(e.alloc, node, raw), "")
+	return e.out.node(r)
 }
 
-func (e *encoder) number(raw unsafe.Pointer, text, at string) error {
-	if err := check(native.ValueNumber(e.alloc, text, raw), ""); err != nil {
-		return encodeError(at, "%q is not a number", text)
+func (e *encoder) number(text string) error {
+	if !isNumber(text) {
+		return e.fail("%q is not a number", text)
 	}
-	return nil
+	return e.out.number(text)
 }
 
-func (e *encoder) text(raw unsafe.Pointer, m encoding.TextMarshaler, at string) error {
+func (e *encoder) text(m encoding.TextMarshaler) error {
 	text, err := m.MarshalText()
 	if err != nil {
-		return encodeError(at, "%v", err)
+		return e.fail("%v", err)
 	}
-	return e.str(raw, string(text), at)
+	return e.str(string(text))
 }
 
-func (e *encoder) str(raw unsafe.Pointer, text, at string) error {
-	st := native.ValueString(e.alloc, text, raw)
-	if st == native.ErrBadValue {
-		return encodeError(at, "the text is not UTF-8")
+func (e *encoder) str(text string) error {
+	if !utf8.ValidString(text) {
+		return e.fail("the text is not UTF-8")
 	}
-	return check(st, "")
-}
-
-// instant writes t as an instant's text, through the C surface's own
-// writer.
-func (e *encoder) instant(raw unsafe.Pointer, t time.Time, at string) error {
-	ts := native.Timestamp{Seconds: t.Unix(), Nanoseconds: uint32(t.Nanosecond())}
-	if err := check(native.TimestampFormat(e.alloc, ts, raw), ""); err != nil {
-		return encodeError(at, "%s has no instant text: %v", t, err)
-	}
-	return nil
+	return e.out.text(text)
 }
 
 // length writes d as an exact length, [seconds, nanoseconds].
-func (e *encoder) length(raw unsafe.Pointer, d time.Duration, at string) error {
+func (e *encoder) length(d time.Duration) error {
 	if d < 0 {
-		return encodeError(at, "an exact length is never negative, and %s is", d)
+		return e.fail("an exact length is never negative, and %s is", d)
 	}
 	secs := uint64(d / time.Second)
 	nanos := uint64(d % time.Second)
-	return e.write(raw, reflect.ValueOf([2]uint64{secs, nanos}), at)
+	e.depth--
+	defer func() { e.depth++ }()
+	return e.write(reflect.ValueOf([2]uint64{secs, nanos}))
 }
 
-func (e *encoder) list(raw unsafe.Pointer, v reflect.Value, at string) error {
-	if err := check(native.ValueList(e.alloc, raw), ""); err != nil {
+func (e *encoder) list(v reflect.Value) error {
+	n := v.Len()
+	if err := e.out.list(n); err != nil {
 		return err
 	}
-	return withScratch(func(tmp unsafe.Pointer) error {
-		for i := 0; i < v.Len(); i++ {
-			if err := e.write(tmp, v.Index(i), at+"["+strconv.Itoa(i)+"]"); err != nil {
-				native.ValueFree(tmp)
-				return err
-			}
-			st := native.ListPush(e.alloc, raw, tmp)
-			native.ValueFree(tmp)
-			if err := check(st, ""); err != nil {
-				return err
-			}
+	e.path = append(e.path, pathStep{})
+	for i := 0; i < n; i++ {
+		e.path[len(e.path)-1].index = i
+		if err := e.write(v.Index(i)); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	e.path = e.path[:len(e.path)-1]
+	return e.out.end()
 }
 
 // keyText is a map key's text: a string as it is, an integer in decimal,
 // a TextMarshaler's text.
 func keyText(k reflect.Value) (string, error) {
-	if k.Type().Implements(typeTextMarshaler) && k.Kind() != reflect.String {
+	if k.Kind() != reflect.String && flagsOf(k.Type()).textMarshaler {
 		b, err := k.Interface().(encoding.TextMarshaler).MarshalText()
 		return string(b), err
 	}
@@ -308,7 +550,7 @@ func keyText(k reflect.Value) (string, error) {
 	return "", fmt.Errorf("a map keyed by %s has no value form", k.Type())
 }
 
-func (e *encoder) mapOf(raw unsafe.Pointer, v reflect.Value, at string) error {
+func (e *encoder) mapOf(v reflect.Value) error {
 	type kv struct {
 		key string
 		num bool
@@ -321,7 +563,7 @@ func (e *encoder) mapOf(raw unsafe.Pointer, v reflect.Value, at string) error {
 	for iter.Next() {
 		text, err := keyText(iter.Key())
 		if err != nil {
-			return encodeError(at, "%v", err)
+			return e.fail("%v", err)
 		}
 		item := kv{key: text, val: iter.Value()}
 		switch iter.Key().Kind() {
@@ -342,17 +584,20 @@ func (e *encoder) mapOf(raw unsafe.Pointer, v reflect.Value, at string) error {
 		}
 		return strings.Compare(a.key, b.key)
 	})
-	if err := check(native.ValueMap(e.alloc, raw), ""); err != nil {
+	for i := 1; i < len(entries); i++ {
+		if entries[i].key == entries[i-1].key {
+			return e.fail("two keys are both written %q", entries[i].key)
+		}
+	}
+	if err := e.out.mapOf(len(entries)); err != nil {
 		return err
 	}
-	return withScratch(func(tmp unsafe.Pointer) error {
-		for _, item := range entries {
-			if err := e.set(raw, tmp, item.key, item.val, at); err != nil {
-				return err
-			}
+	for _, item := range entries {
+		if err := e.entry(item.key, func() error { return e.write(item.val) }); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return e.out.end()
 }
 
 func compare[T int64 | uint64](a, b T) int {
@@ -365,39 +610,87 @@ func compare[T int64 | uint64](a, b T) int {
 	return 0
 }
 
-func (e *encoder) set(raw, tmp unsafe.Pointer, key string, v reflect.Value, at string) error {
-	if err := e.write(tmp, v, joinKey(at, key)); err != nil {
-		native.ValueFree(tmp)
+// entry writes one map entry: its key, checked, then what write writes
+// under it.
+func (e *encoder) entry(key string, write func() error) error {
+	if !utf8.ValidString(key) {
+		return e.fail("the key %q is not UTF-8", key)
+	}
+	if err := e.out.key(key); err != nil {
 		return err
 	}
-	st := native.MapSet(e.alloc, raw, key, tmp)
-	native.ValueFree(tmp)
-	if st == native.ErrBadValue {
-		return encodeError(at, "the key %q is not UTF-8", key)
+	e.path = append(e.path, pathStep{key: key, index: -1})
+	if err := write(); err != nil {
+		return err
 	}
-	return check(st, "")
+	e.path = e.path[:len(e.path)-1]
+	return nil
 }
 
-func (e *encoder) record(raw unsafe.Pointer, v reflect.Value, at string) error {
+func (e *encoder) record(v reflect.Value) error {
 	fields := fieldsOf(v.Type())
-	if err := check(native.ValueMap(e.alloc, raw), ""); err != nil {
+	n := 0
+	for _, f := range fields {
+		if fv, ok := fieldByIndex(v, f.index); ok && !omitted(fv, f.omitEmpty) {
+			n++
+		}
+	}
+	if err := e.out.mapOf(n); err != nil {
 		return err
 	}
-	return withScratch(func(tmp unsafe.Pointer) error {
-		for _, f := range fields {
-			fv, ok := fieldByIndex(v, f.index)
-			if !ok {
-				continue
-			}
-			if omitted(fv, f.omitEmpty) {
-				continue
-			}
-			if err := e.set(raw, tmp, f.name, fv, at); err != nil {
-				return err
-			}
+	for _, f := range fields {
+		fv, ok := fieldByIndex(v, f.index)
+		if !ok || omitted(fv, f.omitEmpty) {
+			continue
 		}
-		return nil
-	})
+		if err := e.entry(f.name, func() error { return e.write(fv) }); err != nil {
+			return err
+		}
+	}
+	return e.out.end()
+}
+
+// isNumber reports whether text is in the JSON number grammar (RFC 8259
+// section 6), which every number's text keeps.
+func isNumber(text string) bool {
+	i, n := 0, len(text)
+	if i < n && text[i] == '-' {
+		i++
+	}
+	switch {
+	case i < n && text[i] == '0':
+		i++
+	case i < n && text[i] >= '1' && text[i] <= '9':
+		for i < n && text[i] >= '0' && text[i] <= '9' {
+			i++
+		}
+	default:
+		return false
+	}
+	if i < n && text[i] == '.' {
+		i++
+		start := i
+		for i < n && text[i] >= '0' && text[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	if i < n && (text[i] == 'e' || text[i] == 'E') {
+		i++
+		if i < n && (text[i] == '+' || text[i] == '-') {
+			i++
+		}
+		start := i
+		for i < n && text[i] >= '0' && text[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	return i == n
 }
 
 // omitted reports whether a field is left out: a nil pointer always (an

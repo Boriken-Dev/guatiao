@@ -15,7 +15,7 @@ own: guatiao is loaded at run time.
 
 | import | what |
 | --- | --- |
-| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`, `Surface` for a package over another guatiao library |
+| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `MarshalWire`, `UnmarshalWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`, `Surface` for a package over another guatiao library |
 | `.../bindings/go/guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
 | `.../bindings/go/guatiao/cmd/guatiao-kind` | the command writing a kind package's glue, run by `go generate` |
 
@@ -460,6 +460,9 @@ l, err := civil.ReadLength(value)                    // [s, ns], seconds, {secs,
 func (r Ref) ToWire() ([]byte, error)                     // any Ref, a *Value included
 func FromWire(data []byte, opts ...Option) (*Value, error) // ErrBadValue: not exactly one value
 
+func MarshalWire(x any) ([]byte, error)     // Go data to wire bytes, no tree built
+func UnmarshalWire(data []byte, dst any) error // wire bytes into what dst points at, no tree built
+
 func WireAnnounce(channel uint64, schema any) ([]byte, error) // a Value, a view or plain data
 func WireSend(channel uint64, value any) ([]byte, error)
 func WireClose(channel uint64) ([]byte, error)
@@ -492,6 +495,18 @@ sentinel of its status, `errors.As` finds it as an `*Error` too; it
 changes nothing the receiver keeps and quotes nothing the frame carried.
 `Accept` may be called from several goroutines (calls are serialised); a
 receiver dropped unclosed is freed by a cleanup.
+
+`MarshalWire(x)` writes the bytes `NewValue(x)` then `ToWire` would, in
+Go, with the same rules and errors; `UnmarshalWire(data, &dst)` reads
+them as `FromWire` then `Decode` would. Neither builds a tree or calls the
+library, except for a `time.Time`, a `time.Duration`, a `*Value` or an
+`Unmarshaler` (which read through it). `UnmarshalWire` refuses bytes cut
+short, bytes after the value, an unknown tag, a length not in its
+shortest form or past what remains, text that is not UTF-8, a number
+outside the grammar and nesting past 128, all `ErrBadValue`; it does not
+look for a repeated key (the last is kept). A package whose library
+answers a whole document as wire bytes crosses once this way, not once
+per node: `serde.Unmarshal` and `serde.Emit` of Go data do.
 
 ## Secrets
 

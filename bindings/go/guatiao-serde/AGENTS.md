@@ -47,13 +47,21 @@ library stays loaded for the process.
 v, err := serde.Parse(`{"port": 5900}`, serde.JSON)
 defer v.Close()
 text, err := serde.Emit(v, serde.YAML, serde.Pretty())
+
+var cfg struct{ Port uint16 `guatiao:"port"` }
+err = serde.Unmarshal(`{"port": 5900}`, serde.JSON, &cfg) // no Value in between
 ```
 
 - `Parse(text string, format Format, opts ...Option) (*guatiao.Value, error)`:
   a new Value to close.
+- `Unmarshal(text string, format Format, dst any, opts ...Option) error`:
+  the document read straight into what `dst` points at, as `Parse` then
+  `Decode` would, with the same errors and no Value built: it crosses
+  once, as wire bytes, read in Go (`guatiao.UnmarshalWire`).
 - `Emit(x any, format Format, opts ...Option) (string, error)`: `x` is a
   `*guatiao.Value`, a view (`Ref`, `MapRef`, `ListRef`) or plain data
-  `guatiao.NewValue` takes.
+  `guatiao.NewValue` takes. Go data is written as wire bytes in Go
+  (`guatiao.MarshalWire`) and crosses once, with no tree built.
 - `Format`: `JSON`, `TOML`, `YAML`.
 - Options: `Pretty()` indents what `Emit` writes; `How(flags uint32)` takes
   one of `BytesDataURI`, `BytesBase64`, `BytesArray`, `BytesRefuse`, or'd

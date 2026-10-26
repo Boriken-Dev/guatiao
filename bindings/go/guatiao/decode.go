@@ -371,11 +371,17 @@ func decodeInstant(node unsafe.Pointer, v reflect.Value, at string) error {
 	if native.Tag(node) != native.TagString {
 		return decodeError(at, node, "an instant's text")
 	}
+	return instantInto(native.TextOf(node), v, at)
+}
+
+// instantInto reads an instant's text through the C surface's own reader,
+// in UTC.
+func instantInto(text string, v reflect.Value, at string) error {
 	alloc, err := coreAlloc()
 	if err != nil {
 		return err
 	}
-	ts, refusal, st := native.TimestampParse(alloc, native.TextOf(node))
+	ts, refusal, st := native.TimestampParse(alloc, text)
 	if st != native.OK {
 		return decodeFailed(at, "not an instant: %s at byte %d", refusal.Expected, refusal.At)
 	}
