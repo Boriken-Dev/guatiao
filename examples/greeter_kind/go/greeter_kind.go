@@ -4,15 +4,16 @@
 
 // Package greeterkind holds the kinds of include/greeter_kind.h, for Go:
 // an interface per kind, holding the slots every table has, and an
-// interface per slot appended after them. guatiao-kind reads the header
-// and these interfaces and writes the rest (guatiao_kinds.go, .h, .c): a
+// interface per slot appended after them. guatiao-kind reads the kinds'
+// description (include/greeter_kind.kinds.json) and these interfaces and
+// writes the rest (guatiao_kinds.go, .h, .c): a
 // descriptor per kind (GreeterKind), a remote implementing every
 // interface (GreeterRemote), and the cgo that calls and serves a table.
 // A host calls a greeter through GreeterRemote; a provider implements
 // Greeter, and any of the optional interfaces it wants.
 package greeterkind
 
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
 
 import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 

@@ -152,6 +152,38 @@ func TestAProvidersMetaIsACopyCarryingItsForm(t *testing.T) {
 	}
 }
 
+func TestAProviderCarriesItsKindsDescriptions(t *testing.T) {
+	reg := scanned(t)
+	document, ok, err := reg.KindDescriptions("derived_greeter_hello")
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	defer document.Close()
+	var read struct {
+		Format int `guatiao:"format"`
+		Kinds  []struct {
+			Name      string `guatiao:"name"`
+			FloorHash uint32 `guatiao:"floor_hash"`
+		} `guatiao:"kinds"`
+	}
+	if err := document.Decode(&read); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, k := range read.Kinds {
+		names = append(names, k.Name)
+	}
+	if read.Format != 1 || strings.Join(names, ",") != "greeter,listener,conversation,counter,wide" {
+		t.Fatalf("%+v", read)
+	}
+	if _, ok, err := reg.KindDescriptions("hello_library_greeter"); ok || err != nil {
+		t.Fatalf("a provider written by hand carries none: %v %v", ok, err)
+	}
+	if _, _, err := reg.KindDescriptions("nobody"); !errors.Is(err, guatiao.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestBuildsAnInstanceAndLendsItsSchema(t *testing.T) {
 	reg := scanned(t)
 	schema, ok, err := reg.ProviderConfig("derived_greeter_shouter")

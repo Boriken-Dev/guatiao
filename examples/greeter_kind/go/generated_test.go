@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-// The glue is what guatiao-kind writes from the header and the interfaces
-// as they are now: a header that changed shape, or an interface that did,
-// fails here rather than in a call.
+// The glue is what guatiao-kind writes from the kinds' description and the
+// interfaces as they are now: a kind that changed shape, or an interface
+// that did, fails here rather than in a call.
 func TestTheGlueIsCurrent(t *testing.T) {
 	out, err := exec.Command("go", "run", "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind",
-		"-header", "../include/greeter_kind.h", "-check").CombinedOutput()
+		"-description", "../include/greeter_kind.kinds.json", "-check").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

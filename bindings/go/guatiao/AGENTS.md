@@ -183,7 +183,12 @@ data is plain Go data, already freed (numbers as `Number`). Also
 schema), `ProviderMeta(key) (*Value, bool, error)` (what the provider
 declared beyond its schema, its notices or its form under
 `intake.ProviderFormKey`: a copy the caller closes, outliving the library;
-false when it declares nothing, `ErrNotFound` for an unknown key), `Host() unsafe.Pointer` (the `guatiao_host_info *`), `Close()`.
+false when it declares nothing, `ErrNotFound` for an unknown key),
+`KindDescriptions(key) (*Value, bool, error)` (the document of the kinds
+the provider serves and the object kinds they reach, what `guatiao-kind
+-description` reads, a copy the caller closes; false when it carries
+none, `ErrNotFound` for an unknown key, `ErrBadValue` for one that is not
+a description), `Host() unsafe.Pointer` (the `guatiao_host_info *`), `Close()`.
 
 `Create(key, config)` checks the configuration against the provider's
 schema first (`ErrBadValue` with the field), then builds an `*Instance`;
@@ -213,12 +218,14 @@ call on its registry.
 ## Kinds: calling a table, serving one
 
 A kind is a Go interface naming its required slots, marked
-`//guatiao:kind <name> <C table>`; each optional slot is an interface of
+`//guatiao:kind <name> [<C table>]`; each optional slot is an interface of
 its own, as `io.WriterTo` stands beside `io.Writer`; every method returns
 an `error` last, and an object kind's interface has `Close() error`, its
-`destroy` slot. The command `guatiao-kind` reads the kind's C header
-(slot order, floor hash, which argument is handed over, lent or borrowed,
-which slot can refuse) and the interfaces, and writes the glue:
+`destroy` slot. The command `guatiao-kind` reads the kinds' description
+(`-description <crate>.kinds.json`, the document a kind crate commits) or
+their C header (`-header`, which needs the C table name; it defaults to
+`<name>_vtable`): slot order, floor hash, which argument is handed over,
+lent or borrowed, which slot can refuse. It reads the interfaces too, and writes the glue:
 `<Interface>Kind` (a `*guatiao.Kind[*<Interface>Remote]`), a remote with
 a method per slot implementing every interface, and the cgo calling and
 serving each slot.
@@ -226,7 +233,7 @@ serving each slot.
 ```go
 package greeterkind
 
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
 
 import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 

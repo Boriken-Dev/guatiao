@@ -332,6 +332,31 @@ func (r *Registry) ProviderMeta(key string) (*Value, bool, error) {
 	return v, true, nil
 }
 
+// KindDescriptions is the document of the kinds the provider under key
+// serves and of every object kind their slots take or answer
+// ({"format": 1, "kinds": [...]}, the <crate>.kinds.json a kind crate
+// commits), as a Value the caller owns and closes, and false when the
+// provider carries none: what guatiao-kind writes a kind's glue from when
+// no file of it is at hand. ErrNotFound when nothing answers to key,
+// ErrBadValue when what it carries is not a description.
+func (r *Registry) KindDescriptions(key string) (*Value, bool, error) {
+	h, err := r.open()
+	if err != nil {
+		return nil, false, err
+	}
+	out := native.Calloc(native.SizeValue)
+	v := adopt(out, r.alloc)
+	if err := check(native.RegistryAnswer("kind_descriptions", h, key, r.alloc, out), ""); err != nil {
+		v.Close()
+		return nil, false, err
+	}
+	if v.Tag() == TagAbsent {
+		v.Close()
+		return nil, false, nil
+	}
+	return v, true, nil
+}
+
 // Instance is one a registry built from a configuration: what each call
 // through its tables takes. Close destroys it through the provider that
 // built it, even after a retire or a refresh loaded a new build.
