@@ -5,8 +5,10 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -88,6 +90,142 @@ func TestReadsATableAsTheHeaderGeneratorRendersIt(t *testing.T) {
 	}
 	if _, err := readTable(header, "nonesuch_vtable"); err == nil {
 		t.Fatal("a table the header lacks")
+	}
+}
+
+// The probe kinds of the header above, as their description.
+const document = `{"format": 1, "kinds": [
+  {"name": "probe", "floor_hash": 42, "object": false, "slots": [
+    {"name": "greet", "required": true, "fallible": true, "args": [{"name": "name", "type": "str"}], "answer": {"type": "map"}},
+    {"name": "fill", "required": false, "fallible": true, "args": [{"name": "config", "type": "map", "pass": "lent"}], "answer": {"type": "bool"}},
+    {"name": "take", "required": false, "fallible": true, "args": [{"name": "config", "type": "map", "pass": "taken"}]},
+    {"name": "count", "required": false, "fallible": false, "args": [], "answer": {"type": "i64"}}]},
+  {"name": "ear", "floor_hash": 7, "object": true, "slots": [
+    {"name": "heard", "required": true, "fallible": false, "args": [{"name": "what", "type": "str"}]}]}]}`
+
+// A kind read from its description is the table its header declares, so
+// the glue is the same whichever it was written from: for the greeter
+// kinds, whose header and document the kind crate commits side by side.
+func TestReadsADescriptionAsTheHeaderDeclaresIt(t *testing.T) {
+	include := filepath.Join("..", "..", "..", "..", "..", "examples", "greeter_kind", "include")
+	hdr, err := os.ReadFile(filepath.Join(include, "greeter_kind.h"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, err := os.ReadFile(filepath.Join(include, "greeter_kind.kinds.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := readDocument(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range doc.Kinds {
+		fromHeader, err := readTable(string(hdr), k.Name+"_vtable")
+		if err != nil {
+			t.Fatal(err)
+		}
+		described, err := describedTable(doc, k.Name, k.Name+"_vtable")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(fromHeader, described) {
+			t.Errorf("%s:\nheader      %+v\ndescription %+v", k.Name, fromHeader, described)
+		}
+	}
+}
+
+func TestWritesTheSameGlueFromADescription(t *testing.T) {
+	fromHeader := pkg(t, kinds, header)
+	if err := run(fromHeader, "probe.h", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	described := pkg(t, strings.ReplaceAll(kinds, " probe_vtable", ""), header)
+	if err := os.WriteFile(filepath.Join(described, "probe.kinds.json"), []byte(document), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(described, "probe.kinds.json", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"guatiao_kinds.go", "guatiao_kinds.h", "guatiao_kinds.c"} {
+		a, _ := os.ReadFile(filepath.Join(fromHeader, name))
+		b, _ := os.ReadFile(filepath.Join(described, name))
+		a = bytes.ReplaceAll(a, []byte("probe.h"), []byte("SOURCE"))
+		b = bytes.ReplaceAll(b, []byte("probe.kinds.json"), []byte("SOURCE"))
+		if !bytes.Equal(a, b) {
+			t.Errorf("%s differs:\n%s\n---\n%s", name, a, b)
+		}
+	}
+	if err := run(described, "probe.kinds.json", "guatiao_kinds", true); err != nil {
+		t.Fatalf("what it wrote is what it checks: %v", err)
+	}
+}
+
+func TestRefusesADescriptionItCannotRead(t *testing.T) {
+	cases := map[string]struct{ from, to, says string }{
+		"another format":    {`"format": 1`, `"format": 2`, "format 1"},
+		"an unknown type":   {`"type": "i64"`, `"type": "u128"`, "an answer cannot be"},
+		"a borrowed list":   {`"type": "map", "pass": "taken"`, `"type": "list", "pass": "borrowed"`, "a list cannot be passed borrowed"},
+		"a kind not in it":  {`"name": "ear"`, `"name": "lug"`, "describes no kind ear"},
+		"a pass it ignores": {`"pass": "lent"`, `"pass": "kept"`, "borrowed, taken or lent"},
+	}
+	for name, c := range cases {
+		dir := pkg(t, strings.ReplaceAll(kinds, " probe_vtable", ""), header)
+		if err := os.WriteFile(filepath.Join(dir, "probe.kinds.json"), []byte(strings.Replace(document, c.from, c.to, 1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := run(dir, "probe.kinds.json", "guatiao_kinds", false)
+		if err == nil || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A kind born in TypeScript has no header: its description is all there
+// is, and the marker names no C table.
+const tallyKinds = `package tally
+
+import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
+
+//guatiao:kind watcher
+type Watcher interface {
+	Changed(name string, total int64) error
+	Close() error
+}
+
+//guatiao:kind tally
+type Tally interface {
+	Add(name string, by uint32) (int64, error)
+	Total(name string) (int64, error)
+}
+
+type Aller interface{ All() (map[string]int64, error) }
+type Knower interface{ Known(name string) (bool, error) }
+type Checksummer interface{ Checksum(data []byte) (uint32, error) }
+type Reporter interface{ Report(watcher Watcher) error }
+type Loader interface{ Load(counts *guatiao.Value) (uint32, error) }
+`
+
+func TestWritesGlueForAKindWithNoHeader(t *testing.T) {
+	text, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "examples", "tally_kind", "include", "tally_kind.kinds.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := pkg(t, tallyKinds, "")
+	if err := os.WriteFile(filepath.Join(dir, "tally_kind.kinds.json"), text, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(dir, "tally_kind.kinds.json", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	goSrc, _ := os.ReadFile(filepath.Join(dir, "guatiao_kinds.go"))
+	for _, want := range []string{
+		"var TallyKind = guatiao.NewKind", "FloorHash: 1286177969", "var WatcherKind = guatiao.NewKind",
+		"func (r *TallyRemote) Report(watcher Watcher) error", "c.Take(counts, guatiao.MapClass)",
+	} {
+		if !strings.Contains(string(goSrc), want) {
+			t.Errorf("no %q in\n%s", want, goSrc)
+		}
 	}
 }
 

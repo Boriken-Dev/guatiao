@@ -161,6 +161,9 @@
   X(guatiao_status, guatiao_registry_provider_meta,                                            \
     (const guatiao_registry *reg, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
     (reg, key, alloc, out), "load")                                                             \
+  X(guatiao_status, guatiao_registry_kind_descriptions,                                        \
+    (const guatiao_registry *reg, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
+    (reg, key, alloc, out), "load")                                                             \
   X(guatiao_status, guatiao_registry_provider_create,                                          \
     (const guatiao_registry *reg, guatiao_str key, const guatiao_value *config, void **out,     \
      guatiao_provider_error *err),                                                              \

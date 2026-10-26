@@ -10,11 +10,15 @@
 // a descriptor (<Interface>Kind, a *guatiao.Kind), a remote
 // (<Interface>Remote, implementing the interface and every optional one),
 // and the cgo that calls a table of the kind and serves one over Go
-// values. The kind's C header says what each slot takes (`-header`, from
-// the package's directory); the interfaces say how Go spells it. Run it
-// with go generate:
+// values. The kinds' description says what each slot takes
+// (`-description`, the <crate>.kinds.json a kind crate commits, from the
+// package's directory), or their C header does (`-header`); the
+// interfaces say how Go spells it. Run it with go generate:
 //
-//	//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
+//	//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
+//
+// The C table name in the marker is needed only with -header; without
+// it, it is <kind name>_vtable.
 //
 // A kind's interface holds its required slots, an object kind's its
 // Close (the destroy slot) too; each other slot is a method of an
@@ -33,15 +37,20 @@ import (
 
 func main() {
 	header := flag.String("header", "", "the kinds' C header, from the package's directory")
+	description := flag.String("description", "", "the kinds' description document, from the package's directory")
 	dir := flag.String("dir", ".", "the package's directory")
 	out := flag.String("o", "guatiao_kinds", "the base name of what is written")
 	check := flag.Bool("check", false, "write nothing; fail when what is there is not what would be written")
 	flag.Parse()
-	if *header == "" {
-		fmt.Fprintln(os.Stderr, "guatiao-kind: -header names the kinds' C header")
+	from := *header
+	if (*header == "") == (*description == "") {
+		fmt.Fprintln(os.Stderr, "guatiao-kind: -description names the kinds' document, or -header their C header: one of them")
 		os.Exit(2)
 	}
-	if err := run(*dir, *header, *out, *check); err != nil {
+	if *description != "" {
+		from = *description
+	}
+	if err := run(*dir, from, *out, *check); err != nil {
 		fmt.Fprintln(os.Stderr, "guatiao-kind:", err)
 		os.Exit(1)
 	}

@@ -56,10 +56,21 @@ type pkgInfo struct {
 	exprText func(ast.Expr) string
 }
 
-func run(dir, headerPath, out string, check bool) error {
-	headerText, err := os.ReadFile(filepath.Join(dir, headerPath))
+// run writes the glue of the package in dir, its kinds read from the
+// file at from (relative to dir): a kinds document when its name ends in
+// .json, else the kinds' C header.
+func run(dir, from, out string, check bool) error {
+	text, err := os.ReadFile(filepath.Join(dir, from))
 	if err != nil {
 		return err
+	}
+	tableOf := func(k *kindDecl) (*cTable, error) { return readTable(string(text), k.table) }
+	if strings.HasSuffix(from, ".json") {
+		doc, err := readDocument(text)
+		if err != nil {
+			return fmt.Errorf("%s: %w", from, err)
+		}
+		tableOf = func(k *kindDecl) (*cTable, error) { return describedTable(doc, k.kind, k.table) }
 	}
 	pkg, err := load(dir, out)
 	if err != nil {
@@ -78,7 +89,7 @@ func run(dir, headerPath, out string, check bool) error {
 
 	var plans []*kindPlan
 	for _, k := range pkg.kinds {
-		table, err := readTable(string(headerText), k.table)
+		table, err := tableOf(k)
 		if err != nil {
 			return err
 		}
@@ -88,21 +99,21 @@ func run(dir, headerPath, out string, check bool) error {
 		}
 		plans = append(plans, plan)
 	}
-	goSrc, err := pkg.emitGo(plans, headerPath, out)
+	goSrc, err := pkg.emitGo(plans, from, out)
 	if err != nil {
 		return err
 	}
 	files := map[string][]byte{
 		out + ".go": goSrc,
-		out + ".h":  pkg.emitH(plans, headerPath, out),
-		out + ".c":  pkg.emitC(plans, headerPath, out),
+		out + ".h":  pkg.emitH(plans, from, out),
+		out + ".c":  pkg.emitC(plans, from, out),
 	}
 	for _, name := range []string{out + ".go", out + ".h", out + ".c"} {
 		path := filepath.Join(dir, name)
 		if check {
 			there, err := os.ReadFile(path)
 			if err != nil || !bytes.Equal(there, files[name]) {
-				return fmt.Errorf("%s is not what guatiao-kind writes from %s: run go generate", path, headerPath)
+				return fmt.Errorf("%s is not what guatiao-kind writes from %s: run go generate", path, from)
 			}
 			continue
 		}
@@ -192,9 +203,11 @@ func load(dir, out string) (*pkgInfo, error) {
 					for _, c := range doc.List {
 						if rest, ok := strings.CutPrefix(c.Text, "//guatiao:kind "); ok {
 							parts := strings.Fields(rest)
-							if len(parts) != 2 {
-								return nil, fmt.Errorf("%s: //guatiao:kind takes the kind's name and its C table", ts.Name.Name)
+							if len(parts) != 1 && len(parts) != 2 {
+								return nil, fmt.Errorf("%s: //guatiao:kind takes the kind's name, and its C table", ts.Name.Name)
 							}
+							// The table's name, which only a header needs, is <kind>_vtable unless said.
+							parts = append(parts, parts[0]+"_vtable")
 							decl = &kindDecl{iface: ts.Name.Name, kind: parts[0], table: parts[1],
 								required: map[string]*goMethod{}, file: f}
 						}
