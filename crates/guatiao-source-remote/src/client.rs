@@ -335,9 +335,19 @@ impl Peer {
                 builder = builder.kinds(&[t.kind.as_str()]).table(table.kind_table());
                 tables.push(table);
             }
+            let document = kinds
+                .document(
+                    p.tables
+                        .iter()
+                        .map(|t| t.kind.as_str())
+                        .filter(|k| kinds.get(k).is_some_and(|d| !d.object())),
+                )
+                .map_err(|e| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &e.to_string()))?;
             // Any non-null ctx: a provider's tables share one, and these
             // find their peer table by kind.
-            builder = builder.ctx(core::ptr::without_provenance_mut(1));
+            builder = builder
+                .ctx(core::ptr::without_provenance_mut(1))
+                .kind_descriptions(document);
             for table in tables {
                 builder = builder.keep(table);
             }

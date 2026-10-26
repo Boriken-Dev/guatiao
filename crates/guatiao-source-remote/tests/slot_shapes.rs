@@ -17,6 +17,7 @@ use std::sync::Mutex;
 
 use common::{CHATS, Ear, eventually, pair};
 use greeter_kind::{Counter, Greeter, Listener, Wide};
+use guatiao::library::kind::KindDescription;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 
@@ -224,4 +225,30 @@ fn callbacks_nested_without_end_are_refused_and_unwind() {
     );
     // The link carries on.
     assert!(greeter.greet("after").is_ok());
+}
+
+/// A remote provider carries its kinds' document, as the peer's own
+/// derived provider does: a host binds it with no file of its own.
+#[test]
+fn a_remote_provider_carries_its_kinds_descriptions() {
+    let (server, _source, registry) = pair(None);
+    let remote = registry
+        .providers("greeter")
+        .next()
+        .expect("the remote greeter");
+    let carried = remote.kind_descriptions().expect("a document");
+    let names: Vec<&str> = carried.iter().map(KindDescription::name).collect();
+    assert_eq!(
+        names,
+        ["greeter", "listener", "conversation", "counter", "wide"]
+    );
+
+    let own = server
+        .registry()
+        .providers("greeter")
+        .next()
+        .expect("the peer's greeter")
+        .kind_descriptions()
+        .expect("the derived document");
+    assert_eq!(carried, own);
 }

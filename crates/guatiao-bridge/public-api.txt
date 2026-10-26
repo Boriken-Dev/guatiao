@@ -219,6 +219,7 @@ impl guatiao_bridge::Kinds
 pub fn guatiao_bridge::Kinds::add(&mut self, guatiao::library::kind::description::KindDescription) -> core::result::Result<(), guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Kinds::add_json(&mut self, &str) -> core::result::Result<usize, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Kinds::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Kinds::document<'a>(&self, impl core::iter::traits::collect::IntoIterator<Item = &'a str>) -> core::result::Result<alloc::string::String, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Kinds::get(&self, &str) -> core::option::Option<&alloc::sync::Arc<guatiao::library::kind::description::KindDescription>>
 pub fn guatiao_bridge::Kinds::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Kinds::names(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>

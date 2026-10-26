@@ -10,9 +10,9 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use std::path::Path;
 
-use guatiao::library::kind::KindDescription;
-use guatiao::value::convert::TryAsRef;
-use guatiao::{Alloc, Map, Value};
+use guatiao::library::kind::{AnswerType, ArgType, KindDescription};
+use guatiao::value::convert::{ToValue, TryAsRef};
+use guatiao::{Alloc, List, Map, Value};
 
 use crate::error::BridgeError;
 
@@ -97,6 +97,61 @@ impl Kinds {
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.by_name.keys().map(String::as_str)
     }
+
+    /// The document a provider serving `served` carries
+    /// (`ProviderPartsBuilder::kind_descriptions`): `{"format":1,"kinds":[..]}`
+    /// as compact JSON, each kind served followed by the object kinds its
+    /// slots take or answer, in slot order and transitively, every kind
+    /// once, as `#[derive(Provider)]` writes it. A kind not known here is
+    /// left out; empty when none is known.
+    pub fn document<'a>(
+        &self,
+        served: impl IntoIterator<Item = &'a str>,
+    ) -> Result<String, BridgeError> {
+        let mut order = Vec::new();
+        for name in served {
+            self.reach(name, &mut order);
+        }
+        if order.is_empty() {
+            return Ok(String::new());
+        }
+        let written = |e: guatiao::ValueError| {
+            BridgeError::Table(format!("a kind's description cannot be written: {e}"))
+        };
+        let mut kinds = List::new();
+        for kind in order {
+            kinds.push(kind.to_value().map_err(written)?);
+        }
+        let mut document = Map::new();
+        document.set("format", 1u32);
+        document.set("kinds", kinds);
+        guatiao_serde::text::json::to_string(
+            &Value::from(document),
+            guatiao_serde::Presentation::new(),
+        )
+        .map_err(|e| BridgeError::Table(format!("a kind document cannot be written: {e}")))
+    }
+
+    /// Pushes `name`, then every object kind its slots reach, each once.
+    fn reach<'s>(&'s self, name: &str, order: &mut Vec<&'s KindDescription>) {
+        let Some(kind) = self.by_name.get(name) else {
+            return;
+        };
+        if order.iter().any(|k| k.name() == name) {
+            return;
+        }
+        order.push(kind);
+        for slot in kind.slots() {
+            for arg in slot.args() {
+                if let ArgType::Object { kind: object, .. } = arg.ty() {
+                    self.reach(object, order);
+                }
+            }
+            if let Some(AnswerType::Object { kind: object }) = slot.answer() {
+                self.reach(object, order);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -115,6 +170,32 @@ mod tests {
         let other = greeter().replace("\"floor_hash\":", "\"floor_hash\":1");
         assert!(kinds.add_json(&other).is_err());
         assert_eq!(kinds.names().collect::<Vec<_>>(), ["greeter"]);
+    }
+
+    /// The document a provider of greeter and counter carries is the one
+    /// the derive writes for the same kinds: the same kinds, in the same
+    /// order.
+    #[test]
+    fn a_document_names_what_is_served_and_every_object_kind_it_reaches() {
+        use greeter_kind::{Counter, Greeter};
+        use guatiao::library::Kind;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/greeter_kind/include/greeter_kind.kinds.json");
+        let mut kinds = Kinds::new();
+        kinds.load(&path).expect("read");
+
+        let document = kinds
+            .document(["greeter", "counter", "nobody"])
+            .expect("written");
+        let derived = guatiao::library::kind::kind_document(&[
+            <dyn Greeter as Kind>::describe,
+            <dyn Counter as Kind>::describe,
+        ]);
+        assert_eq!(
+            KindDescription::document_json(&document).expect("reads"),
+            KindDescription::document_json(&derived).expect("reads")
+        );
+        assert_eq!(kinds.document(["nobody"]).expect("written"), "");
     }
 
     #[test]
