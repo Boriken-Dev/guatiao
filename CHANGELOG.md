@@ -1549,6 +1549,11 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a WebSocket end sends nothing after the peer's
+  close.** Once the peer's close had been answered, frames the link still
+  had queued, and the link's own close as it ended, went out after it,
+  which RFC 6455 does not allow; such a write now fails as the link's
+  end.
 - **guatiao-source-remote: a trust store no longer keeps waiting a client
   the access control list will never admit.** A listener whose list sends
   every source on to a fingerprint rule (`permit` one fingerprint from
