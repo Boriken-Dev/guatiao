@@ -25,6 +25,7 @@ include("redact.jl")
 include("wire.jl")
 include("kinds.jl")
 include("registry.jl")
+include("described.jl")
 include("provide.jl")
 include("ffi.jl")
 

@@ -104,6 +104,10 @@
       r <- .Call(C_registry_provider_meta, .gt_reg(.self), key)
       if (is.null(r)) NULL else .gt_root(r)
     },
+    kind_descriptions = function(key) {
+      "The document of the kinds the provider serves and of the object kinds their slots reach, as plain data kinds_of() loads, or NULL when it carries none."
+      .Call(C_registry_kind_descriptions, .gt_reg(.self), key)
+    },
     host = function() {
       "The registry's guatiao_host_info, as an external pointer."
       .Call(C_registry_host, .gt_reg(.self))

@@ -212,6 +212,42 @@ SEXP C_registry_provider_meta(SEXP x, SEXP key) {
   return owner;
 }
 
+/* The document of the kinds a provider serves, as plain R data, or NULL
+ * when it carries none. */
+SEXP C_registry_kind_descriptions(SEXP x, SEXP key) {
+  guatiao_registry *reg = reg_of(x);
+  guatiao_value document;
+  set_absent(&document);
+  guatiao_status st = GT_CORE_FN(guatiao_registry_kind_descriptions)(reg, gt_str_arg(key, "the key"),
+                                                                     &gt_binding_alloc, &document);
+  if (st) {
+    gt_raise(st, st == GUATIAO_ERR_NOT_FOUND ? "no provider answers to that key"
+                                             : "what the provider carries is not a kinds document");
+  }
+  if (document.tag == GUATIAO_ABSENT) return R_NilValue;
+  return gt_read_and_free(&document, 0);
+}
+
+/* A kinds document read from its JSON text by the library, as plain R
+ * data; refused naming where it goes wrong. */
+SEXP C_kind_document_read(SEXP text) {
+  guatiao_value document, why;
+  set_absent(&document);
+  set_absent(&why);
+  guatiao_status st = GT_CORE_FN(guatiao_kind_document_read)(gt_str_arg(text, "the document"),
+                                                             &gt_binding_alloc, &document, &why);
+  if (st) {
+    char message[512] = "not a kinds document";
+    if (why.tag == GUATIAO_STRING) {
+      guatiao_str t = guatiao_string_text(&why);
+      snprintf(message, sizeof message, "%.*s", (int)(t.len < 500 ? t.len : 500), (const char *)t.ptr);
+    }
+    gt_free(&why);
+    gt_raise(st, "%s", message);
+  }
+  return gt_read_and_free(&document, 0);
+}
+
 SEXP C_registry_host(SEXP x) {
   guatiao_registry *reg = reg_of(x);
   const guatiao_host_info *h = GT_CORE_FN(guatiao_registry_host)(reg);

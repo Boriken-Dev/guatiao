@@ -1,5 +1,6 @@
 \name{kind}
 \alias{kind}
+\alias{kinds_of}
 \alias{method}
 \alias{lent}
 \alias{taken}
@@ -13,6 +14,7 @@
 \usage{
 kind(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
   int64 = "auto", where = topenv(parent.frame()))
+kinds_of(document, known = list(), class = .gt_camel, where = new.env())
 method(..., returns = NULL, required = FALSE, fallible = FALSE)
 lent(shape)
 taken(shape)
@@ -30,7 +32,8 @@ the header's table declares them. For \code{method}, the slot's arguments,
 named, each a shape.}
 \item{object}{An object kind: its table starts with \code{destroy}, which is
 \code{close()} on a remote.}
-\item{class}{The virtual S4 class the kind defines; the C name in CamelCase.}
+\item{class}{The virtual S4 class the kind defines; the C name in CamelCase.
+For \code{kinds_of}, a function of the kind's name answering it.}
 \item{int64}{How a 64-bit integer is answered: \code{"auto"} an R integer
 when it fits, a double up to 2^53 (where a double holds every whole
 number), else a \code{number}; \code{"number"} always a \code{number};
@@ -41,7 +44,14 @@ number), else a \code{number}; \code{"number"} always a \code{number};
 \code{kind}, what its remotes answer and what its R methods are handed; for
 \code{call_slot}, this call's answer (\code{NULL}: the kind's).}
 \item{where}{Where the classes and generics are defined: a package's namespace
-as it installs, or the global environment for a script.}
+as it installs, or the global environment for a script. For \code{kinds_of},
+a fresh environment by default.}
+\item{document}{A kinds document, the \code{<crate>.kinds.json} a kind crate
+commits beside its header: its JSON text (read by the library, so no JSON
+package is needed), the R data \code{registry$kind_descriptions()} answers,
+or a value holding it.}
+\item{known}{Kinds, as \code{kind()} answers them, that a slot of the
+document may name though the document does not describe them.}
 \item{returns}{The answer's shape: \code{NULL} for none, a shape name, or an
 object kind.}
 \item{required}{A slot every table fills: the kind's original ones, first.}
@@ -62,7 +72,8 @@ on every call.}
 \item{data}{A buffer's first contents.}
 }
 \value{
-\code{kind} returns the kind's description, invisibly; \code{method},
+\code{kind} returns the kind's description, invisibly; \code{kinds_of}
+a list of them, named by each kind's C name; \code{method},
 \code{lent} and \code{taken} describe a slot or shape; \code{bind_table} a
 remote; \code{has_slot} \code{TRUE} or \code{FALSE}; \code{call_slot} the
 slot's answer; \code{byte_buffer} a buffer; \code{live_objects} how many R
@@ -76,6 +87,13 @@ and a remote class (\code{GreeterRemote}, extending the kind's class and
 \code{guatiao_remote}) with a method of each generic that calls the slot.
 A slot is found by position. A name two kinds of one package share must take
 the same arguments.
+
+\code{kinds_of(document)} declares, as \code{kind()} would, every kind of a
+description document (each object kind before the kinds naming it), in
+\code{where}: what a host binds a kind from when it has no declaration of
+it, such as the document a library carries. A type it does not know, a
+borrowed list or kinds referring to each other in a cycle is an error naming
+the kind and the slot.
 
 Shapes: \code{"string"} (\code{guatiao_str}: a string), \code{"bytes"} (a raw
 vector), \code{"bool"}, \code{"int8"} to \code{"uint64"}, \code{"float"},

@@ -20,6 +20,7 @@ SEXP C_duration_read(SEXP);
 SEXP C_file_carries(SEXP, SEXP);
 SEXP C_has_export(SEXP, SEXP);
 SEXP C_integer64_text(SEXP);
+SEXP C_kind_document_read(SEXP);
 SEXP C_kind_new(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_library_close(SEXP);
 SEXP C_library_entry(SEXP);
@@ -52,6 +53,7 @@ SEXP C_registry_destroy(SEXP, SEXP, SEXP);
 SEXP C_registry_free(SEXP);
 SEXP C_registry_host(SEXP);
 SEXP C_registry_keyed_by(SEXP, SEXP, SEXP);
+SEXP C_registry_kind_descriptions(SEXP, SEXP);
 SEXP C_registry_load_file(SEXP, SEXP);
 SEXP C_registry_new(SEXP, SEXP, SEXP);
 SEXP C_registry_priority(SEXP, SEXP);
@@ -106,6 +108,7 @@ static const R_CallMethodDef calls[] = {
     {"C_file_carries", (DL_FUNC)(void (*)(void)) & C_file_carries, 2},
     {"C_has_export", (DL_FUNC)(void (*)(void)) & C_has_export, 2},
     {"C_integer64_text", (DL_FUNC)(void (*)(void)) & C_integer64_text, 1},
+    {"C_kind_document_read", (DL_FUNC)(void (*)(void)) & C_kind_document_read, 1},
     {"C_kind_new", (DL_FUNC)(void (*)(void)) & C_kind_new, 11},
     {"C_library_close", (DL_FUNC)(void (*)(void)) & C_library_close, 1},
     {"C_library_entry", (DL_FUNC)(void (*)(void)) & C_library_entry, 1},
@@ -138,6 +141,7 @@ static const R_CallMethodDef calls[] = {
     {"C_registry_free", (DL_FUNC)(void (*)(void)) & C_registry_free, 1},
     {"C_registry_host", (DL_FUNC)(void (*)(void)) & C_registry_host, 1},
     {"C_registry_keyed_by", (DL_FUNC)(void (*)(void)) & C_registry_keyed_by, 3},
+    {"C_registry_kind_descriptions", (DL_FUNC)(void (*)(void)) & C_registry_kind_descriptions, 2},
     {"C_registry_load_file", (DL_FUNC)(void (*)(void)) & C_registry_load_file, 2},
     {"C_registry_new", (DL_FUNC)(void (*)(void)) & C_registry_new, 3},
     {"C_registry_priority", (DL_FUNC)(void (*)(void)) & C_registry_priority, 2},
