@@ -107,8 +107,11 @@ function e = build(cls)
                     logical(required), arg_kinds, int32(ret_kinds));
   total = n + double(d.object);
   floor_slots = sum(required) + double(d.object);
+  % A slot is a pointer: 8 bytes where an array may pass 2^32 elements, else 4.
+  [~, most] = computer();
+  word = 4 + 4 * (most > 2^32);
   e = struct('class', cls, 'desc', d, 'cid', cid, 'names', {names}, 'codes', {codes}, ...
-             'size', 8 + 8 * total, 'floor_size', 8 + 8 * floor_slots);
+             'size', 8 + word * total, 'floor_size', 8 + word * floor_slots);
 end
 
 function [code, kind] = arg_code(s, where)

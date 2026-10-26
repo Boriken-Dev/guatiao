@@ -27,9 +27,11 @@ function tally()
   gt_env('examples');
   e = guatiao.internal.kinds('of', 'tallykind.Tally');
   expect_equal(e.desc.floor_hash, 1286177969, 'the floor hash the document names');
-  expect_equal(e.size, 8 + 8 * 7, 'a word per slot');
+  [~, most] = computer();
+  word = 4 + 4 * (most > 2^32);
+  expect_equal(e.size, 8 + word * 7, 'a word per slot');
   w = guatiao.internal.kinds('of', 'tallykind.Watcher');
-  expect_equal(w.floor_size, 8 + 8 * 2, 'destroy and changed');
+  expect_equal(w.floor_size, 8 + word * 2, 'destroy and changed');
   reg = guatiao.Registry('m-tally', '0.1');
   reg.register_library(guatiao.Library('m_tally', '0.1.0', {'gtt.Tallies'}));
   t = reg.bind('m_tally_tallies', 'tallykind.Tally');

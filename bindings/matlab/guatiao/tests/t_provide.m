@@ -76,7 +76,8 @@ function kind_refusals()
   expect_error(@() guatiao.slot('not a name', {}), 'guatiao:BadValue');
   e = guatiao.internal.kinds('of', 'gtt.Pair');
   expect_equal(e.codes{1}.args, [41 41]);
-  expect_equal(e.size, 16);
+  [~, most] = computer();
+  expect_equal(e.size, 8 + (4 + 4 * (most > 2^32)), 'the header and one slot');
   expect_error(@() guatiao.internal.kinds('of', 'gtt.Sizes'), 'guatiao:WrongKind', 'a provider declares no kind');
 end
 

@@ -59,7 +59,8 @@ function header()
     expect_equal(str2double(tok{1}), e.desc.floor_hash, [pairs{i, 1} ' floor hash']);
     body = regexp(text, ['typedef struct ' pairs{i, 1} ' \{(.*?)\} ' pairs{i, 1} ';'], 'tokens', 'once');
     slots = numel(regexp(body{1}, '\(\*\w+\)'));
-    expect_equal(e.size, 8 + 8 * slots, [pairs{i, 1} ' size']);
+    [~, most] = computer();
+    expect_equal(e.size, 8 + (4 + 4 * (most > 2^32)) * slots, [pairs{i, 1} ' size']);
   end
 end
 
