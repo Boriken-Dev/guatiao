@@ -64,6 +64,11 @@ rdma = ["tcp", "dep:libloading", "dep:libc"]
 # open. Each frame's body is one binary message.
 ws = ["tcp", "dep:tungstenite"]
 
+# WebTransport (HTTP/3 over QUIC), what a browser opens with the server's
+# certificate pinned by its hash: `quic`'s TLS and threads, wtransport for
+# HTTP/3's session over the same quinn.
+webtransport = ["quic", "dep:wtransport"]
+
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 # The kind tables it serves and calls through: libffi's closures and calls.
@@ -93,6 +98,10 @@ tokio = { version = "1.47", optional = true, default-features = false, features 
 memmap2 = { version = "0.9", optional = true }
 # WebSocket framing and its HTTP upgrade; no TLS.
 tungstenite = { version = "0.30", optional = true, default-features = false, features = ["handshake"] }
+# WebTransport's HTTP/3 session (the `webtransport` feature), driven over
+# the quinn connections the transport accepts itself (`quinn`); no
+# certificate generation of its own (coqui-peer-tls makes them).
+wtransport = { version = "0.7.2", optional = true, default-features = false, features = ["quinn", "ring"] }
 
 # Named pipes on Windows: overlapped I/O, so one thread reads while
 # another writes, with no `unsafe` here.
