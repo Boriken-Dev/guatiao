@@ -20,6 +20,8 @@ pub mod guatiao_source_remote::config
 pub fn guatiao_source_remote::config::acl_of(&guatiao::value::value::Value) -> core::result::Result<coqui_net_acl::Acl, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::client_of(&guatiao::value::types::map::Map) -> core::result::Result<(alloc::boxed::Box<dyn guatiao_source_remote::transport::Connect>, guatiao_source_remote::link::LinkOptions), guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::options_of(&guatiao::value::types::map::Map, guatiao_source_remote::protocol::Trust) -> core::result::Result<guatiao_source_remote::link::LinkOptions, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::config::policy_of(&guatiao::value::value::Value) -> core::result::Result<coqui_peer_tls::policy::Policy, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::config::tls_config_of(&guatiao::value::types::map::Map) -> core::result::Result<guatiao_source_remote::transport::tls::TlsConfig, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::trust_of(&str) -> core::result::Result<guatiao_source_remote::protocol::Trust, guatiao::library::kind::ProviderError>
 pub mod guatiao_source_remote::link
 #[non_exhaustive] pub enum guatiao_source_remote::link::LinkError
@@ -49,6 +51,7 @@ pub fn guatiao_source_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guati
 pub fn guatiao_source_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::open(&self, &str, &str) -> core::result::Result<(), guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::peer(&self) -> &str
+pub fn guatiao_source_remote::link::Link::peer_id(&self) -> core::option::Option<&str>
 pub fn guatiao_source_remote::link::Link::ping(&self) -> core::result::Result<core::time::Duration, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::trust(&self) -> guatiao_source_remote::protocol::Trust
 pub fn guatiao_source_remote::link::Link::why(&self) -> alloc::string::String
@@ -470,6 +473,7 @@ impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::trans
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::new(R) -> guatiao_source_remote::transport::stream::StreamReader<R>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::with_timeout(R, impl core::ops::function::FnMut(&R, core::option::Option<core::time::Duration>) -> core::io::error::Result<()> + core::marker::Send + 'static) -> guatiao_source_remote::transport::stream::StreamReader<R>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::transport::FrameRead for guatiao_source_remote::transport::stream::StreamReader<R>
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub struct guatiao_source_remote::transport::stream::StreamWriter<W: core::io::write::Write>
@@ -511,6 +515,48 @@ impl core::fmt::Debug for guatiao_source_remote::transport::tcp::TcpListen
 pub fn guatiao_source_remote::transport::tcp::TcpListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const guatiao_source_remote::transport::tcp::CONNECT_TIMEOUT: core::time::Duration
 pub fn guatiao_source_remote::transport::tcp::from_stream(std::net::tcp::TcpStream) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
+pub mod guatiao_source_remote::transport::tls
+pub use guatiao_source_remote::transport::tls::Identity
+pub use guatiao_source_remote::transport::tls::PeerId
+pub use guatiao_source_remote::transport::tls::Policy
+pub use guatiao_source_remote::transport::tls::TrustStore
+pub use guatiao_source_remote::transport::tls::WaitingEntry
+pub use guatiao_source_remote::transport::tls::Weakening
+pub struct guatiao_source_remote::transport::tls::TlsConfig
+impl guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::fingerprint(&self) -> coqui_peer::id::PeerId
+pub fn guatiao_source_remote::transport::tls::TlsConfig::identity(&self) -> &coqui_peer_tls::identity::Identity
+pub fn guatiao_source_remote::transport::tls::TlsConfig::new(coqui_peer_tls::identity::Identity) -> guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::open(&std::path::Path) -> core::io::error::Result<guatiao_source_remote::transport::tls::TlsConfig>
+pub fn guatiao_source_remote::transport::tls::TlsConfig::pins(self, impl core::iter::traits::collect::IntoIterator<Item = coqui_peer::id::PeerId>) -> guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::policy(self, coqui_peer_tls::policy::Policy) -> guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::store(self, coqui_peer::store::TrustStore) -> guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::trust_store(&self) -> core::option::Option<&coqui_peer::store::TrustStore>
+pub fn guatiao_source_remote::transport::tls::TlsConfig::weakened(&self) -> alloc::vec::Vec<coqui_peer_tls::policy::Weakening>
+impl core::clone::Clone for guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_source_remote::transport::tls::TlsConfig
+pub fn guatiao_source_remote::transport::tls::TlsConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_source_remote::transport::tls::TlsConnect
+impl guatiao_source_remote::transport::tls::TlsConnect
+pub fn guatiao_source_remote::transport::tls::TlsConnect::new(&str, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::tls::TlsConnect>
+pub fn guatiao_source_remote::transport::tls::TlsConnect::timeout(self, core::time::Duration) -> guatiao_source_remote::transport::tls::TlsConnect
+impl core::clone::Clone for guatiao_source_remote::transport::tls::TlsConnect
+pub fn guatiao_source_remote::transport::tls::TlsConnect::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_source_remote::transport::tls::TlsConnect
+pub fn guatiao_source_remote::transport::tls::TlsConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::tls::TlsConnect
+pub fn guatiao_source_remote::transport::tls::TlsConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
+pub fn guatiao_source_remote::transport::tls::TlsConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_source_remote::transport::tls::TlsListen
+impl guatiao_source_remote::transport::tls::TlsListen
+pub fn guatiao_source_remote::transport::tls::TlsListen::accept(&self) -> core::io::error::Result<guatiao_source_remote::transport::tcp::Accepted>
+pub fn guatiao_source_remote::transport::tls::TlsListen::bind(&str, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::tls::TlsListen>
+pub fn guatiao_source_remote::transport::tls::TlsListen::from_listener(std::net::tcp::TcpListener, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::tls::TlsListen>
+pub fn guatiao_source_remote::transport::tls::TlsListen::local_addr(&self) -> core::io::error::Result<core::net::socket_addr::SocketAddr>
+impl core::fmt::Debug for guatiao_source_remote::transport::tls::TlsListen
+pub fn guatiao_source_remote::transport::tls::TlsListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao_source_remote::transport::tls::IDENTITY_FILE: &str
 pub mod guatiao_source_remote::transport::ws
 pub struct guatiao_source_remote::transport::ws::WsConnect
 impl guatiao_source_remote::transport::ws::WsConnect
@@ -556,13 +602,18 @@ pub fn guatiao_source_remote::transport::shm::ShmConnect::describe(&self) -> all
 impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::tcp::TcpConnect
 pub fn guatiao_source_remote::transport::tcp::TcpConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
 pub fn guatiao_source_remote::transport::tcp::TcpConnect::describe(&self) -> alloc::string::String
+impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::tls::TlsConnect
+pub fn guatiao_source_remote::transport::tls::TlsConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
+pub fn guatiao_source_remote::transport::tls::TlsConnect::describe(&self) -> alloc::string::String
 impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::ws::WsConnect
 pub fn guatiao_source_remote::transport::ws::WsConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
 pub fn guatiao_source_remote::transport::ws::WsConnect::describe(&self) -> alloc::string::String
 pub trait guatiao_source_remote::transport::FrameRead: core::marker::Send
+pub fn guatiao_source_remote::transport::FrameRead::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::FrameRead::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::FrameRead::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::transport::FrameRead for guatiao_source_remote::transport::stream::StreamReader<R>
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub trait guatiao_source_remote::transport::FrameWrite: core::marker::Send
@@ -634,6 +685,7 @@ pub fn guatiao_source_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guati
 pub fn guatiao_source_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::open(&self, &str, &str) -> core::result::Result<(), guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::peer(&self) -> &str
+pub fn guatiao_source_remote::link::Link::peer_id(&self) -> core::option::Option<&str>
 pub fn guatiao_source_remote::link::Link::ping(&self) -> core::result::Result<core::time::Duration, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::link::Link::trust(&self) -> guatiao_source_remote::protocol::Trust
 pub fn guatiao_source_remote::link::Link::why(&self) -> alloc::string::String

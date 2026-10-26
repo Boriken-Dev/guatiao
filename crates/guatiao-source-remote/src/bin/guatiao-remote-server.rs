@@ -19,13 +19,15 @@ use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
 
 const USAGE: &str = "\
 guatiao-remote-server (--stdio | --listen URL) [options]
+guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
 
   --stdio               serve one link on stdin and stdout (a host's child)
   --listen URL          serve every link to URL: tcp://ADDRESS:PORT is the
                         trusted level, ws://ADDRESS:PORT the same over
-                        WebSocket (a browser), local://name the local one (a
-                        socket path or a pipe name), rdma://ADDRESS:PORT RDMA
-                        (experimental, Linux only)
+                        WebSocket (a browser), tls://ADDRESS:PORT the secure
+                        level, local://name the local one (a socket path or a
+                        pipe name), rdma://ADDRESS:PORT RDMA (experimental,
+                        Linux only)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
   --range CIDR          admit peers from this address range (repeatable): a
                         permit rule of the access control list, which denies
@@ -34,6 +36,16 @@ guatiao-remote-server (--stdio | --listen URL) [options]
                         ([[rule]] action, source, destination, port,
                         fingerprint; default); trusted needs it or --range
   --key-file PATH       the trusted level's pre-shared key
+  --state-dir DIR       secure: this server's identity (DIR/identity.pem, made
+                        when absent) and its trust store (DIR/peers): clients
+                        it does not know wait there until accepted
+  --identity PATH       secure: the identity file instead (made when absent)
+  --pin FINGERPRINT     secure: trust this client (repeatable); with any, the
+                        trust store no longer decides
+  --policy PATH         secure: the TLS policy, a TOML or JSON file (default
+                        strict); its [acl] is the access control list
+  --waiting             list the clients waiting in --state-dir, then exit
+  --accept FINGERPRINT  accept a waiting client in --state-dir, then exit
   --rdma-device NAME    the RDMA device rdma:// goes through (default: the first)
   --kinds PATH          a kind description document (repeatable)
   --load PATH           a library to load (repeatable)
@@ -50,6 +62,12 @@ struct Args {
     ranges: Vec<String>,
     acl: Option<PathBuf>,
     key_file: Option<PathBuf>,
+    state_dir: Option<PathBuf>,
+    identity: Option<PathBuf>,
+    pins: Vec<String>,
+    policy: Option<PathBuf>,
+    waiting: bool,
+    accept: Option<String>,
     rdma_device: Option<String>,
     kinds: Vec<PathBuf>,
     load: Vec<PathBuf>,
@@ -69,6 +87,12 @@ fn parse() -> Result<Args, String> {
         ranges: Vec::new(),
         acl: None,
         key_file: None,
+        state_dir: None,
+        identity: None,
+        pins: Vec::new(),
+        policy: None,
+        waiting: false,
+        accept: None,
         rdma_device: None,
         kinds: Vec::new(),
         load: Vec::new(),
@@ -97,6 +121,12 @@ fn parse() -> Result<Args, String> {
             "--range" => a.ranges.push(need(&mut it, &flag)?),
             "--acl" => a.acl = Some(need(&mut it, &flag)?.into()),
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),
+            "--state-dir" => a.state_dir = Some(need(&mut it, &flag)?.into()),
+            "--identity" => a.identity = Some(need(&mut it, &flag)?.into()),
+            "--pin" => a.pins.push(need(&mut it, &flag)?),
+            "--policy" => a.policy = Some(need(&mut it, &flag)?.into()),
+            "--waiting" => a.waiting = true,
+            "--accept" => a.accept = Some(need(&mut it, &flag)?),
             "--rdma-device" => a.rdma_device = Some(need(&mut it, &flag)?),
             "--kinds" => a.kinds.push(need(&mut it, &flag)?.into()),
             "--load" => a.load.push(need(&mut it, &flag)?.into()),
@@ -116,6 +146,14 @@ fn parse() -> Result<Args, String> {
             "-h" | "--help" => return Err(USAGE.to_string()),
             other => return Err(format!("`{other}` is not an option\n\n{USAGE}")),
         }
+    }
+    if a.waiting || a.accept.is_some() {
+        if a.state_dir.is_none() {
+            return Err(format!(
+                "--waiting and --accept need --state-dir\n\n{USAGE}"
+            ));
+        }
+        return Ok(a);
     }
     if a.stdio == a.listen.is_some() {
         return Err(format!("name one of --stdio and --listen\n\n{USAGE}"));
@@ -192,8 +230,42 @@ fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
     Ok(options)
 }
 
+/// The pairing commands: list the waiting clients, or accept one.
+fn pairing(a: &Args) -> Result<(), String> {
+    #[cfg(feature = "tls")]
+    {
+        use guatiao_source_remote::transport::tls::{PeerId, TrustStore};
+        let dir = a.state_dir.as_deref().unwrap_or(std::path::Path::new("."));
+        let store = TrustStore::open(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        if a.waiting {
+            for entry in store.waiting().map_err(|e| e.to_string())? {
+                match entry.source {
+                    Some(source) => println!("{} from {source}", entry.id),
+                    None => println!("{}", entry.id),
+                }
+            }
+        }
+        if let Some(text) = &a.accept {
+            let id: PeerId = text
+                .parse()
+                .map_err(|_| format!("`{text}` is not a fingerprint"))?;
+            store.accept(&id).map_err(|e| format!("{id}: {e}"))?;
+            println!("accepted {id}");
+        }
+        Ok(())
+    }
+    #[cfg(not(feature = "tls"))]
+    {
+        let _ = a;
+        Err("--waiting and --accept are the secure level's, which this build lacks".to_string())
+    }
+}
+
 fn run() -> Result<(), String> {
     let a = parse()?;
+    if a.waiting || a.accept.is_some() {
+        return pairing(&a);
+    }
     let (registry, described) = registry(&a)?;
     let trust = a.trust.unwrap_or(Trust::Local);
     let server = Server::new(registry, described, options(&a, trust)?);
@@ -229,6 +301,8 @@ fn run() -> Result<(), String> {
         "tcp" => serve_tcp(&server, address, &a),
         #[cfg(feature = "ws")]
         "ws" => serve_ws(&server, address, &a),
+        #[cfg(feature = "tls")]
+        "tls" => serve_tls(&server, address, &a),
         #[cfg(feature = "rdma")]
         "rdma" => serve_rdma(&server, address, &a),
         #[cfg(feature = "local")]
@@ -334,6 +408,71 @@ fn serve_ws(server: &Server, address: &str, a: &Args) -> Result<(), String> {
         "guatiao-remote-server: serving ws://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
     );
+    serve_accepted(server, || listener.accept())
+}
+
+#[cfg(feature = "tls")]
+fn serve_tls(server: &Server, address: &str, a: &Args) -> Result<(), String> {
+    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig, TlsListen};
+    if server.options().trust() != Trust::Secure {
+        return Err("tls:// serves the secure level: pass --trust secure".to_string());
+    }
+    let mut config = match (&a.state_dir, &a.identity) {
+        (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
+        (None, Some(path)) => TlsConfig::new(
+            Identity::open_or_create(path).map_err(|e| format!("{}: {e}", path.display()))?,
+        ),
+        (Some(_), Some(_)) => {
+            return Err("name --state-dir or --identity, not both".to_string());
+        }
+        (None, None) => {
+            return Err("tls:// needs an identity: --state-dir DIR or --identity PATH".to_string());
+        }
+    };
+    let pins = a
+        .pins
+        .iter()
+        .map(|p| {
+            p.parse::<PeerId>()
+                .map_err(|_| format!("--pin `{p}` is not a fingerprint"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    config = config.pins(pins);
+    let mut policy = match &a.policy {
+        Some(path) => guatiao_source_remote::config::policy_of(&document(path)?)
+            .map_err(|e| format!("{}: {}", path.display(), e.message()))?,
+        None => guatiao_source_remote::transport::tls::Policy::strict(),
+    };
+    if let Some(acl) = named_acl(a)? {
+        if policy.acl.is_some() {
+            return Err(
+                "the policy names an access control list: leave out --acl and --range".to_string(),
+            );
+        }
+        policy.acl = Some(acl);
+    }
+    let said = policy
+        .acl
+        .as_ref()
+        .map_or_else(|| "every source".to_string(), listing);
+    config = config.policy(policy);
+    let trusting = if !a.pins.is_empty() {
+        format!("{} pinned clients", a.pins.len())
+    } else {
+        "the trust store's clients".to_string()
+    };
+    let listener = TlsListen::bind(address, &config).map_err(|e| e.to_string())?;
+    eprintln!(
+        "guatiao-remote-server: serving tls://{} as {}, trusting {trusting}, admitting {said}",
+        listener.local_addr().map_err(|e| e.to_string())?,
+        config.fingerprint(),
+    );
+    for w in config.weakened() {
+        eprintln!(
+            "guatiao-remote-server: weaker than strict: {} = {} (strict: {})",
+            w.setting, w.value, w.strict
+        );
+    }
     serve_accepted(server, || listener.accept())
 }
 

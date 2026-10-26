@@ -392,6 +392,8 @@ pub(crate) struct Inner {
     proxies: Proxies,
     next_call: AtomicU64,
     peer: String,
+    /// The identity the transport proved, `sha256:<hex>`.
+    peer_id: Option<String>,
     trust: Trust,
 }
 
@@ -512,6 +514,12 @@ impl Link {
                 "the trusted level needs guatiao-source-remote's `tcp` feature".to_string(),
             ));
         }
+        if options.trust == Trust::Secure && reader.peer_id().is_none() {
+            writer.shutdown();
+            return Err(LinkError::Trust(
+                "the secure level runs over a transport that proves the peer, `tls://`".to_string(),
+            ));
+        }
         reader.set_timeout(Some(options.handshake_timeout))?;
         let ours = Offer {
             max_frame: options.max_frame,
@@ -610,6 +618,13 @@ impl Link {
                         ),
                     ));
                 }
+                if trust == Trust::Secure && reader.peer_id().is_none() {
+                    return Err(refuse_link(
+                        &mut *writer,
+                        Status::GUATIAO_ERR_UNSUPPORTED,
+                        "the secure level runs over a transport that proves the peer, and this one proves none",
+                    ));
+                }
                 (nonce, Offer::from_value(&offered, &ours))
             }
             Ok(_) => {
@@ -700,6 +715,7 @@ impl Link {
         theirs: &Offer,
         setup: Setup,
     ) -> Link {
+        let peer_id = reader.peer_id();
         let inner = Arc::new(Inner {
             gate: Gate::new(writer),
             closer,
@@ -724,6 +740,7 @@ impl Link {
             proxies: setup.proxies,
             next_call: AtomicU64::new(1),
             peer,
+            peer_id,
             trust: options.trust,
         });
         let reading = Arc::clone(&inner);
@@ -749,6 +766,12 @@ impl Link {
     /// The peer, in words.
     pub fn peer(&self) -> &str {
         &self.inner.peer
+    }
+
+    /// The peer's identity as the transport proved it, `sha256:<hex>` (its
+    /// TLS certificate's fingerprint); `None` below the secure level.
+    pub fn peer_id(&self) -> Option<&str> {
+        self.inner.peer_id.as_deref()
     }
 
     /// The trust level it runs at.
