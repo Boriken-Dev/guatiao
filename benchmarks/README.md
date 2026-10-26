@@ -450,6 +450,43 @@ One large string is the exception, as in Dart: the tape copies it into
 the wire bytes and again on each side, where a callback hands it over
 once. Go's callbacks read it fastest of all, and lose everywhere else.
 
+## Documents to Julia data (`documents-julia.json`)
+
+The same three documents and three ways: through a value
+(`GuatiaoSerde.parse(text)[]`, `GuatiaoSerde.emit(Value(data))`), through
+the tape (wire bytes read and written in Julia), and through `@cfunction`
+callbacks. The package reads through the callbacks
+(`GuatiaoSerde.parse(Any, text)`) and writes through the tape
+(`GuatiaoSerde.emit(data)`); the script carries the other two ways.
+
+```bash
+cargo build --release -p guatiao -p guatiao-serde \
+  --features guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+julia --project=<env holding Guatiao and GuatiaoSerde from the checkout> \
+  benchmarks/julia/documents.jl --save documents-julia   # GUATIAO_LIBRARY=target/release
+```
+
+Local and provisional: Julia 1.13.2 on the ARM64 machine's Linux
+environment (there is no Windows ARM64 Julia), one run of fifteen
+samples, microseconds per call, median. Before this, `emit` of plain data
+built a `Value`, the "value" column.
+
+| Julia | value | tape | callbacks | value / chosen |
+| --- | --- | --- | --- | --- |
+| configuration, parse | 89 | 70 | **64** | 1.4x |
+| configuration, render | 140 | **93** | 115 | 1.5x |
+| 10k floats, parse | 1720 | 1448 | **1448** | 1.2x |
+| 10k floats, render | 2032 | **1097** | 1096 | 1.9x |
+| 1 MiB string, parse | 173 | 214 | **183** | 0.95x |
+| 1 MiB string, render | 428 | **683** | 452 | 0.63x |
+
+Julia is the one binding where callbacks win reading: an `@cfunction`
+call from C costs a few nanoseconds, so building plain data per event
+beats decoding bytes in Julia, and both beat reading a tree (whose nodes
+the library allocates and frees). Writing, the tape wins on documents
+with structure; one large string is the exception again, copied once
+more on its way through the bytes.
+
 ## guatiao-source-remote across a link (`remote-*.jsonl`)
 
 `guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
