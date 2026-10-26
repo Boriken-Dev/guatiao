@@ -85,6 +85,15 @@ write now.
   in `guatiao/ffi`). Each suite now also compares its layouts with the
   ones the platform's C compiler gives `guatiao.h`, and both pass on
   armv7 under qemu-user. `usize` and `isize` slots are a word wide.
+- **Fortran: a document straight into a derived type of your own and
+  back.** `guatiao_visit(text, format, visitor)` hands a document's events
+  to a `guatiao_visitor` (an abstract type whose `on_key`, `on_number`,
+  `on_map_begin` and other events a program overrides), and
+  `guatiao_emit_walker(walker, format, text)` writes what a
+  `guatiao_walker`'s `walk` hands its `guatiao_sink`, with no value built
+  either way; JSON, TOML and YAML. `guatiao_c` mirrors the C tables as
+  `gt_visitor` and `gt_walker`, and `guatiao_serde_c` declares the
+  `*_visit` and `*_emit_walker` exports.
 - **MATLAB and Octave: a document straight to MATLAB data and back.**
   `guatiao.serde.data(text, format, 'ReadDataUris', 'Numbers', 'Maps')`
   answers what `guatiao.serde.parse(text).data()` does with no value
