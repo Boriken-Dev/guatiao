@@ -404,12 +404,22 @@ let source = RemoteSource::new(
   it holds its key (a stolen certificate leaves no entry), and refuses
   it. An operator lists the waiting clients and accepts one by
   fingerprint; its next link goes through. Waiting entries are capped per
-  source address and in all. Removing a peer from the store refuses its
-  next link: TLS session resumption is off at both ends.
-- **A refused client** is told so in words naming its own fingerprint:
-  TLS 1.3 lets a client finish its handshake before the server has
-  checked its certificate, so the refusal arrives as the link ending
-  before the server's first answer.
+  source and in all; a source is an IPv4 address, or an IPv6 /64, so the
+  holder of one subnet cannot fill the queue from many addresses (in
+  Rust, `TrustStore::with_ipv6_prefix(bits)` on the store handed to
+  `TlsConfig::store` groups by another prefix). Removing a peer from the
+  store refuses its next link: TLS session resumption is off at both
+  ends unless the policy's `allow_resumption` keeps it.
+- **A refusal says why.** The side that refuses a certificate names the
+  reason: not pinned, not accepted by the trust store (a server's
+  waiting client), or a chain where a pinned peer presents one
+  certificate. The refused side hears the TLS alert
+  `certificate_unknown`: a client is told the server does not trust it,
+  in words naming its own fingerprint. TLS 1.3 lets a client finish its
+  handshake before the server has checked its certificate, so that
+  refusal arrives with the link's first read. A refused link answers
+  `GUATIAO_ERR_BAD_VALUE`, as every failed trust check does, never
+  `GUATIAO_ERR_GONE`.
 - **The handshake** runs on the server's serving thread, bounded as a
   whole by the link's handshake timeout, so a client that connects and
   stalls holds only that thread for that long. Both ends require the
@@ -427,6 +437,7 @@ let source = RemoteSource::new(
   | `pin_digests` | `["sha256", "sha384", "sha512"]` |
   | `check_validity` | `true` |
   | `allow_chain_when_pinned` | `false` |
+  | `allow_resumption` | `false`: a resumed session skips the certificate check, so a removed peer could come back on one |
   | `waiting_per_source`, `waiting_total`, `waiting_rerecord_secs` | `16`, `1000`, `60` |
   | `acl` | none (the server's access control list, above) |
 

@@ -25,8 +25,11 @@ write now.
   DIR --waiting` / `--accept FINGERPRINT` pair it. coqui-peer-tls's TLS
   policy, strict by default, is part of the configuration (`policy`, in
   its text form), and every setting looser than strict is listed. TLS
-  session resumption is off, so a peer removed from the store is refused
-  at its next link. `transport::tls::{TlsConfig, TlsConnect, TlsListen}`
+  session resumption is off unless the policy's `allow_resumption` keeps
+  it, so a peer removed from the store is refused at its next link. A
+  refusal names why (a certificate not pinned, not accepted by the trust
+  store, or presented with a chain) and answers `GUATIAO_ERR_BAD_VALUE`;
+  the waiting caps count an IPv6 source by its /64. `transport::tls::{TlsConfig, TlsConnect, TlsListen}`
   in Rust; `connect: tls://...` with `state_dir` or `identity_file`,
   `pins` and `policy` in a source file's configuration and in a peer
   manifest; `--listen tls://`, `--state-dir`, `--identity`, `--pin`,
