@@ -167,5 +167,5 @@ end
     for (i, refusal) in enumerate(Guatiao.Wire.REFUSALS)
         @test occursin("#define GUATIAO_WIRE_$(uppercase(string(refusal))) $i\n", text)
     end
-    @test sizeof(GWireEvent) == 144
+    @test sizeof(GWireEvent) == cld(16 + 3 * sizeof(GValue) + sizeof(Ptr{Cvoid}), 8) * 8
 end

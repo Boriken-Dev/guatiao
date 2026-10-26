@@ -34,8 +34,8 @@ end
 end
 
 @testset "a parse error is laid out as the header says" begin
-    @test sizeof(GuatiaoSerde.GParseError) == 56
-    @test fieldoffset(GuatiaoSerde.GParseError, 4) == 16
+    @test sizeof(GuatiaoSerde.GParseError) == (sizeof(Ptr{Cvoid}) == 8 ? 16 : 12) + 8 + 4 * sizeof(Ptr{Cvoid})
+    @test fieldoffset(GuatiaoSerde.GParseError, 4) == (sizeof(Ptr{Cvoid}) == 8 ? 16 : 12)
 end
 
 @testset "the library is found through each route" begin

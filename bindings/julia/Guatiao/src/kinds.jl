@@ -494,7 +494,7 @@ end
 "The allocator a container node records, when complete, else this binding's."
 function recorded_alloc(node::Ptr{GValue})
     t = load_tag(node)
-    a = t in (TAG_MAP, TAG_LIST, TAG_STRING, TAG_NUMBER, TAG_BYTES) ? unsafe_load(Ptr{Ptr{GAlloc}}(node + PAYLOAD + 24)) : Ptr{GAlloc}(C_NULL)
+    a = t in (TAG_MAP, TAG_LIST, TAG_STRING, TAG_NUMBER, TAG_BYTES) ? unsafe_load(Ptr{Ptr{GAlloc}}(node + PAYLOAD + OWNED_ALLOC)) : Ptr{GAlloc}(C_NULL)
     return complete_alloc(a) ? a : binding_alloc()
 end
 function complete_alloc(a::Ptr{GAlloc})
@@ -546,7 +546,7 @@ end
 
 function write_tree(out::Ptr, result, kind::Symbol)
     out == C_NULL && throw(GuatiaoError(NullArgument, "no slot for the answer"))
-    named = kind === :value ? unsafe_load(Ptr{Ptr{GAlloc}}(out + PAYLOAD + 24)) : unsafe_load(Ptr{Ptr{GAlloc}}(out + 24))
+    named = kind === :value ? unsafe_load(Ptr{Ptr{GAlloc}}(out + PAYLOAD + OWNED_ALLOC)) : unsafe_load(Ptr{Ptr{GAlloc}}(out + OWNED_ALLOC))
     alloc = complete_alloc(named) ? named : binding_alloc()
     whole = result isa ValueRef && isempty(result.path) && result.owner isa Value ? result.owner : result
     root = if whole isa Value && whole.alloc == alloc

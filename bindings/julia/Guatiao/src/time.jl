@@ -130,7 +130,7 @@ end
 
 function finish_text(status::UInt32, err::Ref{GTextError}, form::Symbol)
     expected = GC.@preserve err begin
-        p = Ptr{GValue}(Base.unsafe_convert(Ptr{GTextError}, err) + 8)
+        p = Ptr{GValue}(Base.unsafe_convert(Ptr{GTextError}, err) + fieldoffset(GTextError, 2))
         msg = load_tag(p) == TAG_STRING ? text_of(unsafe_load(payload_ptr(GString, p))) : ""
         guatiao_value_free(p)
         msg

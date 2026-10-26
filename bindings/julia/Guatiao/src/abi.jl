@@ -4,10 +4,14 @@
 
 # The structs and constants of guatiao.h, field for field, in the
 # header's order. An immutable isbits struct has C's natural layout, which
-# is the header's; the sizes are pinned below and every offset is compared
-# with the header's text by the test suite. 64-bit platforms only.
+# is the header's; the sizes are pinned below in words (a pointer and a
+# size_t), as the header states them, and every offset is compared with
+# the header's text by the test suite.
 
 const GUATIAO_ABI_VERSION = UInt32(1)
+
+"The width of a pointer and of `size_t`, in bytes."
+const WORD = sizeof(Ptr{Cvoid})
 
 const TAG_ABSENT = UInt32(0)
 const TAG_NULL = UInt32(1)
@@ -61,11 +65,11 @@ struct GBuffer
     alloc::Ptr{GAlloc}
 end
 
-"`guatiao_value`: a tag, then a 32-byte payload whose live arm the tag names."
+"`guatiao_value`: a tag, then a four-word payload whose live arm the tag names."
 struct GValue
     tag::UInt32
     pad::UInt32
-    payload::NTuple{4,UInt64}
+    payload::NTuple{4,UInt}
 end
 
 "`guatiao_list`: an owned sequence of values."
@@ -226,15 +230,19 @@ struct GWireEvent
 end
 
 const PAYLOAD = 8   # offset of the payload in a guatiao_value
-const ENTRY_VALUE = 32  # offset of the value in a guatiao_entry
+const ENTRY_VALUE = 4 * WORD  # offset of the value in a guatiao_entry
+const OWNED_ALLOC = 3 * WORD  # offset of the allocator in an owned string, buffer, list or map
 
-for (T, n) in ((GAlloc, 40), (GStr, 16), (GBytes, 16), (GBytesMut, 16), (GString, 32),
-    (GBuffer, 32), (GValue, 40), (GList, 32), (GEntry, 72), (GMap, 32),
-    (GProviderError, 40), (GDate, 8), (GTime, 8), (GDateTime, 16),
-    (GTimestamp, 16), (GSpan, 64), (GTextError, 48), (GKindHeader, 8), (GObject, 24),
-    (GKinds, 16), (GKindTable, 32), (GKindTables, 24), (GProviderInfo, 168),
-    (GProviders, 24), (GLibraryInfo, 80), (GHostInfo, 64), (GWireEvent, 144))
-    sizeof(T) == n || error("$(T) is $(sizeof(T)) bytes, the header's is $n: a 64-bit platform is required")
+let W = WORD, V = 8 + 4 * WORD
+    for (T, n) in ((GAlloc, 5W), (GStr, 2W), (GBytes, 2W), (GBytesMut, 2W), (GString, 4W),
+        (GBuffer, 4W), (GValue, V), (GList, 4W), (GEntry, 4W + V), (GMap, 4W),
+        (GProviderError, 5W), (GDate, 8), (GTime, 8), (GDateTime, 16),
+        (GTimestamp, 16), (GSpan, 64), (GTextError, W + V), (GKindHeader, 8), (GObject, 3W),
+        (GKinds, 2W), (GKindTable, 8 + 3W), (GKindTables, 3W), (GProviderInfo, 8 + 20W),
+        (GProviders, 3W), (GLibraryInfo, 8 + 9W), (GHostInfo, 8 + 7W),
+        (GWireEvent, cld(16 + W + 3V, 8) * 8))
+        sizeof(T) == n || error("$(T) is $(sizeof(T)) bytes, the header's is $n on this platform")
+    end
 end
 
 # Views over a node's payload arms; `p` addresses a guatiao_value.
