@@ -11,6 +11,7 @@ function cases = t_serde()
     'a document reads straight into the data parse then data() answers', @data_reads
     'data reads every shared vector as the value it decodes to', @data_vectors
     'MATLAB data writes as wire bytes what it builds as a tree, refusals included', @data_writes
+    'the writer judges text as UTF-8 as the library does, after any run of ASCII', @text_judged
   };
 end
 
@@ -202,6 +203,36 @@ function data_writes()
     expect_equal(tape, tree, sprintf('refusal %d', i));
   end
   kept.close();
+end
+
+% Octave's chars are the text's bytes, so each shape reaches both writers
+% as it is; MATLAB's chars are UTF-16 and always reach them as UTF-8.
+function text_judged()
+  shapes = {[195 169], [226 130 172], [240 144 128 128], [244 143 191 191], [192 128], [193 191], ...
+            [224 159 191], [237 160 128], [240 143 191 191], [244 144 128 128], [245 128 128 128], 128, 195, ...
+            [226 130], [240 159 152]};
+  for run = [0 1 7 8 9 16 23]
+    for s = 1:numel(shapes)
+      x = {char([repmat(120, 1, run), shapes{s}, repmat(121, 1, mod(run, 3))])};
+      tree = wire_or_message(@() value_wire(x));
+      tape = wire_or_message(@() guatiao_mex('wire_of', x));
+      expect_equal(tape, tree, sprintf('%d x then %s', run, sprintf('%02x ', shapes{s})));
+    end
+  end
+end
+
+function w = value_wire(x)
+  v = guatiao.Value(x);
+  w = v.to_wire();
+  v.close();
+end
+
+function r = wire_or_message(f)
+  try
+    r = f();
+  catch e
+    r = [e.identifier ' ' e.message];
+  end
 end
 
 function m = message_of(f)
