@@ -91,6 +91,27 @@ abstract interface class RemoteChannel {
 
   /// Closes the channel; [messages] is then done.
   Future<void> close();
+
+  /// Datagrams beside the messages, on a channel that has them
+  /// (WebTransport); `null` elsewhere.
+  RemoteDatagrams? get datagrams;
+}
+
+/// Datagrams beside a link's calls: each delivered whole or not at all,
+/// in any order, for what a page accepts losing (a sensor's readings, a
+/// wire channel's samples). A datagram is the payload alone, nothing
+/// added, so a server reads it with its own stack (`Link::datagrams()` in
+/// Rust); for values the payload is a wire channel's frame.
+abstract interface class RemoteDatagrams {
+  /// The largest payload the path takes now.
+  int get maxSize;
+
+  /// Sends one: [BadValue] past [maxSize], [Gone] once the link ended; one
+  /// lost on the way is not said.
+  void send(Uint8List payload);
+
+  /// Each datagram as it arrives, until the link ends. Listened to once.
+  Stream<Uint8List> get received;
 }
 
 /// An object this side serves: [slots] maps each slot's name to what
@@ -566,6 +587,10 @@ final class RemoteLink {
 
   /// How many objects of this side's the peer holds.
   int get objectsHeld => _exports.length;
+
+  /// Datagrams beside the calls, over WebTransport; `null` over a
+  /// WebSocket.
+  RemoteDatagrams? get datagrams => _channel.datagrams;
 
   /// Ends the link: GOODBYE, then the channel closes. Every call waiting
   /// answers `Gone`.

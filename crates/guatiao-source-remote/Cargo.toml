@@ -27,6 +27,10 @@ crate-type = ["rlib", "cdylib"]
 name = "guatiao-remote-server"
 path = "src/bin/guatiao-remote-server.rs"
 
+[[example]]
+name = "datagram_echo"
+required-features = ["webtransport"]
+
 [features]
 default = []
 

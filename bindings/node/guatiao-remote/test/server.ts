@@ -37,6 +37,8 @@ declare module 'vitest' {
     wtServerTls: Served;
     wtNone: Served;
     wtMutual: Served;
+    /** A WebTransport server sending every datagram back, at none. */
+    wtEcho: Served;
   }
 }
 
@@ -155,6 +157,14 @@ export async function setup(project: TestProject): Promise<void> {
     // refuses the link for want of a client certificate alone.
     await serve(server, [...at, '--security', 'mutual-tls', '--pin', `sha256:${'cd'.repeat(32)}`, ...serving]),
   );
+  const echo = path.join(path.dirname(server), 'examples', `datagram_echo${exe}`);
+  if (!existsSync(echo)) {
+    throw new Error(
+      `no ${echo}: build it with ` +
+        '`cargo build -p guatiao-source-remote --features webtransport --example datagram_echo`',
+    );
+  }
+  project.provide('wtEcho', await serve(echo, [REMOTE_KEY]));
 }
 
 export function teardown(): void {

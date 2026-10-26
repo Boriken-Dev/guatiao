@@ -15,6 +15,7 @@ const key = inject('remoteKey');
 const serverTls = inject('wtServerTls');
 const none = inject('wtNone');
 const mutual = inject('wtMutual');
+const echo = inject('wtEcho');
 
 /** A fingerprint no certificate has. */
 const STRANGER = `sha256:${'ab'.repeat(32)}`;
@@ -66,6 +67,43 @@ test('mutual TLS over WebTransport needs a client certificate the browser presen
   await expect(
     RemoteLink.connect(mutual.url, { security: 'mutual-tls', pins: mutual.hashes, handshakeTimeout: 5_000 }),
   ).rejects.toBeInstanceOf(Gone);
+});
+
+test('datagrams beside the calls: each one sent comes back from a server that echoes them', async () => {
+  const link = await RemoteLink.connect(echo.url, { security: 'none', key, pins: echo.hashes });
+  const datagrams = link.datagrams!;
+  expect(datagrams.maxSize).toBeGreaterThan(1000);
+  // Datagrams may be lost: send until one comes back, each telling which it was.
+  const seen = new Set<number>();
+  let next = datagrams.receive();
+  for (let i = 0; i < 50 && seen.size < 3; i++) {
+    datagrams.send(new Uint8Array([7, i, 0, 9]));
+    const back = await Promise.race([
+      next,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 200)),
+    ]);
+    if (back !== undefined) {
+      expect([back[0], back[2], back[3]]).toEqual([7, 0, 9]);
+      seen.add(back[1]!);
+      next = datagrams.receive();
+    }
+  }
+  expect(seen.size).toBeGreaterThanOrEqual(3);
+  expect(() => datagrams.send(new Uint8Array(datagrams.maxSize + 1))).toThrow(BadValue);
+  // Echoes still on the way arrive before a quiet moment.
+  const quiet = (): Promise<undefined> => new Promise((resolve) => setTimeout(() => resolve(undefined), 300));
+  while ((await Promise.race([next, quiet()])) !== undefined) next = datagrams.receive();
+  link.close();
+  // A receive still waiting when the link ends reads the end, as one after it.
+  await expect(next).rejects.toBeInstanceOf(Gone);
+  await expect(datagrams.receive()).rejects.toBeInstanceOf(Gone);
+  expect(() => datagrams.send(new Uint8Array([1]))).toThrow(Gone);
+});
+
+test('a WebSocket link has no datagrams', async () => {
+  const link = await RemoteLink.connect(inject('remoteUrl'), { security: 'none', key });
+  expect(link.datagrams).toBeUndefined();
+  link.close();
 });
 
 test('pins are refused on a WebSocket URL', async () => {

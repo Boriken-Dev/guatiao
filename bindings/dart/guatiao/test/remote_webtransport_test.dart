@@ -8,7 +8,9 @@
 /// browser flag. On the VM, which has no WebTransport, the URL is refused.
 library;
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:guatiao/guatiao.dart' show BadValue, Gone, Unsupported;
 import 'package:guatiao/remote.dart';
@@ -132,6 +134,80 @@ void main() {
         }
       },
     );
+
+    test(
+      'datagrams beside the calls: each one sent comes back from a server that echoes them',
+      () async {
+        final (url, hashes, stop) = await datagramEchoServer();
+        try {
+          final link = await RemoteLink.connect(
+            url,
+            security: RemoteSecurity.none,
+            key: utf8.encode(remoteKey),
+            tls: RemoteTls(pins: hashes),
+          );
+          final datagrams = link.datagrams!;
+          expect(datagrams.maxSize, greaterThan(1000));
+          final received = StreamIterator(datagrams.received);
+          // Datagrams may be lost: send until one comes back, each telling
+          // which it was.
+          final seen = <int>{};
+          Future<bool>? next;
+          for (var i = 0; i < 50 && seen.length < 3; i++) {
+            datagrams.send(Uint8List.fromList([7, i, 0, 9]));
+            next ??= received.moveNext();
+            final came = await next.timeout(
+              const Duration(milliseconds: 200),
+              onTimeout: () => false,
+            );
+            if (came) {
+              final back = received.current;
+              expect([back[0], back[2], back[3]], [7, 0, 9]);
+              seen.add(back[1]);
+              next = null;
+            }
+          }
+          expect(seen.length, greaterThanOrEqualTo(3));
+          expect(
+            () => datagrams.send(Uint8List(datagrams.maxSize + 1)),
+            throwsA(isA<BadValue>()),
+          );
+          // Echoes still on the way arrive before a quiet moment.
+          for (;;) {
+            next ??= received.moveNext();
+            final came = await next.timeout(
+              const Duration(milliseconds: 300),
+              onTimeout: () => false,
+            );
+            if (!came) break;
+            next = null;
+          }
+          await link.close();
+          expect(await next, isFalse, reason: 'the link ended: done');
+          expect(
+            () => datagrams.send(Uint8List.fromList([1])),
+            throwsA(isA<Gone>()),
+          );
+        } finally {
+          await stop();
+        }
+      },
+    );
+
+    test('a WebSocket link has no datagrams', () async {
+      final (url, stop) = await remoteServer();
+      try {
+        final link = await RemoteLink.connect(
+          url,
+          security: RemoteSecurity.none,
+          key: utf8.encode(remoteKey),
+        );
+        expect(link.datagrams, isNull);
+        await link.close();
+      } finally {
+        await stop();
+      }
+    });
 
     test('a page presents no identity of its own', () async {
       await expectLater(

@@ -108,6 +108,9 @@ final class _WebChannel implements RemoteChannel {
   void send(Uint8List body) => _ws.send(body.toJS);
 
   @override
+  RemoteDatagrams? get datagrams => null;
+
+  @override
   Future<void> close() async {
     _ws.close(1000);
   }

@@ -76,6 +76,9 @@ final class _IoChannel implements RemoteChannel {
   void send(Uint8List body) => _ws.add(body);
 
   @override
+  RemoteDatagrams? get datagrams => null;
+
+  @override
   Future<void> close() async {
     // The peer answers a close; one that does not is not waited for.
     await _ws
