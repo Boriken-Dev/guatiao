@@ -1549,6 +1549,17 @@ write now.
 
 ### Fixed
 
+- **Dart: the remote client (`package:guatiao/remote.dart`) as the Rust
+  one.** A call refused before it runs releases the peer's objects handed
+  in it and drops the page's own given back; a call waiting for a place
+  under the peer's `max_calls` answers `Busy` at its timeout; an object
+  lent for a call named back as handed over is `WrongKind` and stays
+  lent; a WebSocket opening after its timeout is closed on the VM; a
+  peer's values are read as strictly as the wire encoding states.
+- **Dart: text keeps a leading U+FEFF, and under dart2js an integer past
+  53 bits is a `BigInt`** where values are read in Dart (`wireToDart`,
+  `toDart`, the remote client): Dart's UTF-8 decoder dropped the mark,
+  and `isValidInt` took 2^60 as an `int` there.
 - **guatiao-source-remote: a WebSocket end sends nothing after the peer's
   close.** Once the peer's close had been answered, frames the link still
   had queued, and the link's own close as it ended, went out after it,

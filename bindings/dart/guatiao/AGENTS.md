@@ -626,12 +626,14 @@ await link.close();
   {RemoteTrust trust = trusted, List<int>? key, String? token, ...})` runs
   the handshake over any message transport: `RemoteChannel` is `messages`
   (a `Stream<Uint8List>`, one frame body each), `send(Uint8List)`,
-  `close()`. `timeout: null` waits as long as the link lives.
+  `close()`. `timeout: null` waits as long as the link lives; a call
+  waiting for a place under the peer's `max_calls` counts against its
+  timeout and answers `Busy` when it runs out.
 - A server that does not prove the key fails the connect with
   `BadValue` ("the server does not hold this link's key"); a server that
   refuses the client's proof ends the link, and the first call answers
   `Gone` with its words. A handshake past its bound, or a WebSocket that
-  does not open, is `Gone`.
+  does not open, is `Gone`; one that opens after that is closed.
 - `link.list() -> Future<RemoteCatalog>` (`kinds`: `RemoteKind` by name,
   `libraries`: `RemoteLibrary` (`id`, `version`, `stamp`, `providers`),
   `providers`); `link.open(RemoteLibrary)`, `link.closeLibrary(..)`;
@@ -658,8 +660,12 @@ await link.close();
   call until the call returns; a handed one until the peer releases it.
   A slot it does not fill is refused `Unsupported`; a handler that throws
   a `GuatiaoException` refuses with its status and words, anything else
-  `InternalError`. The peer's calls run on the event loop as they
-  arrive; a call a handler makes names the call it runs in as its parent.
+  `InternalError`. A call refused before its handler runs releases the
+  peer's objects handed in it and drops this side's own given back. An
+  object lent for a call cannot come back handed over or answered:
+  `WrongKind`, and it stays lent. The peer's calls run on the event loop
+  as they arrive; a call a handler makes names the call it runs in as its
+  parent.
 - `RemoteObject`: `kind`, `id`, `alive`, `call`, `release()`
   (idempotent; a `Finalizer` is the backstop). A handle lent for one call
   answers `Gone` once it returns.
@@ -668,7 +674,9 @@ await link.close();
   open call. A refusal is the status's exception. A malformed frame from
   the peer ends the link (GOODBYE) and throws `MalformedFrame` (a
   `BadValue`, `fault` a `FrameFault`, `at` the byte) where a caller reads
-  it.
+  it; a value in it is read as strictly as the wire encoding states (a
+  length in its shortest form, the JSON number grammar, a bool byte of 0
+  or 1, no key repeated).
 - `RemoteKind` (`name`, `object`, `slots`, `slot(name)`), `RemoteSlot`
   (`name`, `index`, `required`, `fallible`, `args`, `answer`),
   `RemoteArg` (`name`, `type`, `kind`, `pass`, `nullable`),
@@ -749,7 +757,7 @@ package.
   `Value.fromWire(data).toDart(numbers:)` answers. For bytes a library
   just wrote (a call answering a whole document as wire bytes): it checks
   only that each body is whole (`BadValue` otherwise), so bytes from
-  anywhere else go through `Value.fromWire`. `Uint8List dartToWire(Object?
+  anywhere else go through `Value.fromWire`. Text keeps a leading U+FEFF. `Uint8List dartToWire(Object?
   obj)`: the wire bytes of what `Value.fromDart(obj)` would build, the
   same objects and errors. One crossing per document, where reading a
   tree costs one per node. Pure Dart, so `wasm.dart` exports both too.
