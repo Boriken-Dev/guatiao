@@ -1543,6 +1543,15 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a shared-memory or Windows local client that
+  stays silent gives up its handshake place at the handshake's time
+  limit.** Once its rings were mapped a shared-memory client's handshake
+  had no time limit on any platform, and on Windows a named pipe's reads
+  had none at all, so a client that connected and said nothing held a
+  serving thread and one of `guatiao-remote-server`'s `--max-handshakes`
+  places until it went. A pipe's reads during the handshake are now
+  watched and cancelled at their bound; `local` on Windows adds
+  `windows-sys` (`CancelIoEx`).
 - **guatiao-source-remote: a call that panics on the side serving it
   answers `GUATIAO_ERR_INTERNAL` and gives its place back.** A panic
   while serving a call, a listing or an open left the call unanswered (its

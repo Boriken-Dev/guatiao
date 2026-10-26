@@ -142,3 +142,46 @@ fn a_client_that_never_sets_up_does_not_hold_up_the_next() {
     );
     drop(silent);
 }
+
+/// Serves the one connection a fresh listener accepts, under a 1 s
+/// handshake, with `client` holding what it connected; answers how long
+/// the handshake took to fail.
+fn silent_handshake<T>(tag: &str, client: impl FnOnce(&str) -> T) -> Duration {
+    let server =
+        common::server(LinkOptions::new(Trust::Local).handshake_timeout(Duration::from_secs(1)));
+    let name = endpoint(tag);
+    let listener = ShmListen::bind(&name).expect("listens");
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let conn = listener.accept().expect("accepts");
+        let started = std::time::Instant::now();
+        let failed = server.serve(conn).is_err();
+        let _ = tx.send((failed, started.elapsed()));
+    });
+    let _held = client(&name);
+    let (failed, took) = rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the handshake ended at its bound");
+    assert!(failed, "a silent client never links");
+    took
+}
+
+#[test]
+fn a_client_that_maps_the_rings_and_says_nothing_is_dropped_at_the_handshake_bound() {
+    use guatiao_source_remote::transport::Connect;
+    // The rings mapped, and no HELLO over them.
+    let took = silent_handshake("mapped", |name| {
+        ShmConnect::new(name).connect().expect("connects")
+    });
+    assert!(took < Duration::from_secs(5), "{took:?}");
+}
+
+#[test]
+fn a_client_that_never_sends_its_path_is_dropped_at_the_handshake_bound() {
+    use guatiao_source_remote::transport::Connect;
+    use guatiao_source_remote::transport::local::LocalConnect;
+    let took = silent_handshake("pathless", |name| {
+        LocalConnect::new(name).connect().expect("connects")
+    });
+    assert!(took < Duration::from_secs(5), "{took:?}");
+}

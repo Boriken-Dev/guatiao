@@ -54,7 +54,7 @@ quic = ["tls", "dep:quinn", "dep:tokio"]
 
 # The same machine by name, at the local level: a Unix socket (std) on
 # Unix, a named pipe on Windows.
-local = ["dep:interprocess"]
+local = ["dep:interprocess", "dep:windows-sys"]
 
 # The same machine through shared memory: two rings in a mapped file, a
 # local connection beside them for wake-ups.
@@ -113,6 +113,9 @@ wtransport = { version = "0.7.2", optional = true, default-features = false, fea
 # another writes, with no `unsafe` here.
 [target.'cfg(windows)'.dependencies]
 interprocess = { version = "2", optional = true, default-features = false }
+# Ending a read blocked on a pipe from another thread (`CancelIoEx`),
+# which nothing safe does on Windows. interprocess's own version.
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_System_IO"] }
 
 # RDMA: libibverbs opened at run time, and `poll` on its completion
 # channel beside the TCP connection. Both are already in the build

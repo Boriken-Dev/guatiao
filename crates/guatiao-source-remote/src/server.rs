@@ -597,7 +597,8 @@ impl Server {
 
     /// Ends every link, and every connection still in its handshake: their
     /// calls in flight answer `GONE`. A transport that cannot wake a read
-    /// from another thread (TCP and TLS on Windows) ends its handshake when
+    /// from another thread (on Windows: TCP, TLS, a named pipe, shared
+    /// memory) ends its handshake when
     /// the handshake's read bound runs out.
     pub fn end_links(&self) {
         self.inner.ends.fetch_add(1, Ordering::AcqRel);

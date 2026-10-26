@@ -314,10 +314,12 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   still unsent; a named pipe, a child's stdio and memory ignore it.
 - **A Unix socket** is created `0600`; `LocalListen::bind` replaces a
   socket left by a listener that is gone and refuses anything else at the
-  path. **A named pipe** has Windows' default access, and nothing can end
-  a read blocked on it: ending a link sends GOODBYE, and the peer closing
-  its end ends that read. A pipe takes no read timeout, so its handshake
-  is unbounded.
+  path. **A named pipe** has Windows' default access. It takes no read
+  timeout, so while a read bound is set (the handshake) a thread watches
+  each read and cancels one that outlives it; past the handshake nothing
+  ends a read blocked on it: ending a link sends GOODBYE, and the peer
+  closing its end ends that read. **Shared memory** gives the bound to
+  the local connection it waits on for the peer's bytes.
 - **WebSocket** (`ws`): a frame's body is one binary message, with no
   length in front. `WsListen` admits peers by its access control list as `TcpListen` does;
   `accept` reads nothing, and a connection answers the HTTP upgrade on

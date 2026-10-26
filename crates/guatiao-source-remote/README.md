@@ -58,7 +58,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3: server TLS and mutual TLS (over TCP, and `wss://` with `ws`) |
 | `platform-roots` | `tls`, `rustls-platform-verifier` | a server verified by the operating system's certificate authorities (`roots = "platform"`) |
 | `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |
-| `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
+| `local` | `interprocess`, `windows-sys` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
 | `ws` | `tcp`, `tungstenite` | WebSocket: what a browser page connects to |
 | `webtransport` | `quic`, `wtransport` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash |
