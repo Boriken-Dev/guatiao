@@ -12,10 +12,10 @@
 //! A frame is queued for the link's writer and written by whichever thread
 //! finds it free, with every frame queued meanwhile: no thread waits for
 //! another's write, and a call that times out takes back a frame not yet
-//! written. A sender keeps at most the
-//! peer's `max_calls` top-level calls in flight; nested calls are not
-//! counted, since they run on threads already waiting, so the reader never
-//! stops reading and a reply can always arrive.
+//! written. A sender keeps at most the peer's `max_calls` top-level calls
+//! in flight; nested calls are not counted, since they run on threads
+//! already waiting, so the reader never stops reading and a reply can
+//! always arrive.
 //!
 //! Objects cross as ids in their holder's numbering: a handed or answered
 //! object until its handle on the far side is dropped (RELEASE), a lent one
@@ -28,6 +28,7 @@ mod gate;
 mod handshake;
 mod pool;
 mod proxies;
+mod waiting;
 
 pub(crate) use proxies::Proxies;
 
@@ -60,6 +61,7 @@ use crate::transport::{Connection, FrameRead, FrameWrite};
 use gate::{Gate, Unsent};
 use handshake::Offer;
 use pool::{Permits, Pool};
+use waiting::Waiting;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -107,8 +109,9 @@ pub const DEFAULT_MAX_FRAME: usize = 64 << 20;
 pub const DEFAULT_MAX_CALLS: usize = 64;
 /// How long a call waits for its answer unless told otherwise.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
-/// How long a waiting thread polls before it sleeps unless told otherwise.
-pub const DEFAULT_SPIN: Duration = Duration::from_micros(50);
+/// The longest a waiting thread polls before it sleeps unless told
+/// otherwise.
+pub const DEFAULT_SPIN: Duration = Duration::from_micros(200);
 
 impl LinkOptions {
     /// A link at `trust`, with the defaults: frames up to 64 MiB, 64 calls
@@ -172,10 +175,12 @@ impl LinkOptions {
         self
     }
 
-    /// How long a thread waiting for an answer, or an idle pool thread,
-    /// keeps polling before it sleeps. Polling spends a core for that long
-    /// and saves the wake-up a sleeping thread costs on every hand-off;
-    /// zero never polls.
+    /// The longest a thread waiting for an answer, or an idle pool thread,
+    /// polls before it sleeps. It polls just past the typical wait it has
+    /// seen on the link (an answer's round trip, the gap between the peer's
+    /// calls), at least 50 µs, and not at all when that is longer than this
+    /// or as many threads poll as there are cores. Polling spends a core and saves the
+    /// wake-up a sleeping thread costs; zero never polls.
     pub fn spin(mut self, spin: Duration) -> LinkOptions {
         self.spin = spin;
         self
@@ -377,7 +382,8 @@ pub(crate) struct Inner {
     /// What the peer reads.
     send_max: usize,
     timeout: Option<Duration>,
-    spin: Duration,
+    /// How long a thread waiting for an answer polls.
+    answers: Waiting,
     permits: Permits,
     pool: Arc<Pool>,
     handler: Arc<dyn Handler>,
@@ -711,7 +717,7 @@ impl Link {
             timeout: options.timeout,
             permits: Permits::new(theirs.max_calls),
             pool: Arc::new(Pool::new(options.max_calls, &setup.name, options.spin)),
-            spin: options.spin,
+            answers: Waiting::new(options.spin),
             handler: setup.handler,
             kinds: RwLock::new(setup.kinds),
             callers: Mutex::new(BTreeMap::new()),
@@ -826,7 +832,9 @@ impl Link {
         let started = Instant::now();
         self.inner
             .request(|call, out| Frame::Ping { n: call }.encode(out, usize::MAX))?;
-        Ok(started.elapsed())
+        let took = started.elapsed();
+        self.inner.answers.saw(took);
+        Ok(took)
     }
 }
 
@@ -1111,7 +1119,10 @@ impl Inner {
         slot: Option<&SlotDescription>,
     ) -> Result<Vec<u8>, ProviderError> {
         let outcome = loop {
-            let next = match pool::spin_recv(rx, self.spin) {
+            let (spin, polling) = self.answers.poll();
+            let polled = pool::spin_recv(rx, spin);
+            drop(polling);
+            let next = match polled {
                 Some(v) => Ok(v),
                 None => match deadline {
                     None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
@@ -1730,6 +1741,7 @@ impl Inner {
             }
             return Err(bad(e));
         }
+        let sent = Instant::now();
         if let Err(e) = self.write_call(id, frame) {
             // Never sent: what was handed for it is dropped here.
             for id in handed {
@@ -1738,6 +1750,7 @@ impl Inner {
             return Err(e);
         }
         let reply = self.wait(id, &rx, &queued, deadline, Some(desc))?;
+        self.answers.saw(sent.elapsed());
         let Frame::Reply { status, body, .. } =
             Frame::decode(&reply, Alloc::rust()).map_err(bad)?
         else {

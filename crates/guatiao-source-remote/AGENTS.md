@@ -80,8 +80,8 @@ Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME 
 LinkOptions::new(Trust::{Local, Trusted, Secure})
     .key(&[u8]) .token(&str) .max_frame(bytes) .max_calls(n)
     .timeout(Option<Duration>) .handshake_timeout(Duration)
-    .spin(Duration)    // how long a waiting thread polls before it sleeps; past the round trip on a network
-// defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake, 50 µs spin
+    .spin(Duration)    // the most a waiting thread polls before it sleeps; zero never polls
+// defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake, 200 µs spin
 link.alive() link.why() link.peer() link.trust() link.list() link.open(id, stamp)
 link.close(id, stamp) link.kinds() link.ping() link.end()
 LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
@@ -89,6 +89,11 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 
 - **Dropping a `Link` ends it.** Calls waiting answer `GONE`; objects held
   for the peer are dropped.
+- **Polling adapts.** A thread waiting for an answer, or an idle pool
+  thread, polls for 1.5x the typical wait it has seen on the link (an
+  answer's round trip, the gap between the peer's calls), at least 50 µs,
+  not at all when that is past `spin`, and not while as many threads poll
+  as there are cores.
 - **A call past its timeout** is cancelled (CANCEL) and answers `GONE`; an
   object its late answer carries is released. A call waits for the link's
   writer at most until its deadline, and CANCEL never waits: it is queued
