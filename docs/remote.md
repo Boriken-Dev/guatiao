@@ -195,6 +195,13 @@ description of is not served. `--stdio` serves one link on stdin and
 stdout, for a host that starts it as its child. In Rust, `Server::new`
 over a `Registry` does the same.
 
+Each connection's link handshake runs on a thread of its own, at most
+`--max-handshakes` at once (64 unless told); past it, a new connection is
+closed unread. A source the access control list denies, or whose
+handshake fails, is reported at most once a minute per address, the next
+report saying how many were held back; past 1024 addresses in one minute,
+a new one goes unreported.
+
 ## Transports
 
 | transport | reach | a call (local, provisional) |
