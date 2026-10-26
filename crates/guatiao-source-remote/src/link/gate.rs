@@ -16,6 +16,7 @@
 use std::io;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use super::buffers::Buffers;
 use crate::transport::FrameWrite;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -24,6 +25,8 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 pub(crate) struct Gate {
     state: Mutex<State>,
+    /// What a written frame's buffers go back to.
+    buffers: Buffers,
 }
 
 struct State {
@@ -63,7 +66,13 @@ impl Gate {
                 spare: Vec::new(),
                 closed: false,
             }),
+            buffers: Buffers::default(),
         }
+    }
+
+    /// The link's large buffers: a frame's go back here once written.
+    pub(crate) fn buffers(&self) -> &Buffers {
+        &self.buffers
     }
 
     /// Sends `frame`, which starts call `call` (0: none): written now if
@@ -197,6 +206,12 @@ impl Gate {
                 state.writer = Some(writer);
                 return Err(Unsent::Failed(e));
             }
+            for written in batch.drain(..) {
+                self.buffers.give(written.head);
+                if let Some((tail, _)) = written.tail {
+                    self.buffers.give(tail);
+                }
+            }
         }
     }
 }
@@ -300,6 +315,23 @@ mod tests {
                 Op::Parts(bytes("h6"), bytes("t6")),
             ]
         );
+    }
+
+    #[test]
+    fn a_large_frame_once_written_leaves_its_buffers_for_reuse() {
+        let (gate, ops) = gate();
+        let big = super::super::buffers::KEEP_FROM;
+        let busy = gate.try_with(|_| {
+            assert!(gate.send(1, vec![1; big]).is_ok());
+            assert!(gate.send_with_tail(2, bytes("h"), vec![2; big], 0).is_ok());
+        });
+        assert!(busy);
+        assert_eq!(lock(&ops).len(), 2);
+        for _ in 0..2 {
+            let again = gate.buffers().take();
+            assert!(again.is_empty() && again.capacity() >= big);
+        }
+        assert_eq!(gate.buffers().take().capacity(), 0);
     }
 
     #[test]

@@ -101,6 +101,14 @@ write now.
   older than the export they only move it. Fortran's
   `guatiao_lent_refusal(stat, slot, arg)` words either refusal for a
   kind module's remote.
+- **guatiao-source-remote: a link keeps its large buffers.** The frames
+  it reads and the replies it writes, 64 KiB and up, are reused for the
+  next call (at most 16 MiB a link besides the one being read into, let
+  go when the link ends) instead of being freed, which glibc and
+  Windows' heap answered by giving the memory back and faulting every
+  page of the next buffer in again. A 4 MiB round trip moves 1.3 to 1.6
+  times as many bytes a second over a local socket and shared memory, on
+  Windows and in WSL (local, provisional; `benchmarks/README.md`).
 - **guatiao-remote-server: a token clients present, from a file.**
   `--token-file PATH` makes every client present the file's text (a last
   line end left out) inside the link, at server TLS, where it proves the
