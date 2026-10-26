@@ -1247,6 +1247,13 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: described peers are listed at once, and a
+  replaced peer serves on until its successor opens.** A refresh lists up
+  to 16 peers together, so peers slow to refuse cost one wait instead of
+  one each; `disconnect()` no longer waits for a connection under way. An
+  edited peer manifest keeps the old peer's link while the registry holds
+  its library: a new peer that cannot be reached or opened leaves the old
+  library answering instead of `GUATIAO_ERR_GONE`.
 - **guatiao-source-remote: a link polls just past its own round trip.** A
   waiting thread polled a fixed 50 µs, so across a network an answer
   slower than that paid for the poll and a wake-up both. Now a thread
