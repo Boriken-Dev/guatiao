@@ -487,6 +487,43 @@ the library allocates and frees). Writing, the tape wins on documents
 with structure; one large string is the exception again, copied once
 more on its way through the bytes.
 
+## Documents to R data (`documents-r.json`)
+
+The same three documents, two ways: through a value
+(`value_data(serde_parse(text))`, `serde_emit(value(data))`) and through
+the tape (`serde_data(text)`, `serde_emit(data)`), the wire bytes read and
+written in the package's C. There is no callback way: an R error must
+never unwind through the library's frames, so R objects are made only
+once its call has returned.
+
+```bash
+cargo build --release -p guatiao -p guatiao-serde \
+  --features guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+R CMD INSTALL bindings/r/guatiao bindings/r/guatiao.serde
+GUATIAO_LIBRARY=target/release Rscript benchmarks/r/documents.R --save documents-r
+```
+
+Local and provisional: R 4.6.1 on the ARM64 machine's Linux environment,
+one run of fifteen samples, microseconds per call, median, timed with
+`proc.time()` (a millisecond clock, so the larger cases are coarse).
+Spelling a double now tries 15 significant digits first; searching from
+one digit up, rendering the 10k floats took 7250 microseconds both ways.
+
+| R | value | tape | value / tape |
+| --- | --- | --- | --- |
+| configuration, parse | 106 | 70 | 1.5x |
+| configuration, render | 141 | 109 | 1.3x |
+| 10k floats, parse | 1563 | 1188 | 1.3x |
+| 10k floats, render | 2375 | 2250 | 1.06x |
+| 1 MiB string, parse | 1125 | 1125 | 1.0x |
+| 1 MiB string, render | 1375 | 2250 | 0.61x |
+
+The package takes the tape for both. R's value path was already C on
+both sides of one crossing, so the tape saves the tree built and freed in
+between and no more; most of the time left is making R objects and
+spelling numbers. One large string is slower through the bytes, as in
+every binding.
+
 ## guatiao-source-remote across a link (`remote-*.jsonl`)
 
 `guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
