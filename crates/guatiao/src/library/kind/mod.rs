@@ -17,19 +17,19 @@
 //!
 //! - From a registry: [`Registry::offers`](super::Registry::offers) and
 //!   [`Provider::as_kind`](super::Provider::as_kind). Safe, because the
-//!   registry read the descriptor under its guards.
+//!   registry checked the descriptor where it entered.
 //! - From a host, inside a library: [`Host::offers`] and [`Host::offer`].
-//!   Safe for the same reason: the host's answers are read under each
-//!   descriptor's declared size. [`ProviderInfo::as_kind`] reads a
+//!   Safe for the same reason: the host's answers are checked the same
+//!   way. [`ProviderInfo::as_kind`] reads a
 //!   descriptor a library built itself the same way.
 //! - From anywhere else: [`Remote::from_raw`], `unsafe`, with one promise
 //!   — the bytes are a table for this kind's name.
 //!
-//! All three run one validation: the table is at least the kind's floor,
-//! its header hash matches, and no required slot is null. A `floor_hash`
-//! of `0` — a table with no header, or a hand-written C one — is accepted
-//! by `from_raw` alone, where the caller stated the promise; a registry
-//! or host never offers such a table as a kind.
+//! All three run one validation: the table covers every slot of the
+//! kind's, its header hash matches, and no required slot is null. A
+//! `floor_hash` of `0` — a hand-written C table naming no hash — is
+//! accepted by `from_raw` alone, where the caller stated the promise; a
+//! registry or host never offers such a table as a kind.
 //!
 //! # Which providers are offers
 //!
@@ -61,8 +61,8 @@ pub trait Kind: 'static {
     const NAME: &'static str;
     /// The `repr(C)` table, which starts with a [`KindHeader`].
     type Vtable: 'static;
-    /// One past the end of the last required slot. A table shorter than
-    /// this cannot be called.
+    /// The size of [`Kind::Vtable`]: every slot. A table declaring less is
+    /// refused; a larger one has slots appended after these.
     const FLOOR: usize;
     /// FNV-1a over the required methods' names and normalised signatures.
     /// A table carrying another number was built from a different
@@ -160,7 +160,8 @@ pub trait Kind: 'static {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KindHeader {
-    /// `sizeof` the table as the library compiled it. Always first.
+    /// `sizeof` the table as the library compiled it. Always first; a
+    /// table declaring less than its kind's whole table is refused.
     pub struct_size: u32,
     /// [`Kind::FLOOR_HASH`] of the declaration the table was built from.
     pub floor_hash: u32,
@@ -255,7 +256,7 @@ impl core::error::Error for ProviderError {}
 pub enum KindMismatch {
     /// The provider declares no table for this kind.
     NoTable,
-    /// The table is shorter than the kind's last required slot.
+    /// The table is smaller than the kind's whole table.
     BelowFloor {
         /// What the library declared.
         size: usize,

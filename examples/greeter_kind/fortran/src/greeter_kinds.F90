@@ -362,7 +362,6 @@ contains
     gk_k%name = 'greeter'
     gk_k%floor_hash = GREETER_FLOOR_HASH
     gk_k%size = c_sizeof(probe)
-    gk_k%floor_size = c_sizeof(probe%header) + 1 * c_sizeof(probe%greet)
     gk_k%accepts => is_greeter
   end function
 
@@ -371,7 +370,6 @@ contains
     gk_k%name = 'listener'
     gk_k%floor_hash = LISTENER_FLOOR_HASH
     gk_k%size = c_sizeof(listener_table)
-    gk_k%floor_size = c_sizeof(listener_table%header) + 2 * c_sizeof(listener_table%destroy)
     gk_k%object = .true.
     listener_table%header%struct_size = int(gk_k%size, c_int32_t)
     listener_table%header%floor_hash = LISTENER_FLOOR_HASH
@@ -386,7 +384,6 @@ contains
     gk_k%name = 'conversation'
     gk_k%floor_hash = CONVERSATION_FLOOR_HASH
     gk_k%size = c_sizeof(conversation_table)
-    gk_k%floor_size = c_sizeof(conversation_table%header) + 4 * c_sizeof(conversation_table%destroy)
     gk_k%object = .true.
     conversation_table%header%struct_size = int(gk_k%size, c_int32_t)
     conversation_table%header%floor_hash = CONVERSATION_FLOOR_HASH
@@ -404,7 +401,6 @@ contains
     gk_k%name = 'counter'
     gk_k%floor_hash = COUNTER_FLOOR_HASH
     gk_k%size = c_sizeof(probe)
-    gk_k%floor_size = c_sizeof(probe%header) + 1 * c_sizeof(probe%count)
     gk_k%accepts => is_counter
   end function
 
@@ -414,7 +410,6 @@ contains
     gk_k%name = 'wide'
     gk_k%floor_hash = WIDE_FLOOR_HASH
     gk_k%size = c_sizeof(probe)
-    gk_k%floor_size = c_sizeof(probe%header) + 2 * c_sizeof(probe%echo_i64)
     gk_k%accepts => is_wide
   end function
 

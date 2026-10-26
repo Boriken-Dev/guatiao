@@ -1205,10 +1205,9 @@ contains
   recursive subroutine describe(o, k)
     type(gk_out), intent(inout) :: o
     type(gk_kind), intent(in) :: k
-    integer :: j, nreq
+    integer :: j
     character(:), allocatable :: id
     id = k%id
-    nreq = count(k%slots%required)
     call put(o, '')
     call put(o, '  recursive function ' // id // '_kind() result(gk_k)')
     call put(o, '    type(guatiao_kind) :: gk_k')
@@ -1217,8 +1216,6 @@ contains
     call put(o, '    gk_k%floor_hash = ' // upper(id) // '_FLOOR_HASH')
     if (k%object) then
       call put(o, '    gk_k%size = c_sizeof(' // id // '_table)')
-      call put(o, '    gk_k%floor_size = c_sizeof(' // id // '_table%header) + ' // itoa(nreq + 1) // &
-               ' * c_sizeof(' // id // '_table%destroy)')
       call put(o, '    gk_k%object = .true.')
       call put(o, '    ' // id // '_table%header%struct_size = int(gk_k%size, c_int32_t)')
       call put(o, '    ' // id // '_table%header%floor_hash = ' // upper(id) // '_FLOOR_HASH')
@@ -1230,12 +1227,6 @@ contains
       call put(o, '    gk_k%object_table = c_loc(' // id // '_table)')
     else
       call put(o, '    gk_k%size = c_sizeof(probe)')
-      if (nreq == 0) then
-        call put(o, '    gk_k%floor_size = c_sizeof(probe%header)')
-      else
-        call put(o, '    gk_k%floor_size = c_sizeof(probe%header) + ' // itoa(nreq) // ' * c_sizeof(probe%' // &
-                 k%slots(1)%name // ')')
-      end if
     end if
     call put(o, '    gk_k%accepts => is_' // id)
     call put(o, '  end function')

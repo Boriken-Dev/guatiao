@@ -175,7 +175,7 @@ def _destroy_shim(kind: Any) -> Any:
 def table_for(kind: Any, cls: type) -> Any:
     """The table serving `kind` through objects of `cls`, built on first
     use: a slot for each method `cls` defines, null for the rest, so a
-    Rust caller runs the kind's own default for an appended one."""
+    Rust caller runs the kind's own default for an optional one."""
     key = (id(kind), cls)
     with _lock:
         found = _tables.get(key)

@@ -388,8 +388,8 @@ code; a `FormatException` names `file:line:column`. Every `abstract
 interface class` of the file is a kind, in the order written, named in
 snake_case (`SoundLevel` is `sound_level`; `@KindName('x')` says
 otherwise); `implements ObjectKind` makes an object kind. Its methods are
-the slots in table order, required first: `@appended` marks an appended
-one, `@fallible` one that can refuse; a method's name in snake_case is the
+the slots in table order, required first: `@appended` marks an optional
+one after them, `@fallible` one that can refuse; a method's name in snake_case is the
 slot's (capitals in a row refused). `///` comments are the docs. The floor
 hash is the one `#[guatiao::kind]` gives the same required slots
 (`@FloorHash(n)` pins one). Plain arguments only; an import prefix is read
@@ -412,7 +412,7 @@ provider kind, and any document `generateKinds` would refuse.
 **A remote** (`KindRemote`): a method per slot, `has(slotName)` (the C
 name: `has('greet_into')`), `kind`, `table`, `size`, `ctx`, `close()`
 (destroys an object this side owns, once; does nothing otherwise),
-`isClosed`. A slot an older table lacks throws `Unsupported`; a refusal
+`isClosed`. A slot the provider left null throws `Unsupported`; a refusal
 throws its status's `GuatiaoException` with the provider's words.
 A handle dropped unclosed is destroyed when it is collected.
 

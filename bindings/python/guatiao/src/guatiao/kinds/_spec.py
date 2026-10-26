@@ -32,10 +32,9 @@ class Method:
 
     `args` are shapes: `STR`, `MAP`, `taken(MAP)`, `lent(LISTENER)` and
     the rest. `returns` is a shape, an object kind, or `None` for a slot
-    that answers nothing. `required` marks a method every table must fill:
-    the ones the kind was born with, which its `FLOOR_HASH` covers. A
-    method appended later is not required, and a caller finds it absent
-    in an older table. `arg_names` and `doc` are what a description of
+    that answers nothing. `required` marks a method every table must fill,
+    which its `FLOOR_HASH` covers; a provider may leave any other slot
+    null, and a caller then finds it absent. `arg_names` and `doc` are what a description of
     the kind says of it (`kinds.describe_kinds`); unnamed arguments are
     `arg0`, `arg1`, ...
     """
@@ -148,13 +147,8 @@ class Kind:
                 raise TypeError(
                     f"{struct.__name__}.{method.name} is not the prototype the method describes"
                 )
-        floor = getattr(struct, "header").size
-        if self.is_object:
-            floor = struct.destroy.offset + _WORD
-        for method in self.methods:
-            if method.required:
-                floor = max(floor, getattr(struct, method.name).offset + _WORD)
-        self.floor = floor
+        # Every slot: a smaller table is refused.
+        self.floor = ctypes.sizeof(struct)
 
     def slot_type(self, name: str) -> Any:
         return dict(self.struct._fields_)[name]
@@ -182,9 +176,8 @@ class Remote:
     converting its arguments and its answer.
 
     Valid while the table's library is: until it is unloaded, or, once
-    retired, collected. A slot the table does not carry (a method appended
-    after the library was built) raises `guatiao.Unsupported`; `has(name)`
-    asks first. A refusal raises the `GuatiaoError` its status names,
+    retired, collected. A slot the provider left null raises
+    `guatiao.Unsupported`; `has(name)` asks first. A refusal raises the `GuatiaoError` its status names,
     with the provider's own words in `.message`.
     """
 
@@ -192,8 +185,12 @@ class Remote:
         if not table_ptr:
             raise FloorMismatch(f"no {kind.name} table")
         if size < kind.floor:
-            raise FloorMismatch(f"the {kind.name} table is {size} bytes, its required slots need {kind.floor}")
+            raise FloorMismatch(f"the {kind.name} table is {size} bytes, smaller than the kind's {kind.floor}")
         header = ctypes.cast(table_ptr, ctypes.POINTER(_abi.KindHeader)).contents
+        if header.struct_size < kind.floor:
+            raise FloorMismatch(
+                f"the {kind.name} table declares {header.struct_size} bytes, smaller than the kind's {kind.floor}"
+            )
         if header.floor_hash != kind.floor_hash:
             raise FloorMismatch(
                 f"the table's floor_hash {header.floor_hash} is not the {kind.name} kind's {kind.floor_hash}"
@@ -210,14 +207,11 @@ class Remote:
             self._scope._check_open()
 
     def _slot(self, name: str) -> Any:
-        field = getattr(self.kind.struct, name)
-        if field.offset + _WORD > self.size:
-            return None
         fn = getattr(self._table, name)
         return fn if fn else None
 
     def has(self, name: str) -> bool:
-        """Whether the table carries the slot for `name`."""
+        """Whether the table fills the slot for `name`."""
         self._check()
         return self._slot(name) is not None
 

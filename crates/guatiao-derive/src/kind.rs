@@ -13,7 +13,7 @@
 //! - `<Trait>Vtable`, a `repr(C)` table: a `KindHeader`, then one slot per
 //!   method in declaration order, each a monomorphised shim;
 //! - `<Trait>Vtable::of::<T>()`, a `const fn` filling the table for an
-//!   implementation, and one `<method>_end()` per slot;
+//!   implementation;
 //! - `impl Kind for dyn Trait`, naming the table, its floor and its hash;
 //! - `impl Trait for Remote<dyn Trait>`, the proxy that calls through a
 //!   table it was handed;
@@ -64,14 +64,15 @@
 //! `Drop`. Nothing is allocated and nothing is owed back. Lent shared, a
 //! slot whose method takes `&mut self` answers `GUATIAO_ERR_UNSUPPORTED`.
 //!
-//! # Versioning
+//! # Slots
 //!
-//! Slots follow declaration order. A method **with a default body** is an
-//! appended slot: a table too short to hold it makes the proxy run the
-//! default. A required method after a defaulted one is refused, so the
-//! floor is one contiguous prefix. The header's hash covers the required
-//! methods' names and signatures, so a table built from a different
-//! declaration is refused rather than called with the wrong ABI.
+//! Slots follow declaration order, the required ones first. A method
+//! **with a default body** is an optional slot: a provider may leave it
+//! null, and the proxy then runs the default. A required method after a
+//! defaulted one is refused. A table smaller than the kind's is refused,
+//! and the header's hash covers the required methods' names and
+//! signatures, so a table built from a different declaration is refused
+//! rather than called with the wrong ABI.
 //!
 //! The signatures are hashed as **spelled**, after one canonical rewrite
 //! (`crate::spelling`): `std`/`core`/`alloc` paths of `Vec`, `String`,
@@ -349,8 +350,8 @@ fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<V
         } else if seen_default {
             return Err(syn::Error::new_spanned(
                 &f.sig.ident,
-                "a required method cannot follow one with a default body: defaulted methods are \
-                 appended slots, and the required ones must be one contiguous prefix",
+                "a required method cannot follow one with a default body: the required slots \
+                 come first",
             ));
         }
         plans.push(plan);
@@ -909,12 +910,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     let floor_hash = fnv1a(&hash_input);
     let description = description_fn(tr, attr, methods, floor_hash);
     let floor_hash = syn::LitInt::new(&floor_hash.to_string(), proc_macro2::Span::call_site());
-    // The floor: one past the last required slot, or past `destroy` for
-    // an object kind whose methods all have defaults.
-    let floor_end = match required.last() {
-        Some(last) => end_ident(&last.ident),
-        None => format_ident!("destroy_end"),
-    };
 
     // Counts the objects this image made and has not seen destroyed.
     let live = format_ident!("__GUATIAO_LIVE_{}", trait_ident.to_string().to_uppercase());
@@ -927,11 +922,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     });
     let destroy_items = object.then(|| {
         quote! {
-            #[doc(hidden)]
-            pub const fn destroy_end() -> usize {
-                ::core::mem::offset_of!(Self, destroy) + ::core::mem::size_of::<usize>()
-            }
-
             /// # Safety
             ///
             /// `ctx` is null or the cell `into_object` boxed for a `__T`,
@@ -949,7 +939,9 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
         }
     });
-    let destroy_required = object.then(|| quote! { ("destroy", #table::destroy_end()), });
+    let destroy_required = object.then(|| {
+        quote! { ("destroy", ::core::mem::offset_of!(#table, destroy) + ::core::mem::size_of::<usize>()), }
+    });
 
     // A slot lending a tree says which argument, so a C reader can tell it
     // from one handed over: both are a pointer without `const`.
@@ -976,16 +968,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         let shim = shim_ident(&m.ident);
         quote! { #ident: ::core::option::Option::Some(Self::#shim::<__T>), }
     });
-    let end_fns = methods.iter().map(|m| {
-        let ident = &m.ident;
-        let end = end_ident(&m.ident);
-        quote! {
-            #[doc(hidden)]
-            pub const fn #end() -> usize {
-                ::core::mem::offset_of!(Self, #ident) + ::core::mem::size_of::<usize>()
-            }
-        }
-    });
     let receiver = if object {
         Receiver::Cell
     } else {
@@ -996,8 +978,8 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         .map(|m| emit_shim(trait_ident, &table, receiver, m));
     let required_slots = required.iter().map(|m| {
         let name = m.ident.to_string();
-        let end = end_ident(&m.ident);
-        quote! { (#name, #table::#end()), }
+        let ident = &m.ident;
+        quote! { (#name, ::core::mem::offset_of!(#table, #ident) + ::core::mem::size_of::<usize>()), }
     });
     let proxies = methods.iter().map(|m| emit_proxy(&table, m));
 
@@ -1358,10 +1340,10 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 }
             }
 
-            /// One past the last required slot. Frozen.
+            /// The smallest table a reader accepts: every slot.
             #[doc(hidden)]
             pub const fn floor() -> usize {
-                Self::#floor_end()
+                ::core::mem::size_of::<Self>()
             }
 
             /// FNV-1a over the shape and the required signatures, as a
@@ -1372,8 +1354,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             #description
 
             #destroy_items
-
-            #(#end_fns)*
 
             #(#shims)*
 
@@ -1448,10 +1428,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
 
         #instance_impl
     }
-}
-
-fn end_ident(method: &Ident) -> Ident {
-    format_ident!("{}_end", method)
 }
 
 // --- the description -------------------------------------------------------
@@ -2218,7 +2194,6 @@ fn emit_shim(
 /// converts the answer back.
 fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     let method = &m.ident;
-    let end = end_ident(&m.ident);
     let slot_ty = slot_type(m);
     let ret_ty = &m.ret_ty;
     let params: Vec<TokenStream> = m
@@ -2490,8 +2465,8 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         #(#marshals)*
         #out_init
         #err_init
-        // SAFETY: the slot's own signature, read under the table's size;
-        // every pointer is a live local or a borrowed argument.
+        // SAFETY: the slot's own signature, within the table validation
+        // sized; every pointer is a live local or a borrowed argument.
         let __status = unsafe { __f(self.ctx() #(, #arg_names)* #out_arg #err_arg) };
         #settle
         #on_status
@@ -2503,13 +2478,13 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         // A required slot: validation established it is present.
         None => quote! {
             // SAFETY: the slot at that offset has this type in `#table`.
-            let __f: #slot_ty = unsafe { self.slot(::core::mem::offset_of!(#table, #method), #table::#end()) }
+            let __f: #slot_ty = unsafe { self.slot(::core::mem::offset_of!(#table, #method)) }
                 .expect("validated: a required slot is present and non-null");
             #call
         },
-        // An appended slot: absent from an older table, so the default
-        // body runs, exactly as it would on a type implementing the trait,
-        // and a tree it answers is moved into the allocator asked for.
+        // An optional slot: null when the provider leaves it out, so the
+        // default body runs, exactly as it would on a type implementing the
+        // trait, and a tree it answers is moved into the allocator asked for.
         Some(block) => {
             let fallback = if m.answers_tree() {
                 let ret = match &m.ret {
@@ -2537,7 +2512,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             };
             quote! {
                 // SAFETY: the slot at that offset has this type in `#table`.
-                match unsafe { self.slot::<#slot_ty>(::core::mem::offset_of!(#table, #method), #table::#end()) } {
+                match unsafe { self.slot::<#slot_ty>(::core::mem::offset_of!(#table, #method)) } {
                     ::core::option::Option::Some(__f) => { #call }
                     ::core::option::Option::None => #fallback
                 }
@@ -2677,7 +2652,9 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("const FLOOR_HASH : u32 = GreeterVtable :: FLOOR_HASH ;"));
-        assert!(out.contains("(\"greet\" , GreeterVtable :: greet_end ())"));
+        assert!(out.contains(
+            "(\"greet\" , :: core :: mem :: offset_of ! (GreeterVtable , greet) + :: core :: mem :: size_of :: < usize > ())"
+        ), "{out}");
         assert!(out.contains("const OBJECT : bool = false"));
         assert!(
             !out.contains("destroy"),
@@ -2732,7 +2709,9 @@ mod tests {
         assert_eq!(fields, ["header", "destroy", "say", "read", "turns"]);
         assert!(out.contains("const OBJECT : bool = true"));
         assert!(!out.contains("Instance"), "an object kind has no instances");
-        assert!(out.contains("(\"destroy\" , ConversationVtable :: destroy_end ())"));
+        assert!(out.contains(
+            "(\"destroy\" , :: core :: mem :: offset_of ! (ConversationVtable , destroy) + :: core :: mem :: size_of :: < usize > ())"
+        ), "{out}");
         let literal = fnv1a("object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64");
         assert!(
             out.contains(&format!("pub const FLOOR_HASH : u32 = {literal} ;")),
@@ -2956,7 +2935,7 @@ mod tests {
         );
         assert!(!out.contains("__guatiao_destroy"), "{out}");
         assert!(
-            out.contains("(\"destroy\" , PoolVtable :: destroy_end ())"),
+            out.contains("(\"destroy\" , :: core :: mem :: offset_of ! (PoolVtable , destroy) + :: core :: mem :: size_of :: < usize > ())"),
             "{out}"
         );
     }

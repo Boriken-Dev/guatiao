@@ -255,11 +255,11 @@ static gt_remote *remote_of(SEXP x) {
   return r;
 }
 
-/* The slot's function in a table, or NULL when the table predates it. */
+/* The slot's function in a table, or NULL when the provider left it out
+ * or the table is smaller than its kind's, which fills no slot. */
 static void *slot_fn(const gt_remote *r, int c) {
-  size_t off = 8 + sizeof(void *) * (size_t)c;
-  if (off + sizeof(void *) > r->size) return NULL;
-  return *(void *const *)((const char *)r->table + off);
+  if (r->size < r->kind->size) return NULL;
+  return *(void *const *)((const char *)r->table + 8 + sizeof(void *) * (size_t)c);
 }
 
 static int c_index(const gt_kind *k, int i) { return k->object ? i : i - 1; }
@@ -548,7 +548,10 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   if (c < (k->object ? 1 : 0) || c >= k->nslots) gt_raise(GUATIAO_ERR_NOT_FOUND, "no such slot");
   gt_slot *sl = &k->slots[c];
   void *fn = slot_fn(r, c);
-  if (!fn) gt_raise(GUATIAO_ERR_UNSUPPORTED, "the table has no %s slot %d: built before it, or left out", k->name, i);
+  if (!fn && r->size < k->size)
+    gt_raise(GUATIAO_ERR_WRONG_KIND, "the %s table is %d bytes, smaller than the kind's %d", k->name,
+             (int)r->size, (int)k->size);
+  if (!fn) gt_raise(GUATIAO_ERR_UNSUPPORTED, "the table leaves out the %s slot %d", k->name, i);
   if (XLENGTH(args) != sl->nargs)
     gt_raise(GUATIAO_ERR_BAD_VALUE, "%s.%s takes %d arguments", k->name, sl->name, sl->nargs);
 

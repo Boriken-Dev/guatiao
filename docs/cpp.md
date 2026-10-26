@@ -194,7 +194,7 @@ fails is tried again with the library's own directory searched.
 
 ## What C++ cannot do that Rust can
 
-- Run a kind's default body for a slot an older table leaves out: such a
+- Run a kind's default body for a slot a provider leaves empty: such a
   call answers UNSUPPORTED.
 - Tell a lent tree from one handed over by its C type: the kind's
   declaration says which, and `guatiao_check_kinds` holds it to the

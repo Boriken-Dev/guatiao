@@ -358,7 +358,7 @@ void main() {
       );
     });
 
-    test('written in C: an older table answers has() and Unsupported', () {
+    test('written in C: a slot left null answers has() and Unsupported', () {
       final dir = cGreeterDir;
       if (dir == null) {
         markTestSkipped('no C compiler');

@@ -286,11 +286,11 @@ static int live_remote(gt_call *c, int i, gt_remote **out) {
   return 1;
 }
 
-/* The slot's function in a table, or NULL when the table predates it. */
+/* The slot's function in a table, or NULL when the provider left it out
+ * or the table is smaller than its kind's, which fills no slot. */
 static void *slot_fn(const gt_remote *r, int at) {
-  size_t off = 8 + sizeof(void *) * (size_t)at;
-  if (off + sizeof(void *) > r->size) return NULL;
-  return *(void *const *)((const char *)r->table + off);
+  if (r->size < r->kind->size) return NULL;
+  return *(void *const *)((const char *)r->table + 8 + sizeof(void *) * (size_t)at);
 }
 
 static int c_index(const gt_kind *k, int i) { return k->object ? i : i - 1; }
@@ -641,7 +641,10 @@ int cmd_remote_call(gt_call *c) {
   if (at < (k->object ? 1 : 0) || at >= k->nslots) return gt_fail(c, GUATIAO_ERR_NOT_FOUND, "no such slot");
   gt_slot *sl = &k->slots[at];
   void *fn = slot_fn(r, at);
-  if (!fn) return gt_fail(c, GUATIAO_ERR_UNSUPPORTED, "the table has no %s slot %d: built before it, or left out", k->name, i);
+  if (!fn && r->size < k->size)
+    return gt_fail(c, GUATIAO_ERR_WRONG_KIND, "the %s table is %d bytes, smaller than the kind's %d", k->name,
+                   (int)r->size, (int)k->size);
+  if (!fn) return gt_fail(c, GUATIAO_ERR_UNSUPPORTED, "the table leaves out the %s slot %d", k->name, i);
   if (!args || !mxIsCell(args) || (int)mxGetNumberOfElements(args) != sl->nargs)
     return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "the slot takes %d arguments", sl->nargs);
 

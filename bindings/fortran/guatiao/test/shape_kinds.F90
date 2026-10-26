@@ -421,7 +421,6 @@ contains
     gk_k%name = 'note'
     gk_k%floor_hash = NOTE_FLOOR_HASH
     gk_k%size = c_sizeof(note_table)
-    gk_k%floor_size = c_sizeof(note_table%header) + 3 * c_sizeof(note_table%destroy)
     gk_k%object = .true.
     note_table%header%struct_size = int(gk_k%size, c_int32_t)
     note_table%header%floor_hash = NOTE_FLOOR_HASH
@@ -439,7 +438,6 @@ contains
     gk_k%name = 'shapes'
     gk_k%floor_hash = SHAPES_FLOOR_HASH
     gk_k%size = c_sizeof(probe)
-    gk_k%floor_size = c_sizeof(probe%header) + 11 * c_sizeof(probe%scalars)
     gk_k%accepts => is_shapes
   end function
 

@@ -248,9 +248,9 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     );
     drop(config);
 
-    // 2c. A caller that carries no allocator -- an older host, a zeroed
-    // slot -- gets a map built through C's own, and frees it through the
-    // allocator it records.
+    // 2c. A caller that carries no allocator -- a zeroed slot -- gets a
+    // map built through C's own, and frees it through the allocator it
+    // records.
     {
         let remote = offer.remote().expect("its ctx is its instance");
         // SAFETY: the registry's copy of the table this offer validated.

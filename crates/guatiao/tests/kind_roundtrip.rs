@@ -44,7 +44,7 @@ pub trait Greeter: Send + Sync {
     fn describe(&self, name: &str) -> Result<Map, ProviderError>;
     /// Cannot fail, and answers a scalar.
     fn count(&self) -> i64;
-    /// Appended: a default body an older table lacks.
+    /// Optional: a default body, run when a provider leaves the slot null.
     fn shout(&self, name: &str) -> String {
         format!("{}!", self.greet(name).unwrap_or_default().to_uppercase())
     }
@@ -160,7 +160,7 @@ fn hello() -> Remote<dyn Greeter> {
 #[test]
 fn the_kind_declares_itself() {
     assert_eq!(<dyn Greeter as Kind>::NAME, "greeter");
-    assert_eq!(<dyn Greeter as Kind>::FLOOR, GreeterVtable::count_end());
+    assert_eq!(<dyn Greeter as Kind>::FLOOR, size_of::<GreeterVtable>());
     assert_eq!(
         <dyn Greeter as Kind>::REQUIRED
             .iter()
@@ -184,7 +184,7 @@ fn a_call_round_trips_through_the_proxy() {
     let r = hello();
     assert_eq!(r.greet("ana").unwrap(), "hello, ana");
     assert_eq!(r.count(), 7);
-    assert_eq!(r.shout("bo"), "HELLO, BO!", "the appended slot is called");
+    assert_eq!(r.shout("bo"), "HELLO, BO!", "the optional slot is called");
 
     let e = r.greet("").unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
@@ -265,18 +265,21 @@ fn a_panic_inside_the_implementation_is_a_status() {
 }
 
 #[test]
-fn a_truncated_table_runs_the_default_body() {
+fn a_null_optional_slot_runs_the_default_body() {
+    let mut quiet = GreeterVtable::of::<Hello>();
+    quiet.shout = None;
+    let quiet: &'static GreeterVtable = Box::leak(Box::new(quiet));
     let r = remote(
-        &HELLO_TABLE,
+        quiet,
         &HELLO as *const Hello as *const c_void,
-        GreeterVtable::floor(),
+        size_of::<GreeterVtable>(),
     )
-    .expect("the floor is enough");
+    .expect("an optional slot may be null");
     assert_eq!(r.greet("ana").unwrap(), "hello, ana");
     assert_eq!(
         r.shout("ana"),
         "HELLO, ANA!",
-        "the slot is past the table, so the default body runs — through the proxy's own `greet`"
+        "the slot is null, so the default body runs — through the proxy's own `greet`"
     );
 }
 
@@ -317,7 +320,7 @@ pub trait Tally: Send {
     fn add(&mut self, n: i64) -> i64;
     /// Copies the total's decimal text into `dst`; answers bytes written.
     fn render(&mut self, dst: &mut [u8]) -> i64;
-    /// Appended: an older table lacks it.
+    /// Optional: a provider may leave it null.
     fn total(&self) -> i64 {
         -1
     }
@@ -369,8 +372,8 @@ fn an_object_kind_declares_itself() {
         ["destroy", "add", "render"],
         "destroy is the first required slot"
     );
-    assert_eq!(TallyVtable::destroy_end(), 8 + size_of::<usize>());
-    assert_eq!(<dyn Tally as Kind>::FLOOR, TallyVtable::render_end());
+    assert_eq!(<dyn Tally as Kind>::REQUIRED[0].1, 8 + size_of::<usize>());
+    assert_eq!(<dyn Tally as Kind>::FLOOR, size_of::<TallyVtable>());
     assert_ne!(
         <dyn Tally as Kind>::FLOOR_HASH,
         <dyn Greeter as Kind>::FLOOR_HASH
@@ -412,11 +415,7 @@ fn an_object_is_driven_through_its_handle_and_destroyed_once() {
     .into_object();
     assert_eq!(tally.add(2), 2);
     assert_eq!(tally.add(40), 42);
-    assert_eq!(
-        tally.total(),
-        42,
-        "the appended slot is present in a full table"
-    );
+    assert_eq!(tally.total(), 42, "the optional slot is filled");
     let mut buffer = [0u8; 8];
     assert_eq!(tally.render(&mut buffer), 2);
     assert_eq!(&buffer[..2], b"42");
@@ -463,9 +462,15 @@ fn an_object_crosses_as_raw_parts_and_a_mismatch_destroys_it() {
     .into_object()
     .into_raw();
     // SAFETY: the table is a real one; the kind is deliberately wrong,
-    // which is what the hash check is for.
+    // which is what the size and hash checks are for.
     let why = unsafe { Object::<dyn Greeter>::from_raw(raw) }.unwrap_err();
-    assert!(matches!(why, KindMismatch::HashMismatch { .. }), "{why:?}");
+    assert!(
+        matches!(
+            why,
+            KindMismatch::BelowFloor { .. } | KindMismatch::HashMismatch { .. }
+        ),
+        "{why:?}"
+    );
     assert!(
         dropped.load(core::sync::atomic::Ordering::SeqCst),
         "destroyed on refusal"

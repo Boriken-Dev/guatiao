@@ -4,8 +4,8 @@
 
 function obj = bind_table(cls, t, ctx, holder)
 % A remote of the kind class `cls` over a table struct(table, size, ctx),
-% refused when the table is smaller than the kind's required slots or
-% carries another floor hash (guatiao:WrongKind:floor). `ctx` replaces the
+% refused when the table is smaller than the kind's or carries another
+% floor hash (guatiao:WrongKind:floor). `ctx` replaces the
 % table's when given.
   e = guatiao.internal.kinds('of', cls);
   if isempty(t.table)
@@ -13,7 +13,7 @@ function obj = bind_table(cls, t, ctx, holder)
   end
   hash = guatiao_mex('table_floor_hash', t.table);
   if t.size < e.floor_size || hash ~= e.desc.floor_hash
-    error('guatiao:WrongKind:floor', ['the table is not the %s kind''s: size %d (at least %d), ' ...
+    error('guatiao:WrongKind:floor', ['the table is not the %s kind''s: size %d (the kind''s is %d), ' ...
           'floor hash %d (want %d)'], e.desc.name, t.size, e.floor_size, hash, e.desc.floor_hash);
   end
   if isempty(ctx)

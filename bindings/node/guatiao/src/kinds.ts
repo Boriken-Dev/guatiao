@@ -81,7 +81,7 @@ export interface MethodSpec {
   readonly args?: readonly Shape<any, any, any, any>[];
   /** A shape, an object kind (an object the caller then owns), or none. */
   readonly answer?: Shape<any, any, any, any> | ObjectKindLike;
-  /** A slot every table fills: one the kind was born with, which its floor hash covers. */
+  /** A slot every table fills, which its floor hash covers; a provider may leave any other null. */
   readonly required?: boolean;
   /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
   readonly fallible?: boolean;
@@ -108,7 +108,7 @@ export interface Kind<M extends Methods = Methods, O extends boolean = boolean> 
   readonly methods: M;
   /** The table's size in bytes: the header, `destroy`, a word per slot. */
   readonly tableSize: number;
-  /** The smallest table this kind accepts: up to its last required slot. */
+  /** The smallest table this kind accepts: every slot, `tableSize`. */
   readonly floor: number;
   /** A caller's handle on a table of this kind, over `ctx`. */
   bind(table: bigint, size: number, ctx: bigint | null): Remote<Kind<M, O>>;
@@ -1182,7 +1182,6 @@ export class KindImpl implements Kind<Methods, boolean> {
       offset += WORD;
     }
     const slots: ResolvedSlot[] = [];
-    let floor = this.isObject ? offset : SIZE.kindHeader;
     for (const [methodName, method] of Object.entries(spec.methods)) {
       if (RESERVED.has(methodName) || methodName in Object.prototype) {
         throw new TypeError(`${name}.${methodName}: the name is a remote's own; name it otherwise, a slot is found by position`);
@@ -1224,12 +1223,11 @@ export class KindImpl implements Kind<Methods, boolean> {
         cTypes,
       };
       slots.push(slot);
-      if (slot.required) floor = offset + WORD;
       offset += WORD;
     }
     this.slots = slots;
     this.tableSize = offset;
-    this.floor = floor;
+    this.floor = offset;
     // Registered now, once per slot: koffi cannot register a callback from
     // inside one, and a table is often first served from inside a call.
     refuseInsideACall(`the ${name} kind`);
@@ -1632,8 +1630,9 @@ export class RemoteImpl {
 
   constructor(kind: KindImpl, raw: RawObject, scope: Scope | undefined, isHandle: boolean) {
     if (!raw.table) throw new FloorMismatch(`no ${kind.name} table`);
-    if (raw.size < kind.floor) {
-      throw new FloorMismatch(`the ${kind.name} table is ${raw.size} bytes, its required slots need ${kind.floor}`);
+    const declared = Math.min(raw.size, n.u32(raw.table, KIND_HEADER.structSize));
+    if (declared < kind.floor) {
+      throw new FloorMismatch(`the ${kind.name} table is ${declared} bytes, smaller than the kind's ${kind.floor}`);
     }
     const hash = n.u32(raw.table, KIND_HEADER.floorHash);
     if (hash !== kind.floorHash) {
@@ -1654,7 +1653,6 @@ export class RemoteImpl {
   }
 
   #slotFn(slot: ResolvedSlot): ((...args: unknown[]) => number) | undefined {
-    if (slot.offset + WORD > this.size) return undefined;
     const ptr = n.ptrAt(this.table, slot.offset);
     if (!ptr) return undefined;
     let fn = this.#fns.get(slot.index);
@@ -1911,7 +1909,7 @@ export function implementsSlot(target: object, slot: ResolvedSlot): boolean {
  * The table serving `kind` through `target`'s methods (an object, or a
  * class's prototype), built on first use and kept for the process: a slot
  * for each method it has, null for the rest, so a Rust caller runs the
- * kind's own default for an appended one. `TypeError` for a missing
+ * kind's own default for an optional one. `TypeError` for a missing
  * required method. @internal
  */
 export function tableFor(kind: KindImpl, target: object, what = 'the object'): bigint {

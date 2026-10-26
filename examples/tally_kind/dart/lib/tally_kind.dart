@@ -138,28 +138,28 @@ abstract interface class Tally {
 
 /// Appended: every count, as `{name: count}`.
 ///
-/// `all` of the `tally` kind: a slot appended after its first ones, which an older table may lack.
+/// `all` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyAll {
   Object all();
 }
 
 /// Appended: whether `name` has a count.
 ///
-/// `known` of the `tally` kind: a slot appended after its first ones, which an older table may lack.
+/// `known` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyKnown {
   bool known(String name);
 }
 
 /// Appended: the sum of the bytes, modulo 2^32.
 ///
-/// `checksum` of the `tally` kind: a slot appended after its first ones, which an older table may lack.
+/// `checksum` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyChecksum {
   int checksum(Uint8List data);
 }
 
 /// Appended: tells `watcher` each count, for this call alone.
 ///
-/// `report` of the `tally` kind: a slot appended after its first ones, which an older table may lack.
+/// `report` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyReport {
   void report(WatcherRemote watcher);
 }
@@ -167,7 +167,7 @@ abstract interface class TallyReport {
 /// Appended: adds the counts of `counts` (`{name: count}`), which the
 /// tally owns from the call on; answers how many names it held.
 ///
-/// `load` of the `tally` kind: a slot appended after its first ones, which an older table may lack.
+/// `load` of the `tally` kind: an optional slot, which a provider may leave null.
 abstract interface class TallyLoad {
   int load(Value counts);
 }
@@ -226,7 +226,7 @@ final class TallyRemote extends KindRemote
 
   /// Appended: every count, as `{name: count}`.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('all')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('all')` asks first.
   @override
   Value all() {
     final c = CallScope();
@@ -246,7 +246,7 @@ final class TallyRemote extends KindRemote
 
   /// Appended: whether `name` has a count.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('known')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('known')` asks first.
   @override
   bool known(String name) {
     final c = CallScope();
@@ -267,7 +267,7 @@ final class TallyRemote extends KindRemote
 
   /// Appended: the sum of the bytes, modulo 2^32.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('checksum')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('checksum')` asks first.
   @override
   int checksum(List<int> data) {
     final c = CallScope();
@@ -288,7 +288,7 @@ final class TallyRemote extends KindRemote
 
   /// Appended: tells `watcher` each count, for this call alone.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('report')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('report')` asks first.
   @override
   void report(Watcher watcher) {
     final c = CallScope();
@@ -309,7 +309,7 @@ final class TallyRemote extends KindRemote
   /// Appended: adds the counts of `counts` (`{name: count}`), which the
   /// tally owns from the call on; answers how many names it held.
   ///
-  /// Throws `Unsupported` when the table lacks it: `has('load')` asks first.
+  /// Throws `Unsupported` when the provider left it null: `has('load')` asks first.
   @override
   int load(Object counts) {
     final c = CallScope();

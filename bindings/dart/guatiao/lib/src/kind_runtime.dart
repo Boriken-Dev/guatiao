@@ -93,14 +93,8 @@ abstract class Kind<R extends KindRemote> {
     return table.cast<Void>();
   }();
 
-  /// The smallest table this kind accepts: up to its last required slot.
-  int get floor {
-    var end = isObject ? _first : _header;
-    for (var i = 0; i < slots.length; i++) {
-      if (slots[i].required) end = offsetOf(i) + _word;
-    }
-    return end;
-  }
+  /// The smallest table this kind accepts: every slot, [tableSize].
+  int get floor => tableSize;
 
   /// A caller's remote over a table of this kind; with [scope], valid for
   /// that call only; [owned], an object the caller destroys. Generated.
@@ -113,7 +107,7 @@ abstract class Kind<R extends KindRemote> {
   });
 
   /// Whether [target] implements slot [index]: the kind's interface for a
-  /// required slot, the slot's own interface for an appended one.
+  /// required slot, the slot's own interface for an optional one.
   /// Generated.
   bool slotServedBy(Object target, int index);
 
@@ -125,7 +119,7 @@ abstract class Kind<R extends KindRemote> {
   Pointer<Void> shim(int index);
 
   /// A caller's remote over [found], checked: [FloorMismatch] for no
-  /// table, one shorter than the required slots, or another kind's hash.
+  /// table, one smaller than the kind's, or another kind's hash.
   R bind(ProviderTable found) => remote(found.table, found.size, found.ctx);
 
   /// An object of this kind the caller owns: its `close()` destroys it.
@@ -244,9 +238,11 @@ abstract class KindRemote {
     bool owned = false,
   }) : _scope = scope {
     if (table == nullptr) throw FloorMismatch('no ${kind.name} table');
-    if (size < kind.floor) {
+    final declared = table.cast<guatiao_kind_header>().ref.struct_size;
+    final smaller = declared < size ? declared : size;
+    if (smaller < kind.floor) {
       throw FloorMismatch(
-        'the ${kind.name} table is $size bytes, its required slots need '
+        'the ${kind.name} table is $smaller bytes, smaller than the kind\'s '
         '${kind.floor}',
       );
     }
@@ -275,7 +271,7 @@ abstract class KindRemote {
   _Owned? _held;
   bool _closed = false;
 
-  /// Whether the table carries the slot named [slotName] (its C name).
+  /// Whether the table fills the slot named [slotName] (its C name).
   bool has(String slotName) {
     _checkOpen();
     final index = kind.slots.indexWhere((s) => s.name == slotName);
@@ -289,12 +285,11 @@ abstract class KindRemote {
 
   Pointer<Void> _slotAt(int index) {
     final at = kind.offsetOf(index);
-    if (at + _word > size) return nullptr;
     return (table.cast<Uint8>() + at).cast<Pointer<Void>>().value;
   }
 
   /// Slot [index]'s function, for the generated method: [Unsupported]
-  /// when the table is too short to carry it or carries null.
+  /// when the provider left it null.
   Pointer<Void> slot(int index) {
     _checkOpen();
     final fn = _slotAt(index);

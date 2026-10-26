@@ -220,7 +220,7 @@ proxy copies the answer once. Then:
 | item | what |
 | --- | --- |
 | `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
-| `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`; `<method>_end()` per slot; `FLOOR_HASH` as a **literal** the attribute computed, so a C header generator renders it as `#define <table>_FLOOR_HASH n` |
+| `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`, the whole table; `FLOOR_HASH` as a **literal** the attribute computed, so a C header generator renders it as `#define <table>_FLOOR_HASH n` |
 | `<Trait>Vtable::description() -> String` | the kind as data, compact JSON: name, floor hash, `object`, each slot in table order with its arguments (`type`, and `pass` for a tree or an object), answer, `required`, `fallible` and doc text. The format is in the docs' encodings page; a kind crate commits a document of its kinds beside its header, which bindings load instead of declaring the kind again |
 | `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut`, and the hidden `describe(seen, out)`: pushes `description()`, then the object kinds a slot takes or answers, each once |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
@@ -246,9 +246,10 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
 | `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, passes an `Object` or lends one |
 
-A method **with a default body** is an appended slot: an older table
-lacks it and the proxy runs the default. A required method after a
-defaulted one is refused. A method that cannot fail propagates a provider
+A method **with a default body** is an optional slot: a provider may
+leave it null, and the proxy then runs the default. A required method
+after a defaulted one is refused. A table smaller than the whole table is
+refused. A method that cannot fail propagates a provider
 failure as a panic. Refused by name, on the author's span: a generic or
 `unsafe` trait, a `where` clause, missing `Send + Sync`, an empty trait,
 associated consts/types, `async`, generic or variadic methods, `&mut
@@ -310,7 +311,7 @@ a `&mut [u8]` argument crosses as a `BytesMut` out-buffer (the one
 
 | item | what |
 | --- | --- |
-| `<Trait>Vtable` | `header`, then **`destroy: Option<unsafe extern "C" fn(ctx)>`**, then the slots; `destroy_end()`; `destroy` is the first entry of `REQUIRED` |
+| `<Trait>Vtable` | `header`, then **`destroy: Option<unsafe extern "C" fn(ctx)>`**, then the slots; `destroy` is the first entry of `REQUIRED` |
 | `Kind::OBJECT` | `true`; the hash is over `object;` + the required signatures, so an object table never passes for a provider table with the same methods |
 | the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (`ObjectCell::new`) and hands back the handle |
 | `TableFor` | a hidden `unsafe impl<T: Trait> guatiao::library::kind::TableFor<T> for <Trait>Vtable` (`Kind = dyn Trait`, `table() = of::<T>()`): what `ObjectCell::new` and the safe `Object::from_cell` require, so a cell's table is the one built for its value's type and kind |

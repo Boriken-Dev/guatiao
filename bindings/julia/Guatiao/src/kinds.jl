@@ -75,11 +75,8 @@ slot_offset(spec::KindSpec, i::Int) = first_slot(spec) + (i - 1) * WORD
 
 function KindSpec(name::String, floor_hash::Integer, object::Bool, slots::Vector{SlotSpec})
     size = sizeof(GKindHeader) + (object ? WORD : 0) + length(slots) * WORD
-    floor = sizeof(GKindHeader) + (object ? WORD : 0)
-    for (i, s) in enumerate(slots)
-        s.required && (floor = max(floor, sizeof(GKindHeader) + (object ? WORD : 0) + i * WORD))
-    end
-    return KindSpec(name, UInt32(floor_hash), object, slots, size, floor)
+    # Every slot: a smaller table is refused.
+    return KindSpec(name, UInt32(floor_hash), object, slots, size, size)
 end
 
 """
@@ -636,8 +633,10 @@ check_keep(x) = isopen(x) || throw(closed_error(x isa Registry ? "registry" : "i
 
 function check_table(spec::KindSpec, table::Ptr{Cvoid}, size::Integer)
     table == C_NULL && throw(FloorMismatch("no $(spec.name) table"))
-    size < spec.floor && throw(FloorMismatch("the $(spec.name) table is $size bytes, its required slots need $(spec.floor)"))
+    size < spec.floor && throw(FloorMismatch("the $(spec.name) table is $size bytes, smaller than the kind's $(spec.floor)"))
     h = unsafe_load(Ptr{GKindHeader}(table))
+    h.struct_size < spec.floor &&
+        throw(FloorMismatch("the $(spec.name) table declares $(h.struct_size) bytes, smaller than the kind's $(spec.floor)"))
     h.floor_hash == spec.floor_hash ||
         throw(FloorMismatch("the table's floor_hash $(h.floor_hash) is not the $(spec.name) kind's $(spec.floor_hash)"))
     return nothing
@@ -645,14 +644,13 @@ end
 
 remote_state(r) = getfield(r, :state)
 
-"The slot's function pointer, or an `Unsupported` error when the table lacks it."
+"The slot's function pointer, or an `Unsupported` error when the provider left it null."
 function slot_pointer(r, spec::KindSpec, i::Int)
     st = remote_state(r)
     st.open || throw(closed_error("object"))
     st.scope === nothing || check_scope(st.scope)
     check_keep(st.keep)
-    off = slot_offset(spec, i)
-    f = off + WORD <= st.size ? unsafe_load(Ptr{Ptr{Cvoid}}(st.table + off)) : C_NULL
+    f = unsafe_load(Ptr{Ptr{Cvoid}}(st.table + slot_offset(spec, i)))
     f == C_NULL && throw(GuatiaoError(Unsupported, "this $(spec.name) table has no `$(spec.slots[i].name)`"))
     return f, st.ctx
 end
@@ -660,23 +658,22 @@ end
 """
     has(r, slot::Symbol) -> Bool
 
-Whether a remote's table carries the slot (a slot appended after its
-library was built is missing from an older table).
+Whether a remote's table fills the slot (a provider may leave an
+optional one null).
 """
 function has(r, slot::Symbol)
     st = remote_state(r)
     spec = kind(supertype(typeof(r)))
     i = findfirst(s -> s.name === slot, spec.slots)
     i === nothing && throw(ArgumentError("the $(spec.name) kind has no slot `$slot`"))
-    off = slot_offset(spec, i)
-    return off + WORD <= st.size && unsafe_load(Ptr{Ptr{Cvoid}}(st.table + off)) != C_NULL
+    return unsafe_load(Ptr{Ptr{Cvoid}}(st.table + slot_offset(spec, i))) != C_NULL
 end
 
 """
     bind(K, table, size, ctx; keep = nothing)
 
 A caller's handle on any table of the kind `K`: its remote. A
-`FloorMismatch` when the table is smaller than the kind's required slots
+`FloorMismatch` when the table is smaller than the kind's
 or has another floor hash. `keep` is what keeps the table valid (it is
 checked open on every call).
 """

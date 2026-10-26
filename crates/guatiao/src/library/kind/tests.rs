@@ -12,8 +12,8 @@ use core::mem::offset_of;
 
 trait Greeter: Send + Sync {
     fn greet(&self, name: &str) -> Result<String, ProviderError>;
-    /// An appended slot with a default body: an older table lacks it
-    /// and the proxy runs the default.
+    /// An optional slot with a default body: a provider may leave it
+    /// null, and the proxy then runs the default.
     fn shout(&self) -> i64 {
         -1
     }
@@ -27,7 +27,6 @@ struct GreeterVtable {
 }
 
 const GREET_END: usize = offset_of!(GreeterVtable, greet) + size_of::<usize>();
-const SHOUT_END: usize = offset_of!(GreeterVtable, shout) + size_of::<usize>();
 const HASH: u32 = fnv1a("greet(&self, name: &str) -> Result<String, ProviderError>");
 
 unsafe extern "C" fn greet_shim<T: Greeter>(
@@ -80,7 +79,7 @@ impl GreeterVtable {
 impl Kind for dyn Greeter {
     const NAME: &'static str = "greeter";
     type Vtable = GreeterVtable;
-    const FLOOR: usize = GREET_END;
+    const FLOOR: usize = size_of::<GreeterVtable>();
     const FLOOR_HASH: u32 = HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[("greet", GREET_END)];
 
@@ -103,7 +102,7 @@ impl Greeter for Remote<dyn Greeter> {
         type Slot = unsafe extern "C" fn(*mut c_void, Str, *mut Text, *mut ProviderError) -> Status;
         // SAFETY: `greet` is the slot at that offset in the table
         // validation checked.
-        let f: Slot = unsafe { self.slot(offset_of!(GreeterVtable, greet), GREET_END) }
+        let f: Slot = unsafe { self.slot(offset_of!(GreeterVtable, greet)) }
             .expect("validated: a required slot is present and non-null");
         let mut out = Text::new("");
         let mut err = ProviderError::none();
@@ -118,8 +117,8 @@ impl Greeter for Remote<dyn Greeter> {
 
     fn shout(&self) -> i64 {
         type Slot = unsafe extern "C" fn(*mut c_void, *mut i64) -> Status;
-        // SAFETY: as `greet`; an absent slot is the default body.
-        match unsafe { self.slot::<Slot>(offset_of!(GreeterVtable, shout), SHOUT_END) } {
+        // SAFETY: as `greet`; a null slot is the default body.
+        match unsafe { self.slot::<Slot>(offset_of!(GreeterVtable, shout)) } {
             Some(f) => {
                 let mut out = 0i64;
                 // SAFETY: the slot's own signature.
@@ -279,7 +278,7 @@ fn a_call_round_trips_through_a_remote() {
     )
     .expect("a full table validates");
     assert_eq!(r.greet("ana").unwrap(), "hello, ana");
-    assert_eq!(r.shout(), 11, "the appended slot is present and called");
+    assert_eq!(r.shout(), 11, "the optional slot is filled and called");
 
     let e = r.greet("").unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
@@ -304,21 +303,57 @@ fn a_panic_in_the_implementation_is_a_status_and_the_process_lives() {
     assert_eq!(e.message(), "", "a panic has no words the shim could write");
 }
 
+/// A provider leaving an optional slot null gets the trait's default body.
 #[test]
-fn a_truncated_table_runs_the_default_body_for_an_appended_slot() {
+fn a_null_optional_slot_runs_the_default_body() {
+    let mut quiet = GreeterVtable::of::<Hello>();
+    quiet.shout = None;
+    let quiet: &'static GreeterVtable = Box::leak(Box::new(quiet));
     let r = remote_of(
-        &HELLO_TABLE,
+        quiet,
         &HELLO as *const Hello as *const c_void,
-        GREET_END,
+        size_of::<GreeterVtable>(),
     )
-    .expect("the floor is enough");
+    .expect("an optional slot may be null");
     assert_eq!(r.greet("ana").unwrap(), "hello, ana");
+    assert_eq!(r.shout(), -1, "the slot is null, so the default runs");
+}
+
+/// A table short of the kind's by one slot, or by a byte, is refused
+/// whether the descriptor or the header says so, naming both sizes.
+#[test]
+fn a_table_short_of_every_slot_is_refused() {
+    let ctx = &HELLO as *const Hello as *const c_void;
+    let full = size_of::<GreeterVtable>();
+    for size in [GREET_END, full - 1] {
+        let refused = remote_of(&HELLO_TABLE, ctx, size).unwrap_err();
+        assert_eq!(refused, KindMismatch::BelowFloor { size, floor: full });
+        let words = refused.to_string();
+        assert!(
+            words.contains(&size.to_string()) && words.contains(&full.to_string()),
+            "{words}"
+        );
+
+        let mut short = GreeterVtable::of::<Hello>();
+        short.header.struct_size = size as u32;
+        let short: &'static GreeterVtable = Box::leak(Box::new(short));
+        assert_eq!(
+            remote_of(short, ctx, full).unwrap_err(),
+            KindMismatch::BelowFloor { size, floor: full },
+            "the header's own size counts too"
+        );
+    }
+    let mut unsized_header = GreeterVtable::of::<Hello>();
+    unsized_header.header.struct_size = 0;
+    let unsized_header: &'static GreeterVtable = Box::leak(Box::new(unsized_header));
     assert_eq!(
-        r.shout(),
-        -1,
-        "the slot is past the table, so the default runs"
+        remote_of(unsized_header, ctx, full).unwrap_err(),
+        KindMismatch::BelowFloor {
+            size: 0,
+            floor: full
+        },
+        "a header declaring no size is refused, not read as the descriptor's"
     );
-    assert_eq!(r.size(), GREET_END);
 }
 
 #[test]
@@ -328,7 +363,7 @@ fn each_check_names_itself() {
         remote_of(&HELLO_TABLE, ctx, GREET_END - 1).unwrap_err(),
         KindMismatch::BelowFloor {
             size: GREET_END - 1,
-            floor: GREET_END
+            floor: size_of::<GreeterVtable>()
         }
     );
 
@@ -543,7 +578,7 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
             "kinds_short",
             KindMismatch::BelowFloor {
                 size: GREET_END - 1,
-                floor: GREET_END
+                floor: size_of::<GreeterVtable>()
             }
         )]
     );

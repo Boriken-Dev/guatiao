@@ -41,9 +41,8 @@ typedef struct {
   int64_t (*outstanding)(void *ctx);
 } greeter_vtable;
 
-/* The frozen floor: the original slot and nothing after it. A floor that
-   tracked the newest slot would refuse every library built before it. */
-#define GREETER_FLOOR (offsetof(greeter_vtable, greet) + sizeof(void *))
+/* The floor: every slot this file's greeter_vtable has. */
+#define GREETER_FLOOR sizeof(greeter_vtable)
 
 static guatiao_str s(const char *lit) { return guatiao_cstr(lit); }
 
@@ -429,13 +428,10 @@ int main(int argc, char **argv) {
       guatiao_value config = GUATIAO_VALUE_MAP_LIT(config_entries);
       guatiao_value greeting = {0};
 
-      /* The appended slot, read only when the library declared it.
-         A DELTA, never an absolute: the library holds its own schema and
+      /* A DELTA, never an absolute: the library holds its own schema and
          metadata, allocated through this same counter and never released,
          so the count is not zero and was never meant to be. */
-      bool counts = size >= offsetof(greeter_vtable, outstanding) +
-                                sizeof(void *) &&
-                    v->outstanding != NULL;
+      bool counts = v->outstanding != NULL;
       int64_t before = counts ? v->outstanding(ctx) : 0;
 
       CHECK(v->greet != NULL, "a greeter declares a greet slot");

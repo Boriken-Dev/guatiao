@@ -220,15 +220,15 @@ void what_is_not_the_kind(guatiao::registry& reg) {
   CHECK(guatiao::try_bind_table<gk::greeter>(t.first, t.second, reg.provider_ctx("cpp_kinds_hello")).code() ==
         guatiao::status::wrong_kind);
   CHECK(gk::counter::try_bind(reg, "cpp_kinds_shouter").code() == guatiao::status::not_found);
-  // A table shorter than a slot answers UNSUPPORTED for it, and the call
-  // frees what it was given.
+  // A table smaller than the kind's is not one of it: every slot answers
+  // WRONG_KIND, and the call frees what it was given.
   auto g = reg.provider_table("cpp_kinds_hello", "greeter");
-  guatiao::remote<gk::greeter> short_table(g.first, offsetof(greeter_vtable, shout), reg.provider_ctx("cpp_kinds_hello"),
-                                           counted().get());
-  CHECK(!short_table.has_shout() && short_table.has_greet());
-  CHECK(short_table.try_shout("x").code() == guatiao::status::unsupported);
+  guatiao::remote<gk::greeter> short_table(g.first, sizeof(greeter_vtable) - sizeof(void*),
+                                           reg.provider_ctx("cpp_kinds_hello"), counted().get());
+  CHECK(!short_table.has_shout() && !short_table.has_greet());
+  CHECK(short_table.try_shout("x").code() == guatiao::status::wrong_kind);
   guatiao::map handed = MUST(guatiao::map::try_of({{"name", "x"}}));
-  CHECK(short_table.try_greet_from(std::move(handed)).code() == guatiao::status::unsupported);
+  CHECK(short_table.try_greet_from(std::move(handed)).code() == guatiao::status::wrong_kind);
 }
 
 void a_lent_map_replaced_comes_back_empty(guatiao::registry& reg) {

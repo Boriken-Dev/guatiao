@@ -42,10 +42,10 @@ impl GreeterVtable {
             count: ::core::option::Option::Some(Self::__guatiao_shim_count::<__T>),
         }
     }
-    /// One past the last required slot. Frozen.
+    /// The smallest table a reader accepts: every slot.
     #[doc(hidden)]
     pub const fn floor() -> usize {
-        Self::greet_end()
+        ::core::mem::size_of::<Self>()
     }
     /// FNV-1a over the shape and the required signatures, as a
     /// literal, so a C header generator can render it: what a C
@@ -61,14 +61,6 @@ impl GreeterVtable {
             "{\"name\":\"greeter\",\"floor_hash\":4109485502,\"object\":false,\"slots\":[{\"name\":\"greet\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"text\"}},{\"name\":\"count\",\"required\":false,\"fallible\":false,\"args\":[{\"name\":\"bytes\",\"type\":\"bytes\"},{\"name\":\"flag\",\"type\":\"bool\"}],\"answer\":{\"type\":\"i64\"}}]}",
         );
         out
-    }
-    #[doc(hidden)]
-    pub const fn greet_end() -> usize {
-        ::core::mem::offset_of!(Self, greet) + ::core::mem::size_of::<usize>()
-    }
-    #[doc(hidden)]
-    pub const fn count_end() -> usize {
-        ::core::mem::offset_of!(Self, count) + ::core::mem::size_of::<usize>()
     }
     /// # Safety
     ///
@@ -143,7 +135,11 @@ impl ::guatiao::library::Kind for dyn Greeter {
     const FLOOR: usize = GreeterVtable::floor();
     const FLOOR_HASH: u32 = GreeterVtable::FLOOR_HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[
-        ("greet", GreeterVtable::greet_end()),
+        (
+            "greet",
+            ::core::mem::offset_of!(GreeterVtable, greet)
+                + ::core::mem::size_of::<usize>(),
+        ),
     ];
     const OBJECT: bool = false;
     fn live_objects(
@@ -194,10 +190,7 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
             out: *mut ::guatiao::Text,
             err: *mut ::guatiao::library::ProviderError,
         ) -> ::guatiao::Status = unsafe {
-            self.slot(
-                ::core::mem::offset_of!(GreeterVtable, greet),
-                GreeterVtable::greet_end(),
-            )
+            self.slot(::core::mem::offset_of!(GreeterVtable, greet))
         }
             .expect("validated: a required slot is present and non-null");
         let __arg_name = ::guatiao::Str::new(name);
@@ -229,10 +222,7 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
                         flag: bool,
                         out: *mut i64,
                     ) -> ::guatiao::Status,
-                >(
-                ::core::mem::offset_of!(GreeterVtable, count),
-                GreeterVtable::count_end(),
-            )
+                >(::core::mem::offset_of!(GreeterVtable, count))
         } {
             ::core::option::Option::Some(__f) => {
                 let __arg_bytes = ::guatiao::value::types::Bytes::new(bytes);
