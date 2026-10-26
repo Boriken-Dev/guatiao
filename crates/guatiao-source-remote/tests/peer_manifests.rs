@@ -388,22 +388,12 @@ fn one_peer_and_manifests_of_peers_are_one_or_the_other() {
 }
 
 #[test]
-fn the_old_trust_key_is_refused_with_what_to_write_now() {
-    let mut config = Map::new();
-    config.set("connect", "tcp://127.0.0.1:7000");
-    config.set("trust", "trusted");
-    let refused = RemoteSource::from_config(&config).unwrap_err();
-    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
-    assert!(
-        refused.message().contains("`trust` is now `security`"),
-        "{}",
-        refused.message()
-    );
-    let dir = scratch("old_trust");
+fn a_key_no_manifest_has_is_refused_by_name() {
+    let dir = scratch("unknown_key");
     write(
         &dir,
-        "old.guatiao.toml",
-        "type = \"remote\"\nname = \"old\"\nconnect = \"tcp://127.0.0.1:1\"\ntrust = \"trusted\"\n",
+        "odd.guatiao.toml",
+        "type = \"remote\"\nname = \"odd\"\nconnect = \"tcp://127.0.0.1:1\"\ntrust = \"trusted\"\n",
     );
     let mut dirs = List::new();
     dirs.push(dir.display().to_string().as_str());
@@ -415,7 +405,10 @@ fn the_old_trust_key_is_refused_with_what_to_write_now() {
         .unwrap();
     let refreshed = registry.refresh();
     let words = format!("{:?}", refreshed.refused);
-    assert!(words.contains("`trust` is now `security`"), "{words}");
+    assert!(
+        words.contains("`trust` is not a key of a peer manifest"),
+        "{words}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

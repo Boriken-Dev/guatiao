@@ -127,12 +127,13 @@ fn same_call(a: &SlotDescription, b: &SlotDescription) -> bool {
 }
 
 /// Whether a table built for one description is called rightly through
-/// the other: the same name, floor and slots as far as the shorter goes.
-/// Docs do not count, and a kind grown by slots past its floor agrees.
+/// the other: the same name, floor hash and slots, every one. Docs do not
+/// count.
 fn agree(a: &KindDescription, b: &KindDescription) -> bool {
     a.name() == b.name()
         && a.object() == b.object()
         && a.floor_hash() == b.floor_hash()
+        && a.slots().len() == b.slots().len()
         && a.slots()
             .iter()
             .zip(b.slots())
@@ -721,15 +722,15 @@ mod tests {
     }
 
     #[test]
-    fn docs_and_slots_past_the_shorter_do_not_count() {
+    fn docs_do_not_count_and_a_slot_fewer_disagrees() {
         let mut known = Known::new(Described::new());
         assert!(known.learn(&kinds("Greets by name.")));
         assert!(known.learn(&kinds("Greets otherwise.")), "a doc differs");
         let mut shorter = document();
         let slots = shorter["kinds"][0]["slots"].as_array_mut().unwrap();
         let last = slots.pop().unwrap();
-        assert_eq!(last["required"], false, "a slot past the floor");
-        assert!(known.learn(&read(&shorter)), "a slot fewer");
+        assert_eq!(last["required"], false, "an optional slot");
+        assert!(!known.learn(&read(&shorter)), "a slot fewer");
         assert_eq!(greeter(&known).as_deref(), Some("Greets by name."));
     }
 

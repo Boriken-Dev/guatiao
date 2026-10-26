@@ -485,16 +485,11 @@ mod tests {
             "typo.guatiao.toml",
             "type = \"pyhton\"\nmodule = \"typo\"\n",
         );
-        write(
-            "old.guatiao-py.toml",
-            "type = \"python\"\nmodule = \"old\"\n",
-        );
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 4, "{found:?}");
         assert!(found.iter().any(|f| f.id() == "mine"));
         assert!(!found.iter().any(|f| f.id().contains("theirs")));
-        assert!(!found.iter().any(|f| f.id().contains("old")));
         for file in ["untyped.guatiao.toml", "numbered.guatiao.toml"] {
             let why = broken_why(&found, file);
             assert!(why.contains("`type` is missing or not text"), "{why}");

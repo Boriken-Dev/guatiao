@@ -138,14 +138,8 @@ pub fn security_of(name: &str) -> Result<Security, ProviderError> {
     })
 }
 
-/// What a configuration still naming the old `trust` key is told.
-const TRUST_IS_SECURITY: &str = "`trust` is now `security`: `trusted` is `none`, `secure` is `mutual-tls` (the default on a network), and `local` is the default on the same machine";
-
 /// The security a configuration names, else `scheme`'s default.
 fn security_in(map: &Map, scheme: &str) -> Result<Security, ProviderError> {
-    if map.contains_key("trust") {
-        return Err(refused(TRUST_IS_SECURITY));
-    }
     text(map, "security")?.map_or(Ok(Security::default_for(scheme)), security_of)
 }
 
@@ -606,7 +600,6 @@ pub(crate) fn peer_of(
                     "a peer manifest names a peer that listens, by `connect`; a child the host starts is the source's own configuration",
                 ));
             }
-            "trust" => return Err(refused(TRUST_IS_SECURITY)),
             other => {
                 return Err(refused(format!(
                     "`{other}` is not a key of a peer manifest: type, name, {}",
