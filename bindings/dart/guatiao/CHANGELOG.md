@@ -129,6 +129,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The remote client lets go of what a refused call handed over.** A
+  call the page refused before running it (made during a call that had
+  returned, past its `maxCalls`, on a slot its `Served` does not fill)
+  kept the peer's objects handed in it, and this side's own given back,
+  until the link ended; a call refused while its objects were received
+  kept the later ones. Each is now released or dropped.
+- **A remote call waiting for a place answers `Busy` at its timeout.**
+  Past the peer's `max_calls` a call waited for a place with no bound;
+  the call's timeout now bounds that wait and the answer together.
+- **An object lent for a remote call cannot come back handed over.** A
+  peer naming it as handed over, in a call or an answer, got it; that is
+  now `WrongKind`, and the object stays lent.
+- **A WebSocket that opens after its timeout is closed** on the Dart VM,
+  where it was left open.
+- **The remote client reads a peer's values strictly.** It took a length
+  not in its shortest form, a number outside the JSON number grammar, a
+  bool byte other than 0 or 1 and a repeated key; each is now a
+  malformed frame naming the byte.
+- **Text keeps a leading U+FEFF** where `wireToDart` and the remote client
+  read it: Dart's UTF-8 decoder dropped it.
+- **Under dart2js an integer past 53 bits is a `BigInt`** where numbers
+  are read from text (`toDart`, `wireToDart`, the remote client's
+  values); 2^60 and other integers a double holds exactly came back as
+  `int`.
 - **A tree a kind's slot answers outlives its library**, whatever
   allocator the slot built it in: one that ignored the carrier built it in
   its own, freed after the unload through code that was gone. It is moved
