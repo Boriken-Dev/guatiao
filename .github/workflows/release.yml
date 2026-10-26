@@ -133,6 +133,11 @@ jobs:
               manifest = json.loads(pathlib.Path(f"bindings/node/guatiao-{crate}/package.json").read_text())
               found_versions.append((f"bindings/node/guatiao-{crate}/package.json", manifest["version"]))
               found_versions.append((f"bindings/node/guatiao-{crate}/package.json's guatiao", manifest["dependencies"]["guatiao"]))
+          # The remote protocol's client: a package of its own, with its own lockfile.
+          remote = json.loads(pathlib.Path("bindings/node/guatiao-remote/package.json").read_text())
+          remote_lock = json.loads(pathlib.Path("bindings/node/guatiao-remote/package-lock.json").read_text())
+          found_versions.append(("bindings/node/guatiao-remote/package.json", remote["version"]))
+          found_versions.append(("bindings/node/guatiao-remote/package-lock.json", remote_lock["packages"][""]["version"]))
           for where, found in found_versions:
               if found != cargo:
                   problems.append(f"Cargo says {cargo} and {where} says {found}")
@@ -334,17 +339,19 @@ jobs:
           for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm run build)
           done
+          # The remote protocol's client: outside the workspace, its own install.
+          (cd guatiao-remote && npm ci && npm run build)
       - name: "Dry-run the pack: what npm would publish"
         working-directory: bindings/node
         run: |
-          for p in guatiao guatiao-serde guatiao-intake; do
+          for p in guatiao guatiao-serde guatiao-intake guatiao-remote; do
             (cd "$p" && npm pack --dry-run)
           done
       - name: Pack
         working-directory: bindings/node
         run: |
           mkdir -p ../../npm
-          for p in guatiao guatiao-serde guatiao-intake; do
+          for p in guatiao guatiao-serde guatiao-intake guatiao-remote; do
             (cd "$p" && npm pack --pack-destination ../../../npm)
           done
       - uses: actions/upload-artifact@v4
@@ -911,10 +918,10 @@ jobs:
           # guatiao first: the others depend on it.
           packed = {}
           for tarball in glob.glob("npm/*.tgz"):
-              m = re.fullmatch(r"npm/(guatiao(?:-serde|-intake)?)-(\d.*)\.tgz", tarball)
+              m = re.fullmatch(r"npm/(guatiao(?:-serde|-intake|-remote)?)-(\d.*)\.tgz", tarball)
               assert m, f"an unexpected tarball: {tarball}"
               packed[m.group(1)] = (tarball, m.group(2))
-          for name in ("guatiao", "guatiao-serde", "guatiao-intake"):
+          for name in ("guatiao", "guatiao-serde", "guatiao-intake", "guatiao-remote"):
               tarball, version = packed[name]
               try:
                   with urllib.request.urlopen(f"https://registry.npmjs.org/{name}") as r:
