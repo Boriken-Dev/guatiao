@@ -391,6 +391,65 @@ exception in Dart: the tape copies it into the wire bytes and again into
 native memory, where a callback hands it over once, and the cost is
 UTF-8 conversion either way.
 
+## Documents to Node and Go data (`documents-node.json`, `documents-go.json`, `documents-go-before.json`)
+
+The same three documents and three ways as for Python and Dart: through a
+value (Node: `loads` then `toJS()`, `dumps` of plain data, which builds a
+tree; Go: `serde.Parse` then `Decode`, `serde.Emit` of a
+`guatiao.NewValue`), through the tape (Node: `parse`, `render`; Go:
+`serde.Unmarshal`, `serde.Emit` of Go data), and through callbacks (koffi
+callbacks in Node, cgo exports in Go). Each program first checks that the
+three read and write the same thing.
+
+```bash
+cargo build --release -p guatiao -p guatiao-serde \
+  --features guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+(cd bindings/node && npm ci) && (cd bindings/node/guatiao && npm run build) \
+  && (cd bindings/node/guatiao-serde && npm run build)
+GUATIAO_LIBRARY=target/release node benchmarks/node/documents.mjs --save documents-node
+(cd benchmarks/go && GOWORK=off GUATIAO_LIBRARY=../../target/release go run . -save documents-go)
+```
+
+Local and provisional: the Windows ARM64 machine, Node 22.23.4 and Go
+1.27.3, fifteen samples each, microseconds per call, median. The machine
+was shared with other builds: Node is one run; Go is the lowest median of
+three runs alternating with a run of the value path on the commit before
+(`documents-go-before.json`, the "before" column), whose `serde.Emit`
+built a tree from Go data.
+
+| Node | value | tape | callbacks | value / tape |
+| --- | --- | --- | --- | --- |
+| configuration, parse | 4298 | 174 | 1841 | 24.7x |
+| configuration, render | 1119 | 124 | 3580 | 9.0x |
+| 10k floats, parse | 47462 | 2344 | 21425 | 20.2x |
+| 10k floats, render | 13726 | 1615 | 33467 | 8.5x |
+| 1 MiB string, parse | 622 | 722 | 650 | 0.86x |
+| 1 MiB string, render | 1520 | 1369 | 1464 | 1.1x |
+
+| Go | before | value | tape | callbacks | before / tape |
+| --- | --- | --- | --- | --- | --- |
+| configuration, parse | 151 | 137 | 98 | 163 | 1.5x |
+| configuration, render | 334 | 213 | 93 | 116 | 3.6x |
+| 10k floats, parse | 2163 | 1875 | 1057 | 1649 | 2.0x |
+| 10k floats, render | 4687 | 2750 | 1033 | 1709 | 4.5x |
+| 1 MiB string, parse | 714 | 719 | 1051 | 210 | 0.68x |
+| 1 MiB string, render | 1191 | 1254 | 1690 | 1564 | 0.70x |
+
+Both bindings take the tape. Node reads a tree through koffi a field at a
+time, and builds one a koffi call per node, so one crossing per document
+wins by an order of magnitude; a koffi callback per event loses too, as a
+ctypes one does in Python. Go reads a tree's memory directly, so its
+value path was already cheap to read, and the tape still saves the tree
+built and freed in between; Go's writer gained most, from one cgo call
+per node to none. The Go "value" column is faster than "before" because
+the walk over Go data that both the tree and the tape use now passes
+plain data (`map[string]any`, `[]any`, strings, numbers) without
+reflection and spells a path only for an error.
+
+One large string is the exception, as in Dart: the tape copies it into
+the wire bytes and again on each side, where a callback hands it over
+once. Go's callbacks read it fastest of all, and lose everywhere else.
+
 ## guatiao-source-remote across a link (`remote-*.jsonl`)
 
 `guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
