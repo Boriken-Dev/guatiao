@@ -903,6 +903,73 @@ fn a_configuration_map_reaches_the_secure_level() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A host sees every setting looser than strict that its own
+/// configuration and its peer manifests name, by peer, as the server
+/// binary prints its own.
+#[test]
+fn a_host_sees_the_settings_its_configuration_weakens() {
+    let dir = scratch("weakened");
+    let identity = dir.join("host.pem");
+    let mut config = guatiao::Map::new();
+    config.set("connect", "tls://127.0.0.1:9");
+    config.set("security", "mutual-tls");
+    config.set("identity_file", identity.display().to_string().as_str());
+    let pin = format!("sha256:{}", "0".repeat(64));
+    let mut pins = guatiao::List::new();
+    pins.push(pin.as_str());
+    config.set("pins", pins);
+    let source = RemoteSource::from_config(&config).unwrap();
+    assert!(source.weakened().is_empty(), "{:?}", source.weakened());
+
+    let mut policy = guatiao::Map::new();
+    policy.set("profile", "strict");
+    policy.set("allow_resumption", true);
+    config.set("policy", policy.clone());
+    let source = RemoteSource::from_config(&config).unwrap();
+    let weakened = source.weakened();
+    assert_eq!(weakened.len(), 1, "{weakened:?}");
+    assert_eq!(weakened[0].0, "");
+    assert_eq!(weakened[0].1.setting, "allow_resumption");
+
+    // No TLS runs at none, so no policy holds.
+    let mut plain = guatiao::Map::new();
+    plain.set("connect", "tcp://127.0.0.1:9");
+    plain.set("security", "none");
+    plain.set("key", "a key");
+    plain.set("policy", policy);
+    let source = RemoteSource::from_config(&plain).unwrap();
+    assert!(source.weakened().is_empty(), "{:?}", source.weakened());
+
+    // A peer manifest's own policy, under the peer's name, once a refresh
+    // has read it.
+    let peers = dir.join("peers");
+    std::fs::create_dir_all(&peers).unwrap();
+    std::fs::write(
+        peers.join("lab.guatiao.toml"),
+        format!(
+            "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
+             security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\npins = [\"{pin}\"]\n\
+             [policy]\nprofile = \"strict\"\nallow_resumption = true\n"
+        ),
+    )
+    .unwrap();
+    let mut described = guatiao::Map::new();
+    let mut dirs = guatiao::List::new();
+    dirs.push(peers.display().to_string().as_str());
+    described.set("dirs", dirs);
+    let source = RemoteSource::from_config(&described).unwrap();
+    assert!(
+        source.weakened().is_empty(),
+        "nothing read before a refresh"
+    );
+    let _ = refresh(&source);
+    let weakened = source.weakened();
+    assert_eq!(weakened.len(), 1, "{weakened:?}");
+    assert_eq!(weakened[0].0, "lab");
+    assert_eq!(weakened[0].1.setting, "allow_resumption");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_secure_level_over_a_transport_that_proves_no_peer_is_refused() {
     let mut config = guatiao::Map::new();

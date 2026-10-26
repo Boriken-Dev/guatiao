@@ -219,6 +219,22 @@ pub fn policy_of(value: &guatiao::Value) -> Result<crate::transport::tls::Policy
     guatiao_serde::adapt::from_value(value).map_err(|e| refused(format!("not a TLS policy: {e}")))
 }
 
+/// Every setting looser than strict in the TLS policy a configuration
+/// names (its access control list's default included), when its link runs
+/// TLS; empty under the strict policy, and at no security, where no TLS
+/// policy applies.
+#[cfg(feature = "tls")]
+pub(crate) fn weakened_in(map: &Map) -> Vec<crate::transport::tls::Weakening> {
+    let scheme = match text(map, "connect") {
+        Ok(Some(connect)) => connect.split_once("://").map_or("", |(scheme, _)| scheme),
+        _ => "child",
+    };
+    match (security_in(map, scheme), map.get("policy")) {
+        (Ok(Security::None) | Err(_), _) | (_, None) => Vec::new(),
+        (Ok(_), Some(policy)) => policy_of(policy).map_or_else(|_| Vec::new(), |p| p.weakened()),
+    }
+}
+
 /// The authorities `roots` names: `platform`, or a CA bundle's path.
 #[cfg(feature = "tls")]
 pub fn roots_of(text: &str) -> Result<crate::transport::tls::Roots, ProviderError> {
@@ -565,12 +581,12 @@ pub(crate) fn check_defaults(defaults: &Map) -> Result<(), ProviderError> {
 }
 
 /// The peer a manifest at `path` describes: its keys over the source's
-/// `defaults`, its `key_file` read from beside it.
+/// `defaults`, its `key_file` read from beside it; and that configuration.
 pub(crate) fn peer_of(
     defaults: &Map,
     manifest: &Map,
     path: &Path,
-) -> Result<(Box<dyn Connect>, LinkOptions), ProviderError> {
+) -> Result<(Box<dyn Connect>, LinkOptions, Map), ProviderError> {
     for entry in manifest.iter() {
         match entry.key() {
             "type" | "name" => {}
@@ -632,5 +648,6 @@ pub(crate) fn peer_of(
             "a peer manifest names where the peer is, `connect`",
         ));
     }
-    client_of(&merged)
+    let (connect, options) = client_of(&merged)?;
+    Ok((connect, options, merged))
 }
