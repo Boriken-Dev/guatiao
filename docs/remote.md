@@ -346,6 +346,19 @@ to a Linux VM on it, polling past the round trip brought a call from 160
 x86-64 host to its VM from 114 µs to 74 µs. Set `spin` to zero to spend
 the least CPU: 180 µs a call there, about 40 % less CPU.
 
+A link keeps the large buffers it reads frames into and writes replies
+from (64 KiB and up, at most 16 MiB a link besides the one its reader
+reads into, let go when the link ends), so a large call's buffers stay
+mapped from one call to the next. Freed instead, they went back to the
+operating system (glibc trims a thread's arena; on Windows the fault
+counts say every free of one did), and every page was faulted in again
+on each call. A link that made a 4 MiB call holds about 16 MiB from then
+on, idle or not; a server with many such links holds that much for each.
+Kept, a 4 MiB round trip moved 1.3 to 1.6 times as many bytes a second
+over a local socket and shared memory (TCP 1.5 times in WSL, 1.1 to 1.3
+on Windows), and the server spent a third to a half less CPU on it
+(`benchmarks/README.md`).
+
 ### RDMA (experimental, Linux)
 
 Built with the `rdma` feature (off by default) on Linux, a link can run
