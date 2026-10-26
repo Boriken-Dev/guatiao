@@ -9,6 +9,7 @@ ways round."""
 from __future__ import annotations
 
 import ctypes
+import json
 import logging
 import os
 import re
@@ -111,6 +112,70 @@ def test_a_description_that_disagrees_with_its_struct_is_refused():
         Method("bad", [TEXT])
     with pytest.raises(TypeError, match="hide"):
         Kind("sized", floor_hash=1, methods=[Method("size", [], I64)])
+
+
+_DOCUMENT = native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.kinds.json"
+
+
+def _same_kind(a: Kind, b: Kind) -> None:
+    assert (a.name, a.floor_hash, a.is_object) == (b.name, b.floor_hash, b.is_object)
+    assert [f[0] for f in a.struct._fields_] == [f[0] for f in b.struct._fields_]
+    for x, y in zip(a.methods, b.methods):
+        assert (x.name, x.fallible, x.required, x.prototype()) == (y.name, y.fallible, y.required, y.prototype())
+
+
+def test_a_kind_loaded_from_its_description_is_the_kind_its_class_declares():
+    text = _DOCUMENT.read_text(encoding="utf-8")
+    loaded = kinds.kinds_of(text)
+    assert list(loaded) == ["greeter", "listener", "conversation", "counter", "wide"]
+    for cls in (Greeter, Listener, Conversation, Counter, Wide):
+        _same_kind(loaded[cls.kind.name], cls.kind)
+    # One kind alone finds the object kinds it names among the known ones.
+    greeter_only = {"format": 1, "kinds": [k for k in json.loads(text)["kinds"] if k["name"] == "greeter"]}
+    with pytest.raises(TypeError, match="no kind listener"):
+        kinds.kinds_of(greeter_only)
+    _same_kind(kinds.kinds_of(greeter_only, known=[Listener, Conversation])["greeter"], Greeter.kind)
+
+
+def test_the_committed_kinds_module_is_what_the_description_writes():
+    written = kinds.generate(
+        _DOCUMENT.read_text(encoding="utf-8"),
+        source="../include/greeter_kind.kinds.json",
+        command="python -m guatiao.kinds ../include/greeter_kind.kinds.json -o greeter_kind.py",
+    )
+    committed = (native.GREETER_KIND_PY / "greeter_kind.py").read_text(encoding="utf-8")
+    assert written == committed, "regenerate: the command is in the module's first lines"
+
+
+def test_a_description_that_is_not_one_is_refused_naming_where():
+    def one(slots):
+        return {"format": 1, "kinds": [{"name": "k", "floor_hash": 1, "object": False, "slots": slots}]}
+
+    with pytest.raises(TypeError, match="format"):
+        kinds.kinds_of({"format": 2, "kinds": []})
+    with pytest.raises(TypeError, match=r"k\.x argument 0: 'u128'"):
+        kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "u128"}]}]))
+    with pytest.raises(TypeError, match="answer cannot be 'str'"):
+        kinds.kinds_of(one([{"name": "x", "answer": {"type": "str"}}]))
+    with pytest.raises(TypeError, match="list cannot be passed borrowed"):
+        kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "list", "pass": "borrowed"}]}]))
+    loop = {
+        "name": "node",
+        "floor_hash": 2,
+        "object": True,
+        "slots": [{"name": "next", "args": [], "answer": {"type": "object", "kind": "node"}}],
+    }
+    with pytest.raises(TypeError, match="refers to itself"):
+        kinds.kinds_of({"format": 1, "kinds": [loop]})
+
+
+def test_a_host_binds_a_kind_from_what_the_library_carries():
+    with Registry("py-carried", "0.1") as registry:
+        registry.scan_dir(_TARGET_DEBUG, rules="kind=greeter")
+        carried = kinds.kinds_of(registry.kind_descriptions("derived_greeter_hello"))
+        greeter = registry.bind("derived_greeter_hello", carried["greeter"])
+        with greeter.greet("ana") as answer:
+            assert answer.to_python() == {"greeting": "hello, ana"}
 
 
 # ---- calling a table a library built --------------------------------------
