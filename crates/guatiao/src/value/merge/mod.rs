@@ -89,6 +89,7 @@ use alloc::collections::BTreeMap;
 use crate::value::alloc::Alloc;
 use crate::value::convert::{ToValue, TryAsRef, describe};
 use crate::value::error::{MAX_DEPTH, ValueError};
+use crate::value::types::map::{Filling, Lookup};
 use crate::value::types::{List, Map, Tag, Value};
 
 /// Which strategy combines two values.
@@ -333,7 +334,18 @@ impl<'a> Provenance<'a> {
     /// layer replaced stops being attributed to the layer it came from.
     /// The empty path is the root, and drops everything.
     fn forget_subtree(&mut self, path: &[String]) {
-        self.leaves.retain(|k, _| !k.starts_with(path));
+        // A path sorts before everything beneath it and those follow it
+        // together, so the subtree is one range of the leaves.
+        let beneath: Vec<Vec<String>> = self
+            .leaves
+            .range(path.to_vec()..)
+            .map(|(k, _)| k)
+            .take_while(|k| k.starts_with(path))
+            .cloned()
+            .collect();
+        for leaf in beneath {
+            self.leaves.remove(&leaf);
+        }
     }
 }
 
@@ -534,19 +546,14 @@ fn clone_into(value: &Value, alloc: Alloc) -> Result<Value, MergeError> {
 /// Whether the two maps share at least one key, compared as raw bytes so
 /// a key the contract would reject still compares correctly.
 fn shares_a_key(a: &Value, b: &Value) -> bool {
+    let Some(a) = TryAsRef::<Map>::try_as_ref(a).map(Lookup::new) else {
+        return false;
+    };
     TryAsRef::<Map>::try_as_ref(b)
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
-        .map(|e| (e.key(), e.value()))
-        .any(|(key, _)| {
-            TryAsRef::<Map>::try_as_ref(a)
-                .map(Map::entries)
-                .unwrap_or(&[])
-                .iter()
-                .map(|e| (e.key(), e.value()))
-                .any(|(other, _)| other == key)
-        })
+        .any(|e| a.contains_key(e.key()))
 }
 
 /// Walks the same shape `merge_value` will, recording which leaves the
@@ -583,6 +590,7 @@ fn record_claims<'a>(
     // Recursive map-into-map: descend, so only the keys the later layer
     // actually carries change hands.
     if matches!(mode, MergeMode::Substitute | MergeMode::Deep) && is_map(earlier) && is_map(later) {
+        let earlier_map = TryAsRef::<Map>::try_as_ref(earlier).map(Lookup::new);
         for (key, later_child) in TryAsRef::<Map>::try_as_ref(later)
             .map(Map::entries)
             .unwrap_or(&[])
@@ -590,7 +598,7 @@ fn record_claims<'a>(
             .map(|e| (e.key(), e.value()))
         {
             let child_path = child(path, key);
-            match TryAsRef::<Map>::try_as_ref(earlier).and_then(|m| m.get(key)) {
+            match earlier_map.as_ref().and_then(|m| m.get(key)) {
                 Some(earlier_child) => record_claims(
                     earlier_child,
                     later_child,
@@ -780,8 +788,10 @@ fn merge_simple(
     // whole distinction from `Substitute`. Built as a copy of the earlier
     // map with the later's keys written over it, so a replaced key keeps
     // its position and a new one lands at the end.
-    let mut out: Map = Map::try_from(clone_into(earlier, alloc)?)
-        .map_err(|_| MergeError::from(ValueError::WrongKind))?;
+    let mut out = Filling::new(
+        Map::try_from(clone_into(earlier, alloc)?)
+            .map_err(|_| MergeError::from(ValueError::WrongKind))?,
+    );
     for entry in <&Map>::try_from(later).map(Map::entries).unwrap_or(&[]) {
         // An absent entry keeps whatever the earlier map holds there; over
         // a key the earlier map lacks it is copied, as `Substitute` does.
@@ -790,7 +800,7 @@ fn merge_simple(
         }
         out.set_in(entry.key(), clone_into(entry.value(), alloc)?, alloc)?;
     }
-    Ok(out.into())
+    Ok(out.into_map().into())
 }
 
 /// `Simple`'s list rule: element `i` of the later replaces element `i`
@@ -943,10 +953,13 @@ fn merge_maps_recursively(
     alloc: Alloc,
     depth: u32,
 ) -> Result<Value, MergeError> {
-    let mut out = Map::new_in(alloc);
-    // Each door checks every key, so each side is read once, not per key.
+    let mut out = Filling::new(Map::new_in(alloc));
+    // Each door checks every key, so each side is read once, not per key,
+    // and each is searched through its own index, not scanned per key.
     let earlier_map = TryAsRef::<Map>::try_as_ref(earlier);
     let later_map = TryAsRef::<Map>::try_as_ref(later);
+    let earlier_keys = earlier_map.map(Lookup::new);
+    let later_keys = later_map.map(Lookup::new);
 
     for (key, earlier_value) in earlier_map
         .map(Map::entries)
@@ -954,7 +967,7 @@ fn merge_maps_recursively(
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        let child = match later_map.and_then(|m| m.get(key)) {
+        let child = match later_keys.as_ref().and_then(|m| m.get(key)) {
             Some(later_value) => merge_value(
                 earlier_value,
                 later_value,
@@ -974,12 +987,12 @@ fn merge_maps_recursively(
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        if !earlier_map.is_some_and(|m| m.contains_key(key)) {
+        if !earlier_keys.as_ref().is_some_and(|m| m.contains_key(key)) {
             out.set_in(key, clone_into(later_value, alloc)?, alloc)?;
         }
     }
 
-    Ok(out.into())
+    Ok(out.into_map().into())
 }
 
 /// A map on the left absorbing a list of maps on the right, folding each

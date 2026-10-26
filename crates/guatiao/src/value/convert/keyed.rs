@@ -21,6 +21,7 @@ use super::{FromValue, MapError, ToValue};
 use crate::schema::build::KindBuilder;
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
+use crate::value::types::map::Filling;
 use crate::value::types::{Map, Value};
 
 /// A type that can key a map: written as an object's key, as text, and
@@ -155,11 +156,12 @@ fn entries_to_value<'a, K: MapKey + 'a, V: ToValue + 'a>(
     entries: impl Iterator<Item = (&'a K, &'a V)>,
     alloc: Alloc,
 ) -> Result<Value, ValueError> {
-    let mut out = Map::new_in(alloc);
+    // Two keys may write one text, so a key is looked for, not appended.
+    let mut out = Filling::new(Map::new_in(alloc));
     for (key, value) in entries {
         out.set_in(&key.to_key()?, value.to_value_in(alloc)?, alloc)?;
     }
-    Ok(out.into())
+    Ok(out.into_map().into())
 }
 
 /// Reads every entry of an object, calling `insert` with each key and
