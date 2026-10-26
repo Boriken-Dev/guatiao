@@ -85,6 +85,15 @@ write now.
   in `guatiao/ffi`). Each suite now also compares its layouts with the
   ones the platform's C compiler gives `guatiao.h`, and both pass on
   armv7 under qemu-user. `usize` and `isize` slots are a word wide.
+- **MATLAB and Octave: a document straight to MATLAB data and back.**
+  `guatiao.serde.data(text, format, 'ReadDataUris', 'Numbers', 'Maps')`
+  answers what `guatiao.serde.parse(text).data()` does with no value
+  built, and `guatiao.serde.emit` of MATLAB data (not a value or view)
+  now writes it the same way: the document crosses once as wire bytes,
+  read and written in the MEX gateway, which walks MATLAB data once for
+  a tree or for the bytes. Measured locally in Octave on a structured
+  document: 1.1x to 1.2x; slower for one large string written out. The
+  gateway spells a double from 15 significant digits up, as R now does.
 - **R: a document straight to R data and back.** `guatiao.serde` gains
   `serde_data(text, format, read_data_uris, numbers)`, answering what
   `value_data(serde_parse(text))` does with no value built, and
