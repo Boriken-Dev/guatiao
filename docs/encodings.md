@@ -586,7 +586,7 @@ paths = ["."]                # where its code is, relative to this file
 
 | key | holds |
 | --- | --- |
-| `type` | required text: the source that serves it, as the source declares itself (`source=<type>`): `python`, `js`, `lua`, `wasm` or `rhai` |
+| `type` | required text: the source that serves it, as the source declares itself (`source=<type>`): `python`, `js`, `lua`, `wasm` or `rhai`; `remote` describes a peer (below) |
 | `module`, or `name` for `js` | required text, not empty: the library's id |
 | `version` | optional text: without it the source reads the version from the code, as its page says |
 | `kinds` | a list of text: every kind its providers serve |
@@ -601,6 +601,38 @@ libraries for several sources. A manifest with no `type`, or a type none
 of them serves, is listed as a library that does not open, in words
 naming the file: a host that adds several sources over its directory
 hears of it from each.
+
+### A peer
+
+A manifest of `type = "remote"` describes a peer that guatiao-source-remote
+reaches, rather than a library: a device or a process serving providers
+over [guatiao's remote protocol](remote.md).
+
+```toml
+type = "remote"
+name = "lab-printer"             # the peer's name
+connect = "tcp://192.0.2.5:7000" # where it listens, and by which transport
+trust = "trusted"                # the link's trust level
+key_file = "lab-printer.key"     # the trusted level's key, relative to this file
+```
+
+| key | holds |
+| --- | --- |
+| `name` | required text, not empty and holding no `/`: the peer's name. Its libraries and providers are served as `<name>/<id>` |
+| `connect` | required text: `tcp://host:port`, `local://name`, `shm://name` or `rdma://host:port` |
+| `trust` | text: `local` (for `local://` and `shm://`), `trusted` (for `tcp://` and `rdma://`) or `secure`, which no transport of this build runs and is refused as unsupported; required unless the source's configuration names it |
+| `key_file` | text, relative to the manifest's directory: a file holding the trusted level's pre-shared key |
+| `timeout_ms`, `max_frame`, `max_calls` | whole numbers: a call's wait (`0` for as long as the link lives) and the link's bounds |
+| `rdma_device` | text: the RDMA device `rdma://` goes through |
+
+Nothing else: a manifest naming `key` or `token` is refused, since a
+secret in a search path is a credential anyone reading the directory
+holds, as is one naming `child` (a manifest describes a peer that
+listens; a child the host starts is the host's own configuration) and
+one naming a key not listed here. Keys the manifest leaves out are taken
+from the source's configuration. Its stamp is its content and the path
+and content of the key file the peer uses: a change to either is a new
+peer.
 
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 

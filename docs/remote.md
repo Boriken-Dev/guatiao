@@ -43,6 +43,7 @@ configuration map:
 | `token` | what a secure client presents |
 | `timeout_ms` | how long a call waits for its answer; `0` waits as long as the link lives (default 30 000) |
 | `max_frame`, `max_calls` | the link's bounds (defaults 64 MiB and 64) |
+| `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above then apply to every peer whose manifest does not name them |
 
 ```c
 /* {"child": ["guatiao-remote-server", "--stdio", "--kinds", "greeter_kind.kinds.json",
@@ -60,6 +61,41 @@ under `%source/%id` (`libraries_keyed_by` and `keyed_by` in Rust,
 C, the same names in every binding), and each answers `device-0/...`,
 `device-1/...`. `examples/remote_pool` fans one call out to three
 devices held that way and gathers the answers.
+
+### Peers in a search path
+
+A peer can be a file, as a library is: a manifest of `type = "remote"`
+([the format](encodings.md#a-peer)) in a directory the source's `dirs`
+names.
+
+```toml
+# peers/lab-printer.guatiao.toml
+type = "remote"
+name = "lab-printer"
+connect = "tcp://192.0.2.5:7000"
+trust = "trusted"
+key_file = "lab-printer.key"
+```
+
+```c
+/* {"dirs": ["peers"]} */
+guatiao_registry_add_source_file(reg, guatiao_cstr("libguatiao_source_remote.so"), &config, &err);
+```
+
+Every refresh reads the manifests again. Each is a peer named by its
+`name`, and serves its libraries and providers as `<name>/<id>`
+(`lab-printer/printer`, `lab-printer/printer_status`), so identical
+devices sit in one registry under the default keys. An edited manifest,
+or a replaced key file, is a new peer over a new link, and the old link
+ends then: should the new peer's library not open, the refusal is
+reported and the old one answers `GUATIAO_ERR_GONE` until the next
+change. A removed manifest takes its peer's libraries with it. A manifest that describes no peer is
+reported in words naming the file, as is a peer that cannot be reached;
+the others are served, and an unreachable peer's libraries stay listed,
+answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed one
+after another, so a peer slow to refuse a connection slows the refresh.
+A manifest names its key by file, never inline, since it lies in a
+search path.
 
 A call that gets no answer within its timeout is cancelled and answers
 `GUATIAO_ERR_GONE`, as does every call open when the link is lost; the
@@ -206,8 +242,10 @@ network by default.
   reads and changes traffic freely. Use it only where the network itself
   is the boundary.
 - **`secure`**: any network: TLS 1.3 or QUIC, with a token or client
-  certificates. No transport of this build runs it yet, so reach a device
-  across an open network only through one you secure yourself.
+  certificates. No transport of this build runs it yet: a configuration
+  or a manifest naming it is refused with `GUATIAO_ERR_UNSUPPORTED`, so
+  reach a device across an open network only through one you secure
+  yourself.
 
 ## The protocol
 

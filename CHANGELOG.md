@@ -22,6 +22,22 @@ write now.
   `examples/greeter_kind/go` is generated from its description now.
   `Registry.KindDescriptions(key)` answers the document a library
   carries.
+- **guatiao-source-remote: a peer is a manifest in a search path.** A
+  source configured with `dirs` or `manifests` (instead of `connect` or
+  `child`) reads every `<name>.guatiao.toml` of `type = "remote"` there
+  at each refresh, a peer per manifest: its `name`, `connect`, `trust`,
+  `key_file` (beside the manifest; a manifest never holds `key` or
+  `token`) and the link's bounds, the rest taken from the source's
+  configuration. A peer serves its libraries and providers as
+  `<name>/<id>`, so identical devices sit in one registry under the
+  default keys. An edited manifest or key file is a new peer; a removed
+  one retires its libraries; a manifest describing no peer, and a peer
+  that cannot be reached, are reported in words naming the file while the
+  others are served. `RemoteSource::from_config` builds either kind of
+  source from the same configuration in Rust. guatiao-bridge's
+  `manifest::TYPES` gains `remote`, so the other sources pass a peer's
+  manifest over, and a format naming no code extensions stamps the
+  manifest's content alone. The format is in `docs/encodings.md`.
 - **A key can name the source a library came from.** `%source`, in a
   library's and a provider's key template, renders the name of the
   source that served it (the name it was added under, a source file's
@@ -1008,6 +1024,10 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: `trust = "secure"` is
+  `GUATIAO_ERR_UNSUPPORTED`**, from a configuration or a peer manifest,
+  where it was `GUATIAO_ERR_BAD_VALUE` naming transports this build does
+  not have: the secure level lives outside this build.
 - **The source crates are `guatiao-source-<kind>`, and a library's
   manifest is `<name>.guatiao.toml` with a `type`.** `guatiao-py`,
   `guatiao-js`, `guatiao-lua`, `guatiao-wasm`, `guatiao-rhai` and
