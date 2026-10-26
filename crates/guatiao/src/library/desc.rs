@@ -16,21 +16,19 @@
 //! about who releases what. The values a provider *produces* are owned
 //! and carry their allocator; the description of the provider is not.
 //!
-//! # `struct_size` first, and appended fields only
+//! # `struct_size` first, and every field this build knows required
 //!
-//! Exactly the arrangement [`crate::value::Allocator`] uses, for the same
-//! reason and with the same rule: the leading `u32` is the size of the
-//! struct **as the side that wrote it compiled it**, a frozen `floor()`
-//! says how much must be present to be usable at all, and each field
-//! added later carries its own guard.
+//! The arrangement [`crate::value::Allocator`] uses: the leading `u32` is
+//! the size of the struct **as the side that wrote it compiled it**, and
+//! `floor()` is this build's whole struct. A smaller `struct_size` is
+//! refused; a larger one is a struct with fields this build does not
+//! know, read up to its own.
 //!
-//! **A slot is appended, never changed.** `struct_size` cannot version a
-//! signature: there is no size at which an old caller stops short of a
-//! changed argument list, so the field is present, the pointer is called,
-//! and a two-argument callback invoked with three arguments is silent
-//! memory corruption in every already-compiled consumer. Adding a second
-//! slot beside the first, with null meaning "use the old one", is the
-//! only change that is safe.
+//! **A field is appended, never changed.** `struct_size` cannot version a
+//! signature: there is no size at which a reader stops short of a changed
+//! argument list, so a two-argument callback invoked with three arguments
+//! would be silent memory corruption. A change no appended field can
+//! express bumps [`ABI_VERSION`].
 //!
 //! # A descriptor's fields are its producer's contract
 //!
@@ -64,18 +62,16 @@
 #![allow(non_camel_case_types)]
 
 use core::ffi::c_void;
-use core::mem::{offset_of, size_of};
+use core::mem::size_of;
 
 use super::kind::ProviderError;
 use crate::value::alloc::Allocator;
 use crate::value::status::Status;
 use crate::value::types::{List, Map, MaybeNull, Str, Value};
 
-/// The envelope's own version, for a library that wants to refuse a host
-/// it does not understand.
+/// The envelope's own version. A descriptor naming another is refused.
 ///
-/// Bumped only for a change no `struct_size` guard can express. Appending
-/// a field is not such a change.
+/// Bumped only for a change appending a field cannot express.
 pub const ABI_VERSION: u32 = 1;
 
 /// What the host tells a library about itself, on the way in.
@@ -133,35 +129,14 @@ pub struct HostInfo<'a> {
     /// worth keeping apart.
     pub meta: MaybeNull<Map>,
     /// What the host will answer a library that asks, or null for a host
-    /// that answers nothing. See [`HostServices`]. Appended after `meta`;
-    /// a library reads it only when `struct_size` covers it.
+    /// that answers nothing. See [`HostServices`].
     pub services: *const HostServices,
 }
 
 impl HostInfo<'_> {
-    /// The smallest `struct_size` that can be used at all.
-    ///
-    /// Frozen at the first field added after v1, and never moved. A floor
-    /// that tracked the newest field would refuse every host compiled
-    /// before it existed, which is the failure the guard exists to
-    /// prevent rather than to cause.
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(HostInfo, host_version) + size_of::<Str>()
-    }
-
-    /// Where the `alloc` field ends, for the guard that reads it.
-    pub const fn alloc_end() -> usize {
-        offset_of!(HostInfo, alloc) + size_of::<*const Allocator>()
-    }
-
-    /// Where the `meta` field ends, for the guard that reads it.
-    pub const fn meta_end() -> usize {
-        offset_of!(HostInfo, meta) + size_of::<MaybeNull<Map>>()
-    }
-
-    /// Where the `services` field ends, for the guard that reads it.
-    pub const fn services_end() -> usize {
-        offset_of!(HostInfo, services) + size_of::<*const HostServices>()
+        size_of::<HostInfo>()
     }
 }
 
@@ -215,13 +190,13 @@ pub struct HostServices {
     /// this table. Null for a host that offers none.
     pub alloc: Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>,
     /// `get`, answering a descriptor pinned for the caller: release it
-    /// with `unpin`. Appended; read only when `struct_size` covers it.
+    /// with `unpin`.
     pub get_pinned: Option<
         unsafe extern "C" fn(ctx: *mut c_void, key: Str, out: *mut *const ProviderInfo) -> Status,
     >,
     /// `list`, each of the first `cap` descriptors it writes pinned for
     /// the caller: release each with `unpin`. The total counts every
-    /// provider, as `list`'s does. Appended with `get_pinned`.
+    /// provider, as `list`'s does.
     pub list_pinned: Option<
         unsafe extern "C" fn(
             ctx: *mut c_void,
@@ -232,26 +207,16 @@ pub struct HostServices {
         ) -> Status,
     >,
     /// Another hold on a descriptor the caller already holds pinned.
-    /// Appended with `get_pinned`.
     pub pin: Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>,
     /// Gives back one hold on a pinned descriptor; the caller does not
-    /// read it again unless it holds another. Appended with `get_pinned`.
+    /// read it again unless it holds another.
     pub unpin: Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>,
 }
 
 impl HostServices {
-    /// The smallest usable `struct_size`: the three slots the table was
-    /// born with. **Frozen.**
+    /// The smallest `struct_size` this build reads: every slot it knows.
     pub const fn floor() -> usize {
-        offset_of!(HostServices, alloc)
-            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>>()
-    }
-
-    /// Where the pinning slots end, for the guard that reads them: all
-    /// four or none.
-    pub const fn pinned_end() -> usize {
-        offset_of!(HostServices, unpin)
-            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>>()
+        size_of::<HostServices>()
     }
 }
 
@@ -262,16 +227,10 @@ impl HostServices {
 ///
 /// # Why it carries a stride
 ///
-/// **`struct_size` cannot version an array's element size.** Every
-/// descriptor here declares its own size and a reader guards each
-/// appended field against it — but that only places the fields *within*
-/// an element. Finding element `i` needs the size the LIBRARY laid the
-/// array out at, and a reader that assumed its own would land inside an
-/// element built before its newest slot existed, read whatever sits at
-/// that offset as a `struct_size`, and guard every field against a number
-/// it invented.
-///
-/// So the library states the stride and a reader walks by bytes.
+/// **`struct_size` places the fields within one element, not the
+/// elements.** A library built with fields appended after this build's
+/// lays its elements further apart, so it states the stride and a reader
+/// walks by bytes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Providers<'a> {
@@ -293,9 +252,7 @@ pub struct Providers<'a> {
 /// # Why this one carries no stride
 ///
 /// [`Providers`] states its stride because a `ProviderInfo` can grow a
-/// field. A [`Str`] cannot: it declares no `struct_size`, so it has no
-/// mechanism to grow through and its layout is frozen by definition.
-/// Where there is no versioning there is no version skew, and the element
+/// field. A [`Str`] cannot: it declares no `struct_size`, so its element
 /// size is the same number on both sides of the boundary.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -409,27 +366,15 @@ pub struct LibraryInfo<'a> {
     /// elsewhere, values this library's allocator made that somebody still
     /// holds.
     ///
-    /// Appended after `meta`; a host reads it only when `struct_size`
-    /// covers it, and a library that predates it is unmapped without being
-    /// asked. Takes no context: a library asking about itself already has
-    /// its own state.
+    /// Takes no context: a library asking about itself already has its
+    /// own state.
     pub unload: Option<unsafe extern "C" fn() -> Status>,
 }
 
 impl LibraryInfo<'_> {
-    /// The smallest usable `struct_size`.
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(LibraryInfo, providers) + size_of::<Providers>()
-    }
-
-    /// Where the `meta` field ends, for the guard that reads it.
-    pub const fn meta_end() -> usize {
-        offset_of!(LibraryInfo, meta) + size_of::<MaybeNull<Map>>()
-    }
-
-    /// Where the `unload` field ends, for the guard that reads it.
-    pub const fn unload_end() -> usize {
-        offset_of!(LibraryInfo, unload) + size_of::<Option<unsafe extern "C" fn() -> Status>>()
+        size_of::<LibraryInfo>()
     }
 }
 
@@ -604,10 +549,9 @@ pub struct ProviderInfo<'a> {
     pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
     /// The descriptions of the kinds this provider serves, and of every
     /// object kind their slots take or answer, each once: one document
-    /// `{"format":1,"kinds":[...]}` as JSON text, the format
-    /// `docs/encodings.md` states ("A kind, described"). **Empty when
-    /// the provider carries none**, which a host reads the same as a
-    /// descriptor older than this field.
+    /// `{"kinds":[...]}` as JSON text, the encoding `docs/encodings.md`
+    /// states ("A kind, described"). **Empty when the provider carries
+    /// none.**
     ///
     /// What lets a host bind a kind it has no file for. `#[derive(Provider)]`
     /// writes it; a provider written by hand may leave it empty. The text
@@ -645,10 +589,9 @@ impl<'a> KindTable<'a> {
         }
     }
 
-    /// The smallest usable `struct_size`: every field it was born with.
-    /// **Frozen.**
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(KindTable, vtable) + size_of::<*const c_void>()
+        size_of::<KindTable>()
     }
 }
 
@@ -688,46 +631,9 @@ impl<'a> KindTables<'a> {
 }
 
 impl ProviderInfo<'_> {
-    /// The smallest usable `struct_size`.
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(ProviderInfo, ctx) + size_of::<*mut c_void>()
-    }
-
-    /// Where the `meta` field ends, for the guard that reads it.
-    pub const fn meta_end() -> usize {
-        offset_of!(ProviderInfo, meta) + size_of::<MaybeNull<Map>>()
-    }
-
-    /// Where the `version` field ends, for the guard that reads it.
-    pub const fn version_end() -> usize {
-        offset_of!(ProviderInfo, version) + size_of::<Str>()
-    }
-
-    /// Where the `available` field ends, for the guard that reads it.
-    pub const fn available_end() -> usize {
-        offset_of!(ProviderInfo, available)
-            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>>()
-    }
-
-    /// Where the `tables` field ends, for the guard that reads it.
-    pub const fn tables_end() -> usize {
-        offset_of!(ProviderInfo, tables) + size_of::<KindTables>()
-    }
-
-    /// Where the `create` field ends, for the guard that reads it.
-    pub const fn create_end() -> usize {
-        offset_of!(ProviderInfo, create) + size_of::<*const c_void>()
-    }
-
-    /// Where the `destroy` field ends, for the guard that reads it.
-    pub const fn destroy_end() -> usize {
-        offset_of!(ProviderInfo, destroy) + size_of::<*const c_void>()
-    }
-
-    /// Where the `kind_descriptions` field ends, for the guard that reads
-    /// it.
-    pub const fn kind_descriptions_end() -> usize {
-        offset_of!(ProviderInfo, kind_descriptions) + size_of::<Str>()
+        size_of::<ProviderInfo>()
     }
 }
 
@@ -807,54 +713,16 @@ pub struct SourceInfo {
 }
 
 impl SourceInfo {
-    /// The smallest usable `struct_size`: every field the table was born
-    /// with. **Frozen.**
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(SourceInfo, close)
-            + size_of::<
-                Option<
-                    unsafe extern "C" fn(
-                        ctx: *mut c_void,
-                        id: Str,
-                        info: *const LibraryInfo<'static>,
-                    ),
-                >,
-            >()
+        size_of::<SourceInfo>()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A floor must sit at or below the current size, or appending a
-    /// field locks out every caller compiled before it.
-    ///
-    /// The same assertion `Allocator` carries, for the same reason and in
-    /// the same shape.
-    #[test]
-    fn every_floor_sits_within_its_struct() {
-        assert!(HostInfo::floor() <= size_of::<HostInfo>());
-        assert!(HostInfo::alloc_end() <= size_of::<HostInfo>());
-        assert!(HostInfo::meta_end() < HostInfo::services_end());
-        assert_eq!(HostInfo::services_end(), size_of::<HostInfo>());
-        assert!(LibraryInfo::floor() <= size_of::<LibraryInfo>());
-        assert!(LibraryInfo::meta_end() < LibraryInfo::unload_end());
-        assert_eq!(LibraryInfo::unload_end(), size_of::<LibraryInfo>());
-        assert!(ProviderInfo::floor() <= size_of::<ProviderInfo>());
-        assert!(ProviderInfo::available_end() < ProviderInfo::tables_end());
-        assert!(ProviderInfo::tables_end() < ProviderInfo::create_end());
-        assert!(ProviderInfo::create_end() < ProviderInfo::destroy_end());
-        assert!(ProviderInfo::destroy_end() < ProviderInfo::kind_descriptions_end());
-        assert_eq!(
-            ProviderInfo::kind_descriptions_end(),
-            size_of::<ProviderInfo>()
-        );
-        assert!(HostServices::floor() < HostServices::pinned_end());
-        assert_eq!(HostServices::pinned_end(), size_of::<HostServices>());
-        assert_eq!(KindTable::floor(), size_of::<KindTable>());
-        assert_eq!(SourceInfo::floor(), size_of::<SourceInfo>());
-    }
+    use core::mem::offset_of;
 
     /// The leading field is at offset zero in every one of them, because
     /// a reader that cannot find `struct_size` cannot find anything.

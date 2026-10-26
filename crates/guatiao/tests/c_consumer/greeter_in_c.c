@@ -20,7 +20,7 @@
  * - The map `greet` answers is built IN THE ALLOCATOR THE CALLER NAMED:
  *   the out slot arrives holding an empty map whose `alloc` is the host's,
  *   so the host keeps the answer as it is, with no copy. A caller that
- *   names none (an older host, or a zeroed slot) gets one built through
+ *   names none (a zeroed slot) gets one built through
  *   this file's own allocator, the header's malloc wrapper, which the
  *   host copies from and frees through the `guatiao_alloc` it records.
  *
@@ -42,8 +42,8 @@
  * the key it adds is not UTF-8.
  *
  * `greet`, `greet_into`, `greet_from` and `check` are filled. `shout` and `start` are left null:
- * to the host that is an older table, and its proxy runs the trait's
- * default bodies -- `shout` through this file's `greet`.
+ * optional slots this provider leaves out, so the host's proxy runs the
+ * trait's default bodies -- `shout` through this file's `greet`.
  *
  * `greet_into` takes its listener LENT: a `const guatiao_object *` on the
  * caller's stack, valid for the call. This file calls the listener's
@@ -73,15 +73,15 @@ static guatiao_alloc ALLOC = GUATIAO_ALLOC_MALLOC;
 
 /* The allocator to build an answer in: the one the caller's carrier names
  * -- an empty map whose `alloc` is set -- or this file's own. Built with
- * GREETER_IGNORES_CARRIER, always this file's own, as an older or careless
- * library does: a caller then moves the answer home before the unload. */
+ * GREETER_IGNORES_CARRIER, always this file's own, as a careless library
+ * does: a caller then moves the answer home before the unload. */
 static const guatiao_alloc *answer_alloc(const guatiao_map *out) {
 #if defined(GREETER_IGNORES_CARRIER)
   (void)out;
 #else
   const guatiao_alloc *a = out ? out->alloc : NULL;
   if (out && out->len == 0 && out->cap == 0 && a &&
-      a->struct_size >= offsetof(guatiao_alloc, free) + sizeof(a->free) &&
+      a->struct_size >= sizeof(guatiao_alloc) &&
       a->alloc && a->free) {
     return a;
   }
@@ -275,7 +275,7 @@ static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
     return refuse(err, GUATIAO_ERR_NULL, "no configuration, says C");
   }
   const guatiao_alloc *a = config->alloc;
-  if (!a || a->struct_size < offsetof(guatiao_alloc, free) + sizeof(a->free) ||
+  if (!a || a->struct_size < sizeof(guatiao_alloc) ||
       !a->alloc || !a->free) {
     return refuse(err, GUATIAO_ERR_ALLOC, "the map records no allocator, says C");
   }
@@ -492,18 +492,19 @@ static bool is_greeter(guatiao_str s) {
   return s.len == 7 && memcmp(s.ptr, "greeter", 7) == 0;
 }
 
-/* The greeter table a provider descriptor carries, with `greet_from`
- * inside it: a table for the kind first, then `vtable` when `kinds`
- * names the kind; else null. */
+/* The greeter table a provider descriptor carries: a table for the kind
+ * first, then `vtable` when `kinds` names the kind; else null, as for one
+ * smaller than this file's greeter_vtable. */
 static const greeter_vtable *greeter_of(const guatiao_provider_info *d) {
-  const size_t need = offsetof(greeter_vtable, greet_from) + sizeof(void *);
-  if (d->struct_size >= offsetof(guatiao_provider_info, tables) + sizeof(d->tables)) {
-    for (size_t i = 0; i < d->tables.len; i++) {
-      const guatiao_kind_table *t =
-          (const guatiao_kind_table *)((const char *)d->tables.ptr + i * d->tables.stride);
-      if (is_greeter(t->kind)) {
-        return t->vtable_size >= need ? (const greeter_vtable *)t->vtable : NULL;
-      }
+  const size_t need = sizeof(greeter_vtable);
+  if (d->struct_size < sizeof(guatiao_provider_info)) {
+    return NULL;
+  }
+  for (size_t i = 0; i < d->tables.len; i++) {
+    const guatiao_kind_table *t =
+        (const guatiao_kind_table *)((const char *)d->tables.ptr + i * d->tables.stride);
+    if (is_greeter(t->kind)) {
+      return t->vtable_size >= need ? (const greeter_vtable *)t->vtable : NULL;
     }
   }
   for (size_t i = 0; i < d->kinds.len; i++) {
@@ -521,14 +522,12 @@ static const greeter_vtable *greeter_of(const guatiao_provider_info *d) {
  * into its own. The answer, a map of strings, is freed here. */
 EXPORT guatiao_status c_greeter_hand_over(const guatiao_host_info *host,
                                           guatiao_str key, guatiao_str name) {
-  if (!host ||
-      host->struct_size < offsetof(guatiao_host_info, services) + sizeof(host->services) ||
-      !host->services || !host->services->get) {
+  if (!host || host->struct_size < sizeof(guatiao_host_info) || !host->services ||
+      host->services->struct_size < sizeof(guatiao_host_services) || !host->services->get) {
     return GUATIAO_ERR_NULL;
   }
   const guatiao_host_services *s = host->services;
-  bool pinned = s->struct_size >= offsetof(guatiao_host_services, unpin) + sizeof(s->unpin) &&
-                s->get_pinned && s->unpin;
+  bool pinned = s->get_pinned && s->unpin;
   const guatiao_provider_info *desc = NULL;
   guatiao_status status = pinned ? s->get_pinned(s->ctx, key, &desc) : s->get(s->ctx, key, &desc);
   if (status != GUATIAO_OK) {

@@ -64,7 +64,7 @@ _Static_assert(offsetof(guatiao_alloc, struct_size) == 0, "size leads");
 _Static_assert(offsetof(guatiao_alloc, ctx) == 8, "then ctx");
 _Static_assert(offsetof(guatiao_alloc, alloc) == 16, "then the callbacks");
 _Static_assert(offsetof(guatiao_alloc, free) == 24, "then the callbacks");
-_Static_assert(offsetof(guatiao_alloc, release) == 32, "release is newest");
+_Static_assert(offsetof(guatiao_alloc, release) == 32, "then release");
 
 /* The tag numbers are frozen: a consumer compiled today must keep reading
    a producer built tomorrow, and that works only if numbers never move. */

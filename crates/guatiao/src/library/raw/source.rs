@@ -298,9 +298,7 @@ unsafe fn read_source(raw: *const SourceInfo, bounds: Bounds) -> Result<Table, R
     // SAFETY: the leading word passed the checks.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     if declared < SourceInfo::floor() {
-        return Err(
-            Refusal::new(WHAT, "is smaller than the oldest layout a reader accepts").into(),
-        );
+        return Err(Refusal::short(WHAT, declared, SourceInfo::floor()).into());
     }
     Bounds::ANY
         .data(raw as usize, declared, align_of::<SourceInfo>())

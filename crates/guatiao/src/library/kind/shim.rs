@@ -486,7 +486,8 @@ pub unsafe fn object_ret<K: ?Sized + Kind, R: ?Sized>(
 }
 
 /// The error a proxy hands back: what the shim wrote, or one built from
-/// the status when it wrote nothing (an older library). Its message is
+/// the status when it wrote nothing (a slot written by hand may answer a
+/// status alone). Its message is
 /// moved into this side's allocator, as [`value_ret`] moves a value.
 #[doc(hidden)]
 ///

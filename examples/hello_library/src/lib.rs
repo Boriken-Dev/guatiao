@@ -40,15 +40,14 @@ use guatiao::value::types::{Map, MaybeNull, Str, Text, Value};
 /// The function table every `greeter` provider supplies.
 ///
 /// **The envelope does not define this; the kind does.** A host that
-/// knows what a greeter is compiles against this declaration, checks the
-/// size the library compiled it at against its own floor, and calls
-/// through it.
+/// knows what a greeter is compiles against this declaration, refuses a
+/// table the library declared smaller than [`GreeterVtable::floor`], and
+/// calls through it.
 ///
-/// Slots are **appended, never changed**. `struct_size` can say that a
-/// slot is absent; it cannot say that a slot's arguments changed, so a
-/// changed signature is silent memory corruption in every already-built
-/// consumer. `outstanding` below is an appended slot, and it is here to
-/// make that arrangement real rather than described.
+/// Slots are **appended, never changed**: `struct_size` can say that a
+/// table is longer than a reader knows; it cannot say that a slot's
+/// arguments changed, so a changed signature would be silent memory
+/// corruption.
 #[repr(C)]
 pub struct GreeterVtable {
     /// `sizeof(GreeterVtable)` as the library compiled it. Always first.
@@ -63,26 +62,14 @@ pub struct GreeterVtable {
         unsafe extern "C" fn(ctx: *mut c_void, config: *const Value, out: *mut Value) -> Status,
     >,
     /// How many blocks this library's allocator has outstanding.
-    ///
-    /// **Appended after `greet`**, which is what makes this table a
-    /// worked example of the rule rather than a statement of it: a host
-    /// built against the one-slot version reads a smaller `struct_size`,
-    /// never looks at this field, and works.
     pub outstanding: Option<unsafe extern "C" fn(ctx: *mut c_void) -> i64>,
 }
 
 impl GreeterVtable {
-    /// The smallest `struct_size` a usable greeter can declare: the
-    /// original slot, and nothing after it. **Frozen.** A floor that
-    /// tracked the newest slot would refuse every library built before
-    /// that slot existed.
+    /// The smallest `struct_size` a reader of this declaration accepts:
+    /// every slot it has.
     pub const fn floor() -> usize {
-        core::mem::offset_of!(GreeterVtable, greet) + size_of::<usize>()
-    }
-
-    /// Where the appended slot ends, for the guard that reads it.
-    pub const fn outstanding_end() -> usize {
-        core::mem::offset_of!(GreeterVtable, outstanding) + size_of::<usize>()
+        size_of::<GreeterVtable>()
     }
 }
 

@@ -157,11 +157,9 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_LEN_UNKNOWN UINT64_MAX
 
 /*
- The envelope's own version, for a library that wants to refuse a host
- it does not understand.
+ The envelope's own version. A descriptor naming another is refused.
 
- Bumped only for a change no `struct_size` guard can express. Appending
- a field is not such a change.
+ Bumped only for a change appending a field cannot express.
  */
 #define GUATIAO_ABI_VERSION 1
 
@@ -315,9 +313,9 @@ typedef uint32_t guatiao_status;
 /*
  An allocator, as a vtable a foreign caller can fill in.
 
- Every field after `struct_size` is read only when `struct_size` says it
- is there, so fields may be **appended** without breaking a caller
- compiled against an older copy.
+ `struct_size` covers at least every field this build knows; a larger
+ one is a caller built with fields appended after them, read up to this
+ build's.
  */
 typedef struct guatiao_alloc {
   /*
@@ -345,9 +343,7 @@ typedef struct guatiao_alloc {
    */
   void (*free)(void *ctx, void *ptr, size_t size, size_t align);
   /*
-   Optional, and the newest field. A caller compiled before it existed
-   declares a smaller `struct_size` and it reads as absent — never as
-   whatever bytes happened to follow that caller's allocation.
+   Optional: null for an allocator with nothing to tear down.
    */
   void (*release)(void *ctx);
 } guatiao_alloc;
@@ -639,9 +635,7 @@ typedef const struct guatiao_map *guatiao_map_ptr;
  # Why this one carries no stride
 
  [`Providers`] states its stride because a `ProviderInfo` can grow a
- field. A [`Str`] cannot: it declares no `struct_size`, so it has no
- mechanism to grow through and its layout is frozen by definition.
- Where there is no versioning there is no version skew, and the element
+ field. A [`Str`] cannot: it declares no `struct_size`, so its element
  size is the same number on both sides of the boundary.
  */
 typedef struct guatiao_kinds {
@@ -899,10 +893,9 @@ typedef struct guatiao_provider_info {
   /*
    The descriptions of the kinds this provider serves, and of every
    object kind their slots take or answer, each once: one document
-   `{"format":1,"kinds":[...]}` as JSON text, the format
-   `docs/encodings.md` states ("A kind, described"). **Empty when
-   the provider carries none**, which a host reads the same as a
-   descriptor older than this field.
+   `{"kinds":[...]}` as JSON text, the encoding `docs/encodings.md`
+   states ("A kind, described"). **Empty when the provider carries
+   none.**
 
    What lets a host bind a kind it has no file for. `#[derive(Provider)]`
    writes it; a provider written by hand may leave it empty. The text
@@ -966,7 +959,7 @@ typedef struct guatiao_host_services {
   const struct guatiao_alloc *(*alloc)(void *ctx);
   /*
    `get`, answering a descriptor pinned for the caller: release it
-   with `unpin`. Appended; read only when `struct_size` covers it.
+   with `unpin`.
    */
   guatiao_status (*get_pinned)(void *ctx,
                                struct guatiao_str key,
@@ -974,7 +967,7 @@ typedef struct guatiao_host_services {
   /*
    `list`, each of the first `cap` descriptors it writes pinned for
    the caller: release each with `unpin`. The total counts every
-   provider, as `list`'s does. Appended with `get_pinned`.
+   provider, as `list`'s does.
    */
   guatiao_status (*list_pinned)(void *ctx,
                                 struct guatiao_str kind,
@@ -983,12 +976,11 @@ typedef struct guatiao_host_services {
                                 size_t *total);
   /*
    Another hold on a descriptor the caller already holds pinned.
-   Appended with `get_pinned`.
    */
   void (*pin)(void *ctx, const struct guatiao_provider_info *desc);
   /*
    Gives back one hold on a pinned descriptor; the caller does not
-   read it again unless it holds another. Appended with `get_pinned`.
+   read it again unless it holds another.
    */
   void (*unpin)(void *ctx, const struct guatiao_provider_info *desc);
 } guatiao_host_services;
@@ -1061,8 +1053,7 @@ typedef struct guatiao_host_info {
   guatiao_map_ptr meta;
   /*
    What the host will answer a library that asks, or null for a host
-   that answers nothing. See [`HostServices`]. Appended after `meta`;
-   a library reads it only when `struct_size` covers it.
+   that answers nothing. See [`HostServices`].
    */
   const struct guatiao_host_services *services;
 } guatiao_host_info;
@@ -1075,16 +1066,10 @@ typedef struct guatiao_host_info {
 
  # Why it carries a stride
 
- **`struct_size` cannot version an array's element size.** Every
- descriptor here declares its own size and a reader guards each
- appended field against it — but that only places the fields *within*
- an element. Finding element `i` needs the size the LIBRARY laid the
- array out at, and a reader that assumed its own would land inside an
- element built before its newest slot existed, read whatever sits at
- that offset as a `struct_size`, and guard every field against a number
- it invented.
-
- So the library states the stride and a reader walks by bytes.
+ **`struct_size` places the fields within one element, not the
+ elements.** A library built with fields appended after this build's
+ lays its elements further apart, so it states the stride and a reader
+ walks by bytes.
  */
 typedef struct guatiao_providers {
   /*
@@ -1180,10 +1165,8 @@ typedef struct guatiao_library_info {
    elsewhere, values this library's allocator made that somebody still
    holds.
 
-   Appended after `meta`; a host reads it only when `struct_size`
-   covers it, and a library that predates it is unmapped without being
-   asked. Takes no context: a library asking about itself already has
-   its own state.
+   Takes no context: a library asking about itself already has its
+   own state.
    */
   guatiao_status (*unload)(void);
 } guatiao_library_info;
@@ -2408,11 +2391,9 @@ guatiao_status guatiao_registry_best(const struct guatiao_registry *reg,
  `size_out` may be null; when it is not, it receives the declared size.
 
  **This is the moment a caller takes on the kind's contract.** The
- envelope defines no vtable: check the declared size against the frozen
- floor of the `kind` you believe this is, project each field through the
- pointer, and guard every field appended after that floor. A shorter
- table than you expect is an OLDER library, which is the case the size
- exists to let you support rather than reject.
+ envelope defines no vtable: refuse a declared size below the table of
+ the `kind` you believe this is, and read only the slots that table
+ has; a larger one is a table with slots appended after them.
 
  The pointer is this registry's copy of the library's table, valid until
  that provider's library is closed: unloaded, or collected once retired.

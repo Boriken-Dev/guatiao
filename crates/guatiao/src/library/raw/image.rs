@@ -204,15 +204,12 @@ impl ProviderView {
 }
 
 impl ProviderView {
-    /// The vtable as `T`, or `None` when the library compiled a shorter
-    /// one than this host knows.
+    /// The vtable as `T`, or `None` when the library declared a smaller
+    /// one than `T`.
     ///
-    /// **The check is `vtable_size >= size_of::<T>()`.** A library built
-    /// before the host appended a slot declares a smaller table, and
-    /// casting to `T` anyway hands out a reference whose tail is whatever
-    /// followed the table in that library's image. A host that wants to
-    /// support the older library asks for the smaller `T` it also knows,
-    /// and both answer `Some`.
+    /// **The check is `vtable_size >= size_of::<T>()`**: casting a smaller
+    /// table to `T` would hand out a reference whose tail is whatever
+    /// followed the table in the library's image.
     ///
     /// `None` for a null table, which is what a provider offering no
     /// behaviour declares.
@@ -246,8 +243,8 @@ pub struct LibraryView {
     /// Whatever else it declared, or `None`. A copy. See
     /// [`LibraryInfo::meta`].
     pub meta: Option<Map>,
-    /// Its say in being unmapped, or `None` when it declares none or
-    /// predates the slot. See [`LibraryInfo::unload`].
+    /// Its say in being unmapped, or `None` when it declares none. See
+    /// [`LibraryInfo::unload`].
     pub unload: Option<unsafe extern "C" fn() -> Status>,
     /// What it offers.
     pub providers: Vec<ProviderView>,
@@ -262,9 +259,6 @@ pub(crate) enum Rejected {
     /// array past its cap, a code pointer outside the image's code.
     Malformed(Refusal),
     /// The library speaks an envelope version this build does not.
-    /// Appending a field never changes the version; only a change no
-    /// `struct_size` guard can express does, and such a change makes
-    /// every field after it mean something else.
     UnsupportedAbi {
         /// What the library declared.
         declared: u32,
@@ -355,9 +349,7 @@ pub(crate) unsafe fn read_library(
     // producer's contract.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     if declared < LibraryInfo::floor() {
-        return Err(
-            Refusal::new(WHAT, "is smaller than the oldest layout a reader accepts").into(),
-        );
+        return Err(Refusal::short(WHAT, declared, LibraryInfo::floor()).into());
     }
     bounds
         .data(raw as usize, declared, align_of::<LibraryInfo>())
@@ -369,8 +361,8 @@ pub(crate) unsafe fn read_library(
         return Err(Rejected::UnsupportedAbi { declared: abi });
     }
 
-    // SAFETY: each field lies within `declared` bytes; the text is read
-    // under the checks.
+    // SAFETY: each field lies within the floor; the text is read under
+    // the checks.
     let (id, version, providers) = unsafe {
         (
             text(
@@ -387,37 +379,28 @@ pub(crate) unsafe fn read_library(
         )
     };
 
-    let mut meta = None;
-    if declared >= LibraryInfo::meta_end() {
-        // SAFETY: the guard established the field is present, and a
-        // non-null `meta` is a well-formed map by the contract on it.
-        meta = unsafe {
-            tree(
-                core::ptr::addr_of!((*raw).meta).read().as_ptr(),
-                bounds,
-                "the library's meta",
-                |m| m.clone_in(Alloc::rust()),
-            )
-        }?;
-    }
-
-    let mut unload = None;
-    if declared >= LibraryInfo::unload_end() {
-        // SAFETY: the guard established the field is present.
-        let found = unsafe { core::ptr::addr_of!((*raw).unload).read() };
-        unload = slot(found, |f| f as usize, bounds, "the library's `unload` slot")?;
-    }
+    // SAFETY: within the floor, and a non-null `meta` is a well-formed map
+    // by the contract on it.
+    let meta = unsafe {
+        tree(
+            core::ptr::addr_of!((*raw).meta).read().as_ptr(),
+            bounds,
+            "the library's meta",
+            |m| m.clone_in(Alloc::rust()),
+        )
+    }?;
+    // SAFETY: within the floor.
+    let found = unsafe { core::ptr::addr_of!((*raw).unload).read() };
+    let unload = slot(found, |f| f as usize, bounds, "the library's `unload` slot")?;
 
     // `len` is the library's number: it is capped, bounds the walk and is
     // never a capacity, so a corrupt one costs no allocation before an
     // element is read.
     let stride = providers.stride;
     if providers.len > 0 && stride < ProviderInfo::floor() {
-        return Err(Refusal::new(
-            "the provider array",
-            "declares a stride below the oldest provider layout",
-        )
-        .into());
+        return Err(
+            Refusal::short("the provider array's stride", stride, ProviderInfo::floor()).into(),
+        );
     }
     bounds
         .array(
@@ -447,7 +430,7 @@ pub(crate) unsafe fn read_library(
 }
 
 impl ProviderInfo<'_> {
-    /// Reads this descriptor out, honouring its declared size.
+    /// Reads this descriptor out.
     ///
     /// `None` when a check where it enters refuses it: below the floor,
     /// text that is not UTF-8, a pointer that is misaligned or no address
@@ -490,17 +473,24 @@ pub(super) unsafe fn read_provider(
 ) -> Result<ProviderView, Refusal> {
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
-    // Above the floor, and not past its neighbour: an element claiming
-    // more than the stride overlaps the next one, and every field it
-    // reads beyond the stride belongs to that one.
-    if declared < ProviderInfo::floor() || declared > limit {
-        return Err(Refusal::new(
+    if declared < ProviderInfo::floor() {
+        return Err(Refusal::short(
             "a provider descriptor",
-            "declares a size below the oldest layout or past its array's stride",
+            declared,
+            ProviderInfo::floor(),
         ));
     }
-    // SAFETY: each field lies within `declared` bytes, and each pointer is
-    // read through only after its checks.
+    // Not past its neighbour: an element claiming more than the stride
+    // overlaps the next one, and every field it reads beyond the stride
+    // belongs to that one.
+    if declared > limit {
+        return Err(Refusal::new(
+            "a provider descriptor",
+            "declares a size past its array's stride",
+        ));
+    }
+    // SAFETY: each field lies within the floor, and each pointer is read
+    // through only after its checks.
     unsafe {
         let config = tree(
             core::ptr::addr_of!((*raw).config).read(),
@@ -509,7 +499,7 @@ pub(super) unsafe fn read_provider(
             |v| v.clone_in(Alloc::rust()),
         )?;
         // A fixed stride, unlike the provider array: a `Str` declares no
-        // `struct_size`, so it has no way to grow and no skew to survive.
+        // `struct_size`, so it has no way to grow.
         let kinds = core::ptr::addr_of!((*raw).kinds).read();
         bounds
             .array(
@@ -563,86 +553,46 @@ pub(super) unsafe fn read_provider(
             vtable,
             vtable_size,
             ctx: core::ptr::addr_of!((*raw).ctx).read(),
-            meta: if declared >= ProviderInfo::meta_end() {
-                // SAFETY: the guard established the field is present, and
-                // a non-null `meta` is a well-formed map by the contract
-                // on the field.
-                tree(
-                    core::ptr::addr_of!((*raw).meta).read().as_ptr(),
-                    bounds,
-                    "a provider's meta",
-                    |m| m.clone_in(Alloc::rust()),
-                )?
-            } else {
-                None
-            },
-            available: if declared >= ProviderInfo::available_end() {
-                // SAFETY: the guard established the field is present.
-                slot(
-                    core::ptr::addr_of!((*raw).available).read(),
-                    |f| f as usize,
-                    bounds,
-                    "a provider's `available` slot",
-                )?
-            } else {
-                None
-            },
-            version: if declared >= ProviderInfo::version_end() {
-                // SAFETY: the guard established the field is present.
-                // Empty is how a provider says "my library's", which is a
-                // different statement from a descriptor that predates the
-                // field — and both land on `None` deliberately, because
-                // both mean the same thing to a reader.
-                Some(text(
-                    core::ptr::addr_of!((*raw).version).read(),
-                    bounds,
-                    "a provider's version",
-                )?)
-                .filter(|v| !v.is_empty())
-            } else {
-                None
-            },
-            tables: if declared >= ProviderInfo::tables_end() {
-                // SAFETY: the guard established the field is present.
-                read_kind_tables(core::ptr::addr_of!((*raw).tables).read(), bounds)?
-            } else {
-                Vec::new()
-            },
-            create: if declared >= ProviderInfo::create_end() {
-                // SAFETY: the guard established the field is present.
-                slot(
-                    core::ptr::addr_of!((*raw).create).read(),
-                    |f| f as usize,
-                    bounds,
-                    "a provider's `create` slot",
-                )?
-            } else {
-                None
-            },
-            destroy: if declared >= ProviderInfo::destroy_end() {
-                // SAFETY: the guard established the field is present.
-                slot(
-                    core::ptr::addr_of!((*raw).destroy).read(),
-                    |f| f as usize,
-                    bounds,
-                    "a provider's `destroy` slot",
-                )?
-            } else {
-                None
-            },
-            kind_descriptions: if declared >= ProviderInfo::kind_descriptions_end() {
-                // SAFETY: the guard established the field is present.
-                // Empty and a descriptor older than the field both mean
-                // none.
-                Some(text(
-                    core::ptr::addr_of!((*raw).kind_descriptions).read(),
-                    bounds,
-                    "a provider's kind descriptions",
-                )?)
-                .filter(|d| !d.is_empty())
-            } else {
-                None
-            },
+            // A non-null `meta` is a well-formed map by the contract on
+            // the field.
+            meta: tree(
+                core::ptr::addr_of!((*raw).meta).read().as_ptr(),
+                bounds,
+                "a provider's meta",
+                |m| m.clone_in(Alloc::rust()),
+            )?,
+            available: slot(
+                core::ptr::addr_of!((*raw).available).read(),
+                |f| f as usize,
+                bounds,
+                "a provider's `available` slot",
+            )?,
+            // Empty is how a provider says "my library's".
+            version: Some(text(
+                core::ptr::addr_of!((*raw).version).read(),
+                bounds,
+                "a provider's version",
+            )?)
+            .filter(|v| !v.is_empty()),
+            tables: read_kind_tables(core::ptr::addr_of!((*raw).tables).read(), bounds)?,
+            create: slot(
+                core::ptr::addr_of!((*raw).create).read(),
+                |f| f as usize,
+                bounds,
+                "a provider's `create` slot",
+            )?,
+            destroy: slot(
+                core::ptr::addr_of!((*raw).destroy).read(),
+                |f| f as usize,
+                bounds,
+                "a provider's `destroy` slot",
+            )?,
+            kind_descriptions: Some(text(
+                core::ptr::addr_of!((*raw).kind_descriptions).read(),
+                bounds,
+                "a provider's kind descriptions",
+            )?)
+            .filter(|d| !d.is_empty()),
             hold: Hold::None,
         })
     }
@@ -664,9 +614,10 @@ unsafe fn read_kind_tables(
         return Ok(Vec::new());
     }
     if tables.stride < KindTable::floor() {
-        return Err(Refusal::new(
-            WHAT,
-            "declares a stride below the oldest table layout",
+        return Err(Refusal::short(
+            "a provider's table array's stride",
+            tables.stride,
+            KindTable::floor(),
         ));
     }
     bounds
@@ -685,13 +636,20 @@ unsafe fn read_kind_tables(
         let entry = unsafe { tables.ptr.cast::<u8>().add(i * tables.stride) }.cast::<KindTable>();
         // SAFETY: the leading word is readable.
         let declared = unsafe { core::ptr::addr_of!((*entry).struct_size).read() } as usize;
-        if declared < KindTable::floor() || declared > tables.stride {
-            return Err(Refusal::new(
+        if declared < KindTable::floor() {
+            return Err(Refusal::short(
                 "a per-kind table entry",
-                "declares a size below the oldest layout or past its array's stride",
+                declared,
+                KindTable::floor(),
             ));
         }
-        // SAFETY: each field lies within `declared` bytes.
+        if declared > tables.stride {
+            return Err(Refusal::new(
+                "a per-kind table entry",
+                "declares a size past its array's stride",
+            ));
+        }
+        // SAFETY: each field lies within the floor.
         let (kind, vtable, size) = unsafe {
             (
                 text(
@@ -1219,61 +1177,56 @@ mod tests {
         );
     }
 
+    /// A descriptor one byte short of this build's is refused, naming
+    /// both sizes; a field this build knows is never left unread.
     #[test]
     fn a_library_descriptor_below_the_floor_is_refused() {
-        let value = a_library(LibraryInfo::floor() - 1);
-        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
-        // SAFETY: `_buf` owns the bytes.
-        assert!(unsafe { read_library(ptr, Bounds::ANY) }.is_err());
-
-        let value = a_library(LibraryInfo::floor());
-        let (_buf, ptr) = short_of(&value, LibraryInfo::floor());
-        // SAFETY: as above.
-        let view =
-            unsafe { read_library(ptr, Bounds::ANY) }.expect("a floor-sized descriptor is usable");
-        assert_eq!((view.id.as_str(), view.version.as_str()), ("lib", "0.1.0"));
-        assert!(view.providers.is_empty());
-        assert!(
-            view.meta.is_none(),
-            "a descriptor that predates `meta` declares none"
-        );
-        assert!(view.unload.is_none());
+        for declared in [
+            0,
+            LibraryInfo::floor() - size_of::<usize>(),
+            LibraryInfo::floor() - 1,
+        ] {
+            let value = a_library(declared);
+            let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+            // SAFETY: `_buf` owns the bytes.
+            let Err(Rejected::Malformed(why)) = (unsafe { read_library(ptr, Bounds::ANY) }) else {
+                panic!("{declared} bytes is refused");
+            };
+            let words = why.to_string();
+            assert!(
+                words.contains(&format!("{declared} bytes"))
+                    && words.contains(&LibraryInfo::floor().to_string()),
+                "{words}"
+            );
+        }
     }
 
-    /// A library built before `unload` was appended still loads, and is
-    /// read as declaring no say in being unmapped.
-    ///
-    /// The direction that matters: appending a slot must not lock out a
-    /// library compiled before it existed.
+    /// Every field this build knows is read: `unload` is handed over.
     #[test]
-    fn a_library_from_before_unload_reads_it_as_absent_and_still_loads() {
+    fn a_library_hands_over_its_unload_slot() {
         unsafe extern "C" fn refuse() -> Status {
             Status::GUATIAO_ERR_WRONG_KIND
         }
 
-        let mut value = a_library(LibraryInfo::meta_end());
+        let mut value = a_library(size_of::<LibraryInfo>());
         value.unload = Some(refuse);
-        let (_buf, ptr) = short_of(&value, LibraryInfo::meta_end());
-        // SAFETY: `_buf` owns the bytes.
-        let view = unsafe { read_library(ptr, Bounds::ANY) }.expect("above the floor");
-        assert!(
-            view.unload.is_none(),
-            "the slot sits past the declared size, so reading it anyway \
-             hands back the 0xAA tail as a function pointer"
-        );
-
-        // And one that DOES declare it hands it over, or the test above
-        // passes against a reader that never reads the field.
-        let value = a_library(size_of::<LibraryInfo>());
-        let mut value = LibraryInfo {
-            unload: Some(refuse),
-            ..value
-        };
-        value.struct_size = size_of::<LibraryInfo>() as u32;
         let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
-        // SAFETY: as above.
+        // SAFETY: `_buf` owns the bytes.
         let view = unsafe { read_library(ptr, Bounds::ANY) }.expect("a full descriptor");
         assert!(view.unload.is_some());
+    }
+
+    /// A library built with fields appended after this build's is read up
+    /// to the fields this build knows; its tail is never read.
+    #[test]
+    fn a_larger_library_descriptor_is_read_up_to_this_builds_fields() {
+        let value = a_library(size_of::<LibraryInfo>() + 64);
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` covers every field this build reads; the 64 bytes
+        // declared past them are never read, which is the property under
+        // test.
+        let view = unsafe { read_library(ptr, Bounds::ANY) }.expect("a larger descriptor");
+        assert_eq!((view.id.as_str(), view.version.as_str()), ("lib", "0.1.0"));
     }
 
     /// A library speaking another envelope version is refused by name,
@@ -1292,19 +1245,17 @@ mod tests {
         );
     }
 
-    /// Two providers laid out at a SMALLER stride than this build's.
+    /// Two providers laid out at a LARGER stride than this build's, as a
+    /// library built with fields appended after this build's lays them.
     ///
     /// **Two, because element 0 lands correctly whatever the stride.** A
     /// reader walking at its own element size passes every one-provider
-    /// test there is and lands inside element 1 here, where it reads the
-    /// 0xAA tail as a `struct_size` and guards every field against it.
+    /// test there is and lands short of element 1 here, inside the 0xAA
+    /// tail of element 0.
     #[test]
     fn a_provider_array_is_walked_at_the_librarys_stride() {
-        let stride = ProviderInfo::floor();
-        assert!(
-            stride < size_of::<ProviderInfo>(),
-            "a slot has been appended since v1, so the old element is smaller"
-        );
+        let size = size_of::<ProviderInfo>();
+        let stride = size + 2 * size_of::<u64>();
 
         let first = a_provider(stride, 0);
         let mut second = a_provider(stride, 0);
@@ -1320,12 +1271,12 @@ mod tests {
             core::ptr::copy_nonoverlapping(
                 (&first as *const ProviderInfo).cast::<u8>(),
                 base,
-                stride,
+                size,
             );
             core::ptr::copy_nonoverlapping(
                 (&second as *const ProviderInfo).cast::<u8>(),
                 base.add(stride),
-                stride,
+                size,
             );
         }
 
@@ -1435,10 +1386,9 @@ mod tests {
         }
     }
 
-    /// A descriptor from before `create` and `destroy` reads them as
-    /// absent, and one declaring them hands them over.
+    /// A descriptor declaring `create` and `destroy` hands them over.
     #[test]
-    fn a_descriptor_from_before_create_reads_it_as_absent() {
+    fn a_descriptor_hands_over_create_and_destroy() {
         unsafe extern "C" fn build(
             _ctx: *mut c_void,
             _config: *const Value,
@@ -1448,13 +1398,6 @@ mod tests {
             Status::GUATIAO_ERR_INTERNAL
         }
         unsafe extern "C" fn drop_it(_ctx: *mut c_void, _instance: *mut c_void) {}
-
-        let value = a_provider(ProviderInfo::tables_end(), 0);
-        let (_buf, ptr) = short_of(&value, ProviderInfo::tables_end());
-        // SAFETY: `_buf` owns the bytes.
-        let view = unsafe { read_provider(ptr, ProviderInfo::tables_end(), Bounds::ANY) }
-            .expect("above the floor");
-        assert!(view.create.is_none() && view.destroy.is_none());
 
         let mut value = a_provider(size_of::<ProviderInfo>(), 0);
         value.create = Some(build);
@@ -1507,16 +1450,14 @@ mod tests {
         );
         assert_eq!(view.table_for("nonesuch"), None);
 
-        // A descriptor from before `tables` reads as having none, and the
-        // shared vtable serves what `kinds` names.
-        let (_buf, ptr) = short_of(&value, ProviderInfo::available_end());
-        let mut older = a_provider(ProviderInfo::available_end(), 8);
-        older.vtable = shared;
-        let (_buf2, ptr2) = short_of(&older, ProviderInfo::available_end());
-        let _ = ptr;
+        // A descriptor with no per-kind tables: the shared vtable serves
+        // what `kinds` names.
+        let mut plain = a_provider(size_of::<ProviderInfo>(), 8);
+        plain.vtable = shared;
+        let (_buf2, ptr2) = short_of(&plain, size_of::<ProviderInfo>());
         // SAFETY: as above.
-        let view = unsafe { read_provider(ptr2, ProviderInfo::available_end(), Bounds::ANY) }
-            .expect("above the floor");
+        let view = unsafe { read_provider(ptr2, size_of::<ProviderInfo>(), Bounds::ANY) }
+            .expect("a full descriptor");
         assert!(view.tables.is_empty());
         assert_eq!(view.table_for("greeter"), Some((shared, 8)));
 
@@ -1536,26 +1477,19 @@ mod tests {
         false
     }
 
-    /// A descriptor from before `available` reads as AVAILABLE.
-    ///
-    /// The direction that matters: an older library must not become
-    /// unusable because a host learned to ask a question it never heard.
+    /// A null `available` reads as AVAILABLE.
     #[test]
-    fn a_descriptor_from_before_available_is_available() {
-        let value = a_provider(ProviderInfo::version_end(), 0);
-        let (_buf, ptr) = short_of(&value, ProviderInfo::version_end());
+    fn a_provider_with_no_available_slot_is_available() {
+        let value = a_provider(size_of::<ProviderInfo>(), 0);
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
         // SAFETY: `_buf` owns the bytes.
-        let view = unsafe { read_provider(ptr, ProviderInfo::version_end(), Bounds::ANY) }
-            .expect("above the floor");
-        assert!(
-            view.available.is_none(),
-            "the slot sits past the declared size, so reading it anyway \
-             hands back the 0xAA tail as a function pointer"
-        );
+        let view = unsafe { read_provider(ptr, size_of::<ProviderInfo>(), Bounds::ANY) }
+            .expect("a full descriptor");
+        assert!(view.available.is_none());
         assert_eq!(view.available(), Ok(()));
     }
 
-    /// And one that declares it is asked, and its reason survives.
+    /// One that declares it is asked, and its reason survives.
     #[test]
     fn a_provider_that_refuses_says_why() {
         let mut value = a_provider(size_of::<ProviderInfo>(), 0);
@@ -1567,46 +1501,34 @@ mod tests {
         assert_eq!(view.available(), Err("no calendar here"));
     }
 
+    /// A provider descriptor short of this build's, by a word or a byte, is
+    /// refused naming both sizes, before any field past its leading word
+    /// is read; one past its array's stride is refused too.
     #[test]
     fn a_provider_descriptor_below_the_floor_is_refused() {
-        let value = a_provider(ProviderInfo::floor() - 1, 0);
+        for declared in [
+            ProviderInfo::floor() - size_of::<usize>(),
+            ProviderInfo::floor() - 1,
+        ] {
+            let value = a_provider(declared, 0);
+            let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+            // SAFETY: `_buf` owns the bytes.
+            let why = unsafe { read_provider(ptr, size_of::<ProviderInfo>(), Bounds::ANY) }
+                .expect_err("a short descriptor is refused");
+            assert!(
+                why.to_string().contains(&format!("{declared} bytes")),
+                "{why}"
+            );
+        }
+        let value = a_provider(size_of::<ProviderInfo>() + 8, 0);
         let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
-        // SAFETY: `_buf` owns the bytes.
-        assert!(unsafe { read_provider(ptr, size_of::<ProviderInfo>(), Bounds::ANY) }.is_err());
+        // SAFETY: as above; the limit refuses before the tail is read.
+        let why = unsafe { read_provider(ptr, size_of::<ProviderInfo>(), Bounds::ANY) }
+            .expect_err("past its stride is refused");
+        assert!(why.to_string().contains("stride"), "{why}");
     }
 
-    /// The slot appended after the guards were written, read both ways.
-    ///
-    /// This is the mechanism doing its job rather than rehearsing it:
-    /// `meta` is the first field genuinely added since, so a descriptor
-    /// sized without it is what every library built before today hands
-    /// over.
-    #[test]
-    fn a_descriptor_from_before_meta_reads_it_as_absent() {
-        // A host.
-        let value = a_host(HostInfo::alloc_end());
-        let (_buf, ptr) = short_of(&value, HostInfo::alloc_end());
-        // SAFETY: `_buf` owns the bytes.
-        let read = unsafe { read_host(ptr) }.expect("above the floor");
-        assert!(
-            read.meta.is_null(),
-            "`meta` sits past the declared size — reading it anyway hands \
-             back the 0xAA tail this test fills with"
-        );
-
-        // A provider.
-        let value = a_provider(ProviderInfo::floor(), 0);
-        let (_buf, ptr) = short_of(&value, ProviderInfo::floor());
-        // SAFETY: as above.
-        let view = unsafe { read_provider(ptr, ProviderInfo::floor(), Bounds::ANY) }
-            .expect("a floor-sized provider");
-        assert!(view.meta.is_none());
-    }
-
-    /// And a descriptor that DOES declare it hands it over.
-    ///
-    /// Without this the test above passes against a reader that never
-    /// reads the field at all.
+    /// A host's `meta`, declared, is handed over.
     #[test]
     fn a_descriptor_that_declares_meta_hands_it_over() {
         let map = Map::new();
@@ -1622,25 +1544,25 @@ mod tests {
     }
 
     /// A provider carries the size its vtable was compiled at, and a host
-    /// that knows a longer one must refuse rather than cast.
+    /// whose type for it is longer must refuse rather than cast.
     ///
     /// The table itself is the sentinel-filled buffer, so a reader that
-    /// skipped the size check would hand back a `&Newer` whose last field
+    /// skipped the size check would hand back a `&Longer` whose last field
     /// is 0xAAAA... rather than a function pointer.
     #[test]
     fn a_shorter_vtable_is_refused_and_the_size_it_declares_is_kept() {
         #[repr(C)]
-        struct Older {
+        struct Shorter {
             greet: usize,
         }
         #[repr(C)]
-        struct Newer {
+        struct Longer {
             greet: usize,
             farewell: usize,
         }
 
         let table = [0u64; 4];
-        let mut value = a_provider(size_of::<ProviderInfo>(), size_of::<Older>() as u32);
+        let mut value = a_provider(size_of::<ProviderInfo>(), size_of::<Shorter>() as u32);
         value.vtable = table.as_ptr().cast();
         let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
         // SAFETY: `_buf` owns the descriptor and `table` the vtable.
@@ -1649,14 +1571,14 @@ mod tests {
 
         assert_eq!(
             view.vtable_size,
-            size_of::<Older>(),
+            size_of::<Shorter>(),
             "the declared size survives the read, because the host needs it \
              to decide what it may cast to"
         );
-        assert!(
-            view.vtable_size < size_of::<Newer>(),
-            "this library predates the host's newest slot"
-        );
+        // SAFETY: `Longer` is the shape the test gives this table.
+        assert!(unsafe { view.vtable_as::<Longer>() }.is_none());
+        // SAFETY: as above, for `Shorter`.
+        assert!(unsafe { view.vtable_as::<Shorter>() }.is_some());
     }
 
     /// A misaligned provider array is refused by name, before an element

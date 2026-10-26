@@ -397,17 +397,13 @@ impl Provider {
     ///
     /// **Deliberately raw, and deliberately not generic.** Whoever
     /// defines a `kind` defines what its table looks like, so only they
-    /// can say where its floor is — the size at which an older library is
-    /// still usable. A helper here could only compare against
-    /// `size_of::<T>()`, which refuses every library built before the
-    /// host's newest slot existed, and it would have to build a `&T`,
-    /// which asserts the whole struct is readable when a shorter one is
-    /// exactly what a `struct_size` guard is for.
+    /// can say how large it must be. A typed read is
+    /// [`ProviderView::vtable_as`](crate::library::raw::ProviderView::vtable_as).
     ///
     /// Read it the way [`crate::value::Alloc::from_raw`] reads an
-    /// allocator: check the declared size against your own frozen floor,
-    /// project each field through the raw pointer, and guard every field
-    /// you appended later.
+    /// allocator: refuse a declared size below the kind's table, and read
+    /// only the slots that table has; a larger one is a table with slots
+    /// appended after them.
     pub fn vtable(&self) -> (*const core::ffi::c_void, usize) {
         (self.view.vtable, self.view.vtable_size)
     }

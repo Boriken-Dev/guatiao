@@ -86,14 +86,9 @@ fn library_path() -> PathBuf {
     );
 }
 
-/// Reads a greeter's table the way the crate documents: check the size the
-/// library compiled it at against a frozen floor, then project each field
-/// through the raw pointer.
-///
-/// Never builds a `&GreeterVtable`. A reference asserts the whole struct
-/// is readable, which is exactly what a library compiled before the newest
-/// slot existed does not give you — and the point of the size check is to
-/// work with such a library rather than to reject it.
+/// Reads a greeter's table the way the crate documents: refuse a size the
+/// library compiled below the floor, then project each field through the
+/// raw pointer.
 fn read_greeter(
     ptr: *const core::ffi::c_void,
     size: usize,
@@ -108,18 +103,12 @@ fn read_greeter(
     );
     let table = ptr as *const GreeterVtable;
 
-    // SAFETY: the size check above established that `greet` is present,
+    // SAFETY: the size check above established that every slot is present,
     // and the registry holds the mapping it lives in.
     let greet = unsafe { core::ptr::addr_of!((*table).greet).read() }
         .expect("a greeter that declares no greet slot is not a greeter");
-
-    // The appended slot, read only when the library was compiled with it.
-    let outstanding = if size >= GreeterVtable::outstanding_end() {
-        // SAFETY: the guard established the field is present.
-        unsafe { core::ptr::addr_of!((*table).outstanding).read() }
-    } else {
-        None
-    };
+    // SAFETY: as above.
+    let outstanding = unsafe { core::ptr::addr_of!((*table).outstanding).read() };
     (greet, outstanding)
 }
 
@@ -140,7 +129,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
         "a greeter, an almanac, a sundial and an echo"
     );
 
-    // The appended `meta` slot, read out of the library's own image.
+    // The `meta` slot, read out of the library's own image.
     // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
     // so this pins both answers — an absent slot and a present one are
     // different outcomes, not one untested path.
@@ -485,7 +474,7 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
 
     let (ptr, size) = provider.vtable();
     let (greet, outstanding) = read_greeter(ptr, size);
-    let outstanding = outstanding.expect("this library was built with the appended slot");
+    let outstanding = outstanding.expect("this library fills `outstanding`");
 
     // SAFETY: the slot came from a table whose declared size covers it.
     let before = unsafe { outstanding(provider.ctx()) };
