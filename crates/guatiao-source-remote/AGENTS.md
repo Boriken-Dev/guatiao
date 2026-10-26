@@ -82,7 +82,12 @@ Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | ws://ADDR | t
 `--trust`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`,
 `--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`..., `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
-`--max-frame`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
+`--max-frame`, `--max-handshakes N`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
+At most `--max-handshakes` connections (default 64) are in their handshake
+at once; past it a new one is closed unread. A refused source (denied by
+the access control list, or failing its handshake) is reported at most
+once a minute per address, with how often it was held back (past 1024
+addresses in a minute, a new one goes unreported).
 The trusted level needs `--range` or `--acl`; `tls://` needs `--trust
 secure` and `--state-dir` or `--identity`. The first stderr line is
 `guatiao-remote-server: serving SCHEME://ADDR ...` (at `tls://`, `as
