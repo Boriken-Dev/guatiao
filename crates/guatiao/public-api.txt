@@ -326,10 +326,7 @@ pub guatiao::library::desc::HostInfo::meta: guatiao::value::types::maybe_null::M
 pub guatiao::library::desc::HostInfo::services: *const guatiao::library::desc::HostServices
 pub guatiao::library::desc::HostInfo::struct_size: u32
 impl guatiao::library::desc::HostInfo<'_>
-pub const fn guatiao::library::desc::HostInfo<'_>::alloc_end() -> usize
 pub const fn guatiao::library::desc::HostInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::HostInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::HostInfo<'_>::services_end() -> usize
 impl<'a> core::clone::Clone for guatiao::library::desc::HostInfo<'a>
 pub fn guatiao::library::desc::HostInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::HostInfo<'a>
@@ -347,7 +344,6 @@ pub guatiao::library::desc::HostServices::struct_size: u32
 pub guatiao::library::desc::HostServices::unpin: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::ProviderInfo<'_>)>
 impl guatiao::library::desc::HostServices
 pub const fn guatiao::library::desc::HostServices::floor() -> usize
-pub const fn guatiao::library::desc::HostServices::pinned_end() -> usize
 impl core::clone::Clone for guatiao::library::desc::HostServices
 pub fn guatiao::library::desc::HostServices::clone(&self) -> Self
 impl core::fmt::Debug for guatiao::library::desc::HostServices
@@ -399,8 +395,6 @@ pub guatiao::library::desc::LibraryInfo::unload: core::option::Option<fn() -> gu
 pub guatiao::library::desc::LibraryInfo::version: guatiao::value::types::text::Str<'a>
 impl guatiao::library::desc::LibraryInfo<'_>
 pub const fn guatiao::library::desc::LibraryInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::LibraryInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::LibraryInfo<'_>::unload_end() -> usize
 impl core::marker::Send for guatiao::library::desc::LibraryInfo<'_>
 impl core::marker::Sync for guatiao::library::desc::LibraryInfo<'_>
 impl<'a, 'b: 'a> core::convert::From<&'a guatiao::library::desc::LibraryInfo<'b>> for guatiao::library::raw::LocalLibrary<'a>
@@ -431,14 +425,7 @@ pub fn guatiao::library::desc::ProviderInfo<'_>::as_kind<K: ?core::marker::Sized
 pub fn guatiao::library::desc::ProviderInfo<'_>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
 pub fn guatiao::library::desc::ProviderInfo<'_>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'_>
-pub const fn guatiao::library::desc::ProviderInfo<'_>::available_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::create_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::destroy_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::kind_descriptions_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'_>
 pub fn guatiao::library::desc::ProviderInfo<'_>::view(&self) -> core::option::Option<guatiao::library::raw::ProviderView>
 impl<'a> core::clone::Clone for guatiao::library::desc::ProviderInfo<'a>
@@ -1904,10 +1891,7 @@ pub guatiao::library::HostInfo::meta: guatiao::value::types::maybe_null::MaybeNu
 pub guatiao::library::HostInfo::services: *const guatiao::library::desc::HostServices
 pub guatiao::library::HostInfo::struct_size: u32
 impl guatiao::library::desc::HostInfo<'_>
-pub const fn guatiao::library::desc::HostInfo<'_>::alloc_end() -> usize
 pub const fn guatiao::library::desc::HostInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::HostInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::HostInfo<'_>::services_end() -> usize
 impl<'a> core::clone::Clone for guatiao::library::desc::HostInfo<'a>
 pub fn guatiao::library::desc::HostInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::HostInfo<'a>
@@ -1925,7 +1909,6 @@ pub guatiao::library::HostServices::struct_size: u32
 pub guatiao::library::HostServices::unpin: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::ProviderInfo<'_>)>
 impl guatiao::library::desc::HostServices
 pub const fn guatiao::library::desc::HostServices::floor() -> usize
-pub const fn guatiao::library::desc::HostServices::pinned_end() -> usize
 impl core::clone::Clone for guatiao::library::desc::HostServices
 pub fn guatiao::library::desc::HostServices::clone(&self) -> Self
 impl core::fmt::Debug for guatiao::library::desc::HostServices
@@ -2038,8 +2021,6 @@ pub guatiao::library::LibraryInfo::unload: core::option::Option<fn() -> guatiao:
 pub guatiao::library::LibraryInfo::version: guatiao::value::types::text::Str<'a>
 impl guatiao::library::desc::LibraryInfo<'_>
 pub const fn guatiao::library::desc::LibraryInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::LibraryInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::LibraryInfo<'_>::unload_end() -> usize
 impl core::marker::Send for guatiao::library::desc::LibraryInfo<'_>
 impl core::marker::Sync for guatiao::library::desc::LibraryInfo<'_>
 impl<'a, 'b: 'a> core::convert::From<&'a guatiao::library::desc::LibraryInfo<'b>> for guatiao::library::raw::LocalLibrary<'a>
@@ -2231,14 +2212,7 @@ pub fn guatiao::library::desc::ProviderInfo<'_>::as_kind<K: ?core::marker::Sized
 pub fn guatiao::library::desc::ProviderInfo<'_>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
 pub fn guatiao::library::desc::ProviderInfo<'_>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'_>
-pub const fn guatiao::library::desc::ProviderInfo<'_>::available_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::create_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::destroy_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::floor() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::kind_descriptions_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
-pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'_>
 pub fn guatiao::library::desc::ProviderInfo<'_>::view(&self) -> core::option::Option<guatiao::library::raw::ProviderView>
 impl<'a> core::clone::Clone for guatiao::library::desc::ProviderInfo<'a>
@@ -3732,7 +3706,6 @@ pub guatiao::value::alloc::Allocator::release: core::option::Option<fn(*mut core
 pub guatiao::value::alloc::Allocator::struct_size: u32
 impl guatiao::value::alloc::Allocator
 pub const fn guatiao::value::alloc::Allocator::floor() -> usize
-pub const fn guatiao::value::alloc::Allocator::release_end() -> usize
 impl core::fmt::Debug for guatiao::value::alloc::Allocator
 pub fn guatiao::value::alloc::Allocator::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const fn guatiao::value::alloc::rust_alloc() -> guatiao::value::alloc::Allocator
@@ -7482,7 +7455,6 @@ pub guatiao::value::Allocator::release: core::option::Option<fn(*mut core::ffi::
 pub guatiao::value::Allocator::struct_size: u32
 impl guatiao::value::alloc::Allocator
 pub const fn guatiao::value::alloc::Allocator::floor() -> usize
-pub const fn guatiao::value::alloc::Allocator::release_end() -> usize
 impl core::fmt::Debug for guatiao::value::alloc::Allocator
 pub fn guatiao::value::alloc::Allocator::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct guatiao::value::Buffer

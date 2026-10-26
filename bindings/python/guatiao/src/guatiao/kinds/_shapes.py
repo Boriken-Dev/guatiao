@@ -138,8 +138,7 @@ def complete(alloc_ptr: Any) -> bool:
     if not alloc_ptr:
         return False
     a = alloc_ptr.contents
-    floor = _abi.Alloc.free.offset + ctypes.sizeof(ctypes.c_void_p)
-    return a.struct_size >= floor and bool(a.alloc) and bool(a.free)
+    return a.struct_size >= ctypes.sizeof(_abi.Alloc) and bool(a.alloc) and bool(a.free)
 
 
 def _move_out(value: Value) -> "_abi.Value":

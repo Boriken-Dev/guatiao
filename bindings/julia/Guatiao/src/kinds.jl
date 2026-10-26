@@ -514,7 +514,7 @@ end
 function complete_alloc(a::Ptr{GAlloc})
     a == C_NULL && return false
     g = unsafe_load(a)
-    return g.struct_size >= 32 && g.alloc != C_NULL && g.free != C_NULL
+    return g.struct_size >= sizeof(GAlloc) && g.alloc != C_NULL && g.free != C_NULL
 end
 
 function receive_lent(p::Ptr, scope::Scope, kind::Symbol)

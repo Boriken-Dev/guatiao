@@ -439,7 +439,7 @@ bool table_of(const void* table, std::size_t size) noexcept {
 }
 
 inline bool usable_alloc(const guatiao_alloc* a) noexcept {
-  return a && a->struct_size >= offsetof(guatiao_alloc, free) + sizeof(a->free) && a->alloc && a->free;
+  return a && a->struct_size >= sizeof(guatiao_alloc) && a->alloc && a->free;
 }
 
 /// A refusal's words written into a slot's error, in this binary's

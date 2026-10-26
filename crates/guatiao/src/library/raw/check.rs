@@ -39,19 +39,42 @@ pub(crate) struct Refusal {
     pub(crate) what: &'static str,
     /// What was wrong with it, as the rest of the sentence.
     pub(crate) why: &'static str,
+    /// For a size refused, what was declared and what this build reads.
+    pub(crate) sizes: Option<(usize, usize)>,
 }
 
 impl Refusal {
     pub(crate) const fn new(what: &'static str, why: &'static str) -> Refusal {
-        Refusal { what, why }
+        Refusal {
+            what,
+            why,
+            sizes: None,
+        }
+    }
+
+    /// `what` declared `declared` bytes where this build reads `floor`.
+    pub(crate) const fn short(what: &'static str, declared: usize, floor: usize) -> Refusal {
+        Refusal {
+            what,
+            why: SHORT,
+            sizes: Some((declared, floor)),
+        }
     }
 }
 
 impl core::fmt::Display for Refusal {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{} {}", self.what, self.why)
+        write!(f, "{} {}", self.what, self.why)?;
+        if let Some((declared, floor)) = self.sizes {
+            write!(f, ": {declared} bytes, where this build reads {floor}")?;
+        }
+        Ok(())
     }
 }
+
+/// What a descriptor, a table or an array stride smaller than this
+/// build's layout is told.
+pub(crate) const SHORT: &str = "is smaller than this build's layout";
 
 const MISALIGNED: &str = "is not aligned for what it points at";
 const IMPLAUSIBLE: &str =

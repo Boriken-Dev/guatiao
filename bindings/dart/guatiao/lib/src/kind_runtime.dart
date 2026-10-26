@@ -387,13 +387,14 @@ final Pointer<NativeFunction<_DestroyC>> _destroyShim =
 
 Pointer<guatiao_alloc> get _binding => native.core().alloc;
 
-/// Whether [alloc] can build: its size reaches past `free`, and both
-/// functions are there. `struct_size`, `ctx`, `alloc`, `free` are four
-/// words on 32- and 64-bit alike.
+/// Whether [alloc] can build: its size covers this build's
+/// `guatiao_alloc`, and both functions are there.
 bool _complete(Pointer<guatiao_alloc> alloc) {
   if (alloc == nullptr) return false;
   final a = alloc.ref;
-  return a.struct_size >= _word * 4 && a.alloc != nullptr && a.free != nullptr;
+  return a.struct_size >= sizeOf<guatiao_alloc>() &&
+      a.alloc != nullptr &&
+      a.free != nullptr;
 }
 
 /// `guatiao_value.payload`'s offset: after the tag and its padding.

@@ -27,7 +27,7 @@
 #![allow(non_camel_case_types)]
 
 use core::ffi::c_void;
-use core::mem::{offset_of, size_of};
+use core::mem::size_of;
 use core::ptr;
 
 /// Allocates `size` bytes aligned to `align`, or returns null.
@@ -48,9 +48,9 @@ pub type ReleaseFn = unsafe extern "C" fn(ctx: *mut c_void);
 
 /// An allocator, as a vtable a foreign caller can fill in.
 ///
-/// Every field after `struct_size` is read only when `struct_size` says it
-/// is there, so fields may be **appended** without breaking a caller
-/// compiled against an older copy.
+/// `struct_size` covers at least every field this build knows; a larger
+/// one is a caller built with fields appended after them, read up to this
+/// build's.
 #[repr(C)]
 #[derive(Debug)]
 pub struct Allocator {
@@ -72,28 +72,14 @@ pub struct Allocator {
     /// called. Spelled out for the reason given on `alloc`.
     pub free:
         Option<unsafe extern "C" fn(ctx: *mut c_void, ptr: *mut c_void, size: usize, align: usize)>,
-    /// Optional, and the newest field. A caller compiled before it existed
-    /// declares a smaller `struct_size` and it reads as absent — never as
-    /// whatever bytes happened to follow that caller's allocation.
+    /// Optional: null for an allocator with nothing to tear down.
     pub release: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
 }
 
 impl Allocator {
-    /// Everything up to and including `free`: what a caller must cover for
-    /// this struct to be usable at all.
-    ///
-    /// **This floor must not move when a field is appended.** Comparing a
-    /// caller's `struct_size` against `size_of::<Allocator>()` instead
-    /// would refuse every caller built before the newest field existed,
-    /// which inverts the whole convention. Each appended field gets its
-    /// own guard instead; see [`Alloc::from_raw`].
+    /// The smallest `struct_size` this build reads: every field it knows.
     pub const fn floor() -> usize {
-        offset_of!(Allocator, free) + size_of::<Option<FreeFn>>()
-    }
-
-    /// One past the end of `release`, the newest field.
-    pub const fn release_end() -> usize {
-        offset_of!(Allocator, release) + size_of::<Option<ReleaseFn>>()
+        size_of::<Allocator>()
     }
 }
 
@@ -103,8 +89,8 @@ impl Allocator {
 pub enum AllocError {
     /// The pointer to the allocator was null.
     Null,
-    /// `struct_size` did not even cover `free`, so there is no usable
-    /// vtable here — not an old caller, a wrong one.
+    /// `struct_size` is below this build's [`Allocator`]: not a vtable
+    /// this build can read.
     TooSmall {
         /// What the caller declared.
         declared: usize,
@@ -132,8 +118,8 @@ impl core::fmt::Display for AllocError {
             AllocError::Null => f.write_str("the allocator pointer was null"),
             AllocError::TooSmall { declared, need } => write!(
                 f,
-                "the allocator declared struct_size {declared}, which does not cover its \
-                 required callbacks ({need} bytes)"
+                "the allocator declared struct_size {declared}, below the {need} bytes of \
+                 this build's guatiao_alloc"
             ),
             AllocError::NoAllocFn => f.write_str("the allocator's `alloc` callback was null"),
             AllocError::NoFreeFn => f.write_str("the allocator's `free` callback was null"),
@@ -148,9 +134,8 @@ impl core::fmt::Display for AllocError {
 impl core::error::Error for AllocError {}
 
 /// A checked view of a caller's allocator: the function pointers rather
-/// than the struct pointer, so the coverage question is answered once.
-/// `release` is `None` for a caller that did not declare it, which is
-/// indistinguishable from one that declared it null.
+/// than the struct pointer, so the size question is answered once.
+/// `release` is `None` for an allocator that declares it null.
 ///
 /// **An allocator outlives everything built through it, by contract and
 /// not by borrow**: every owned container records its address, so one
@@ -169,7 +154,7 @@ pub struct Alloc {
 impl core::fmt::Debug for Alloc {
     /// Deliberately does not print the function pointers: a raw address is
     /// not something a reader can act on. What is diagnostic is which
-    /// optional slot survived the coverage check.
+    /// optional slot the allocator fills.
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Alloc")
             .field("ctx_is_null", &self.ctx.is_null())
@@ -184,7 +169,7 @@ impl Alloc {
     /// # Safety
     ///
     /// 1. `raw` is null, or points at `raw->struct_size` readable,
-    ///    aligned bytes. Nothing past `struct_size` is read.
+    ///    aligned bytes. Nothing past this build's fields is read.
     /// 2. **The allocator outlives every value built through it.** A
     ///    vtable inside a loaded library therefore means that library
     ///    stays mapped while the host holds a tree it made -- which is
@@ -196,8 +181,7 @@ impl Alloc {
 
         // The leading u32 only, through the raw pointer. Forming `&*raw`
         // first would assert that the whole struct is dereferenceable,
-        // which is precisely what a caller with a smaller one does not
-        // have.
+        // which a caller declaring a smaller one does not have.
         let declared = unsafe { ptr::addr_of!((*raw).struct_size).read() } as usize;
 
         if declared < Allocator::floor() {
@@ -217,17 +201,7 @@ impl Alloc {
         let Some(free) = (unsafe { ptr::addr_of!((*raw).free).read() }) else {
             return Err(AllocError::NoFreeFn);
         };
-
-        // The appended-field guard. `>=` against offset plus size means a
-        // declared size covering only PART of the slot reads as absent
-        // rather than handing back half a real pointer and half of
-        // whatever followed the caller's allocation — which would be
-        // non-null, and therefore called.
-        let release = if declared >= Allocator::release_end() {
-            unsafe { ptr::addr_of!((*raw).release).read() }
-        } else {
-            None
-        };
+        let release = unsafe { ptr::addr_of!((*raw).release).read() };
 
         Ok(Alloc {
             ctx,
@@ -374,72 +348,42 @@ pub const fn rust_alloc() -> Allocator {
 mod tests {
     use super::*;
 
-    /// The floor must sit below the current size, or appending a field
-    /// locks out every caller compiled before it.
+    /// A caller one word or one byte short of this build's struct is
+    /// refused naming both sizes, before `release` is read: a tail of
+    /// guard words there would otherwise be called.
     #[test]
-    fn the_floor_sits_below_the_current_struct() {
-        assert!(
-            Allocator::floor() < size_of::<Allocator>(),
-            "the floor must be BELOW the current size, or appending `release` refuses every \
-             caller built before it existed"
-        );
-        assert!(Allocator::floor() <= offset_of!(Allocator, release));
-        assert_eq!(Allocator::release_end(), size_of::<Allocator>());
+    fn a_caller_short_of_this_builds_struct_is_refused() {
+        for declared in [
+            Allocator::floor() - size_of::<usize>(),
+            Allocator::floor() - 1,
+        ] {
+            let mut a = rust_alloc();
+            a.struct_size = declared as u32;
+            let why = unsafe { Alloc::from_raw(&a) }.unwrap_err();
+            assert_eq!(
+                why,
+                AllocError::TooSmall {
+                    declared,
+                    need: Allocator::floor()
+                }
+            );
+            let words = why.to_string();
+            assert!(
+                words.contains(&declared.to_string())
+                    && words.contains(&Allocator::floor().to_string()),
+                "{words}"
+            );
+        }
     }
 
-    /// A caller compiled before `release` existed is accepted, and its
-    /// `release` reads as absent rather than as whatever followed it.
-    ///
-    /// The guard word is non-zero on purpose: a tail of zeroes would make
-    /// this pass against a guard that does nothing at all, since a null
-    /// function pointer already reads as `None`.
+    /// `release` is read: an allocator that fills it hands it over.
     #[test]
-    fn an_older_caller_is_accepted_and_its_release_reads_as_absent() {
-        const GUARD: u64 = 0xDEAD_BEEF_DEAD_BEEF;
-
-        #[repr(C)]
-        struct Older {
-            struct_size: u32,
-            ctx: *mut c_void,
-            alloc: Option<AllocFn>,
-            free: Option<FreeFn>,
-        }
-        #[repr(C)]
-        struct WithGuard {
-            older: Older,
-            guard: [u64; 2],
-        }
-
-        let held = WithGuard {
-            older: Older {
-                struct_size: size_of::<Older>() as u32,
-                ctx: ptr::null_mut(),
-                alloc: Some(rust_alloc_fn),
-                free: Some(rust_free_fn),
-            },
-            guard: [GUARD; 2],
-        };
-        assert_eq!(size_of::<Older>(), Allocator::floor());
-
-        let got = unsafe { Alloc::from_raw(ptr::addr_of!(held.older).cast()) }.unwrap();
-        assert!(
-            !got.has_release(),
-            "an uncovered slot must read as absent, never as the bytes that follow"
-        );
-        assert!(
-            held.guard.iter().all(|&w| w == GUARD),
-            "nothing was written"
-        );
-    }
-
-    /// A declared size that covers only part of the newest slot reads it
-    /// as absent, rather than as half a real pointer.
-    #[test]
-    fn a_size_that_cuts_the_newest_slot_in_half_reads_it_as_absent() {
+    fn a_release_slot_is_read() {
+        unsafe extern "C" fn tear_down(_c: *mut c_void) {}
         let mut a = rust_alloc();
-        a.struct_size = (offset_of!(Allocator, release) + 4) as u32;
+        a.release = Some(tear_down);
         let got = unsafe { Alloc::from_raw(&a) }.unwrap();
-        assert!(!got.has_release());
+        assert!(got.has_release());
     }
 
     #[test]

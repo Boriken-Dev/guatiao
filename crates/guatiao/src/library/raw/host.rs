@@ -12,9 +12,8 @@ use super::*;
 /// A pointer to the [`HostInfo`] a host handed its entry point, which the
 /// host keeps valid for the life of the process. `Copy`, `Send`, `Sync`
 /// and `'static`, so it goes in a library's own `OnceLock` and is read
-/// from any later call. Every field is read on demand under the host's
-/// declared `struct_size`, so a host built before a field existed reads
-/// as not having it.
+/// from any later call. A host declaring a `struct_size` below this
+/// build's [`HostInfo`] is refused; fields past it are never read.
 #[derive(Debug, Clone, Copy)]
 pub struct Host {
     raw: *const HostInfo<'static>,
@@ -53,14 +52,9 @@ impl Host {
         self.raw
     }
 
-    fn declared(&self) -> usize {
-        // SAFETY: `from_raw` established the leading word is readable.
-        unsafe { core::ptr::addr_of!((*self.raw).struct_size).read() as usize }
-    }
-
     /// The envelope version the host speaks.
     pub fn abi_version(&self) -> u32 {
-        // SAFETY: within the floor.
+        // SAFETY: within the floor `from_raw` checked.
         unsafe { core::ptr::addr_of!((*self.raw).abi_version).read() }
     }
 
@@ -80,43 +74,33 @@ impl Host {
         .unwrap_or("")
     }
 
-    /// The host's allocator, or `None` when it offers none or predates
-    /// the field.
+    /// The host's allocator, or `None` when it offers none.
     pub fn alloc(&self) -> Option<Alloc> {
-        if self.declared() < HostInfo::alloc_end() {
-            return None;
-        }
-        // SAFETY: the guard established the field is present, and the
-        // allocator it names outlives the process by the block's contract.
+        // SAFETY: within the floor `from_raw` checked, and the allocator it
+        // names outlives the process by the block's contract.
         let raw = unsafe { core::ptr::addr_of!((*self.raw).alloc).read() };
         unsafe { Alloc::from_raw(raw) }.ok()
     }
 
     /// Whatever else the host declared, or `None`.
     pub fn meta(&self) -> Option<&'static Map> {
-        if self.declared() < HostInfo::meta_end() {
-            return None;
-        }
-        // SAFETY: the guard established the field is present; non-null
+        // SAFETY: within the floor `from_raw` checked; non-null
         // means a well-formed map by the contract on the field; the block
         // lives for the process.
         unsafe { core::ptr::addr_of!((*self.raw).meta).read().get() }
     }
 
-    /// A copy of the descriptor as it reads today, with absent fields
-    /// nulled. For a caller that wants a snapshot rather than a handle.
+    /// A copy of the descriptor as it reads today. For a caller that wants
+    /// a snapshot rather than a handle.
     pub fn snapshot(&self) -> HostInfo<'static> {
         // SAFETY: `from_raw` established the contract `read_host` needs.
         unsafe { read_host(self.raw) }.expect("a Host was built from a readable descriptor")
     }
 
-    /// The services table, read under its declared size, or `None` for a
-    /// host that offers none or predates the field.
+    /// The services table, or `None` for a host that offers none or one
+    /// declaring a `struct_size` below this build's.
     fn services(&self) -> Option<Services> {
-        if self.declared() < HostInfo::services_end() {
-            return None;
-        }
-        // SAFETY: the guard established the field is present.
+        // SAFETY: within the floor `from_raw` checked.
         let table = unsafe { core::ptr::addr_of!((*self.raw).services).read() };
         if table.is_null() || !addressable(table) {
             return None;
@@ -124,7 +108,7 @@ impl Host {
         // SAFETY: a non-null table points at one the host keeps for the
         // process, declaring its own size; the leading word is readable.
         let size = unsafe { core::ptr::addr_of!((*table).struct_size).read() } as usize;
-        (size >= HostServices::floor()).then_some(Services { table, size })
+        (size >= HostServices::floor()).then_some(Services { table })
     }
 
     /// One provider by the key the host files it under, read out of the
@@ -208,11 +192,10 @@ impl Host {
     }
 }
 
-/// A host's services table, read field by field under the size it
-/// declares: a table from an older host is shorter than this build's.
+/// A host's services table, its `struct_size` checked against this
+/// build's.
 struct Services {
     table: *const HostServices,
-    size: usize,
 }
 
 /// The services' `get` slots.
@@ -229,7 +212,7 @@ type ListFn = unsafe extern "C" fn(
 /// The services' `pin` and `unpin` slots.
 type PinFn = unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo);
 
-/// The four pinning slots, present together or not at all.
+/// The four pinning slots, filled together or not at all.
 #[derive(Clone, Copy)]
 struct Pinning {
     get: GetFn,
@@ -254,13 +237,9 @@ impl Services {
         unsafe { core::ptr::addr_of!((*self.table).list).read() }
     }
 
-    /// The pinning slots, when the table is long enough to hold them and
-    /// fills all four.
+    /// The pinning slots, when the table fills all four.
     fn pinned(&self) -> Option<Pinning> {
-        if self.size < HostServices::pinned_end() {
-            return None;
-        }
-        // SAFETY: the guard established the four fields are present.
+        // SAFETY: within the floor.
         unsafe {
             Some(Pinning {
                 get: core::ptr::addr_of!((*self.table).get_pinned).read()?,
@@ -715,12 +694,13 @@ unsafe extern "C" fn services_alloc(ctx: *mut c_void) -> *const crate::value::al
     })
 }
 
-/// Reads a host descriptor, honouring its declared size.
+/// Reads a host descriptor: `None` for null, or for one declaring a
+/// `struct_size` below this build's [`HostInfo`].
 ///
 /// # Safety
 ///
 /// `raw` is null, or points at `raw->struct_size` readable, aligned bytes
-/// that stay valid for the call. Nothing past `struct_size` is read.
+/// that stay valid for the call. Nothing past this build's fields is read.
 pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     if raw.is_null() || !addressable(raw) {
         return None;
@@ -735,34 +715,18 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     }
 
     // SAFETY: every read below is a field projection through the raw
-    // pointer, and each field lies within `declared` bytes.
-    let mut info = unsafe {
+    // pointer, and each field lies within the floor just checked.
+    let info = unsafe {
         HostInfo {
             struct_size: declared as u32,
             abi_version: core::ptr::addr_of!((*raw).abi_version).read(),
             host_id: core::ptr::addr_of!((*raw).host_id).read(),
             host_version: core::ptr::addr_of!((*raw).host_version).read(),
-            alloc: core::ptr::null(),
-            meta: MaybeNull::null(),
-            services: core::ptr::null(),
+            alloc: core::ptr::addr_of!((*raw).alloc).read(),
+            meta: core::ptr::addr_of!((*raw).meta).read(),
+            services: core::ptr::addr_of!((*raw).services).read(),
         }
     };
-
-    // The appended-field guard. `>=` against offset plus size means a
-    // declared size covering only PART of the slot reads as absent rather
-    // than handing back half a real pointer and half of whatever followed.
-    if declared >= HostInfo::alloc_end() {
-        // SAFETY: the guard just established the field is present.
-        info.alloc = unsafe { core::ptr::addr_of!((*raw).alloc).read() };
-    }
-    if declared >= HostInfo::meta_end() {
-        // SAFETY: as above.
-        info.meta = unsafe { core::ptr::addr_of!((*raw).meta).read() };
-    }
-    if declared >= HostInfo::services_end() {
-        // SAFETY: as above.
-        info.services = unsafe { core::ptr::addr_of!((*raw).services).read() };
-    }
     Some(info)
 }
 
@@ -771,70 +735,26 @@ mod tests {
     use super::*;
     use crate::library::raw::test_support::*;
 
-    /// A host from before `services` was appended reads as offering none,
-    /// through both readers.
+    /// A host one byte short of this build's struct is refused, by both
+    /// readers, with nothing past the leading word read.
     #[test]
-    fn a_host_from_before_services_offers_none() {
-        let value = a_host(HostInfo::meta_end());
-        let (_buf, ptr) = short_of(&value, HostInfo::meta_end());
-        // SAFETY: `_buf` owns the bytes.
-        let read = unsafe { read_host(ptr) }.expect("above the floor");
-        assert!(read.services.is_null(), "past the declared size, so absent");
-        // SAFETY: as above.
-        let host = unsafe { Host::from_raw(ptr) }.expect("above the floor");
-        assert_eq!(host.get("anything").err(), Some(Status::GUATIAO_ERR_NULL));
-        assert_eq!(host.list("anything").err(), Some(Status::GUATIAO_ERR_NULL));
-        assert_eq!(host.id(), "test-host");
-    }
-
-    /// A host from before `alloc` was appended reads as having none.
-    ///
-    /// This is the test the sentinel exists for: with a zero tail it would
-    /// pass against a reader that ignored `struct_size` entirely.
-    #[test]
-    fn a_shorter_host_reads_its_appended_field_as_absent() {
-        let value = a_host(HostInfo::floor());
-        let (_buf, ptr) = short_of(&value, HostInfo::floor());
-        // SAFETY: `_buf` owns the bytes and outlives the call.
-        let read = unsafe { read_host(ptr) }.expect("a floor-sized host is usable");
-
-        assert_eq!(read.struct_size as usize, HostInfo::floor());
-        assert_eq!(read.host_id.len(), "test-host".len());
-        assert!(
-            read.alloc.is_null(),
-            "the allocator sits past the declared size, so it is absent — \
-             reading it anyway would hand back {:p}, the sentinel this test \
-             fills the tail with",
-            read.alloc
-        );
-    }
-
-    /// A size that covers only PART of an appended field reads as absent.
-    ///
-    /// The guard is `>=` against offset plus size rather than `>` against
-    /// the offset, so half a pointer is never combined with whatever
-    /// followed it.
-    #[test]
-    fn a_size_that_cuts_the_appended_field_in_half_reads_it_as_absent() {
-        let value = a_host(HostInfo::alloc_end() - 1);
-        let (_buf, ptr) = short_of(&value, HostInfo::alloc_end() - 1);
-        // SAFETY: as above.
-        let read = unsafe { read_host(ptr) }.expect("still above the floor");
-        assert!(read.alloc.is_null(), "half a pointer is not a pointer");
-    }
-
-    /// Below the floor is refused outright.
-    #[test]
-    fn a_host_below_the_floor_is_refused() {
-        for declared in [0usize, 4, HostInfo::floor() - 1] {
+    fn a_host_short_of_this_builds_struct_is_refused() {
+        for declared in [
+            0usize,
+            4,
+            HostInfo::floor() - size_of::<usize>(),
+            HostInfo::floor() - 1,
+        ] {
             let value = a_host(declared);
             let (_buf, ptr) = short_of(&value, size_of::<HostInfo>());
-            // SAFETY: as above.
+            // SAFETY: `_buf` owns the bytes and outlives the calls.
             assert!(
                 unsafe { read_host(ptr) }.is_none(),
                 "{declared} is below the floor of {}",
                 HostInfo::floor()
             );
+            // SAFETY: as above.
+            assert!(unsafe { Host::from_raw(ptr) }.is_none());
         }
         // SAFETY: null is the other case.
         assert!(unsafe { read_host(core::ptr::null()) }.is_none());

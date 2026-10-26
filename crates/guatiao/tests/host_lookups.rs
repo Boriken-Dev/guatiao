@@ -5,10 +5,9 @@
 //! What a library asks its host, over descriptors the host LINKS: no
 //! `dlopen`, so Miri runs it, under Stacked and Tree Borrows both.
 //!
-//! An older library's descriptor is shorter than this build's
-//! `ProviderInfo`. The host's answers are read under the size each
-//! descriptor declares, so a field past it reads as absent and nothing
-//! forms a reference to bytes the library never wrote.
+//! The library's descriptor is exactly the bytes it declares, in an
+//! allocation no larger: the host's answers read every field this build
+//! knows and form no reference past them.
 
 #![cfg(feature = "load")]
 
@@ -17,15 +16,14 @@ use guatiao::library::{
 };
 use guatiao::value::types::{MaybeNull, Str};
 
-/// One provider descriptor, `declared` bytes of it and nothing after: what
-/// a library compiled before the newer fields hands over.
-fn short_provider(id: &'static str, declared: usize) -> *const ProviderInfo<'static> {
+/// One provider descriptor, `declared` bytes of it and nothing after.
+fn provider(id: &'static str, declared: usize) -> *const ProviderInfo<'static> {
     let full = ProviderInfo {
         struct_size: declared as u32,
         vtable_size: 0,
         kinds: Kinds::empty(),
         id: Str::new(id),
-        display_name: Str::new("Old"),
+        display_name: Str::new("Linked"),
         config: core::ptr::null(),
         vtable: core::ptr::null(),
         ctx: core::ptr::null_mut(),
@@ -54,7 +52,7 @@ fn short_provider(id: &'static str, declared: usize) -> *const ProviderInfo<'sta
 
 /// A library whose one provider is a floor-size descriptor at the floor
 /// stride.
-fn older_library() -> *const LibraryInfo<'static> {
+fn a_library() -> *const LibraryInfo<'static> {
     let floor = ProviderInfo::floor();
     Box::leak(Box::new(LibraryInfo {
         struct_size: size_of::<LibraryInfo>() as u32,
@@ -62,7 +60,7 @@ fn older_library() -> *const LibraryInfo<'static> {
         id: Str::new("old"),
         version: Str::new("0.1"),
         providers: Providers {
-            ptr: short_provider("old_provider", floor),
+            ptr: provider("old_provider", floor),
             len: 1,
             stride: floor,
         },
@@ -74,37 +72,32 @@ fn older_library() -> *const LibraryInfo<'static> {
 /// # Safety
 ///
 /// Called by the registry with its host descriptor.
-unsafe extern "C" fn older_entry(_host: *const HostInfo<'static>) -> *const LibraryInfo<'static> {
-    older_library()
+unsafe extern "C" fn entry(_host: *const HostInfo<'static>) -> *const LibraryInfo<'static> {
+    a_library()
 }
 
-fn registry_with_an_older_library() -> Registry {
+fn registry_with_a_library() -> Registry {
     let mut registry = Registry::new("lookups", "1.0");
     registry
-        .register_entry("old", older_entry)
-        .expect("an older library registers")
+        .register_entry("old", entry)
+        .expect("the library registers")
         .loaded()
         .expect("it accepts this host");
     registry
 }
 
-/// `get` reads an older descriptor under its own size: the fields it
-/// declares come back, the ones it predates read as absent.
+/// `get` reads the descriptor's every field.
 #[test]
-fn a_host_reads_an_older_descriptor_under_its_declared_size() {
-    let mut registry = registry_with_an_older_library();
+fn a_host_reads_the_descriptor_it_was_handed() {
+    let mut registry = registry_with_a_library();
     let host = registry.host();
     let view = host
         .get("old_provider")
         .expect("the host offers services")
         .expect("the provider is found");
     assert_eq!(view.id(), "old_provider");
-    assert_eq!(view.display_name(), "Old");
-    assert_eq!(
-        view.version(),
-        None,
-        "`version` sits past the declared size, so it is absent"
-    );
+    assert_eq!(view.display_name(), "Linked");
+    assert_eq!(view.version(), Some("9.9.9"));
     assert!(view.meta().is_none() && view.create().is_none());
     assert_eq!(view.available(), Ok(()));
 }
@@ -113,7 +106,7 @@ fn a_host_reads_an_older_descriptor_under_its_declared_size() {
 /// same way; an unknown key is `None`; a dropped registry is `GONE`.
 #[test]
 fn a_host_lists_what_it_gets() {
-    let mut registry = registry_with_an_older_library();
+    let mut registry = registry_with_a_library();
     let host = registry.host();
     let listed = host.list("").expect("the host offers services");
     assert_eq!(listed.len(), 1);

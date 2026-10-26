@@ -1251,7 +1251,7 @@ vtable, ctx, meta, version, available, tables, create, destroy }`;
 `HostInfo { struct_size,
 abi_version, host_id, host_version, alloc, meta, services }`;
 `HostServices { struct_size, ctx, get, list, alloc, get_pinned, list_pinned,
-pin, unpin }` (the last four appended together). `ABI_VERSION` is 1.
+pin, unpin }`. `ABI_VERSION` is 1.
 
 `Providers { ptr, len, stride }` and `Kinds { ptr, len }` — the provider
 array states its stride and the kind array does not, because a `Str`
@@ -1335,15 +1335,13 @@ provider.kind_descriptions()               // Result<Vec<KindDescription>, Descr
 loaded.meta                                // Option<Map>, the registry's copy
 ```
 
-**A provider carries its kinds' descriptions** (`ProviderInfo::kind_descriptions`,
-appended after `destroy`; `kind_descriptions_end()` is its guard): one
-JSON document `{"format":1,"kinds":[...]}` holding every kind it serves
+**A provider carries its kinds' descriptions** (`ProviderInfo::kind_descriptions`):
+one JSON document `{"kinds":[...]}` holding every kind it serves
 and every object kind their slots take or answer, each once, so a host
 binds a kind it has no `.kinds.json` for. `#[derive(Provider)]` writes it
 through `kind_document(&[<dyn K as Kind>::describe, ..])` (each
 `#[guatiao::kind]` describes itself and what it reaches; a hand-written
-`impl Kind` describes nothing); empty text, or a descriptor whose
-`struct_size` ends before the field, reads as none. Read lazily: a
+`impl Kind` describes nothing); empty text reads as none. Read lazily: a
 malformed document refuses at `kind_descriptions()`, never at load.
 guatiao-bridge's described providers and guatiao-source-remote's
 providers carry one too, written from the descriptions they serve.
@@ -1526,7 +1524,7 @@ lease keeps mapped. No handle keeps the descriptor itself.
   allocator the answer is wanted in, which allocates nothing (for a
   `Value`, ABSENT whose map arm records it). The shim reads it
   (`kind::return_alloc`, falling back to its own allocator for a null or
-  zeroed slot, an older host) and calls `<method>_in(.., alloc)`, which
+  zeroed slot) and calls `<method>_in(.., alloc)`, which
   `#[guatiao::kind]` adds to the trait beside every method answering a
   tree. Its default answers `<method>(..)`. An implementation that
   overrides `<method>_in` and builds with the `_in` forms hands its tree
@@ -1549,10 +1547,9 @@ fn greet_in(&self, name: &str, alloc: Alloc) -> Result<Map, ProviderError> {   /
 }
 greeter.greet_in("ana", arena)                // a host asking for the answer in an arena of its own
 ```
-- **`LibraryInfo::unload`** is the library's say, an appended slot:
+- **`LibraryInfo::unload`** is the library's say:
   `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
-  Null, or a descriptor from before the slot, means the library does not
-  support being unloaded. `providers!` always fills it; its long form's
+  Null means the library may be unmapped without being asked. `providers!` always fills it; its long form's
   `unload = <fn>` is asked after the counts, for what only the library
   knows: a thread of its own, a callback registered elsewhere. A
   hand-written descriptor sets the field.
@@ -1586,13 +1583,13 @@ host.get(key) -> Result<Option<ProviderView>, Status>   // read under the size i
 host.list(kind) -> Result<Vec<ProviderView>, Status>    // "" lists all; each pinned
 view.id() / .ctx() / .table_for(kind)
 host.offers::<dyn K>() / host.offer::<dyn K>(key) / host.mismatches::<dyn K>()
-host.snapshot() -> HostInfo                   // a copy, absent fields nulled
+host.snapshot() -> HostInfo                   // a copy
 ```
 
-- **Answers are descriptors the host built, read** under the
-  `struct_size` each declares, so an older host's shorter one reads its
-  newer fields as absent and nothing forms a reference past it. Text and
-  values are copied into the view; its tables are the host's copies.
+- **Answers are descriptors the host built, read** with every field this
+  build knows; one declaring a smaller `struct_size` is refused, and
+  nothing forms a reference past this build's fields. Text and values are
+  copied into the view; its tables are the host's copies.
 - **A view holds a pin**: `get`/`list` go through the host's
   `get_pinned`/`list_pinned`, the view (and every `Offer` and `Remote`
   taken from it) keeps the provider's library loaded while it lives, a
@@ -1604,8 +1601,8 @@ host.snapshot() -> HostInfo                   // a copy, absent fields nulled
 - `list` returns **every** provider claiming the kind, unavailable ones
   included, in the host's order. **There is no best-pick**: ask each
   (`view.available()`) and choose.
-- `Err(GUATIAO_ERR_NULL)`: the host offers no services (older host, or a
-  host that passed none). `Err(GUATIAO_ERR_GONE)`: the registry was
+- `Err(GUATIAO_ERR_NULL)`: the host offers no services (it passed none,
+  or a table smaller than this build's). `Err(GUATIAO_ERR_GONE)`: the registry was
   dropped; the block is still readable, the lookups are not.
 - A lookup from `describe` sees the libraries registered before this one.
   A provider that needs a peer looks it up from a vtable call, on every
@@ -2371,16 +2368,14 @@ dependency. Build the shipped artifact with `--features load` (or
 
 ## Appending to a descriptor
 
-Every descriptor leads with `struct_size`, and a reader decides field by
-field what the writer covered. **A slot is appended, never changed**: a
-changed meaning at an existing offset is silent memory corruption, not a
-version error. `floor()` on each type is the frozen size of its v1
-prefix, and each appended field has its own guard — `HostInfo::alloc_end()`,
-`HostInfo::meta_end()`, and so on.
-
-The guard is `>=` against offset-plus-size, not `>` against the offset, so
-a descriptor declaring only PART of a slot reads it as absent rather than
-splicing half a pointer with whatever followed.
+Every descriptor leads with `struct_size`, and `floor()` on each type is
+this build's whole struct: **every field this build knows is required**.
+A reader refuses a smaller `struct_size`, naming both sizes, and reads a
+larger one up to its own fields: that is a writer built with fields
+appended after them. **A slot is appended, never changed**: a changed
+meaning at an existing offset would be silent memory corruption, not a
+version error, so a change appending cannot express bumps
+`ABI_VERSION`, which a reader matches exactly.
 
 **`struct_size` cannot version an ARRAY's element size.** It places the
 fields within one element; finding element `i` needs the size the library
@@ -2390,13 +2385,9 @@ or an element whose own `struct_size` exceeds the stride (which would
 overlap its neighbour). `Providers::new(&SLICE)` sets the stride for you —
 a hand-set one is a number to get wrong exactly once.
 
-Appending `meta` is what this machinery is for, and it did not move
-`ABI_VERSION` or any `floor()`: a library built before it declares a
-shorter `struct_size`, and the host reads `meta` as absent.
-
-Reading a caller's struct must not start by making a reference to it — a
-reference asserts the whole pointee is dereferenceable, which a caller
-compiled before the last field was appended does not have.
+Reading a caller's struct starts with its leading `u32` alone, through the
+raw pointer: a reference would assert the whole pointee is
+dereferenceable before its size is known.
 
 ---
 

@@ -1392,6 +1392,13 @@ write now.
 
 ### Changed
 
+- **Every field of a descriptor this build knows is required.** A
+  `guatiao_host_info`, `guatiao_host_services`, `guatiao_library_info`,
+  `guatiao_provider_info`, `guatiao_kind_table`, `guatiao_source_info` or
+  `guatiao_alloc` declaring a `struct_size` below this build's is
+  refused, naming both sizes, and so is a provider or table array whose
+  stride is; a larger one is still read up to this build's fields. Each
+  `floor()` is the whole struct, and the `*_end()` guards are gone.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate

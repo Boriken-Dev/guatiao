@@ -462,7 +462,7 @@ static const guatiao_alloc *recorded_alloc(const guatiao_value *node, const guat
   case GUATIAO_BYTES: a = node->payload.bytes.alloc; break;
   default: break;
   }
-  if (a && a->struct_size >= offsetof(guatiao_alloc, free) + sizeof a->free && a->alloc && a->free) return a;
+  if (a && a->struct_size >= sizeof(guatiao_alloc) && a->alloc && a->free) return a;
   return fallback;
 }
 

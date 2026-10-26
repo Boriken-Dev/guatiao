@@ -27,21 +27,16 @@ use guatiao::{Alloc, List, Map, TryAsRef, Value};
 const COMMITTED: &str =
     include_str!("../../../examples/greeter_kind/include/greeter_kind.kinds.json");
 
-/// Each case: the provider's id, what it carries, and the `struct_size`
-/// it declares.
-fn case(k: usize) -> (&'static str, &'static str, usize) {
-    let full = size_of::<ProviderInfo>();
-    let before = ProviderInfo::destroy_end();
+/// Each case: the provider's id and what it carries.
+fn case(k: usize) -> (&'static str, &'static str) {
     [
-        ("carries_none", "", full),
-        ("carries_text", r#"{"format":1,"kinds":["#, full),
-        ("carries_greeters", COMMITTED, full),
-        // Text past the declared size is not the provider's to read.
-        ("predates_the_field", r#"{"format":2}"#, before),
+        ("carries_none", ""),
+        ("carries_text", r#"{"format":1,"kinds":["#),
+        ("carries_greeters", COMMITTED),
     ][k]
 }
 
-const CASES: usize = 4;
+const CASES: usize = 3;
 
 struct Names([Str<'static>; 1]);
 // SAFETY: a constant never written, whose pointer addresses a literal.
@@ -70,9 +65,9 @@ unsafe extern "C" fn entry<const K: usize>(
     _host: *const HostInfo<'static>,
 ) -> *const LibraryInfo<'static> {
     let described = DESCRIBED[K].get_or_init(|| {
-        let (id, text, size) = case(K);
+        let (id, text) = case(K);
         let providers = vec![ProviderInfo {
-            struct_size: size as u32,
+            struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: 0,
             kinds: Kinds::new(&KINDS.0),
             id: Str::new(id),
@@ -107,7 +102,7 @@ unsafe extern "C" fn entry<const K: usize>(
 }
 
 type Entry = unsafe extern "C" fn(*const HostInfo<'static>) -> *const LibraryInfo<'static>;
-const ENTRIES: [Entry; CASES] = [entry::<0>, entry::<1>, entry::<2>, entry::<3>];
+const ENTRIES: [Entry; CASES] = [entry::<0>, entry::<1>, entry::<2>];
 
 #[test]
 fn a_host_reads_what_each_provider_carries() {
@@ -127,7 +122,6 @@ fn a_host_reads_what_each_provider_carries() {
     };
 
     assert_eq!(of("carries_none"), Ok(Vec::new()));
-    assert_eq!(of("predates_the_field"), Ok(Vec::new()));
     let refused = of("carries_text").unwrap_err();
     assert_eq!(refused.at(), "byte 21", "{refused}");
     let read = of("carries_greeters").unwrap();
@@ -206,11 +200,9 @@ fn a_c_host_reads_the_document_or_absent_and_each_refusal_has_its_status() {
         (status, out)
     };
 
-    for none in ["carries_none", "predates_the_field"] {
-        let (status, out) = ask(none);
-        assert_eq!(status, Status::GUATIAO_OK, "{none}");
-        assert_eq!(out, Value::absent(), "{none}");
-    }
+    let (status, out) = ask("carries_none");
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(out, Value::absent());
     assert_eq!(ask("carries_text").0, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(ask("nobody").0, Status::GUATIAO_ERR_NOT_FOUND);
 

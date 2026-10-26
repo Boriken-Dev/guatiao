@@ -533,8 +533,7 @@ func Complete(alloc unsafe.Pointer) bool {
 		return false
 	}
 	a := (*C.guatiao_alloc)(alloc)
-	floor := C.uint32_t(unsafe.Offsetof(C.guatiao_alloc{}.free) + Word)
-	return a.struct_size >= floor && a.alloc != nil && a.free != nil
+	return a.struct_size >= C.uint32_t(unsafe.Sizeof(C.guatiao_alloc{})) && a.alloc != nil && a.free != nil
 }
 
 // Recorded is the allocator a container node records, when it is complete.

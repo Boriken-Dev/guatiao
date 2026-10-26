@@ -1642,11 +1642,9 @@ pub unsafe extern "C" fn guatiao_registry_best(
 /// `size_out` may be null; when it is not, it receives the declared size.
 ///
 /// **This is the moment a caller takes on the kind's contract.** The
-/// envelope defines no vtable: check the declared size against the frozen
-/// floor of the `kind` you believe this is, project each field through the
-/// pointer, and guard every field appended after that floor. A shorter
-/// table than you expect is an OLDER library, which is the case the size
-/// exists to let you support rather than reject.
+/// envelope defines no vtable: refuse a declared size below the table of
+/// the `kind` you believe this is, and read only the slots that table
+/// has; a larger one is a table with slots appended after them.
 ///
 /// The pointer is this registry's copy of the library's table, valid until
 /// that provider's library is closed: unloaded, or collected once retired.
