@@ -10,7 +10,11 @@
 use alloc::fmt;
 use core::ptr;
 
+use core::borrow::BorrowMut;
+use core::hash::BuildHasher;
 use core::marker::PhantomData;
+use std::collections::HashMap;
+use std::collections::hash_map::{Entry as Slot, RandomState};
 
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::convert::MapError;
@@ -491,32 +495,16 @@ impl Map {
     /// is freed with `from` exactly once.
     pub(crate) fn absorb(&mut self, from: Map, alloc: Alloc) -> Result<usize, ValueError> {
         let mut from = from;
+        // Reversed, so each entry is taken from the end in constant time.
+        from.entries_mut().reverse();
+        let mut into = Filling::new(self);
         let mut n = 0;
-        let mut result = Ok(());
-        while let Some(entry) = from.take_first() {
+        while let Some(entry) = from.pop_last() {
             let (key, value) = entry.into_parts();
-            result = self.set_node(&key, value, alloc);
-            if result.is_err() {
-                break;
-            }
+            into.set_in(&key, value, alloc)?;
             n += 1;
         }
-        result?;
         Ok(n)
-    }
-
-    /// Removes the first entry, keeping the order of the rest.
-    fn take_first(&mut self) -> Option<Entry> {
-        if self.len == 0 {
-            return None;
-        }
-        // SAFETY: the first entry is initialised.
-        let out = unsafe { self.ptr.read() };
-        // SAFETY: closing the hole it left. At `len == 1` the source is a
-        // legal one-past-the-end pointer and the count is zero.
-        unsafe { ptr::copy(self.ptr.add(1), self.ptr, self.len - 1) };
-        self.len -= 1;
-        Some(out)
     }
 
     /// The map `ptr` points at, its keys checked: how a map C hands over
@@ -791,8 +779,11 @@ impl<K: AsRef<str>, V: Into<Value>> FromIterator<(K, V)> for Map {
 /// refuses.
 impl<K: AsRef<str>, V: Into<Value>> Extend<(K, V)> for Map {
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
+        let alloc = short_form_alloc(self.alloc());
+        let mut into = Filling::new(self);
         for (key, value) in iter {
-            self.set(key.as_ref(), value);
+            let stored = into.set_in(key.as_ref(), value.into(), alloc);
+            or_abort(stored, core::alloc::Layout::new::<Entry>());
         }
     }
 }
@@ -840,5 +831,140 @@ impl Entry {
     /// for. Use `remove` and `set` for that.
     pub fn value_mut(&mut self) -> &mut Value {
         &mut self.value
+    }
+}
+
+// --- finding keys in a wide map ----------------------------------------------
+
+/// Up to this many keys, a key is found by comparing it with every one.
+const SCAN: usize = 16;
+
+/// Where the first key with each seeded hash sits in a map's entries:
+/// how a wide map is searched without a scan per key. The map itself has
+/// no index, since its layout is the C one.
+#[derive(Debug)]
+struct KeyIndex(HashMap<u64, usize>);
+
+impl KeyIndex {
+    fn of(entries: &[Entry]) -> KeyIndex {
+        let mut index =
+            HashMap::with_capacity_and_hasher(entries.len().saturating_mul(2), RandomState::new());
+        for (at, entry) in entries.iter().enumerate() {
+            let hash = index.hasher().hash_one(entry.key());
+            index.entry(hash).or_insert(at);
+        }
+        KeyIndex(index)
+    }
+
+    fn hash(&self, key: &str) -> u64 {
+        self.0.hasher().hash_one(key)
+    }
+
+    /// The first position of `key` in `entries`, which this indexes.
+    fn find(&self, entries: &[Entry], key: &str) -> Option<usize> {
+        let at = *self.0.get(&self.hash(key))?;
+        if entries[at].key() == key {
+            return Some(at);
+        }
+        // Another key with the same seeded hash: rare enough that the
+        // scan stays off the common path.
+        entries.iter().position(|e| e.key() == key)
+    }
+}
+
+/// A map being filled, where a repeated key replaces the value stored
+/// first and keeps its place, as [`Map::set`] does. Past [`SCAN`] keys
+/// that place is found through a hash of the key, so N stores are linear
+/// in N; nothing else may change the map while it is being filled.
+#[derive(Debug)]
+pub(crate) struct Filling<M: BorrowMut<Map>> {
+    map: M,
+    index: Option<KeyIndex>,
+}
+
+impl<M: BorrowMut<Map>> Filling<M> {
+    pub(crate) fn new(map: M) -> Filling<M> {
+        Filling { map, index: None }
+    }
+
+    /// Stores `value` under `key`; a refused store frees it.
+    pub(crate) fn set_in(
+        &mut self,
+        key: &str,
+        value: Value,
+        alloc: Alloc,
+    ) -> Result<(), ValueError> {
+        let map = self.map.borrow_mut();
+        if self.index.is_none() && map.len() > SCAN {
+            self.index = Some(KeyIndex::of(map.entries()));
+        }
+        let Some(index) = &mut self.index else {
+            return map.set_node(key, value, alloc);
+        };
+        let hash = index.hash(key);
+        match index.0.entry(hash) {
+            Slot::Vacant(room) => {
+                let at = map.len();
+                map.insert_node(key, value, alloc)?;
+                room.insert(at);
+            }
+            Slot::Occupied(first) => {
+                let entries = map.entries_mut();
+                let at = match *first.get() {
+                    at if entries[at].key() == key => Some(at),
+                    _ => entries.iter().position(|e| e.key() == key),
+                };
+                match at {
+                    Some(at) => entries[at].value = value,
+                    None => map.insert_node(key, value, alloc)?,
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `key` is stored.
+    pub(crate) fn contains_key(&mut self, key: &str) -> bool {
+        let map: &Map = self.map.borrow();
+        if self.index.is_none() && map.len() > SCAN {
+            self.index = Some(KeyIndex::of(map.entries()));
+        }
+        match &self.index {
+            Some(index) => index.find(map.entries(), key).is_some(),
+            None => map.contains_key(key),
+        }
+    }
+
+    pub(crate) fn into_map(self) -> M {
+        self.map
+    }
+}
+
+/// A map read by key many times: past [`SCAN`] keys each lookup goes
+/// through a hash of the key rather than a scan. Answers what
+/// [`Map::get`] answers, the first entry under a key.
+#[derive(Debug)]
+pub(crate) struct Lookup<'a> {
+    entries: &'a [Entry],
+    index: Option<KeyIndex>,
+}
+
+impl<'a> Lookup<'a> {
+    pub(crate) fn new(map: &'a Map) -> Lookup<'a> {
+        let entries = map.entries();
+        let index = (entries.len() > SCAN).then(|| KeyIndex::of(entries));
+        Lookup { entries, index }
+    }
+
+    pub(crate) fn get(&self, key: &str) -> Option<&'a Value> {
+        let at = match &self.index {
+            Some(index) => index.find(self.entries, key)?,
+            None => self.entries.iter().position(|e| e.key() == key)?,
+        };
+        Some(&self.entries[at].value)
+    }
+
+    pub(crate) fn contains_key(&self, key: &str) -> bool {
+        self.get(key).is_some()
     }
 }

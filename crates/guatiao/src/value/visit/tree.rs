@@ -10,9 +10,6 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::hash::BuildHasher;
-use std::collections::HashMap;
-use std::collections::hash_map::{Entry as Slot, RandomState};
 
 use super::{
     Build, FromWalk, ListVisitor, ListWalker, MapVisitor, MapWalker, Seed, Sink, Visitor, Walk,
@@ -21,75 +18,11 @@ use super::{
 use crate::value::alloc::Alloc;
 use crate::value::convert::{Kinds, MapError, TryAsRef, copied};
 use crate::value::error::{MAX_DEPTH, ValueError};
+use crate::value::types::map::Filling;
 use crate::value::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
 
 /// How many elements a length hint may reserve room for.
 const RESERVE: usize = 1024;
-
-/// Up to this many keys, a map being filled finds a repeated key by
-/// comparing with every earlier one.
-const SCAN: usize = 16;
-
-/// A map being filled from events, where a repeated key replaces the
-/// value stored first and keeps its place. Past [`SCAN`] keys that place
-/// is found through a hash of the key: a walk of bytes anyone wrote can
-/// name as many keys as it likes, and a scan per key is quadratic in them.
-#[derive(Debug)]
-struct Filling {
-    map: Map,
-    /// Each key's hash, and where the first key with that hash sits.
-    index: Option<HashMap<u64, usize>>,
-}
-
-impl Filling {
-    fn new(map: Map) -> Filling {
-        Filling { map, index: None }
-    }
-
-    fn set_in(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
-        let Some(index) = &mut self.index else {
-            self.map.set_in(key, value, alloc)?;
-            if self.map.len() > SCAN {
-                let mut index = HashMap::with_capacity_and_hasher(
-                    self.map.len().saturating_mul(2),
-                    RandomState::new(),
-                );
-                for (at, entry) in self.map.entries().iter().enumerate() {
-                    let hash = index.hasher().hash_one(entry.key());
-                    index.entry(hash).or_insert(at);
-                }
-                self.index = Some(index);
-            }
-            return Ok(());
-        };
-        let hash = index.hasher().hash_one(key);
-        match index.entry(hash) {
-            Slot::Vacant(room) => {
-                let at = self.map.len();
-                self.map.insert_node(key, value, alloc)?;
-                room.insert(at);
-            }
-            Slot::Occupied(first) => {
-                let entries = self.map.entries_mut();
-                let at = match *first.get() {
-                    at if entries[at].key() == key => Some(at),
-                    // Another key with the same seeded hash: rare enough
-                    // that the scan stays off the common path.
-                    _ => entries.iter().position(|e| e.key() == key),
-                };
-                match at {
-                    Some(at) => entries[at].value = value,
-                    None => self.map.insert_node(key, value, alloc)?,
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn into_map(self) -> Map {
-        self.map
-    }
-}
 
 // --- a value walks itself --------------------------------------------------
 
@@ -462,7 +395,7 @@ own_container!(
 enum Open {
     List(List),
     Map {
-        map: Filling,
+        map: Filling<Map>,
         key: String,
         keyed: bool,
     },
