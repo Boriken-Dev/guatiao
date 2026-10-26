@@ -1291,6 +1291,17 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: large calls, and frames sent together, cost
+  fewer copies and writes.** A large last text or bytes argument, and a
+  large tree answered, go as their frame's tail from where they lie
+  instead of being copied into it; a frame's parts, and every frame
+  queued together, leave in one vectored write over TCP, Unix sockets
+  and shared memory. Measured locally, provisionally: 4 MiB round trips
+  7-29 % faster on every local transport on Windows and in a Linux VM on
+  it (from Windows to the VM, no change beyond the spread), and 32
+  threads of small calls over TCP 20-38 % faster. A large tree answered
+  goes as a tail only for a slot that writes nothing back. The bytes on
+  the wire are the same.
 - **guatiao-source-remote: a server takes its kinds from the providers it
   serves.** A provider's own descriptions (`Provider::kind_descriptions()`,
   carried by derived and bridged providers) describe its kinds, so
