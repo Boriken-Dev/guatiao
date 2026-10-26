@@ -41,7 +41,7 @@ configuration map:
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `security` | `none`, `server-tls` or `mutual-tls` ([Security](#security)): `mutual-tls` on a network unless named; a child, `local://` and `shm://` run `none` alone |
 | `key`, `key_file` | the pre-shared key: text, or a file's bytes; proved both ways with `none`, and at server TLS when the server asks for it |
-| `token` | what a client presents when its server requires a token |
+| `token` | what a client presents when its server requires a token; one empty or only white space is refused |
 | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 | `identity_file` | TLS: the identity file instead of `state_dir` (made when absent) |
 | `pins` | TLS: a list of the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
@@ -932,7 +932,9 @@ key, a token or both, and a client asked for a key it does not hold
 ends the link. At the other levels the proof is empty. A server reached
 over a network compares a client's token with its own by their SHA-256
 digests, every byte, so how long a refusal takes says nothing of either
-token's length.
+token's length. A server requiring a token refuses a client presenting
+none, and a token empty or only white space is refused at either end:
+it would prove nothing.
 
 ### The catalog
 
