@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +29,10 @@ static void double_text(double d, char *buf, size_t n) {
     if (d == 0 && signbit(d)) snprintf(buf, n, "-0");
     return;
   }
-  for (int p = 1; p <= 17; p++) {
+  /* A normal double is within half a unit of the 15th digit of its shortest
+     text, so 15 digits with `%g`'s trailing zeros dropped is that text whenever
+     it reads back; a subnormal has fewer digits and is searched from one. */
+  for (int p = fabs(d) >= DBL_MIN ? 15 : 1; p <= 17; p++) {
     snprintf(buf, n, "%.*g", p, d);
     if (strtod(buf, NULL) == d) return;
   }
