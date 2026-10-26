@@ -7,7 +7,7 @@
 //!
 //! | key | holds |
 //! | --- | --- |
-//! | `connect` | `tcp://host:port`, `ws://host:port/path` (WebSocket, as a browser connects), `tls://host:port` (the secure level), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
+//! | `connect` | `tcp://host:port`, `ws://host:port/path` (WebSocket, as a browser connects), `tls://host:port` (the secure level), `quic://host:port` (the secure level over QUIC), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
 //! | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `trust` | `local`, `trusted` or `secure`; `local` for a child |
@@ -240,6 +240,21 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
                 .map_err(|e| refused(e.to_string()))?;
             Ok((Box::new(connect), options_of(map, trust)?))
         }
+        #[cfg(feature = "quic")]
+        "quic" => {
+            if trust != Trust::Secure {
+                return Err(refused("`quic://` runs the secure level"));
+            }
+            let config = tls_config_of(map)?;
+            let connect = crate::transport::quic::QuicConnect::new(rest, &config)
+                .map_err(|e| refused(e.to_string()))?;
+            Ok((Box::new(connect), options_of(map, trust)?))
+        }
+        #[cfg(not(feature = "quic"))]
+        "quic" => Err(ProviderError::new(
+            Status::GUATIAO_ERR_UNSUPPORTED,
+            "`quic://` is not in this build (guatiao-source-remote's `quic` feature)",
+        )),
         #[cfg(feature = "ws")]
         "ws" => {
             if trust != Trust::Trusted {

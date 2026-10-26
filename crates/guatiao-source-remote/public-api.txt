@@ -46,6 +46,7 @@ pub struct guatiao_source_remote::link::Link
 impl guatiao_source_remote::link::Link
 pub fn guatiao_source_remote::link::Link::alive(&self) -> bool
 pub fn guatiao_source_remote::link::Link::close(&self, &str, &str)
+pub fn guatiao_source_remote::link::Link::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
 pub fn guatiao_source_remote::link::Link::end(&self)
 pub fn guatiao_source_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guatiao_bridge::kinds::Kinds>
 pub fn guatiao_source_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>
@@ -408,6 +409,24 @@ impl core::fmt::Debug for guatiao_source_remote::transport::local::LocalListen
 pub fn guatiao_source_remote::transport::local::LocalListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao_source_remote::transport::memory
 pub fn guatiao_source_remote::transport::memory::pair() -> (guatiao_source_remote::transport::Connection, guatiao_source_remote::transport::Connection)
+pub mod guatiao_source_remote::transport::quic
+pub struct guatiao_source_remote::transport::quic::QuicConnect
+impl guatiao_source_remote::transport::quic::QuicConnect
+pub fn guatiao_source_remote::transport::quic::QuicConnect::new(&str, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::quic::QuicConnect>
+pub fn guatiao_source_remote::transport::quic::QuicConnect::timeout(self, core::time::Duration) -> guatiao_source_remote::transport::quic::QuicConnect
+impl core::fmt::Debug for guatiao_source_remote::transport::quic::QuicConnect
+pub fn guatiao_source_remote::transport::quic::QuicConnect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::quic::QuicConnect
+pub fn guatiao_source_remote::transport::quic::QuicConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
+pub fn guatiao_source_remote::transport::quic::QuicConnect::describe(&self) -> alloc::string::String
+pub struct guatiao_source_remote::transport::quic::QuicListen
+impl guatiao_source_remote::transport::quic::QuicListen
+pub fn guatiao_source_remote::transport::quic::QuicListen::accept(&self) -> core::io::error::Result<guatiao_source_remote::transport::tcp::Accepted>
+pub fn guatiao_source_remote::transport::quic::QuicListen::bind(&str, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::quic::QuicListen>
+pub fn guatiao_source_remote::transport::quic::QuicListen::from_socket(std::net::udp::UdpSocket, &guatiao_source_remote::transport::tls::TlsConfig) -> core::io::error::Result<guatiao_source_remote::transport::quic::QuicListen>
+pub fn guatiao_source_remote::transport::quic::QuicListen::local_addr(&self) -> core::io::error::Result<core::net::socket_addr::SocketAddr>
+impl core::fmt::Debug for guatiao_source_remote::transport::quic::QuicListen
+pub fn guatiao_source_remote::transport::quic::QuicListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao_source_remote::transport::rdma
 pub struct guatiao_source_remote::transport::rdma::RdmaConnect
 impl guatiao_source_remote::transport::rdma::RdmaConnect
@@ -473,6 +492,7 @@ impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::trans
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::new(R) -> guatiao_source_remote::transport::stream::StreamReader<R>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::with_timeout(R, impl core::ops::function::FnMut(&R, core::option::Option<core::time::Duration>) -> core::io::error::Result<()> + core::marker::Send + 'static) -> guatiao_source_remote::transport::stream::StreamReader<R>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::transport::FrameRead for guatiao_source_remote::transport::stream::StreamReader<R>
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
@@ -593,6 +613,9 @@ pub fn guatiao_source_remote::transport::child::ChildCommand::describe(&self) ->
 impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::local::LocalConnect
 pub fn guatiao_source_remote::transport::local::LocalConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
 pub fn guatiao_source_remote::transport::local::LocalConnect::describe(&self) -> alloc::string::String
+impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::quic::QuicConnect
+pub fn guatiao_source_remote::transport::quic::QuicConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
+pub fn guatiao_source_remote::transport::quic::QuicConnect::describe(&self) -> alloc::string::String
 impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::rdma::RdmaConnect
 pub fn guatiao_source_remote::transport::rdma::RdmaConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
 pub fn guatiao_source_remote::transport::rdma::RdmaConnect::describe(&self) -> alloc::string::String
@@ -608,11 +631,17 @@ pub fn guatiao_source_remote::transport::tls::TlsConnect::describe(&self) -> all
 impl guatiao_source_remote::transport::Connect for guatiao_source_remote::transport::ws::WsConnect
 pub fn guatiao_source_remote::transport::ws::WsConnect::connect(&self) -> core::io::error::Result<guatiao_source_remote::transport::Connection>
 pub fn guatiao_source_remote::transport::ws::WsConnect::describe(&self) -> alloc::string::String
+pub trait guatiao_source_remote::transport::Datagrams: core::marker::Send + core::marker::Sync
+pub fn guatiao_source_remote::transport::Datagrams::max_size(&self) -> core::option::Option<usize>
+pub fn guatiao_source_remote::transport::Datagrams::recv(&self, core::option::Option<core::time::Duration>) -> core::io::error::Result<core::option::Option<alloc::vec::Vec<u8>>>
+pub fn guatiao_source_remote::transport::Datagrams::send(&self, &[u8]) -> core::io::error::Result<()>
 pub trait guatiao_source_remote::transport::FrameRead: core::marker::Send
+pub fn guatiao_source_remote::transport::FrameRead::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
 pub fn guatiao_source_remote::transport::FrameRead::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::FrameRead::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::FrameRead::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::transport::FrameRead for guatiao_source_remote::transport::stream::StreamReader<R>
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::peer_id(&self) -> core::option::Option<alloc::string::String>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
@@ -680,6 +709,7 @@ pub struct guatiao_source_remote::Link
 impl guatiao_source_remote::link::Link
 pub fn guatiao_source_remote::link::Link::alive(&self) -> bool
 pub fn guatiao_source_remote::link::Link::close(&self, &str, &str)
+pub fn guatiao_source_remote::link::Link::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
 pub fn guatiao_source_remote::link::Link::end(&self)
 pub fn guatiao_source_remote::link::Link::kinds(&self) -> alloc::sync::Arc<guatiao_bridge::kinds::Kinds>
 pub fn guatiao_source_remote::link::Link::list(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::library::kind::ProviderError>

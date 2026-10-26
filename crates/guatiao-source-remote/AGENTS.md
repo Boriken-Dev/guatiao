@@ -16,6 +16,7 @@ until they are published there.
 | --- | --- |
 | `tcp` | trusted TCP: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`), admission by access control list (`coqui-net-acl`, re-exported as `acl`) |
 | `tls` | `tcp` and `transport::tls`: the secure level, mutual TLS 1.3 (`coqui-peer`, `coqui-peer-tls`, `rustls` with ring) |
+| `quic` | `tls` and `transport::quic`: the secure level over QUIC, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
 | `ws` | `tcp` and `transport::ws`: WebSocket at the trusted level, what a browser opens (`tungstenite`, no TLS) |
@@ -82,7 +83,7 @@ server.end_links(); server.links(); server.links_holding(); server.objects_out()
 Serves every provider of a kind `described` describes; others are left
 out of the catalog. The catalog's `kinds` lists each description once.
 
-Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | ws://ADDR | tls://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
+Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | ws://ADDR | tls://ADDR | quic://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
 `--trust`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`,
 `--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`..., `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
@@ -92,10 +93,10 @@ at once; past it a new one is closed unread. A refused source (denied by
 the access control list, or failing its handshake) is reported at most
 once a minute per address, with how often it was held back (past 1024
 addresses in a minute, a new one goes unreported).
-The trusted level needs `--range` or `--acl`; `tls://` needs `--trust
-secure` and `--state-dir` or `--identity`. The first stderr line is
-`guatiao-remote-server: serving SCHEME://ADDR ...` (at `tls://`, `as
-sha256:<hex>`, the fingerprint a client pins).
+The trusted level needs `--range` or `--acl`; `tls://` and `quic://`
+need `--trust secure` and `--state-dir` or `--identity`. The first stderr
+line is `guatiao-remote-server: serving SCHEME://ADDR ...` (at `tls://`
+and `quic://`, `as sha256:<hex>`, the fingerprint a client pins).
 
 ## Links
 
@@ -105,7 +106,7 @@ LinkOptions::new(Trust::{Local, Trusted, Secure})
     .timeout(Option<Duration>) .handshake_timeout(Duration)
     .spin(Duration)    // the most a waiting thread polls before it sleeps; zero never polls
 // defaults: 64 MiB frames, 64 calls, 30 s per call, 10 s handshake, 200 µs spin
-link.alive() link.why() link.peer() link.peer_id() link.trust() link.list() link.open(id, stamp)
+link.alive() link.why() link.peer() link.peer_id() link.datagrams() link.trust() link.list() link.open(id, stamp)
 link.close(id, stamp) link.kinds() link.ping() link.end()
 LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 ```
@@ -139,7 +140,8 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 ## Transports (`transport`)
 
 ```rust
-trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn set_timeout(..); fn peer_id(&self) -> Option<String> }
+trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn set_timeout(..); fn peer_id(&self) -> Option<String>; fn datagrams(&self) -> Option<Arc<dyn Datagrams>> }
+trait Datagrams { fn send(&self, &[u8]) -> io::Result<()>; fn recv(&self, Option<Duration>) -> io::Result<Option<Vec<u8>>>; fn max_size(&self) -> Option<usize> }
 trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frames(&mut self, &[&[u8]]); fn write_frame_parts(&mut self, head, tail); fn set_timeout(..); fn shutdown(&mut self) }
 struct Connection { reader, writer, peer: String, closer: Option<Box<dyn Fn()>> }
 trait Connect { fn connect(&self) -> io::Result<Connection>; fn describe(&self) -> String }
@@ -157,6 +159,8 @@ tls::{TlsConfig::fingerprint(), weakened(), identity(), trust_store()}
 tls::{TlsConnect::new("host:port", &TlsConfig)?.timeout(d), TlsListen::bind(addr, &TlsConfig)?, TlsListen::from_listener(TcpListener, &TlsConfig)?}
 tls::TlsListen::accept() -> io::Result<tcp::Accepted>      // the handshake runs on the first read
 tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening, IDENTITY_FILE}   // coqui-peer-tls's
+quic::{QuicConnect::new("host:port", &TlsConfig)?.timeout(d), QuicListen::bind(addr, &TlsConfig)?, QuicListen::from_socket(UdpSocket, &TlsConfig)?}   // quic
+quic::QuicListen::accept() -> io::Result<tcp::Accepted>    // the handshake runs on the first read
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
 ws::{WsConnect::new("ws://host:port/path").timeout(d), WsListen::bind(addr, Acl)?}   // ws
@@ -166,7 +170,7 @@ rdma::{RdmaListen::from_listener(TcpListener, Acl)?, RdmaListen::accept() -> io:
 rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices() -> io::Result<Vec<String>>, RING, SETUP_TIMEOUT}
 ```
 
-- **Admission.** `TcpListen`, `WsListen`, `RdmaListen` and `TlsListen`
+- **Admission.** `TcpListen`, `WsListen`, `RdmaListen`, `TlsListen` and `QuicListen`
   bind any address, a wildcard included; nothing about the address or
   the list is refused (an empty `Acl` denies every peer). The first rule
   matching the source (and the local address and port) decides, else
@@ -195,6 +199,24 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   not trust it, with its own fingerprint; one whose link the server ends
   before its first answer otherwise is told the server most likely
   refused it.
+- **QUIC** (`quic`): the same `TlsConfig`, trust, policy, ALPN, waiting
+  entries (with the address the client came from), refusals and words
+  as TLS; resumption follows the policy (off). One bidirectional stream
+  per link carries the frames. `accept` proves a client's address with a
+  Retry, then refuses a denied source before any handshake; connection
+  migration is off, so a link keeps the address it was admitted from.
+  Datagrams (`FrameRead::datagrams`, `Link::datagrams`) are
+  the payload alone, one QUIC DATAGRAM frame each, lost or whole; before
+  the server's handshake `send` is `NotConnected` and `max_size` `None`;
+  past `max_size` `InvalidInput`. quinn runs on a 2-thread tokio runtime
+  per `QuicConnect` and per `QuicListen`; a thread waits on it by
+  polling under its handle, so a caller inside another tokio runtime
+  does not panic. A clean end (`shutdown`, or `closer` when no write is
+  under way) finishes the stream, waits up to 2 s for the peer to
+  acknowledge it, then closes with code 1; code 0 (a `closer` during a
+  write, or a connection dropped unclosed) the peer reads as an error. A
+  server refusing after the handshake closes with code 2; any TLS alert
+  is a refusal (`PermissionDenied`, so `BAD_VALUE`), never `GONE`.
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it. `write_frames` gets frames queued while another
   thread wrote: by default one `write_frame` each, a stream writes them
@@ -255,7 +277,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`, `ws://host:port/path`, `tls://host:port`, `local://name`, `shm://name`, `rdma://host:port` |
+| `connect` | `tcp://host:port`, `ws://host:port/path`, `tls://host:port`, `quic://host:port`, `local://name`, `shm://name`, `rdma://host:port` |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 | `child` | list: the server program and its arguments |
 | `trust` | `local`, `trusted`, `secure` (`local` for a child; required for `connect`) |
@@ -270,7 +292,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 
 A scheme this build lacks is `GUATIAO_ERR_UNSUPPORTED`, naming it, as is
 `trust = "secure"` in a build without `tls`. Each scheme runs one level
-(`tls://` the secure one); another is `BAD_VALUE`. `config::{acl_of,
+(`tls://` and `quic://` the secure one, with the same keys); another is `BAD_VALUE`. `config::{acl_of,
 policy_of, tls_config_of}` read those values.
 
 A peer manifest (`docs/encodings.md`, "A peer"): `type = "remote"`,

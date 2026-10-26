@@ -9,9 +9,9 @@
 //! guatiao-remote-bench run URL [options]     five metrics against it, one JSON line
 //! ```
 //!
-//! URL is `tcp://`, `tls://`, `local://`, `shm://` or, built with the
+//! URL is `tcp://`, `tls://`, `quic://`, `local://`, `shm://` or, built with the
 //! `rdma` feature, `rdma://` (the address of its TCP set-up). Options:
-//! `--key TEXT` (tcp, rdma), `--identity PATH` (tls: both ends present
+//! `--key TEXT` (tcp, rdma), `--identity PATH` (tls, quic: both ends present
 //! the identity in this file, made when absent, and each pins it),
 //! `--mss N` (tcp, Unix: caps the segment size, as on a path without
 //! jumbo frames), `--spin MICROSECONDS` (how long a waiting thread polls before it
@@ -163,7 +163,7 @@ fn split(url: &str) -> Result<(&str, &str), String> {
 fn options(scheme: &str, a: &Args) -> LinkOptions {
     let trust = match scheme {
         "tcp" | "rdma" => Trust::Trusted,
-        "tls" => Trust::Secure,
+        "tls" | "quic" => Trust::Secure,
         _ => Trust::Local,
     };
     let mut o = LinkOptions::new(trust);
@@ -210,7 +210,7 @@ fn tls_config(a: &Args) -> Result<transport::tls::TlsConfig, String> {
     let path = a
         .identity
         .as_deref()
-        .ok_or("tls:// needs --identity PATH")?;
+        .ok_or("tls:// and quic:// need --identity PATH")?;
     let identity =
         Identity::open_or_create(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let me = identity.fingerprint();
@@ -297,6 +297,18 @@ fn serve(a: &Args) -> Result<(), String> {
                 }
             }
         }
+        "quic" => {
+            use guatiao_source_remote::transport::tcp::Accepted;
+            let listen = transport::quic::QuicListen::bind(address, &tls_config(a)?)
+                .map_err(|e| e.to_string())?;
+            loop {
+                match listen.accept() {
+                    Ok(Accepted::Connection(c)) => serve_one(Ok(c)),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("accept: {e}"),
+                }
+            }
+        }
         "local" => {
             let listen = transport::local::LocalListen::bind(address).map_err(|e| e.to_string())?;
             loop {
@@ -337,6 +349,10 @@ impl FrameRead for CountRead {
 
     fn peer_id(&self) -> Option<String> {
         self.0.peer_id()
+    }
+
+    fn datagrams(&self) -> Option<Arc<dyn transport::Datagrams>> {
+        self.0.datagrams()
     }
 }
 
@@ -419,6 +435,10 @@ fn connector(scheme: &str, address: &str, a: &Args) -> Result<Box<dyn Connect>, 
         }),
         "tls" => Box::new(
             transport::tls::TlsConnect::new(address, &tls_config(a)?).map_err(|e| e.to_string())?,
+        ),
+        "quic" => Box::new(
+            transport::quic::QuicConnect::new(address, &tls_config(a)?)
+                .map_err(|e| e.to_string())?,
         ),
         "local" => Box::new(transport::local::LocalConnect::new(address)),
         "shm" => Box::new(transport::shm::ShmConnect::new(address)),

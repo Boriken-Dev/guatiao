@@ -5,9 +5,10 @@
 //! What a link runs over: something that reads and writes whole frames.
 //!
 //! A byte stream (TCP, a Unix socket, a pipe, a child's stdio, a shared
-//! memory ring) carries each frame behind its `u32` length, as the link
-//! builds it; a message transport (a WebSocket, a QUIC datagram) carries
-//! the body alone, one frame per message.
+//! memory ring, a QUIC stream) carries each frame behind its `u32` length,
+//! as the link builds it; a message transport (a WebSocket) carries the
+//! body alone, one frame per message. QUIC also carries [`Datagrams`]
+//! beside the frames.
 
 #![deny(unsafe_code)]
 
@@ -15,6 +16,8 @@ pub mod child;
 #[cfg(feature = "local")]
 pub mod local;
 pub mod memory;
+#[cfg(feature = "quic")]
+pub mod quic;
 #[cfg(feature = "rdma")]
 pub mod rdma;
 #[cfg(feature = "shm")]
@@ -28,6 +31,7 @@ pub mod tls;
 #[cfg(feature = "ws")]
 pub mod ws;
 
+use alloc::sync::Arc;
 use core::time::Duration;
 use std::io;
 
@@ -51,6 +55,32 @@ pub trait FrameRead: Send {
     fn peer_id(&self) -> Option<String> {
         None
     }
+
+    /// Datagrams beside the link's frames, on a transport that has them
+    /// (QUIC); `None` elsewhere. A wrapper forwards it.
+    fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
+        None
+    }
+}
+
+/// Datagrams beside a link's frames: each delivered whole or not at all,
+/// in any order, for what a caller accepts losing (a wire channel's
+/// samples, a sensor's readings). A datagram is the bytes given and
+/// nothing more, so a peer in any language reads it with its own stack.
+pub trait Datagrams: Send + Sync {
+    /// Sends one. Refused (`InvalidInput`) past [`max_size`](Datagrams::max_size),
+    /// `Unsupported` when the peer takes none, `NotConnected` before the
+    /// transport's handshake or after the link ended.
+    fn send(&self, payload: &[u8]) -> io::Result<()>;
+
+    /// The next one, waiting at most `timeout` (`None`: while the link
+    /// lives); `Ok(None)` when the wait ran out. An error once the link
+    /// ended.
+    fn recv(&self, timeout: Option<Duration>) -> io::Result<Option<Vec<u8>>>;
+
+    /// The largest payload the path takes now; `None` before the
+    /// handshake, or when the peer takes none.
+    fn max_size(&self) -> Option<usize>;
 }
 
 /// Writes whole frames.

@@ -33,7 +33,8 @@ library it loaded itself, in any language.
   (a few microseconds a call); TCP at the trusted level: peers admitted
   by an access control list, a pre-shared key proved both ways; TLS 1.3
   at the secure level: mutual TLS, each side known by its certificate's
-  fingerprint, unknown clients waiting until an operator accepts them.
+  fingerprint, unknown clients waiting until an operator accepts them;
+  the same over QUIC, with datagrams beside the calls.
 
 ## Installation
 
@@ -46,6 +47,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | --- | --- | --- |
 | `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP at the trusted level |
 | `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3 at the secure level |
+| `quic` | `tls`, `quinn`, `tokio` | the secure level over QUIC, with datagrams |
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
 | `ws` | `tcp`, `tungstenite` | WebSocket at the trusted level: what a browser page connects to |

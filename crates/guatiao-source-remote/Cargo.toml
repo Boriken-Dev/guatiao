@@ -40,6 +40,12 @@ tcp = ["dep:hmac", "dep:sha2", "dep:getrandom", "dep:coqui-net-acl"]
 # unknown clients waiting in a trust store until an operator accepts them.
 tls = ["tcp", "dep:coqui-peer", "dep:coqui-peer-tls", "dep:rustls"]
 
+# QUIC, the secure level over UDP: the same mutual TLS 1.3 and trust as
+# `tls`, one QUIC stream per link for frames and datagrams beside it.
+# quinn runs on a small tokio runtime inside the transport; the link
+# itself stays on threads.
+quic = ["tls", "dep:quinn", "dep:tokio"]
+
 # The same machine by name, at the local level: a Unix socket (std) on
 # Unix, a named pipe on Windows.
 local = ["dep:interprocess"]
@@ -79,6 +85,10 @@ coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "d01b690
 coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "d940fac026a7e93db153ff4584aee130f2a6b882", optional = true, features = ["generate", "serde", "acl"] }
 # The TLS state the link's threads share; coqui-peer-tls's version.
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
+# QUIC (the `quic` feature): quinn with rustls on ring, and the runtime
+# it runs on.
+quinn = { version = "0.11.12", optional = true, default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+tokio = { version = "1.47", optional = true, default-features = false, features = ["rt-multi-thread", "time", "net"] }
 # The shared rings' file, mapped.
 memmap2 = { version = "0.9", optional = true }
 # WebSocket framing and its HTTP upgrade; no TLS.
@@ -107,6 +117,9 @@ serde_json = "1"
 coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "d01b6907859029fad23e5d97398146a03c313ffe" }
 coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "d940fac026a7e93db153ff4584aee130f2a6b882", features = ["generate"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+# The QUIC tests' own clients (an impostor, a server agreeing no protocol).
+quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+tokio = { version = "1.47", default-features = false, features = ["rt-multi-thread", "time", "net"] }
 
 [lints]
 workspace = true
