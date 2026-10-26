@@ -1634,7 +1634,12 @@ write now.
   each looked every key up by scanning, so 100 000 keys took minutes in
   a debug build. They find keys through a hash past 16 now; a repeated
   key, or two keys of a std map writing one text, still replaces the
-  first in its place. `guatiao_map_set` stays a scan per call, and its
+  first in its place. That hash is the wire readers': each key hashed
+  once, under seeds drawn once per build, into a table with room for the
+  map's count when the builder is given one. The same goes for a `Value`
+  built by a `TreeSink`, and so for C visitors and JSON, TOML and YAML
+  read into a value: two hundred keys from JSON text are built in about
+  five sixths of the time they took. `guatiao_map_set` stays a scan per call, and its
   documentation now says so.
 
 - **Layering two long lists with `MergeMode::Deep` is linear in their

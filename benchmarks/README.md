@@ -445,6 +445,55 @@ separates `decode_as::<Value>` from `decode`, about 3 us here, is the
 builder's path itself: each value read through the generic walk, each
 key copied out of the reader before its value is read.
 
+## A wide map built by a builder that replaces repeats (`filling-keys*.json`)
+
+The 200 keys built into a tree by the builder that replaces a repeated
+key in place: from their JSON text (`json_keys_tree`, a `TreeSink` the
+parser gives no count) and from their tree walked into a `TreeSink`
+(`sink_keys_tree`, given the count). Before, that builder's index hashed
+each key with SipHash and the hash again, made at the seventeenth key
+and grown on the way; after, it hashes each key once with the wire
+readers' hash, under seeds drawn once per build, made at the first key
+with room for the count when there is one. Local and provisional: five
+alternating runs of three rounds each, Windows ARM64 at high priority
+and Linux on it. Microseconds per call, median.
+
+| metric | Windows before | Windows after | Linux before | Linux after |
+| --- | --- | --- | --- | --- |
+| 200 keys from JSON text, `json::from_str` | 28.28 | 23.91 | 30.24 | 24.72 |
+| 200 keys walked into a `TreeSink` | 21.47 | 16.37 | 21.77 | 14.92 |
+| configuration from JSON text, `json::from_str` then `from_value` | 15.83 | 16.38 | 17.35 | 17.01 |
+| configuration from JSON text, `json::from_str_as` | 6.65 | 6.68 | 6.55 | 6.61 |
+| 200 keys into a tree, `decode` | 14.58 | 16.95 | 14.63 | 14.28 |
+| 200 keys into a tree, `decode_as::<Value>` | 17.11 | 19.21 | 18.35 | 17.58 |
+| 200 keys to wire bytes, `to_bytes_of` | 5.85 | 5.82 | 6.30 | 6.31 |
+| 200 keys walked, bytes | 5.78 | 6.59 | 6.11 | 6.09 |
+
+The configuration's maps hold five keys or fewer and never reach the
+index. The last four rows are the wire readers and writer, their code
+unchanged but for `#[inline]` on the reader's `slice`. On Windows three
+of them are 12-16% slower, and the cause is where the compiler put the
+code, not the code: a release build splits the crate into sixteen units
+and inlines across them only what is marked inline, and the larger
+`map.rs` moved that split. Linux shows no such change, and on Windows
+with `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1` (`filling-keys-cgu1*.json`)
+the same rows are unchanged or faster while the builders gain as above:
+
+| metric, one codegen unit, Windows | before | after |
+| --- | --- | --- |
+| 200 keys from JSON text, `json::from_str` | 25.19 | 21.24 |
+| 200 keys walked into a `TreeSink` | 19.23 | 13.37 |
+| 200 keys into a tree, `decode` | 12.78 | 13.08 |
+| 200 keys into a tree, `decode_as::<Value>` | 15.65 | 15.00 |
+| 200 keys to wire bytes, `to_bytes_of` | 5.86 | 5.87 |
+| 200 keys walked, bytes | 7.30 | 6.48 |
+
+The bytes walk's 5.8 before is the default split's luck: built with
+line tables, the same code ran no faster than 8.8. A linker map showed the
+change's split had moved `Reader::slice` out of the readers' loops;
+`#[inline]` on it brought the bytes walk from 8.17 to 7.39 in a direct
+comparison, and stays.
+
 ## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
 
 A document to a binding's plain objects and back, three ways: through a
