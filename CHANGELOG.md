@@ -179,8 +179,9 @@ write now.
   now writes it the same way: the document crosses once as wire bytes,
   read and written in the MEX gateway, which walks MATLAB data once for
   a tree or for the bytes. Measured locally in Octave on a structured
-  document: 1.1x to 1.2x; slower for one large string written out. The
-  gateway spells a double from 15 significant digits up, as R now does.
+  document: 1.1x to 1.2x, and 1.07x for one large string written out.
+  The gateway spells a double from 15 significant digits up, as R now
+  does.
 - **R: a document straight to R data and back.** `guatiao.serde` gains
   `serde_data(text, format, read_data_uris, numbers)`, answering what
   `value_data(serde_parse(text))` does with no value built, and
@@ -188,10 +189,10 @@ write now.
   way: the document crosses once as wire bytes, read and written in the
   package's C. `guatiao_r_api` appends `wire_of` and
   `read_wire_and_free`, what they are built on. Measured locally on a
-  structured document: 1.06x to 1.5x; slower for one large string
-  written out. R spells a double from 15 significant digits up where it
-  searched from one, which made writing 10k floats about three times
-  faster either way.
+  structured document: 1.06x to 1.5x; within a tenth for one large
+  string written out. R spells a double from 15 significant digits up
+  where it searched from one, which made writing 10k floats about three
+  times faster either way.
 - **Julia: a document straight to plain data and back.**
   `GuatiaoSerde.parse(Any, text; format, how)` answers what
   `parse(text)[]` does with no `Value` built: the library hands each event
@@ -200,7 +201,7 @@ write now.
   data writes wire bytes in Julia and crosses once instead of building a
   tree. `Guatiao.FFI.read_plain` and `julia_to_wire` are what they are
   built on. Measured locally on a structured document: 1.2x to 1.9x;
-  slower for one large string written out.
+  as fast for one large string written out.
 - **Node and Go: a document straight to the language's own data and
   back.** Node's `guatiao-serde` gains `parse(text, { format, how,
   numbers, maps })`, answering what `loads(...).toJS()` does, and
@@ -212,8 +213,8 @@ write now.
   in the binding's own language: Node's `wireToJS`/`jsToWire` in
   `guatiao/ffi`, Go's `guatiao.MarshalWire`/`UnmarshalWire`. Measured
   locally on a structured document: 8x to 25x faster in Node, 1.5x to
-  4.5x in Go; slower for a document that is one large string, which is
-  copied once more.
+  4.5x in Go; for a document that is one large string, 1.5x in Node and
+  slower in Go, which copies it once more.
 - **Providers a language bridge or a remote peer serves carry their
   kinds' descriptions.** A provider guatiao-bridge builds from an
   engine's declaration (the Lua, Rhai, JavaScript and WebAssembly

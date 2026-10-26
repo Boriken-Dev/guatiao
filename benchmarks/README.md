@@ -526,8 +526,9 @@ Julia is the one binding where callbacks win reading: an `@cfunction`
 call from C costs a few nanoseconds, so building plain data per event
 beats decoding bytes in Julia, and both beat reading a tree (whose nodes
 the library allocates and frees). Writing, the tape wins on documents
-with structure; one large string is the exception again, copied once
-more on its way through the bytes.
+with structure. One large string was the exception, copied once more
+on its way through the bytes and a byte at a time: see "One large string
+written out".
 
 ## Documents to R data (`documents-r.json`)
 
@@ -563,8 +564,8 @@ one digit up, rendering the 10k floats took 7250 microseconds both ways.
 The package takes the tape for both. R's value path was already C on
 both sides of one crossing, so the tape saves the tree built and freed in
 between and no more; most of the time left is making R objects and
-spelling numbers. One large string is slower through the bytes, as in
-every binding.
+spelling numbers. One large string was slower through the bytes, for
+its UTF-8 check: see "One large string written out".
 
 ## Documents to MATLAB and Octave data (`documents-octave.json`)
 
@@ -598,8 +599,40 @@ MATLAB was not measured.
 The gateway takes the tape for both: it saves the tree built and freed in
 between, and little else, since Octave's own arrays cost most of the
 time (making one per element reading, inspecting one per element
-writing). One large string is slower through the bytes, as in every
-binding.
+writing). One large string was slower through the bytes, for its UTF-8
+check: see "One large string written out".
+
+## One large string written out
+
+`{"blob": "x" * 2^20}` rendered through the tape and through a value,
+before and after each binding's writer was changed: Node copies long
+ASCII text as Latin-1 on Node 22, whose `encodeInto` is about ten times
+slower than Node 24's, and grows its buffer to what a write needs;
+Julia copies text in one block where `append!` copied a byte at a time;
+R and the MEX gateway check UTF-8 eight ASCII bytes at a time where they
+checked one. The library writes the string as fast from wire bytes as
+from a tree (from C in Linux: 363-373 us either way), so what remained
+was each writer's own. Local and provisional, the documents benchmarks
+above, the two builds alternated (Node four runs, the others three),
+medians of the runs' medians, microseconds.
+
+| 1 MiB string, render | value | tape before | tape after | value / tape after |
+| --- | --- | --- | --- | --- |
+| Node 22, Windows ARM64 | 1189 | 976 | 787 | 1.5x |
+| Julia 1.13, Linux | 423 | 666 | 444 | 0.95x |
+| R 4.6, Linux | 1312 | 2188 | 1438 | 0.91x |
+| Octave 10.3, Linux | 1415 | 2127 | 1327 | 1.07x |
+
+Every other case of those benchmarks is unchanged beyond the spread. The
+writers alone, on that string: Node 22 0.71 ms to 0.22 ms (Node 24 0.37
+to 0.32), Julia 0.39 to 0.05, R 0.91 to 0.13. Two kinds of tape writer
+have nothing left to take: Go's `MarshalWire` spends about 0.09 ms of a
+1.3 ms render (its UTF-8 check 0.02, one copy), the rest being the
+crossing and the library as in the value path; Fortran writes through
+`guatiao_*_emit_walker`, and a C walker handing the library the string
+measured the same as building a tree from it and emitting that (399-415
+against 399-413 us, Linux). Dart's writer was not changed: `utf8.encode`
+takes about 3 ms of its 4 ms under the JIT.
 
 ## guatiao-source-remote across a link (`remote-*.jsonl`)
 
