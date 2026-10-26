@@ -158,9 +158,13 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`NotConnected`). Any path is accepted; no subprotocol, no extension,
   the `Origin` header unread (the key proof is the gate). A text
   message, an unmasked client frame or a message over `max` is an error;
-  a close or a dropped connection between messages is the clean end.
-  Each frame is copied once into a message. `wss://` is refused
-  `Unsupported`: the secure level lives outside this build.
+  a close or a dropped connection ends the reads as a stream's end of
+  file does (tungstenite does not tell a drop inside a message from one
+  between).
+  The reader answers a ping or a close only when the writer is not
+  writing, else on a later read. A frame is copied into a message on its
+  way out. `wss://` is refused `Unsupported`: the secure level lives
+  outside this build.
 - **Shared memory**: the client creates the file (`/dev/shm`, else the
   temporary directory; `0600`; removed once mapped on Unix, deleted with
   its last handle on Windows), sends its path once over the local
