@@ -224,6 +224,30 @@ user installed in the browser, chosen by the user. So from a page:
   link.token` in place of `--key-file`, every client then presenting the
   file's text (a last line end left out).
 
+**Over WebTransport (`https://`).** A page opens WebTransport to a
+server's `https://` URL and pins its certificate by hash: no
+certificate authority, no name, no browser flag, which suits a device on
+a network. The page passes the hashes the server says (`certificate
+hashes`, or its `--hashes-file`):
+
+```ts
+const link = await RemoteLink.connect('https://192.0.2.21:7443/', {
+  security: 'server-tls', key, pins: ['sha256:9f86d0...', 'sha256:60303a...'],
+});
+```
+
+```dart
+final link = await RemoteLink.connect(Uri.parse('https://192.0.2.21:7443/'),
+    security: RemoteSecurity.serverTls, key: keyBytes,
+    tls: RemoteTls(pins: hashes));
+```
+
+Server TLS and none work from a page; mutual TLS needs the browser to
+present a client certificate, which Chrome did not to a test profile
+holding none (with one a user installed: not measured). Without pins the
+browser trusts the server as it trusts any site. The Dart VM and Node have
+no WebTransport: there `https://` is `Unsupported`.
+
 On the Dart VM, which owns its TLS, `RemoteTls(pins: [...], identity:
 pem)` pins the server by fingerprint and presents an identity file's
 certificate, so a Dart program reaches a `wss://` server at mutual TLS

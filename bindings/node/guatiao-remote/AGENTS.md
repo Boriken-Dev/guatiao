@@ -15,10 +15,11 @@ open `ws://` is `http://`, secure only on localhost. Nothing of the
 ## A link
 
 ```ts
-RemoteLink.connect(url: string | URL, options?: LinkOptions): Promise<RemoteLink>  // ws:// or wss://
+RemoteLink.connect(url: string | URL, options?: LinkOptions): Promise<RemoteLink>  // ws://, wss:// or https:// (WebTransport)
 RemoteLink.over(channel: RemoteChannel, options: LinkOptions & { trust?: RemoteTrust }): Promise<RemoteLink>
 interface LinkOptions {
-  security?: RemoteSecurity;          // 'none' | 'server-tls' | 'mutual-tls' (default); ws:// runs none alone, wss:// the others
+  security?: RemoteSecurity;          // 'none' | 'server-tls' | 'mutual-tls' (default); ws:// runs none alone, wss:// the others, https:// any
+  pins?: readonly string[];           // https:// only: 'sha256:<hex>' of the server's certificate, the browser's serverCertificateHashes
   key?: Uint8Array | string;          // the pre-shared key (a string is UTF-8): required with none; at server TLS proved when the server asks
   token?: string;                     // what this side presents when the server requires a token (server TLS: key or token required)
   timeout?: number | null;            // ms a call waits; default 30 000; null: as long as the link lives
@@ -37,6 +38,15 @@ link.objectsHeld: number              // objects of this side's the peer holds
 link.trust: RemoteTrust
 ```
 
+- **WebTransport** (`https://host:port/path`): a browser's only (Node has
+  none: `Unsupported`). `pins` (the hashes the server says as
+  `certificate hashes`) become `serverCertificateHashes`; without them
+  the browser trusts the server as any site. One bidirectional stream
+  carries each frame behind its `u32` LE length; a frame over `maxFrame`
+  ends the link. A session that does not open, or a certificate matching
+  no pin, rejects `Gone`; `mutual-tls` needs a client certificate the
+  browser presents (Chrome presented none to a profile holding none). `pins` with a `ws://` or `wss://` URL is a
+  `TypeError`.
 - A wrong key rejects `BadValue` ("the server does not hold this link's
   key") before the link is up; a server that cannot be reached, or does
   not answer the handshake in time, rejects `Gone`; a GOODBYE in the

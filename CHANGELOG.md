@@ -14,6 +14,14 @@ write now.
 
 ### Added
 
+- **A page's remote link over WebTransport, in Dart and TypeScript.**
+  `RemoteLink.connect('https://...')` opens the browser's WebTransport,
+  the server's certificate pinned by hash (`pins` in TypeScript,
+  `RemoteTls(pins: ...)` in Dart, the browser's
+  `serverCertificateHashes`), at no security or server TLS (mutual TLS
+  needs a client certificate the browser presents). One stream carries
+  the frames behind their length. The Dart VM and Node have no
+  WebTransport: `Unsupported` there. Tested in Chrome.
 - **guatiao-source-remote: WebTransport** (feature `webtransport`, off by
   default). `https://host:port/path` is an HTTP/3 session over QUIC, what
   a browser opens with `new WebTransport(url)`: `quic://`'s TLS, trust,

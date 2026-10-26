@@ -581,8 +581,9 @@ WebSocket in plain Dart: no native library, no module, the same code on
 the VM, under dart2js and under dart2wasm. The server is
 `guatiao-remote-server --listen ws://ADDRESS:PORT --security none --range
 CIDR --key-file PATH ...`, or `--listen wss://... --security server-tls`
-(or mutual TLS, the default) (the Rust crate `guatiao-source-remote`,
-feature `ws`, and `tls` for `wss://`).
+(or mutual TLS, the default), or for a page `--listen https://...`
+(WebTransport) (the Rust crate `guatiao-source-remote`, feature `ws`,
+`tls` for `wss://`, `webtransport` for `https://`).
 
 ```dart
 final link = await RemoteLink.connect(Uri.parse('ws://192.0.2.21:7000/'),
@@ -609,9 +610,18 @@ await link.close();
   or on the VM `tls`'s identity; a `token` if the server asks). A URL
   that disagrees, or nothing to prove with, is an `ArgumentError` before
   anything opens. `RemoteTls({List<String> pins, String? identity})`, the
-  VM only (a page passing it is an `ArgumentError`): pins alone decide the
-  server (`sha256:<hex>` of its DER certificate; no certificate authority
-  then), `identity` is PEM text of a certificate and its PKCS#8 key.
+  VM only over `ws`/`wss` (a page passing it there is an `ArgumentError`):
+  pins alone decide the server (`sha256:<hex>` of its DER certificate; no
+  certificate authority then), `identity` is PEM text of a certificate
+  and its PKCS#8 key. **`https://host:port/path`** is WebTransport, a
+  page's only (on the VM `Unsupported`), at any of the three securities:
+  `RemoteTls(pins: hashes)` becomes the browser's
+  `serverCertificateHashes` (what the server says as `certificate
+  hashes`); an `identity` there is an `ArgumentError`, and mutual TLS
+  needs a client certificate the browser presents (else `Gone`).
+  One bidirectional stream carries each frame behind its `u32` LE
+  length; a frame over `maxFrame` ends the link. A session that does not
+  open, or a certificate matching no pin, is `Gone`.
   `RemoteLink.over(RemoteChannel,
   {RemoteTrust trust = trusted, List<int>? key, String? token, ...})` runs
   the handshake over any message transport: `RemoteChannel` is `messages`

@@ -59,7 +59,10 @@ encryption, and whoever reads the page holds the key. Serve the page only
 to those who may call the device. Over `wss://` the link runs server TLS
 (`security: 'server-tls'`: the browser checks the server's certificate,
 the page proves the key or a token inside TLS) or mutual TLS, the
-default (with a client certificate the browser's user installed).
+default (with a client certificate the browser's user installed). Over
+WebTransport (`https://`, a browser's), the page pins the server's own
+certificate by its hash (`pins`, which the server prints), so a device
+needs no certificate authority.
 
 ## Documentation
 

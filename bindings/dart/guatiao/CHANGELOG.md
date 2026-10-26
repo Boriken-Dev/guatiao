@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A page's remote link over WebTransport**: `RemoteLink.connect` takes
+  an `https://` URL in a browser, the server's certificate pinned by hash
+  through `RemoteTls(pins: ...)` (`serverCertificateHashes`), at no
+  security, server TLS or mutual TLS where the browser presents a
+  certificate; on the Dart VM it is `Unsupported`.
+
 - **A kind born in Dart** (`package:guatiao/describe.dart`): abstract
   interface classes spelled with its marks (`U32`, `Lent<MapRef>`,
   `Taken<Listener>`, `MapAnswer`, `implements ObjectKind`, `@fallible`,
