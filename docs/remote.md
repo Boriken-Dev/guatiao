@@ -90,14 +90,16 @@ Every refresh reads the manifests again. Each is a peer named by its
 `name`, and serves its libraries and providers as `<name>/<id>`
 (`lab-printer/printer`, `lab-printer/printer_status`), so identical
 devices sit in one registry under the default keys. An edited manifest,
-or a replaced key file, is a new peer over a new link, and the old link
-ends then: should the new peer's library not open, the refusal is
-reported and the old one answers `GUATIAO_ERR_GONE` until the next
-change. A removed manifest takes its peer's libraries with it. A manifest that describes no peer is
+or a replaced key file, is a new peer over a new link; the old peer keeps
+its link until the registry lets go of every library it opened, so
+should the new peer not be reached or its library not open, the refusal
+is reported and the old library goes on answering. A removed manifest
+takes its peer's libraries with it. A manifest that describes no peer is
 reported in words naming the file, as is a peer that cannot be reached;
 the others are served, and an unreachable peer's libraries stay listed,
-answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed one
-after another, so a peer slow to refuse a connection slows the refresh.
+answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed at once
+(up to 16 connecting together), so a peer slow to refuse a connection
+costs a refresh one wait, not one per peer.
 A manifest names its key by file, never inline, since it lies in a
 search path; a secure peer's manifest names its `pins` and `policy`, and
 the identity this host presents to it by `identity_file` or `state_dir`,
