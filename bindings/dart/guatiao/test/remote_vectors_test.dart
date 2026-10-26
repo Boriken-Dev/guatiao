@@ -264,6 +264,25 @@ void main() {
       expect(() => FrameReader(body).value(), throwsA(isA<MalformedFrame>()));
     });
 
+    test('an integer past 53 bits is a BigInt under JavaScript', () {
+      // 2^60 is a JavaScript number exactly, and still past what one holds
+      // safely: the frames' own integers answer a BigInt for it there.
+      for (final text in [
+        '1152921504606846976',
+        '-1152921504606846976',
+        '9007199254740993',
+      ]) {
+        final big = BigInt.parse(text);
+        final data = dartToWire(big);
+        for (final got in [wireToDartStrict(data), wireToDart(data)]) {
+          expect(got, jsNumbers ? big : big.toInt(), reason: text);
+          expect(got, jsNumbers ? isA<BigInt>() : isA<int>(), reason: text);
+        }
+      }
+      final safe = dartToWire(9007199254740991);
+      expect(wireToDartStrict(safe), isA<int>());
+    });
+
     test('a leading U+FEFF is text, kept as text', () {
       for (final text in ['\ufeffabc', '\ufeff\ufeff', '\ufeff']) {
         final data = dartToWire(text);

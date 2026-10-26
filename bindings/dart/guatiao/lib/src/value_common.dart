@@ -52,6 +52,15 @@ class Absent {
 /// The one [Absent].
 const Absent absent = Absent._();
 
+/// Whether `int` is a JavaScript number (dart2js).
+const bool _jsNumbers = identical(1, 1.0);
+
+/// Whether [whole] is an `int` here: 64 bits on the VM and dart2wasm, 53
+/// under dart2js, where `isValidInt` also takes any integer a double holds
+/// exactly (2^60 among them), past what one holds safely.
+bool _fitsInt(BigInt whole) =>
+    _jsNumbers ? whole.bitLength <= 53 : whole.isValidInt;
+
 /// A number's exact text as Dart, by [numbers]: an integer is an `int`
 /// only where the platform's `int` holds it exactly (64 bits on the VM
 /// and dart2wasm, 53 under dart2js), a `BigInt` otherwise.
@@ -66,7 +75,7 @@ Object numberFromText(String text, Numbers numbers) {
         return double.parse(text);
       }
       final whole = BigInt.parse(text);
-      return whole.isValidInt ? whole.toInt() : whole;
+      return _fitsInt(whole) ? whole.toInt() : whole;
   }
 }
 
@@ -77,5 +86,5 @@ int? intFromText(String text) {
     return null;
   }
   final whole = BigInt.tryParse(text);
-  return whole != null && whole.isValidInt ? whole.toInt() : null;
+  return whole != null && _fitsInt(whole) ? whole.toInt() : null;
 }
