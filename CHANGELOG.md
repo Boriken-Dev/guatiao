@@ -14,6 +14,20 @@ write now.
 
 ### Added
 
+- **`guatiao-remote`, guatiao's remote protocol in TypeScript** (npm,
+  new package). A browser page, or Node 22 and later, calls the providers
+  a `guatiao-remote-server` serves over a WebSocket, as the Dart client
+  does: `RemoteLink.connect(url, { key })`, `list()`, `open(library)`,
+  `table.call(slot, args)`, objects of the server's as `RemoteObject`,
+  the page's own as `Served` (called back while a call is open; a call
+  made from a handler names it with `{ during: call }`). Calls are typed
+  by the catalog's kind descriptions; trees cross as plain data as the
+  `guatiao` package maps them, 64-bit integers as a `bigint` past 2^53.
+  Plain TypeScript with no Node API and nothing of `guatiao` (no koffi);
+  the key proof is HMAC-SHA256 from `@noble/hashes`, which works on a
+  plain `http://` page where WebCrypto does not. It passes the shared
+  vectors, and its suites run in Node and in headless Chrome against the
+  server. `docs/remote.md` has "A page".
 - **guatiao-remote-server: a bound on handshakes in flight.** At most
   `--max-handshakes` connections (64 by default) are in their handshake
   at once; past it a new connection is closed unread. A source the access

@@ -157,6 +157,41 @@ status's exception (`BadValue`, `Gone`, ...), a lost link answers `Gone`
 for every open call, and a call past its timeout (30 s by default) is
 cancelled.
 
+A page written in TypeScript or JavaScript uses the npm package
+`guatiao-remote`: the same client in plain TypeScript, which runs in any
+browser and in Node 22 and later, and needs nothing of the `guatiao`
+package (no koffi, no native library):
+
+```ts
+import { RemoteLink, RemoteObject, Served } from 'guatiao-remote';
+
+const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { key });
+const catalog = await link.list();
+const library = catalog.libraries.find((l) => l.id === 'derived_greeter')!;
+await link.open(library);
+const greeter = library.providers[0]!.table('greeter')!;
+console.log(await greeter.call('greet', ['web']));     // { greeting: 'hello, web' }
+
+const heard: string[] = [];
+const listener = new Served('listener', { heard: ([text]) => void heard.push(text as string) });
+const chat = (await greeter.call('start', [listener])) as RemoteObject;
+await chat.call('say', ['hi']);                        // heard: ['hi']
+chat.release();
+link.close();
+```
+
+A tree crosses as plain data as the `guatiao` package maps it
+(`undefined` absent, objects, arrays, strings, numbers, `Uint8Array`), a
+64-bit integer as a `number` while it is a safe integer and a `bigint`
+beyond, and a lent object, array or buffer is written back in place. The
+key proof is HMAC-SHA256 from `@noble/hashes`: WebCrypto exists only in a
+secure context, and a page that may open `ws://` is a plain `http://`
+page, secure only on localhost. A browser has no context that follows a
+call across `await`, so a handler of a `Served` that calls back into the
+server while the server's call is open names it:
+`table.call(slot, args, { during: call })`, `call` being the handler's
+second argument; the server then runs it as part of that call.
+
 The page holds the key, so whoever reads the page can link: serve the
 page only to those who may call the device, and keep the server's ranges
 to the network they are on. The server does not read the `Origin` a
@@ -549,7 +584,8 @@ Every implementation, in any language, speaks the same frames. The
 shared vectors are `crates/guatiao-source-remote/tests/vectors/remote.json`;
 `crates/guatiao-source-remote/tests/c/` holds a codec, a client and a server
 written in C over guatiao's C API, and the Dart client
-(`bindings/dart/guatiao/lib/src/remote/`) passes the same vectors.
+(`bindings/dart/guatiao/lib/src/remote/`) and the TypeScript one
+(`bindings/node/guatiao-remote/`) pass the same vectors.
 
 ### Frames
 

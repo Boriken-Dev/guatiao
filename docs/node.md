@@ -383,6 +383,13 @@ from Node's thread that waits for such a thread never returns.
   koffi cannot do inside a call a library is making: describe kinds and
   build libraries at module level.
 
+## A page, or Node, as a client of a server
+
+Calling the providers a `guatiao-remote-server` serves over a WebSocket
+needs none of this package: `guatiao-remote` is guatiao's remote protocol
+in plain TypeScript, for a browser page or Node, with no native library
+(see [remote](remote.md), "A page").
+
 ## The examples
 
 - `examples/node_host/` scans for greeters in any language, registers
