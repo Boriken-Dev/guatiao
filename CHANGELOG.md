@@ -21,6 +21,16 @@ write now.
   imports the object kinds a separate document describes instead of
   refusing them. Node's `kindsOf` loads an object kind that names itself
   through its slots, or one naming it back, which it refused before.
+- **Go: a kind born in Go is written as its description.**
+  `guatiao-kind -document <file>` reads a package's `//guatiao:kind`
+  interfaces, with no description or header behind them, into the
+  description document and writes the glue from it. Doc comments carry
+  the docs, and `//guatiao:` directives say what a Go type cannot: the
+  appended slots' interfaces, a slot that cannot fail, an argument lent,
+  handed over, nullable or written in place. The floor hash is the one
+  `#[guatiao::kind]` gives the same required slots unless
+  `//guatiao:floorhash` pins one. `examples/tally_kind/go` describes byte
+  for byte as the TypeScript declaration of the same kinds.
 - **Python: a kind born in Python is written as its description.** A
   `KindProtocol` class naming its kind but no `floor_hash` gets the floor
   hash `#[guatiao::kind]` would give the same required slots, and

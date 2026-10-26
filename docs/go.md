@@ -107,6 +107,53 @@ reads the same from the C header, for a kind with no description), and
 kind with no header at all, such as one written in TypeScript, gets its
 glue from its description alone; the marker's C table name is then left
 out (`//guatiao:kind tally`).
+
+**A kind born in Go** has no description to read: `guatiao-kind
+-document <file>` reads the interfaces into one, writes it there, and
+writes the glue from it. A Go type says most of what a description
+holds; a directive in a doc comment says the rest. On the kind's
+interface, `//guatiao:appended` names the interfaces of its appended
+slots in table order, and `//guatiao:floorhash N` pins a hash, which is
+otherwise computed as Rust would compute it for the same required slots.
+On a method, `//guatiao:infallible` says the slot cannot fail, and
+`//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable` and
+`//guatiao:mut` name the arguments lent for the call, handed over, a
+`Ref` that may be null, and bytes written in place. Doc comments are the
+description's docs. `examples/tally_kind/go` declares the tally kinds
+this way, and they describe byte for byte as the TypeScript declaration
+of the same kinds does:
+
+```go
+// Counts by name.
+//
+//guatiao:kind tally
+//guatiao:appended AllCounter Knower Checksummer Reporter Loader
+type Tally interface {
+	// Adds `by` to the count under `name`: the new count, or why not.
+	Add(name string, by uint32) (int64, error)
+	// The count under `name`: 0 when there is none.
+	//
+	//guatiao:infallible
+	Total(name string) (int64, error)
+}
+
+// Appended: tells `watcher` each count, for this call alone.
+type Reporter interface {
+	//guatiao:lent watcher
+	Report(watcher Watcher) error
+}
+```
+
+| Go type | in the description |
+| --- | --- |
+| `string` | `str`; answered, `text` |
+| `[]byte` | `bytes`; marked `mut`, `bytes_mut` |
+| `bool`, `int8`..`int64`, `uint8`..`uint64`, `int`, `uint`, `float32`, `float64` | the scalar (`int` is `isize`, `uint` `usize`) |
+| `guatiao.Ref`, `MapRef`, `ListRef` | a `value`, `map` or `list` borrowed (a list only lent); marked `lent`, lent; a `Ref` marked `nullable`, one that may be null |
+| `*guatiao.Value` | a `value` handed over; answered, a `value` |
+| a struct or map type, a slice, `any` | a `map`, a `list`, a `value` the binding converts: borrowed, or marked `taken`; answered, the same |
+| an object kind's interface | an `object` handed over; marked `lent`, lent; answered, the object |
+
 Every method returns an `error` last. A tree answered may be any Go type:
 the binding converts Go values and trees as `encoding/json` does, structs
 by their `guatiao` (or `json`) tags. The binding's
@@ -303,3 +350,6 @@ goroutine, as its provider allows. What C holds of a Go value is a
   `examples/go_provider/cshared/` the same library as a file.
 - `examples/greeter_kind/go/` holds the greeter kinds as interfaces, and
   the glue `guatiao-kind` wrote for them.
+- `examples/tally_kind/go/` holds the tally kinds born in Go, the glue
+  written from the document they describe as, and a test serving them
+  from Go and calling every slot.
