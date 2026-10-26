@@ -4,7 +4,8 @@
 
 /// The remote protocol's shared vectors: every frame both ways, every
 /// argument list and answer typed by the greeter kinds' descriptions,
-/// every malformed body refused where the file says, every proof.
+/// every malformed body refused where the file says, every proof; and the
+/// wire encoding's own, which a peer's values are read against.
 library;
 
 import 'dart:convert';
@@ -15,12 +16,15 @@ import 'package:guatiao/src/remote/args.dart';
 import 'package:guatiao/src/remote/codec.dart';
 import 'package:guatiao/src/remote/described.dart';
 import 'package:guatiao/src/remote/proof.dart';
-import 'package:guatiao/src/tape.dart' show dartToWire;
+import 'package:guatiao/src/tape.dart'
+    show dartToWire, wireToDart, wireToDartStrict;
+import 'package:guatiao/src/value_common.dart' show Numbers, numberFromText;
 import 'package:test/test.dart';
 
 import 'support.dart';
 
 late final Map<String, Object?> _vectors;
+late final Map<String, Object?> _wire;
 late final Map<String, RemoteKind> _kinds;
 
 List<Map<String, Object?>> _list(String key) =>
@@ -194,6 +198,81 @@ void main() {
       for (final k in document['kinds'] as List)
         (k as Map)['name'] as String: RemoteKind.fromDescription(k),
     };
+    _wire =
+        jsonDecode(
+              await readRepoText([
+                'crates',
+                'guatiao',
+                'tests',
+                'vectors',
+                'wire.json',
+              ]),
+            )
+            as Map<String, Object?>;
+  });
+
+  group("the wire encoding's shared vectors, as a peer's values are read", () {
+    // A tree as plain Dart, a number as the docs say it reads.
+    Object? plain(List<Object?> tree) => switch (tree[0] as String) {
+      'number' => numberFromText(tree[1] as String, Numbers.auto),
+      'list' => [
+        for (final item in tree[1] as List) plain(item as List<Object?>),
+      ],
+      'map' => {
+        for (final pair in tree[1] as List)
+          (pair as List)[0] as String: plain(pair[1] as List<Object?>),
+      },
+      _ => _tree(tree),
+    };
+
+    List<Map<String, Object?>> wire(String key) =>
+        (_wire[key] as List).cast<Map<String, Object?>>();
+
+    test('every value decodes to its tree', () {
+      final cases = wire('values');
+      expect(cases, hasLength(21));
+      for (final c in cases) {
+        final data = _hex(c['hex'] as String);
+        final got = wireToDartStrict(data);
+        final name = c['name'] as String;
+        expect(got, _same(plain(c['tree'] as List<Object?>)), reason: name);
+        expect(got, _same(wireToDart(data)), reason: name);
+      }
+    });
+
+    test('every malformed value is refused, naming the byte', () {
+      final cases = wire('malformed');
+      expect(cases, hasLength(12));
+      for (final c in cases) {
+        final name = c['name'] as String;
+        expect(
+          () => wireToDartStrict(_hex(c['hex'] as String)),
+          throwsA(
+            isA<BadValue>().having(
+              (e) => e.message,
+              'message',
+              endsWith(' at ${c['at']}'),
+            ),
+          ),
+          reason: 'accepted bytes the vectors refuse: $name',
+        );
+      }
+    });
+
+    test("a peer's malformed value is a malformed frame", () {
+      final body = (FrameWriter()..bytes(_hex('0207'))).done();
+      expect(() => FrameReader(body).value(), throwsA(isA<MalformedFrame>()));
+    });
+
+    test('a leading U+FEFF is text, kept as text', () {
+      for (final text in ['\ufeffabc', '\ufeff\ufeff', '\ufeff']) {
+        final data = dartToWire(text);
+        expect(wireToDartStrict(data), text);
+        expect(wireToDart(data), text);
+        expect((wireToDartStrict(dartToWire({text: 1})) as Map).keys, [text]);
+        expect(FrameReader((FrameWriter()..text(text)).done()).text(), text);
+      }
+    });
   });
 
   test('every frame decodes to its fields and encodes to its bytes', () {
