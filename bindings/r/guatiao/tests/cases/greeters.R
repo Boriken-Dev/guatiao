@@ -34,7 +34,7 @@ case("the kinds copy their floor hashes and sizes from the header", with_example
     expect_equal(as.numeric(found[2]), k$floor_hash, paste(table, "floor hash"))
     body <- regmatches(header, regexec(sprintf("typedef struct %s \\{(.*?)\\} %s;", table, table), header))[[1]][2]
     slots <- length(gregexpr("\\(\\*\\w+\\)", body)[[1]])
-    expect_equal(gt$.gt_kind_sizes(k)[["full"]], 8 + 8 * slots, paste(table, "size"))
+    expect_equal(gt$.gt_kind_sizes(k)[["full"]], 8 + .Machine$sizeof.pointer * slots, paste(table, "size"))
   }
 }))
 

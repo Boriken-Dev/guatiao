@@ -172,7 +172,7 @@ int cmd_kind_new(gt_call *c) {
   k->floor_hash = (uint32_t)hash;
   k->object = obj;
   k->nslots = n;
-  k->size = 8 + 8 * (size_t)n;
+  k->size = 8 + sizeof(void *) * (size_t)n;
   k->slots = slots;
   int at = 0;
   if (obj) {
@@ -288,7 +288,7 @@ static int live_remote(gt_call *c, int i, gt_remote **out) {
 
 /* The slot's function in a table, or NULL when the table predates it. */
 static void *slot_fn(const gt_remote *r, int at) {
-  size_t off = 8 + 8 * (size_t)at;
+  size_t off = 8 + sizeof(void *) * (size_t)at;
   if (off + sizeof(void *) > r->size) return NULL;
   return *(void *const *)((const char *)r->table + off);
 }
@@ -1230,8 +1230,10 @@ int cmd_served_table(gt_call *c) {
   int user = k->nslots - (k->object ? 1 : 0);
   if (!has || (int)mxGetNumberOfElements(has) != user || !(mxIsLogical(has) || (user == 0)))
     return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "one flag per slot");
-  void **table = (void **)calloc(1, k->size);
+  void *table = calloc(1, k->size);
   if (!table) return gt_fail(c, GUATIAO_ERR_ALLOC, "out of memory");
+  /* The slots follow the 8-byte header, a pointer each. */
+  void **slots = (void **)((char *)table + sizeof(guatiao_kind_header));
   gt_lock_gateway();
   guatiao_kind_header *h = (guatiao_kind_header *)table;
   h->struct_size = (uint32_t)k->size;
@@ -1240,7 +1242,7 @@ int cmd_served_table(gt_call *c) {
   for (int at = 0; at < k->nslots; at++) {
     gt_slot *sl = &k->slots[at];
     int wanted = sl->destroy || flags[sl->index_m - 1];
-    if (wanted && !(table[1 + at] = closure_code(c, sl))) {
+    if (wanted && !(slots[at] = closure_code(c, sl))) {
       free(table);
       return 0;
     }

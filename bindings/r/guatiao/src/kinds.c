@@ -148,7 +148,7 @@ SEXP C_kind_new(SEXP name, SEXP floor_hash, SEXP object, SEXP args, SEXP rets, S
   k->floor_hash = (uint32_t)Rf_asReal(floor_hash);
   k->object = obj;
   k->nslots = n;
-  k->size = 8 + 8 * (size_t)n;
+  k->size = 8 + sizeof(void *) * (size_t)n;
   k->slots = slots;
   k->spec = R_NilValue;
   int c = 0;
@@ -257,7 +257,7 @@ static gt_remote *remote_of(SEXP x) {
 
 /* The slot's function in a table, or NULL when the table predates it. */
 static void *slot_fn(const gt_remote *r, int c) {
-  size_t off = 8 + 8 * (size_t)c;
+  size_t off = 8 + sizeof(void *) * (size_t)c;
   if (off + sizeof(void *) > r->size) return NULL;
   return *(void *const *)((const char *)r->table + off);
 }
@@ -1150,15 +1150,17 @@ SEXP C_served_table(SEXP kind, SEXP spec, SEXP has) {
   }
   int user = k->nslots - (k->object ? 1 : 0);
   if (XLENGTH(has) != user) gt_raise(GUATIAO_ERR_BAD_VALUE, "one flag per slot");
-  void **table = (void **)calloc(1, k->size);
+  void *table = calloc(1, k->size);
   if (!table) gt_raise(GUATIAO_ERR_ALLOC, "out of memory");
   guatiao_kind_header *h = (guatiao_kind_header *)table;
+  /* The slots follow the 8-byte header, a pointer each. */
+  void **slots = (void **)((char *)table + sizeof(guatiao_kind_header));
   h->struct_size = (uint32_t)k->size;
   h->floor_hash = k->floor_hash;
   for (int c = 0; c < k->nslots; c++) {
     gt_slot *sl = &k->slots[c];
     int wanted = sl->destroy || LOGICAL(has)[sl->index_r - 1] == 1;
-    if (wanted) table[1 + c] = closure_code(sl);
+    if (wanted) slots[c] = closure_code(sl);
   }
   return R_MakeExternalPtr(table, R_NilValue, R_NilValue);
 }

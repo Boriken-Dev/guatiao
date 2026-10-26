@@ -283,7 +283,8 @@ print.guatiao_kind <- function(x, ...) {
 .gt_kind_sizes <- function(kind) {
   n <- length(kind$slots) + if (kind$object) 1L else 0L
   req <- sum(vapply(kind$slots, function(s) s$required, logical(1))) + if (kind$object) 1L else 0L
-  c(full = 8 + 8 * n, floor = 8 + 8 * req)
+  word <- .Machine$sizeof.pointer
+  c(full = 8 + word * n, floor = 8 + word * req)
 }
 
 # ---- remotes -----------------------------------------------------------------
