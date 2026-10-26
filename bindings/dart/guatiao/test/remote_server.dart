@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// guatiao-remote-server on loopback over WebSocket, serving
-/// `derived_greeter` for the greeter kinds: started by the VM suite
+/// guatiao-remote-server on loopback over WebSocket or WebTransport,
+/// serving `derived_greeter` for the greeter kinds: started by the VM suite
 /// directly, and by a browser suite through a hybrid isolate.
 ///
 /// The server is `GUATIAO_REMOTE_SERVER`, else the workspace's debug
@@ -38,13 +38,21 @@ String _library(String dir) {
   return '$dir/libderived_greeter.so';
 }
 
-/// A running server: [url] to connect to, [stop] to end it, and over TLS
-/// the [fingerprint] it presents.
+/// A running server: [url] to connect to, [stop] to end it, over TLS the
+/// [fingerprint] it presents, and over WebTransport the [hashes] a page
+/// pins.
 final class RemoteServer {
-  RemoteServer._(this.url, this.fingerprint, this._process, this._dir);
+  RemoteServer._(
+    this.url,
+    this.fingerprint,
+    this.hashes,
+    this._process,
+    this._dir,
+  );
 
   final Uri url;
   final String? fingerprint;
+  final List<String> hashes;
   final Process _process;
   final Directory _dir;
   Future<void>? _stopping;
@@ -70,6 +78,21 @@ const List<String> serverTlsArguments = [
   '{key}',
 ];
 
+/// What [startRemoteServer] listens with for WebTransport at [security]
+/// (`server-tls`, `none` or `mutual-tls`): `https://`, certificates it
+/// makes itself, which a page pins by hash.
+List<String> webTransportArguments(String security) => [
+  '--listen',
+  'https://127.0.0.1:0',
+  '--security',
+  security,
+  // A client pinned, rotating certificates the page takes: Chrome then
+  // refuses the link for want of a client certificate alone.
+  if (security == 'mutual-tls') ...['--pin', 'sha256:${'cd' * 32}'],
+  if (security == 'none') ...['--range', '127.0.0.1'],
+  if (security != 'mutual-tls') ...['--key-file', '{key}'],
+];
+
 /// Starts the server and waits for the address it serves: by default
 /// `ws://` with no security and the suite's key; [listen] replaces those
 /// arguments, `{key}` in one standing for the key file's path and `{dir}`
@@ -88,7 +111,8 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
     throw StateError(
       'no ${server.path} beside ${library.path}: build them with '
       '`cargo build -p guatiao-source-remote -p derived_greeter '
-      '--features guatiao-source-remote/ws,guatiao-source-remote/tls` '
+      '--features guatiao-source-remote/ws,guatiao-source-remote/tls,'
+      'guatiao-source-remote/webtransport` '
       '(or name the server in GUATIAO_REMOTE_SERVER)',
     );
   }
@@ -114,15 +138,24 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
     library.path,
   ]);
   unawaited(process.stdout.drain<void>());
-  final serving = Completer<(Uri, String?)>();
+  final serving = Completer<(Uri, String?, List<String>)>();
   final said = <String>[];
+  Uri? url;
+  String? fingerprint;
   process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
     (line) {
       said.add(line);
-      final m = RegExp(r'serving (wss?://\S+)').firstMatch(line);
-      if (m != null && !serving.isCompleted) {
-        final as = RegExp(r' as (sha256:[0-9a-f]+)').firstMatch(line);
-        serving.complete((Uri.parse('${m[1]}/'), as?[1]));
+      final m = RegExp(r'serving ((?:wss?|https)://[^\s/]+)').firstMatch(line);
+      if (m != null) {
+        url = Uri.parse('${m[1]}/');
+        fingerprint = RegExp(r' as (sha256:[0-9a-f]+)').firstMatch(line)?[1];
+      }
+      final hashes = RegExp(r'certificate hashes (.+)$').firstMatch(line);
+      final at = url;
+      if (at != null &&
+          !serving.isCompleted &&
+          (hashes != null || at.scheme != 'https')) {
+        serving.complete((at, fingerprint, hashes?[1]!.split(' ') ?? []));
       }
     },
   );
@@ -136,10 +169,10 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
     }),
   );
   try {
-    final (url, fingerprint) = await serving.future.timeout(
+    final (url, fingerprint, hashes) = await serving.future.timeout(
       const Duration(seconds: 30),
     );
-    return RemoteServer._(url, fingerprint, process, dir);
+    return RemoteServer._(url, fingerprint, hashes, process, dir);
   } catch (_) {
     process.kill();
     dir.deleteSync(recursive: true);
@@ -147,16 +180,23 @@ Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
   }
 }
 
-/// For a browser suite: starts the server (at server TLS when [message]
-/// is `server-tls`) and sends its URL; `stop` ends it and is answered
-/// `stopped`, since the isolate may be killed as soon as the suite is done
-/// with it.
+/// For a browser suite: starts the server (at server TLS over `wss://`
+/// when [message] is `server-tls`, over WebTransport at a security when it
+/// is `https <security>`) and sends its URL and the hashes a page pins,
+/// space-separated; `stop` ends it and is answered `stopped`, since the
+/// isolate may be killed as soon as the suite is done with it.
 Future<void> hybridMain(StreamChannel<Object?> channel, Object? message) async {
   try {
     final server = await startRemoteServer(
-      listen: message == 'server-tls' ? serverTlsArguments : null,
+      listen: switch (message) {
+        'server-tls' => serverTlsArguments,
+        String m when m.startsWith('https ') => webTransportArguments(
+          m.substring(6),
+        ),
+        _ => null,
+      },
     );
-    channel.sink.add(server.url.toString());
+    channel.sink.add([server.url.toString(), ...server.hashes].join(' '));
     channel.stream.listen((message) async {
       if (message == 'stop') {
         await server.stop();

@@ -107,7 +107,23 @@ Future<(Uri, String?, Future<void> Function())> serverTlsServer() async {
   return (url, null, stop);
 }
 
+/// The same over WebTransport at [security] (`server-tls`, `none`,
+/// `mutual-tls`): its URL, the certificate hashes a page pins (the one
+/// presented and the next), and what stops it.
+Future<(Uri, List<String>, Future<void> Function())> webTransportServer(
+  String security,
+) async {
+  final (said, stop) = await _hybrid('https $security');
+  final words = said.split(' ');
+  return (Uri.parse(words.first), words.sublist(1), stop);
+}
+
 Future<(Uri, Future<void> Function())> _hybridServer(String? message) async {
+  final (said, stop) = await _hybrid(message);
+  return (Uri.parse(said.split(' ').first), stop);
+}
+
+Future<(String, Future<void> Function())> _hybrid(String? message) async {
   final channel = spawnHybridUri(
     'remote_server.dart',
     message: message,
@@ -118,7 +134,7 @@ Future<(Uri, Future<void> Function())> _hybridServer(String? message) async {
   final said = answers.current! as String;
   if (said.startsWith('error: ')) throw StateError(said.substring(7));
   return (
-    Uri.parse(said),
+    said,
     () async {
       channel.sink.add('stop');
       await answers.moveNext();
