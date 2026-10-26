@@ -9,7 +9,7 @@
 
 use core::hint::black_box;
 
-use guatiao::value::visit::{Flat, Sink};
+use guatiao::value::visit::{Flat, Sink, TreeSink};
 use guatiao::value::wire;
 use guatiao::{Alloc, Bytes, FromValue, ToValue, Value, ValueError, Walk};
 use guatiao_serde::Presentation;
@@ -429,6 +429,35 @@ pub(crate) fn wire_keys_walk(_: &Libraries) -> Run {
     Box::new(move |iters| {
         batch(iters, || {
             black_box(wire::decode_as::<Value>(black_box(&bytes)).expect("read"));
+        })
+    })
+}
+
+// --- a wide map built by a value builder that replaces repeats ------------------
+
+/// The two hundred keys' JSON text into a tree through `json::from_str`:
+/// a `TreeSink` fed by the parser, which gives no count.
+pub(crate) fn json_keys_tree(_: &Libraries) -> Run {
+    let text = json::to_string(&keys(), Presentation::new()).expect("written");
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(
+                json::from_str(black_box(&text), Alloc::rust(), Presentation::new())
+                    .expect("parsed"),
+            );
+        })
+    })
+}
+
+/// The two hundred keys' tree walked into a `TreeSink`, which is given
+/// the map's count.
+pub(crate) fn sink_keys_tree(_: &Libraries) -> Run {
+    let tree = keys();
+    Box::new(move |iters| {
+        batch(iters, || {
+            let mut sink = TreeSink::new();
+            black_box(&tree).walk(Flat(&mut sink)).expect("walked");
+            black_box(sink.into_value().expect("built"));
         })
     })
 }

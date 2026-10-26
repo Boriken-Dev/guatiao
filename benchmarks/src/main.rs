@@ -363,6 +363,14 @@ const METRICS: &[Metric] = &[
         name: "wire_keys_walk",
         setup: walk::wire_keys_walk,
     },
+    Metric {
+        name: "json_keys_tree",
+        setup: walk::json_keys_tree,
+    },
+    Metric {
+        name: "sink_keys_tree",
+        setup: walk::sink_keys_tree,
+    },
 ];
 
 /// One `load_file` into a fresh registry; making and dropping the
