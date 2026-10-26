@@ -151,7 +151,8 @@ impl LinkOptions {
     }
 
     /// The token a client presents (at server TLS or mutual TLS), or a
-    /// server requires of every client.
+    /// server requires of every client. One empty or only white space is
+    /// refused as a link is set up, at either end.
     pub fn token(mut self, token: &str) -> LinkOptions {
         self.token = Some(Arc::from(token));
         self.required = Some(handshake::Required::new(token));
@@ -527,6 +528,9 @@ fn proves_key(options: &LinkOptions) -> bool {
 }
 
 #[cfg(feature = "tcp")]
+/// A token that proves nothing, refused at both ends.
+const BLANK_TOKEN: &str = "token is empty or only white space, and proves nothing";
+
 fn need_key(options: &LinkOptions) -> Result<&[u8], LinkError> {
     options
         .key
@@ -574,6 +578,10 @@ impl Link {
                         .to_string(),
                 ));
             }
+        }
+        if options.token.as_deref().is_some_and(handshake::blank) {
+            writer.shutdown();
+            return Err(LinkError::Trust(format!("the {BLANK_TOKEN}")));
         }
         reader.set_timeout(Some(options.handshake_timeout))?;
         let ours = Offer {
@@ -715,6 +723,13 @@ impl Link {
                         "this server proves clients at server TLS by a key or a token, and has neither",
                     ));
                 }
+                if options.token.as_deref().is_some_and(handshake::blank) {
+                    return Err(refuse_link(
+                        &mut *writer,
+                        Status::GUATIAO_ERR_UNSUPPORTED,
+                        &format!("this server's {BLANK_TOKEN}"),
+                    ));
+                }
                 (nonce, Offer::from_value(&offered, &ours))
             }
             Ok(_) => {
@@ -732,15 +747,14 @@ impl Link {
                 ));
             }
         };
-        if let Some(required) = &options.required {
-            let given = theirs.token.as_deref().unwrap_or_default();
-            if !required.is(given.as_bytes()) {
-                return Err(refuse_link(
-                    &mut *writer,
-                    Status::GUATIAO_ERR_BAD_VALUE,
-                    "the client's token is not this server's",
-                ));
-            }
+        if let Some(required) = &options.required
+            && !required.admits(theirs.token.as_deref())
+        {
+            return Err(refuse_link(
+                &mut *writer,
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "the client's token is not this server's",
+            ));
         }
         let nonce = handshake::nonce();
         let proof = if proves_key(options) {
