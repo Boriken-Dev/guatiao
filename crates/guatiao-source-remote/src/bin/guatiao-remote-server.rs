@@ -17,6 +17,12 @@ use guatiao::{Alloc, Map, Value};
 use guatiao_source_remote::config::trust_of;
 use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
 
+#[cfg(any(feature = "tcp", feature = "local"))]
+use front::Front;
+
+/// Connections in their handshake at once, unless `--max-handshakes` says.
+const MAX_HANDSHAKES: usize = 64;
+
 const USAGE: &str = "\
 guatiao-remote-server (--stdio | --listen URL) [options]
 guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
@@ -54,7 +60,9 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --source PATH[=JSON]  a source file and its configuration (repeatable)
   --refresh-ms N        refresh the sources every N milliseconds
   --max-calls N         calls one link may have running at once
-  --max-frame N         the largest frame read, in bytes";
+  --max-frame N         the largest frame read, in bytes
+  --max-handshakes N    connections in their handshake at once (default 64);
+                        past it a new connection is closed unread";
 
 struct Args {
     stdio: bool,
@@ -77,6 +85,7 @@ struct Args {
     refresh: Option<Duration>,
     max_calls: Option<usize>,
     max_frame: Option<usize>,
+    max_handshakes: usize,
 }
 
 fn parse() -> Result<Args, String> {
@@ -102,6 +111,7 @@ fn parse() -> Result<Args, String> {
         refresh: None,
         max_calls: None,
         max_frame: None,
+        max_handshakes: MAX_HANDSHAKES,
     };
     let need = |it: &mut core::iter::Skip<std::env::Args>, flag: &str| {
         it.next()
@@ -144,6 +154,12 @@ fn parse() -> Result<Args, String> {
             }
             "--max-calls" => a.max_calls = Some(num(need(&mut it, &flag)?, &flag)? as usize),
             "--max-frame" => a.max_frame = Some(num(need(&mut it, &flag)?, &flag)? as usize),
+            "--max-handshakes" => {
+                a.max_handshakes = match num(need(&mut it, &flag)?, &flag)? {
+                    0 => return Err(format!("{flag} must be at least 1")),
+                    n => n as usize,
+                };
+            }
             "-h" | "--help" => return Err(USAGE.to_string()),
             other => return Err(format!("`{other}` is not an option\n\n{USAGE}")),
         }
@@ -300,20 +316,250 @@ fn run() -> Result<(), String> {
         .split_once("://")
         .ok_or_else(|| format!("--listen takes scheme://address, not `{url}`"))?;
     let _ = address;
+    #[cfg(any(feature = "tcp", feature = "local"))]
+    let front = Front::new(server, a.max_handshakes);
     match scheme {
         #[cfg(feature = "tcp")]
-        "tcp" => serve_tcp(&server, address, &a),
+        "tcp" => serve_tcp(&front, address, &a),
         #[cfg(feature = "ws")]
-        "ws" => serve_ws(&server, address, &a),
+        "ws" => serve_ws(&front, address, &a),
         #[cfg(feature = "tls")]
-        "tls" => serve_tls(&server, address, &a),
+        "tls" => serve_tls(&front, address, &a),
         #[cfg(feature = "rdma")]
-        "rdma" => serve_rdma(&server, address, &a),
+        "rdma" => serve_rdma(&front, address, &a),
         #[cfg(feature = "local")]
-        "local" => serve_local(&server, address),
+        "local" => serve_local(&front, address),
         #[cfg(feature = "shm")]
-        "shm" => serve_shm(&server, address),
+        "shm" => serve_shm(&front, address),
         other => Err(format!("`{other}://` is not a transport this build has")),
+    }
+}
+
+/// Every listener's connections: a bounded number in their handshake,
+/// refusals reported sparingly.
+#[cfg(any(feature = "tcp", feature = "local"))]
+mod front {
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::time::Duration;
+    use std::collections::HashMap;
+    use std::sync::{Mutex, PoisonError};
+    use std::time::Instant;
+
+    use guatiao_source_remote::Server;
+    use guatiao_source_remote::transport::Connection;
+
+    /// How often one source's refusals are reported.
+    const REPORT_EVERY: Duration = Duration::from_secs(60);
+
+    /// Sources whose last report is remembered; past it, within one interval,
+    /// a new source's refusals go unreported.
+    const REMEMBERED: usize = 1024;
+
+    /// Says one thing at most once per key per interval, counting what it
+    /// kept quiet in between.
+    struct Throttle {
+        every: Duration,
+        /// When each key was last reported, and how often it was quiet since.
+        seen: HashMap<String, (Instant, u64)>,
+    }
+
+    impl Throttle {
+        fn new(every: Duration) -> Throttle {
+            Throttle {
+                every,
+                seen: HashMap::new(),
+            }
+        }
+
+        /// `Some(quiet)` when `key` is to be reported now, `quiet` being how
+        /// often it was held back since its last report.
+        fn pass(&mut self, key: &str, now: Instant) -> Option<u64> {
+            if let Some((said, quiet)) = self.seen.get_mut(key) {
+                if now.duration_since(*said) < self.every {
+                    *quiet += 1;
+                    return None;
+                }
+                let held = *quiet;
+                *said = now;
+                *quiet = 0;
+                return Some(held);
+            }
+            if self.seen.len() >= REMEMBERED {
+                let every = self.every;
+                self.seen
+                    .retain(|_, (said, _)| now.duration_since(*said) < every);
+                if self.seen.len() >= REMEMBERED {
+                    return None;
+                }
+            }
+            self.seen.insert(key.to_string(), (now, 0));
+            Some(0)
+        }
+    }
+
+    /// What every listener hands its connections to: a thread each for the
+    /// handshake, at most `max` at once, and refusals reported sparingly.
+    pub(super) struct Front {
+        pub(super) server: Server,
+        max: usize,
+        running: AtomicUsize,
+        /// Refused sources, by address.
+        said: Mutex<Throttle>,
+        /// Connections past `max`: apart, so many sources cannot silence it.
+        crowded: Mutex<Throttle>,
+    }
+
+    /// A handshake's place, given back when its thread is done.
+    struct Slot(Arc<Front>);
+
+    impl Drop for Slot {
+        fn drop(&mut self) {
+            self.0.running.fetch_sub(1, Ordering::AcqRel);
+        }
+    }
+
+    /// A peer's words with every `host:port` cut to its host: what a
+    /// source's reports are keyed by.
+    fn without_port(peer: &str) -> String {
+        let host = |word: &'_ str| match word.rsplit_once(':') {
+            Some((host, port))
+                if !host.is_empty()
+                    && !port.is_empty()
+                    && port.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                host.to_string()
+            }
+            _ => word.to_string(),
+        };
+        peer.split(' ').map(host).collect::<Vec<_>>().join(" ")
+    }
+
+    fn since(quiet: u64) -> String {
+        if quiet == 0 {
+            String::new()
+        } else {
+            format!(" ({quiet} more since the last report)")
+        }
+    }
+
+    impl Front {
+        pub(super) fn new(server: Server, max: usize) -> Arc<Front> {
+            Arc::new(Front {
+                server,
+                max,
+                running: AtomicUsize::new(0),
+                said: Mutex::new(Throttle::new(REPORT_EVERY)),
+                crowded: Mutex::new(Throttle::new(REPORT_EVERY)),
+            })
+        }
+
+        /// Prints `words(quiet)` unless `key` was reported within the interval.
+        fn say(&self, to: &Mutex<Throttle>, key: &str, words: impl FnOnce(u64) -> String) {
+            let pass = to
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .pass(key, Instant::now());
+            if let Some(quiet) = pass {
+                eprintln!("guatiao-remote-server: {}", words(quiet));
+            }
+        }
+
+        /// Serves `conn` on a thread of its own, or closes it unread when
+        /// `max` handshakes are running.
+        pub(super) fn take(self: &Arc<Self>, conn: Connection) {
+            if self.running.fetch_add(1, Ordering::AcqRel) >= self.max {
+                self.running.fetch_sub(1, Ordering::AcqRel);
+                let peer = conn.peer.clone();
+                drop(conn);
+                self.say(&self.crowded, "handshakes", |quiet| {
+                    let max = self.max;
+                    format!(
+                        "at most {max} handshakes run at once: closed {peer} unread{}",
+                        since(quiet)
+                    )
+                });
+                return;
+            }
+            let slot = Slot(Arc::clone(self));
+            let started = std::thread::Builder::new().spawn(move || {
+                let front = Arc::clone(&slot.0);
+                let peer = conn.peer.clone();
+                let served = front.server.serve(conn);
+                // The handshake is over either way: its place is free.
+                drop(slot);
+                if let Err(e) = served {
+                    front.say(&front.said, &without_port(&peer), |quiet| {
+                        format!("a link from {peer} was refused: {e}{}", since(quiet))
+                    });
+                }
+            });
+            if let Err(e) = started {
+                eprintln!("guatiao-remote-server: no thread for a connection: {e}");
+            }
+        }
+
+        /// Reports a source the access control list denied.
+        #[cfg(feature = "tcp")]
+        pub(super) fn denied(&self, source: core::net::SocketAddr) {
+            let ip = source.ip().to_string();
+            self.say(&self.said, &ip, |quiet| {
+                format!("the access control list denies {ip}{}", since(quiet))
+            });
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_source_is_reported_once_per_interval_with_what_was_held_back() {
+            let mut t = Throttle::new(Duration::from_secs(60));
+            let start = Instant::now();
+            assert_eq!(t.pass("192.0.2.1", start), Some(0));
+            for s in 1..=5 {
+                assert_eq!(t.pass("192.0.2.1", start + Duration::from_secs(s)), None);
+            }
+            assert_eq!(
+                t.pass("192.0.2.2", start),
+                Some(0),
+                "another source is its own"
+            );
+            assert_eq!(
+                t.pass("192.0.2.1", start + Duration::from_secs(60)),
+                Some(5)
+            );
+            assert_eq!(t.pass("192.0.2.1", start + Duration::from_secs(61)), None);
+        }
+
+        #[test]
+        fn past_the_sources_it_remembers_a_new_one_goes_unreported_until_old_ones_expire() {
+            let mut t = Throttle::new(Duration::from_secs(60));
+            let start = Instant::now();
+            for i in 0..REMEMBERED {
+                assert_eq!(t.pass(&format!("s{i}"), start), Some(0));
+            }
+            assert_eq!(t.pass("late", start + Duration::from_secs(1)), None);
+            assert_eq!(t.seen.len(), REMEMBERED);
+            assert_eq!(t.pass("late", start + Duration::from_secs(60)), Some(0));
+            assert_eq!(t.seen.len(), 1, "the expired sources were let go");
+        }
+
+        #[test]
+        fn a_report_is_keyed_by_the_address_without_its_port() {
+            assert_eq!(without_port("tcp 192.0.2.1:7000"), "tcp 192.0.2.1");
+            assert_eq!(without_port("tls [2001:db8::1]:443"), "tls [2001:db8::1]");
+            assert_eq!(
+                without_port("local /run/guatiao.sock"),
+                "local /run/guatiao.sock"
+            );
+            assert_eq!(without_port(r"local \\.\pipe\x"), r"local \\.\pipe\x");
+            assert_eq!(
+                without_port("rdma 192.0.2.1:7000 through mlx5_0"),
+                "rdma 192.0.2.1 through mlx5_0"
+            );
+        }
     }
 }
 
@@ -362,27 +608,17 @@ fn trusted_acl(
     })
 }
 
-/// Serves every link `accept` hands over, each on a thread of its own.
+/// Hands every connection `accept` admits to `front`.
 #[cfg(feature = "tcp")]
 fn serve_accepted(
-    server: &Server,
+    front: &alloc::sync::Arc<Front>,
     accept: impl Fn() -> std::io::Result<guatiao_source_remote::transport::tcp::Accepted>,
 ) -> Result<(), String> {
     use guatiao_source_remote::transport::tcp::Accepted;
-    let server = alloc::sync::Arc::new(server.clone());
     loop {
         match accept() {
-            Ok(Accepted::Connection(conn)) => {
-                let server = alloc::sync::Arc::clone(&server);
-                std::thread::spawn(move || {
-                    if let Err(e) = server.serve(conn) {
-                        eprintln!("guatiao-remote-server: a link was refused: {e}");
-                    }
-                });
-            }
-            Ok(Accepted::Refused(peer)) => {
-                eprintln!("guatiao-remote-server: the access control list denies {peer}");
-            }
+            Ok(Accepted::Connection(conn)) => front.take(conn),
+            Ok(Accepted::Refused(peer)) => front.denied(peer),
             Ok(_) => {}
             Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
         }
@@ -390,8 +626,9 @@ fn serve_accepted(
 }
 
 #[cfg(feature = "tcp")]
-fn serve_tcp(server: &Server, address: &str, a: &Args) -> Result<(), String> {
+fn serve_tcp(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::tcp::TcpListen;
+    let server = &front.server;
     let acl = trusted_acl(server, "tcp", a)?;
     let said = listing(&acl);
     let listener = TcpListen::bind(address, acl).map_err(|e| e.to_string())?;
@@ -399,26 +636,26 @@ fn serve_tcp(server: &Server, address: &str, a: &Args) -> Result<(), String> {
         "guatiao-remote-server: serving tcp://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
     );
-    serve_accepted(server, || listener.accept())
+    serve_accepted(front, || listener.accept())
 }
 
 #[cfg(feature = "ws")]
-fn serve_ws(server: &Server, address: &str, a: &Args) -> Result<(), String> {
+fn serve_ws(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::ws::WsListen;
-    let acl = trusted_acl(server, "ws", a)?;
+    let acl = trusted_acl(&front.server, "ws", a)?;
     let said = listing(&acl);
     let listener = WsListen::bind(address, acl).map_err(|e| e.to_string())?;
     eprintln!(
         "guatiao-remote-server: serving ws://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
     );
-    serve_accepted(server, || listener.accept())
+    serve_accepted(front, || listener.accept())
 }
 
 #[cfg(feature = "tls")]
-fn serve_tls(server: &Server, address: &str, a: &Args) -> Result<(), String> {
+fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig, TlsListen};
-    if server.options().trust() != Trust::Secure {
+    if front.server.options().trust() != Trust::Secure {
         return Err("tls:// serves the secure level: pass --trust secure".to_string());
     }
     let mut config = match (&a.state_dir, &a.identity) {
@@ -480,13 +717,13 @@ fn serve_tls(server: &Server, address: &str, a: &Args) -> Result<(), String> {
             w.setting, w.value, w.strict
         );
     }
-    serve_accepted(server, || listener.accept())
+    serve_accepted(front, || listener.accept())
 }
 
 #[cfg(feature = "rdma")]
-fn serve_rdma(server: &Server, address: &str, a: &Args) -> Result<(), String> {
+fn serve_rdma(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
     use guatiao_source_remote::transport::rdma::{RdmaListen, RdmaPort};
-    let acl = trusted_acl(server, "rdma", a)?;
+    let acl = trusted_acl(&front.server, "rdma", a)?;
     let said = listing(&acl);
     let port = a
         .rdma_device
@@ -499,50 +736,36 @@ fn serve_rdma(server: &Server, address: &str, a: &Args) -> Result<(), String> {
         "guatiao-remote-server: serving rdma://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
     );
-    serve_accepted(server, || listener.accept())
+    serve_accepted(front, || listener.accept())
 }
 
 #[cfg(feature = "local")]
-fn serve_local(server: &Server, name: &str) -> Result<(), String> {
+fn serve_local(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String> {
     use guatiao_source_remote::transport::local::LocalListen;
-    if server.options().trust() != Trust::Local {
+    if front.server.options().trust() != Trust::Local {
         return Err("local:// serves the local level".to_string());
     }
     let listener = LocalListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
     eprintln!("guatiao-remote-server: serving local://{name}");
     loop {
         match listener.accept() {
-            Ok(conn) => {
-                let server = server.clone();
-                std::thread::spawn(move || {
-                    if let Err(e) = server.serve(conn) {
-                        eprintln!("guatiao-remote-server: a link was refused: {e}");
-                    }
-                });
-            }
+            Ok(conn) => front.take(conn),
             Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
         }
     }
 }
 
 #[cfg(feature = "shm")]
-fn serve_shm(server: &Server, name: &str) -> Result<(), String> {
+fn serve_shm(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String> {
     use guatiao_source_remote::transport::shm::ShmListen;
-    if server.options().trust() != Trust::Local {
+    if front.server.options().trust() != Trust::Local {
         return Err("shm:// serves the local level".to_string());
     }
     let listener = ShmListen::bind(name).map_err(|e| format!("{name}: {e}"))?;
     eprintln!("guatiao-remote-server: serving shm://{name}");
     loop {
         match listener.accept() {
-            Ok(conn) => {
-                let server = server.clone();
-                std::thread::spawn(move || {
-                    if let Err(e) = server.serve(conn) {
-                        eprintln!("guatiao-remote-server: a link was refused: {e}");
-                    }
-                });
-            }
+            Ok(conn) => front.take(conn),
             Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
         }
     }
