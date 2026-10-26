@@ -422,6 +422,45 @@ fn a_peer_removed_from_the_store_cannot_link_again() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The control for the test above: resumption kept by the policy (listed
+/// as a weakening) lets a removed peer back in on the session it holds.
+#[test]
+fn resumption_kept_by_the_policy_lets_a_removed_peer_link_again() {
+    let dir = scratch("resumed");
+    let mut policy = Policy::strict();
+    policy.allow_resumption = true;
+    let server = TlsConfig::open(&dir).unwrap().policy(policy.clone());
+    assert!(
+        server
+            .weakened()
+            .iter()
+            .any(|w| w.setting == "allow_resumption"),
+        "{:?}",
+        server.weakened()
+    );
+    let client_id = Identity::generate().unwrap();
+    let store = TrustStore::open(&dir).unwrap();
+    coqui_peer_tls::TrustStoreExt::accept_certificate(&store, client_id.certificate_der()).unwrap();
+    let address = listen(&server, secure_server());
+    let client = TlsConfig::new(client_id.clone())
+        .pins([server.fingerprint()])
+        .policy(policy);
+    let source = source(&address, &client);
+    let (registry, refused) = refresh(&source);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, tls");
+    drop(registry);
+    source.disconnect();
+
+    assert!(store.remove(&client_id.fingerprint()).unwrap());
+    let (registry, refused) = refresh(&source);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, tls");
+    drop(registry);
+    source.disconnect();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A secure link and a trusted one to the same greeter, for comparing.
 fn linked_pair() -> (RemoteSource, Registry) {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());

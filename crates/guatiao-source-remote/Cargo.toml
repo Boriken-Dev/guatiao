@@ -74,9 +74,9 @@ getrandom = { version = "0.3", optional = true }
 # dependencies, here and below: crates.io refuses this crate while they are.
 coqui-net-acl = { git = "https://github.com/Boriken-Dev/coqui-net-acl", rev = "ef48f2564ab3193d5204f52b8607f25bea1050c5", optional = true, features = ["serde"] }
 # Peer ids, the trust store and the sans-IO handshake driver.
-coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "ed5a5c401bc2da942c5c1f0de42c38e90927a8a9", optional = true }
+coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "d01b6907859029fad23e5d97398146a03c313ffe", optional = true }
 # Mutual TLS: identities, pinned and stored trust, the TLS policy.
-coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "fa409d770baf5086619480d68fadfc9dc7cfa6dd", optional = true, features = ["generate", "serde", "acl"] }
+coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "d940fac026a7e93db153ff4584aee130f2a6b882", optional = true, features = ["generate", "serde", "acl"] }
 # The TLS state the link's threads share; coqui-peer-tls's version.
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
 # The shared rings' file, mapped.
@@ -104,8 +104,8 @@ greeter_kind = { path = "../../examples/greeter_kind" }
 serde_json = "1"
 # The secure level's tests: a client that presents a certificate it holds
 # no key for, written against rustls itself.
-coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "ed5a5c401bc2da942c5c1f0de42c38e90927a8a9" }
-coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "fa409d770baf5086619480d68fadfc9dc7cfa6dd", features = ["generate"] }
+coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "d01b6907859029fad23e5d97398146a03c313ffe" }
+coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "d940fac026a7e93db153ff4584aee130f2a6b882", features = ["generate"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 
 [lints]
