@@ -970,6 +970,36 @@ fn a_host_sees_the_settings_its_configuration_weakens() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A manifest's identity file made by the first refresh leaves the peer
+/// as it was: the next refresh neither replaces it nor reports it again.
+#[test]
+fn an_identity_file_the_first_refresh_makes_leaves_the_peer_as_it_was() {
+    let dir = scratch("identity_made");
+    let pin = format!("sha256:{}", "0".repeat(64));
+    std::fs::write(
+        dir.join("lab.guatiao.toml"),
+        format!(
+            "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
+             security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\npins = [\"{pin}\"]\n"
+        ),
+    )
+    .unwrap();
+    let mut config = guatiao::Map::new();
+    let mut dirs = guatiao::List::new();
+    dirs.push(dir.display().to_string().as_str());
+    config.set("dirs", dirs);
+    let source = RemoteSource::from_config(&config).unwrap();
+    let (mut registry, refused) = refresh(&source);
+    assert_eq!(refused.len(), 1, "{refused:?}");
+    assert!(dir.join("lab.pem").is_file(), "the identity is made");
+    let refreshed = registry.refresh();
+    assert!(
+        refreshed.is_empty(),
+        "reported once while it stays away: {refreshed:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_secure_level_over_a_transport_that_proves_no_peer_is_refused() {
     let mut config = guatiao::Map::new();

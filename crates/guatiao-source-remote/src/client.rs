@@ -563,11 +563,14 @@ impl Described {
             };
             let at = m.path().display().to_string();
             let name = m.id();
-            let stamp = format!(
-                "{}:{}",
-                m.stamp(),
-                config::key_stamp(&self.defaults, m.table(), m.path())
-            );
+            let stamp_now = || {
+                format!(
+                    "{}:{}",
+                    m.stamp(),
+                    config::key_stamp(&self.defaults, m.table(), m.path())
+                )
+            };
+            let mut stamp = stamp_now();
             if name.contains('/') {
                 let why = format!(
                     "{at}: `name` holds a `/`, which parts a peer's name from its libraries' ids"
@@ -589,10 +592,16 @@ impl Described {
                         now.leaving.push((name.to_string(), peer));
                     }
                     match config::peer_of(&self.defaults, m.table(), m.path()) {
-                        Ok((connect, options, merged)) => Arc::new(
-                            Peer::new(connect, options, Arc::clone(&self.generations))
-                                .configured(&merged),
-                        ),
+                        Ok((connect, options, merged)) => {
+                            // Making it may have made its identity file:
+                            // stamped as it is now, the next refresh finds
+                            // the same peer.
+                            stamp = stamp_now();
+                            Arc::new(
+                                Peer::new(connect, options, Arc::clone(&self.generations))
+                                    .configured(&merged),
+                            )
+                        }
                         Err(e) => {
                             let why = format!("{at}: {}", e.message());
                             now.refuse(&mut listed, at, &stamp, e.status, why);
