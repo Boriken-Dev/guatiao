@@ -2965,6 +2965,11 @@ guatiao_status guatiao_value_bytes(const struct guatiao_alloc *alloc,
  can see. **A refused call leaves `value` as it was**, still the
  caller's to free.
 
+ A map has no index, so each call compares `key` with every key stored:
+ a map filled by N calls costs O(N^2) comparisons. One of many thousand
+ keys is better decoded whole (`guatiao_wire_decode`) than set key by
+ key.
+
  **`node` and `value` must not overlap**, and the same pointer for both
  is `GUATIAO_ERR_BAD_VALUE`: this moves the 40 bytes at `value` into
  `node`, which cannot be a slot inside the tree it is moving. A null or
