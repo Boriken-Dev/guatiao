@@ -7,12 +7,12 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
     Answer, AnswerType, Arg, KindDescription, LentHandle, LentObject, LibraryParts, Mechanism,
-    ProviderParts, Serve, ServedTable, TableError,
+    ProviderParts, Serve, ServedProvider, ServedTable, TableError,
 };
 use guatiao::value::types::{Buffer, Number};
 use guatiao::{Alloc, List, Map, Status, Value};
@@ -32,6 +32,16 @@ struct Dispatch<E: Engine> {
     /// The tables of the object kinds its slots answer. The library's parts
     /// keep them; a table holds this dispatch, so these are weak.
     objects: OnceLock<BTreeMap<String, Weak<ServedTable>>>,
+    instances: Mutex<Instances>,
+}
+
+/// The instances built and not yet destroyed. An instance's `ctx` is a
+/// number of the bridge's, past every provider's position, so a slot can
+/// tell a provider called as itself from an instance of it.
+struct Instances {
+    next: usize,
+    /// The engine's id for each instance, by its `ctx`.
+    by_ctx: BTreeMap<usize, u64>,
 }
 
 /// What a lent argument is written back into once the call returns.
@@ -61,9 +71,28 @@ impl<E: Engine> Dispatch<E> {
         if kind.object() {
             return Ok(Target::Object(ctx as u64));
         }
-        ctx.checked_sub(1)
+        if let Some(id) = ctx.checked_sub(1).and_then(|i| self.providers.get(i)) {
+            return Ok(Target::Provider(id.clone()));
+        }
+        self.instances()
+            .by_ctx
+            .get(&ctx)
+            .map(|id| Target::Instance(*id))
+            .ok_or_else(|| refused(Status::GUATIAO_ERR_NULL, "no such provider"))
+    }
+
+    fn instances(&self) -> std::sync::MutexGuard<'_, Instances> {
+        self.instances
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The id of the provider at `position` (its `ctx` as itself).
+    fn provider(&self, position: usize) -> Result<String, ProviderError> {
+        position
+            .checked_sub(1)
             .and_then(|i| self.providers.get(i))
-            .map(|id| Target::Provider(id.clone()))
+            .cloned()
             .ok_or_else(|| refused(Status::GUATIAO_ERR_NULL, "no such provider"))
     }
 
@@ -244,6 +273,38 @@ impl<E: Engine> Serve for Dispatch<E> {
         let library = self.library.clone();
         let _ = self.runner.run(move |e| e.release(&library, ctx as u64));
     }
+
+    fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError> {
+        let id = self.provider(provider)?;
+        let library = self.library.clone();
+        let config = config.clone();
+        let built = self
+            .runner
+            .run(move |e| e.create(&library, &id, &config))??;
+        let mut instances = self.instances();
+        let ctx = instances.next;
+        instances.next += 1;
+        instances.by_ctx.insert(ctx, built);
+        Ok(ctx)
+    }
+
+    fn destroy_instance(&self, _provider: usize, instance: usize) {
+        let Some(id) = self.instances().by_ctx.remove(&instance) else {
+            return;
+        };
+        let library = self.library.clone();
+        let _ = self.runner.run(move |e| e.destroy(&library, id));
+    }
+
+    fn available(&self, provider: usize) -> Result<(), String> {
+        let id = self
+            .provider(provider)
+            .map_err(|e| e.message().to_string())?;
+        let library = self.library.clone();
+        self.runner
+            .run(move |e| e.available(&library, &id))
+            .map_err(|e| e.to_string())?
+    }
 }
 
 /// The object kinds `kind`'s slots answer, and theirs in turn.
@@ -286,6 +347,10 @@ pub(crate) fn library<E: Engine>(
         kinds: Arc::clone(kinds),
         providers: providers.iter().map(|p| p.id().to_string()).collect(),
         objects: OnceLock::new(),
+        instances: Mutex::new(Instances {
+            next: providers.len() + 1,
+            by_ctx: BTreeMap::new(),
+        }),
     });
     let serve: Arc<dyn Serve> = dispatch.clone();
 
@@ -342,9 +407,35 @@ pub(crate) fn library<E: Engine>(
             builder = builder.kinds(&[kind.as_str()]).table(table.kind_table());
             tables.push(table);
         }
+        let position = at + 1;
+        let ctx = if provider.is_instances_only() {
+            if provider.config_schema().is_none() {
+                return Err(BridgeError::Table(format!(
+                    "`{}` is declared instances only, with no configuration to build one from",
+                    provider.id()
+                )));
+            }
+            core::ptr::null_mut()
+        } else {
+            core::ptr::without_provenance_mut(position)
+        };
         builder = builder
-            .ctx(core::ptr::without_provenance_mut(at + 1))
+            .ctx(ctx)
             .kind_descriptions(kinds.document(provider.kinds().iter().map(|(k, _)| k.as_str()))?);
+        if let Some(schema) = provider.config_schema() {
+            builder = builder.config(schema.clone());
+        }
+        if provider.config_schema().is_some() || provider.asks_available() {
+            builder = ServedProvider::new(
+                position,
+                provider.config_schema().is_some(),
+                provider.asks_available(),
+                Arc::clone(&serve),
+                mechanism,
+            )
+            .map_err(|e| table_error(provider.id(), "its own slots", e))?
+            .slots(builder);
+        }
         if let Some(meta) = provider.declared_meta() {
             builder = builder.meta(meta.clone());
         }
