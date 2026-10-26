@@ -45,6 +45,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `tcp` | `hmac`, `sha2`, `getrandom` | TCP at the trusted level |
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
+| `ws` | `tcp`, `tungstenite` | WebSocket at the trusted level: what a browser page connects to |
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
 from C).

@@ -14,6 +14,7 @@ C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`).
 | `tcp` | trusted TCP: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
+| `ws` | `tcp` and `transport::ws`: WebSocket at the trusted level, what a browser opens (`tungstenite`, no TLS) |
 | `rdma` | `tcp` and `transport::rdma`: RDMA, experimental, Linux only; libibverbs opened at run time (`libloading`, `libc`, Linux only), so building needs no rdma-core |
 
 ## A host
@@ -69,7 +70,7 @@ server.end_links(); server.links(); server.links_holding(); server.objects_out()
 Serves every provider of a kind `described` describes; others are left
 out of the catalog. The catalog's `kinds` lists each description once.
 
-Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
+Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | ws://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
 `--trust`, `--range CIDR`..., `--key-file`, `--rdma-device NAME`, `--kinds PATH`..., `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`).
@@ -125,6 +126,8 @@ tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr
 tcp::{TcpListen::from_listener(TcpListener, &[Range])?, from_stream(TcpStream)?}   // sockets the caller set up
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names
+ws::{WsConnect::new("ws://host:port/path").timeout(d), WsListen::bind(addr, &[Range])?}   // ws
+ws::{WsListen::from_listener(TcpListener, &[Range])?, WsListen::accept() -> io::Result<tcp::Accepted>}
 rdma::{RdmaConnect::new("host:port").port(RdmaPort).timeout(d), RdmaListen::bind(addr, &[Range])?.port(RdmaPort)}   // rdma
 rdma::{RdmaListen::from_listener(TcpListener, &[Range])?, RdmaListen::accept() -> io::Result<tcp::Accepted>}
 rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices() -> io::Result<Vec<String>>, RING, SETUP_TIMEOUT}
@@ -147,6 +150,17 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   a read blocked on it: ending a link sends GOODBYE, and the peer closing
   its end ends that read. A pipe takes no read timeout, so its handshake
   is unbounded.
+- **WebSocket** (`ws`): a frame's body is one binary message, with no
+  length in front. `WsListen` admits peers by range as `TcpListen` does;
+  `accept` reads nothing, and a connection answers the HTTP upgrade on
+  its first read, so a client that connects and stalls holds only the
+  thread serving it; a write before the upgrade is refused
+  (`NotConnected`). Any path is accepted; no subprotocol, no extension,
+  the `Origin` header unread (the key proof is the gate). A text
+  message, an unmasked client frame or a message over `max` is an error;
+  a close or a dropped connection between messages is the clean end.
+  Each frame is copied once into a message. `wss://` is refused
+  `Unsupported`: the secure level lives outside this build.
 - **Shared memory**: the client creates the file (`/dev/shm`, else the
   temporary directory; `0600`; removed once mapped on Unix, deleted with
   its last handle on Windows), sends its path once over the local
@@ -179,7 +193,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`, `local://name`, `shm://name`, `rdma://host:port` |
+| `connect` | `tcp://host:port`, `ws://host:port/path`, `local://name`, `shm://name`, `rdma://host:port` |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 | `child` | list: the server program and its arguments |
 | `trust` | `local`, `trusted`, `secure` (`local` for a child; required for `connect`) |
