@@ -52,10 +52,24 @@ function reference, so a place is assigned to a handle before it is used.
 A kind is the table its C header declares. In Fortran it is an abstract
 type extending `guatiao_impl`, with a deferred procedure for every slot
 the table must have and an ordinary one, answering
-`GUATIAO_ERR_UNSUPPORTED`, for each slot appended later. The kind's
-author writes it once, in a module of its own beside the header
-(`examples/greeter_kind/fortran`), with a remote type calling another
-side's table and a `bind(c)` procedure per slot serving one:
+`GUATIAO_ERR_UNSUPPORTED`, for each slot appended later, in a module of
+its own with a remote type calling another side's table and a `bind(c)`
+procedure per slot serving one. That module is written, not declared:
+`guatiao-kind` writes it from the kinds' description (the
+`<crate>.kinds.json` a kind crate commits beside its header, or one
+another language wrote):
+
+```sh
+cd bindings/fortran/guatiao          # or after fpm install, anywhere
+fpm run guatiao-kind -- ../../../examples/greeter_kind/include/greeter_kind.kinds.json \
+  -o ../../../examples/greeter_kind/fortran/src/greeter_kinds.F90
+```
+
+`--check` writes nothing and fails when the module is not what it would
+write; `-m` names the module (by default the document's name without
+`.kinds.json`, plus `s`). The description is read by the guatiao library
+itself, found as any program finds it. `examples/greeter_kind/fortran` is
+its output:
 
 ```fortran
 type, abstract, extends(guatiao_impl) :: greeter
@@ -237,4 +251,5 @@ provider's procedures that a slot reaches need the same (or ifx's
   its identity against its `fpm.toml`, and its CMake project the same
   library as a file.
 - `examples/greeter_kind/fortran/` holds the greeter kinds as abstract
-  types, with their remotes and glue.
+  types, with their remotes and glue, written by `guatiao-kind` from
+  their description.
