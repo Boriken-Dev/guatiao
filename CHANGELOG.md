@@ -14,6 +14,23 @@ write now.
 
 ### Added
 
+- **A provider a language bridge declares can be built from a
+  configuration and asked whether it can run.** guatiao-bridge's
+  `Provided::config(schema)` serves `create` and `destroy` for it
+  (`Offer::instantiate` checks the configuration against the schema, then
+  reaches the new `Engine::create`; the instance's slots arrive as
+  `Target::Instance(id)`, its last drop as `Engine::destroy`),
+  `instances_only()` offers no default instance, and
+  `may_be_unavailable()` serves `available` (`Engine::available`, asked
+  every time a host asks). Core builds the slots: `ServedProvider` makes a
+  provider's `create`, `destroy` and `available` over a `Serve` handler,
+  which gains `create`, `destroy_instance` and `available` with defaults;
+  each distinct reason is kept as long as the provider's slots (64 at
+  most). A `CSignature` says what it returns (`returns() -> CReturn`: a
+  status, a C `bool`, or nothing) in place of `returns_status()`, and a
+  `Mechanism` honours it; `Libffi` does. The
+  Lua, Rhai, JavaScript and WebAssembly sources do not declare instances
+  yet.
 - **Node and Go: a document straight to the language's own data and
   back.** Node's `guatiao-serde` gains `parse(text, { format, how,
   numbers, maps })`, answering what `loads(...).toJS()` does, and
