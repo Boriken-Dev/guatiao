@@ -278,6 +278,9 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
             ))
         }
     });
+    let describers = decl.kinds.iter().map(|kind| {
+        quote! { <dyn #kind as ::guatiao::library::Kind>::describe, }
+    });
     let kind_names: Vec<TokenStream> = decl
         .kinds
         .iter()
@@ -443,6 +446,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                         .version(#version)
                         .kinds(<#ty as ::guatiao::library::kind::ProviderDecl>::KINDS)
                         #(#table_entries)*
+                        .kind_descriptions(::guatiao::library::kind::kind_document(&[ #(#describers)* ]))
                         .ctx(instance)
                         #available_slot
                         #create_slot

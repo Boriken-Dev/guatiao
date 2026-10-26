@@ -79,6 +79,8 @@ struct Built {
     config: Vec<Value>,
     #[allow(dead_code)]
     meta: Vec<Map>,
+    #[allow(dead_code)]
+    kind_descriptions: String,
 }
 
 // SAFETY: built once and never written; every pointer in `info` addresses
@@ -117,6 +119,7 @@ impl Built {
             .collect();
         let config: Vec<Value> = view.config.iter().cloned().collect();
         let meta: Vec<Map> = view.meta.iter().cloned().collect();
+        let kind_descriptions = view.kind_descriptions.clone().unwrap_or_default();
         let info = ProviderInfo {
             struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: view.vtable_size as u32,
@@ -144,6 +147,8 @@ impl Built {
             },
             create: view.create,
             destroy: view.destroy,
+            // SAFETY: as above.
+            kind_descriptions: unsafe { view_of_owned(&kind_descriptions) },
         };
         Built {
             info,
@@ -157,6 +162,7 @@ impl Built {
             tables,
             config,
             meta,
+            kind_descriptions,
         }
     }
 }

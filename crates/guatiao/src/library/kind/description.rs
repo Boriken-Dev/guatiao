@@ -6,12 +6,16 @@
 //! (`<Trait>Vtable::description()`) and a kind crate commits as
 //! `<crate>.kinds.json`, read from a [`Value`].
 //!
-//! The format is stated in `docs/encodings.md`, "A kind, described". This
-//! module reads a value, never text: a caller holding JSON parses it first
-//! (`guatiao-serde`), which keeps this crate free of a format dependency.
+//! The format is stated in `docs/encodings.md`, "A kind, described". A
+//! description is read from a value; the JSON text a provider carries in
+//! its descriptor is read by a small reader of this module's own, so the
+//! crate takes no format dependency.
 
 #![forbid(unsafe_code)]
 
+mod json;
+
+use crate::value::alloc::Alloc;
 use crate::value::convert::{FromValue, TryAsRef};
 use crate::value::types::{List, Map, Value};
 
@@ -514,6 +518,24 @@ impl KindDescription {
             kinds.push(Self::read(k, &format!("kinds[{i}]"))?);
         }
         Ok(kinds)
+    }
+
+    /// Reads a document from its JSON text, as a provider carries it in
+    /// [`ProviderInfo::kind_descriptions`](crate::library::ProviderInfo::kind_descriptions)
+    /// and a kind crate commits it. Text that is not JSON is refused at
+    /// `byte N`, where it stops being JSON.
+    pub fn document_json(text: &str) -> Result<Vec<KindDescription>, DescriptionError> {
+        Self::document(&Self::document_value(text, Alloc::rust())?)
+    }
+
+    /// The document `text` holds as a value built in `alloc`, refused as
+    /// [`document_json`](KindDescription::document_json) refuses it.
+    pub(crate) fn document_value(text: &str, alloc: Alloc) -> Result<Value, DescriptionError> {
+        let value = json::read(text, alloc).map_err(|(at, why)| {
+            DescriptionError::new(format!("byte {at}"), format!("is not {why}"))
+        })?;
+        Self::document(&value)?;
+        Ok(value)
     }
 
     /// The kind's name, as a descriptor's `kinds` and `tables` name it.

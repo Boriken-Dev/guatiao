@@ -29,6 +29,35 @@ pub trait ProviderDecl {
     }
 }
 
+/// What [`Kind::describe`] is, for each kind a provider serves.
+pub type Describe = fn(&mut Vec<&'static str>, &mut Vec<String>);
+
+/// The document a provider carries in [`ProviderInfo::kind_descriptions`]:
+/// `{"format":1,"kinds":[...]}` holding what each of `kinds` describes,
+/// in order, every kind once. Empty when nothing is described, as for a
+/// kind implemented by hand.
+///
+/// ```
+/// # use guatiao::library::Kind;
+/// # use greeter_kind::Greeter;
+/// let document = guatiao::library::kind::kind_document(&[<dyn Greeter as Kind>::describe]);
+/// assert!(document.starts_with(r#"{"format":1,"kinds":[{"name":"greeter""#));
+/// ```
+pub fn kind_document(kinds: &[Describe]) -> String {
+    let mut seen = Vec::new();
+    let mut described = Vec::new();
+    for describe in kinds {
+        describe(&mut seen, &mut described);
+    }
+    if described.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(r#"{"format":1,"kinds":["#);
+    out.push_str(&described.join(","));
+    out.push_str("]}");
+    out
+}
+
 /// Everything one provider's descriptor points at, owned in one place so
 /// the descriptor stays valid for as long as this does.
 ///
@@ -55,6 +84,8 @@ pub struct ProviderParts {
     config: Vec<Value>,
     #[allow(dead_code)]
     meta: Vec<Map>,
+    #[allow(dead_code)]
+    kind_descriptions: String,
     #[allow(dead_code)]
     kept: Kept,
     info: ProviderInfo<'static>,
@@ -101,6 +132,7 @@ impl ProviderParts {
             available: None,
             create: None,
             destroy: None,
+            kind_descriptions: String::new(),
             kept: Kept::default(),
         }
     }
@@ -136,6 +168,7 @@ pub struct ProviderPartsBuilder {
     available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
     create: Option<CreateFn>,
     destroy: Option<DestroyFn>,
+    kind_descriptions: String,
     kept: Kept,
 }
 
@@ -213,6 +246,14 @@ impl ProviderPartsBuilder {
         self
     }
 
+    /// The descriptions of the kinds it serves and the object kinds they
+    /// reach, as one JSON document. See [`ProviderInfo::kind_descriptions`]
+    /// and [`kind_document`]. Empty, the default, for none.
+    pub fn kind_descriptions(mut self, document: String) -> Self {
+        self.kind_descriptions = document;
+        self
+    }
+
     /// Keeps `owner` with the parts, dropped when they are: what a table
     /// or `ctx` given above points into and nothing else owns, such as a
     /// table built at run time. The registry holds the parts while any
@@ -236,6 +277,7 @@ impl ProviderPartsBuilder {
             available,
             create,
             destroy,
+            kind_descriptions,
             kept,
         } = self;
         // The names first, never pushed to after: their heap text is what
@@ -290,6 +332,8 @@ impl ProviderPartsBuilder {
             },
             create,
             destroy,
+            // SAFETY: as `id`.
+            kind_descriptions: unsafe { crate::library::raw::view_of_owned(&kind_descriptions) },
         };
         ProviderParts {
             id,
@@ -300,6 +344,7 @@ impl ProviderPartsBuilder {
             tables,
             config,
             meta,
+            kind_descriptions,
             kept,
             info,
         }

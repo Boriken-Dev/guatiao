@@ -328,6 +328,7 @@ class ProviderInfo(ctypes.Structure):
         ("tables", KindTables),
         ("create", CreateFn),
         ("destroy", DestroyFn),
+        ("kind_descriptions", Str),
     ]
 
 
@@ -411,9 +412,10 @@ assert ctypes.sizeof(Kinds) == 16
 assert ctypes.sizeof(KindTable) == 32
 assert ctypes.sizeof(KindTables) == 24
 assert ctypes.sizeof(Providers) == 24
-assert ctypes.sizeof(ProviderInfo) == 152
+assert ctypes.sizeof(ProviderInfo) == 168
 assert _offset(ProviderInfo, "tables") == 112
 assert _offset(ProviderInfo, "destroy") == 144
+assert _offset(ProviderInfo, "kind_descriptions") == 152
 assert ctypes.sizeof(LibraryInfo) == 80
 assert _offset(LibraryInfo, "unload") == 72
 assert ctypes.sizeof(HostInfo) == 64

@@ -896,6 +896,19 @@ typedef struct guatiao_provider_info {
    Releases an instance `create` built. Null when `create` is null.
    */
   void (*destroy)(void *ctx, void *instance);
+  /*
+   The descriptions of the kinds this provider serves, and of every
+   object kind their slots take or answer, each once: one document
+   `{"format":1,"kinds":[...]}` as JSON text, the format
+   `docs/encodings.md` states ("A kind, described"). **Empty when
+   the provider carries none**, which a host reads the same as a
+   descriptor older than this field.
+
+   What lets a host bind a kind it has no file for. `#[derive(Provider)]`
+   writes it; a provider written by hand may leave it empty. The text
+   outlives every reader, as `id` does.
+   */
+  struct guatiao_str kind_descriptions;
 } guatiao_provider_info;
 
 /*
@@ -2454,6 +2467,30 @@ guatiao_status guatiao_registry_provider_meta(const struct guatiao_registry *reg
                                               struct guatiao_str key,
                                               const struct guatiao_alloc *alloc,
                                               struct guatiao_value *out);
+
+/*
+ The descriptions of the kinds one provider serves, and of every object
+ kind their slots take or answer, each once, copied into `alloc` as the
+ document `docs/encodings.md` states ("A kind, described"): a map
+ `{"format": 1, "kinds": [...]}`. What a host binds a kind from when it
+ has no `.kinds.json` for it.
+
+ `out` holds the document, or stays ABSENT when the provider carries
+ none (a provider written by hand, or a library built before
+ descriptors carried them); both answer `GUATIAO_OK`.
+ `GUATIAO_ERR_NOT_FOUND` when nothing answers to `key`;
+ `GUATIAO_ERR_BAD_VALUE` when what the provider carries is not a
+ description. The caller frees the document with `guatiao_value_free`
+ and may keep it past the library.
+
+ # Safety
+
+ As [`guatiao_registry_provider`].
+ */
+guatiao_status guatiao_registry_kind_descriptions(const struct guatiao_registry *reg,
+                                                  struct guatiao_str key,
+                                                  const struct guatiao_alloc *alloc,
+                                                  struct guatiao_value *out);
 
 /*
  Merges `later` into `earlier`, later winning, and writes a new tree

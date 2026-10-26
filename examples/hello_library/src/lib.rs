@@ -478,6 +478,7 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 tables: KindTables::empty(),
                 create: None,
                 destroy: None,
+                kind_descriptions: Str::new(""),
             },
             ProviderInfo {
                 struct_size: size_of::<ProviderInfo>() as u32,
@@ -497,6 +498,7 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 tables: KindTables::empty(),
                 create: None,
                 destroy: None,
+                kind_descriptions: Str::new(""),
             },
             // Claims a kind AND cannot run here, which is the case a host
             // must tell apart from nobody claiming the kind at all: the
@@ -516,6 +518,7 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 tables: KindTables::empty(),
                 create: None,
                 destroy: None,
+                kind_descriptions: Str::new(""),
             },
             // Reaches the greeter through the host's services, which is
             // the one thing a library could not do before it kept a
@@ -535,6 +538,7 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 tables: KindTables::empty(),
                 create: None,
                 destroy: None,
+                kind_descriptions: Str::new(""),
             },
         ];
 

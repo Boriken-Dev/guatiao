@@ -318,6 +318,24 @@ impl HostRegistry {
         self.inner.provider(key).map(Provider::meta)
     }
 
+    /// One provider's kind descriptions as the document value, built in
+    /// `alloc`: `None` for no such provider, `Some(None)` when it carries
+    /// none.
+    fn kind_descriptions(
+        &self,
+        key: &str,
+        alloc: Alloc,
+    ) -> Option<Result<Option<Value>, crate::library::kind::DescriptionError>> {
+        let provider = self.inner.provider(key)?;
+        Some(
+            provider
+                .view()
+                .kind_descriptions()
+                .map(|text| crate::library::kind::KindDescription::document_value(text, alloc))
+                .transpose(),
+        )
+    }
+
     /// Refreshes every source and describes what changed.
     fn refresh(&mut self, alloc: Alloc) -> Result<Value, ValueError> {
         refreshed_value(alloc, &self.inner.refresh())
@@ -1800,6 +1818,57 @@ pub unsafe extern "C" fn guatiao_registry_provider_meta(
                 Ok(copy) => unsafe { Value::from(copy).write_to(out, alloc.as_raw()) },
                 Err(e) => e.into(),
             },
+        }
+    })
+}
+
+/// The descriptions of the kinds one provider serves, and of every object
+/// kind their slots take or answer, each once, copied into `alloc` as the
+/// document `docs/encodings.md` states ("A kind, described"): a map
+/// `{"format": 1, "kinds": [...]}`. What a host binds a kind from when it
+/// has no `.kinds.json` for it.
+///
+/// `out` holds the document, or stays ABSENT when the provider carries
+/// none (a provider written by hand, or a library built before
+/// descriptors carried them); both answer `GUATIAO_OK`.
+/// `GUATIAO_ERR_NOT_FOUND` when nothing answers to `key`;
+/// `GUATIAO_ERR_BAD_VALUE` when what the provider carries is not a
+/// description. The caller frees the document with `guatiao_value_free`
+/// and may keep it past the library.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_provider`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_kind_descriptions(
+    reg: *const HostRegistry,
+    key: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match registry.kind_descriptions(key, alloc) {
+            None => Status::GUATIAO_ERR_NOT_FOUND,
+            Some(Ok(None)) => Status::GUATIAO_OK,
+            Some(Ok(Some(document))) => {
+                // SAFETY: `out` is null or the caller's slot, written ABSENT
+                // on entry; the document records `alloc`.
+                unsafe { document.write_to(out, alloc.as_raw()) }
+            }
+            Some(Err(_)) => Status::GUATIAO_ERR_BAD_VALUE,
         }
     })
 }

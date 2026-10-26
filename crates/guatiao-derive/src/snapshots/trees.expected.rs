@@ -247,6 +247,18 @@ impl ::guatiao::library::Kind for dyn Trees {
         seen.push("trees");
         0usize
     }
+    fn describe(
+        seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>,
+        out: &mut ::guatiao::__private::alloc::vec::Vec<
+            ::guatiao::__private::alloc::string::String,
+        >,
+    ) {
+        if seen.contains(&"trees") {
+            return;
+        }
+        seen.push("trees");
+        out.push(TreesVtable::description());
+    }
     fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
         remote
     }

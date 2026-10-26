@@ -66,6 +66,8 @@ files:
         name: guatiao_registry_host
       c:@F@guatiao_registry_keyed_by:
         name: guatiao_registry_keyed_by
+      c:@F@guatiao_registry_kind_descriptions:
+        name: guatiao_registry_kind_descriptions
       c:@F@guatiao_registry_libraries:
         name: guatiao_registry_libraries
       c:@F@guatiao_registry_libraries_keyed_by:
