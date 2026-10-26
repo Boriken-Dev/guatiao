@@ -110,7 +110,7 @@ contains
       body = body(n + 2:)
       n = index(body, '(*')
     end do
-    call check(int(k%size) == 8 + 8 * slots, name // ': the table is the header''s size')
+    call check(int(k%size) == 8 + int(c_sizeof(c_null_funptr)) * slots, name // ': the table is the header''s size')
   end subroutine
 
   function to_int(digits) result(v)
