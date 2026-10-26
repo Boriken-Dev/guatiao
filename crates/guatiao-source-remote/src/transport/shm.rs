@@ -146,6 +146,8 @@ struct RingWriter {
     ring: Ring,
     bell: Arc<Mutex<Box<dyn Write + Send>>>,
     gone: Arc<AtomicBool>,
+    /// How long a write waits for room the reader frees none of.
+    stall: Option<Duration>,
 }
 
 impl Read for RingReader {
@@ -211,6 +213,7 @@ impl Write for RingWriter {
         }
         let head = self.ring.counter(HEAD).load(Ordering::Relaxed);
         let mut waited = 0u32;
+        let mut since = None;
         let room = loop {
             let tail = self.ring.counter(TAIL).load(Ordering::Acquire);
             let room = RING - self.ring.held(head, tail)?;
@@ -225,7 +228,11 @@ impl Write for RingWriter {
             waited += 1;
             if waited < 1000 {
                 core::hint::spin_loop();
-            } else if waited < 2000 {
+                continue;
+            }
+            // A yield on a loaded machine can last a whole time slice.
+            stalled(&mut since, self.stall)?;
+            if waited < 2000 {
                 std::thread::yield_now();
             } else {
                 std::thread::sleep(Duration::from_micros(200));
@@ -250,6 +257,22 @@ impl Write for RingWriter {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+/// Fails once `stall` has passed since the first call, which starts the
+/// clock in `since`.
+fn stalled(since: &mut Option<Instant>, stall: Option<Duration>) -> io::Result<()> {
+    let Some(stall) = stall else {
+        return Ok(());
+    };
+    let started = *since.get_or_insert_with(Instant::now);
+    if started.elapsed() >= stall {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("the peer took nothing in for {stall:?}"),
+        ));
+    }
+    Ok(())
 }
 
 fn map(path: &Path, create: bool) -> io::Result<Arc<Region>> {
@@ -324,13 +347,21 @@ fn connection(region: &Arc<Region>, client: bool, bell: Bell, peer: String) -> C
             bell: bell.read,
             gone: Arc::clone(&gone),
         })),
-        writer: Box::new(StreamWriter::new(RingWriter {
-            ring: outgoing,
-            bell: bell.write,
-            gone,
-        })),
+        writer: Box::new(
+            StreamWriter::new(RingWriter {
+                ring: outgoing,
+                bell: bell.write,
+                gone: Arc::clone(&gone),
+                stall: None,
+            })
+            .bounded_by(|w: &mut RingWriter, t| {
+                w.stall = t;
+                Ok(())
+            }),
+        ),
         peer,
-        closer: None,
+        // A writer waiting for room stops waiting.
+        closer: Some(Box::new(move || gone.store(true, Ordering::Release))),
     }
 }
 
@@ -536,6 +567,27 @@ mod tests {
         let mut out = vec![0u8; n];
         ring.copy_out(tail, &mut out);
         assert_eq!(out, b"wrapped");
+    }
+
+    #[test]
+    fn a_write_to_a_ring_nobody_drains_gives_up_at_its_bound() {
+        let ring = heap_ring();
+        // Full: the reader has taken nothing of a whole ring.
+        ring.counter(HEAD).store(RING, Ordering::Relaxed);
+        let mut writer = RingWriter {
+            ring,
+            bell: Arc::new(Mutex::new(Box::new(io::sink()))),
+            gone: Arc::new(AtomicBool::new(false)),
+            stall: Some(Duration::from_millis(100)),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(writer.write(b"more"));
+        });
+        let written = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the write gives up");
+        assert_eq!(written.unwrap_err().kind(), io::ErrorKind::TimedOut);
     }
 
     #[test]

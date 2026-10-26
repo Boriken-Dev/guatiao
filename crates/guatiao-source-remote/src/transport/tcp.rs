@@ -111,9 +111,12 @@ fn connection(stream: TcpStream, peer: String) -> io::Result<Connection> {
             Shared(Arc::clone(&stream)),
             |s: &Shared, t| s.0.set_read_timeout(t),
         )),
-        writer: Box::new(StreamWriter::with_shutdown(Shared(stream), move || {
-            let _ = shutting.shutdown(Shutdown::Both);
-        })),
+        writer: Box::new(
+            StreamWriter::with_shutdown(Shared(stream), move || {
+                let _ = shutting.shutdown(Shutdown::Both);
+            })
+            .bounded_by(|s: &mut Shared, t| s.0.set_write_timeout(t)),
+        ),
         peer,
         closer: Some(Box::new(move || {
             let _ = closing.shutdown(Shutdown::Both);
@@ -314,6 +317,28 @@ mod tests {
         let mut frame = Vec::new();
         assert!(server.reader.read_frame(&mut frame, 1 << 10).unwrap());
         assert_eq!(frame, [1, 2, 3]);
+    }
+
+    #[test]
+    fn a_write_to_a_peer_that_reads_nothing_gives_up_at_its_bound() {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut c = from_stream(TcpStream::connect(l.local_addr().unwrap()).unwrap()).unwrap();
+        let (_unread, _) = l.accept().unwrap();
+        c.writer
+            .set_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        let mut frame = vec![0u8; 16 << 20];
+        frame[..4].copy_from_slice(&((16u32 << 20) - 4).to_le_bytes());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            // Far more than the sockets' buffers hold.
+            let written = (0..16).try_for_each(|_| c.writer.write_frame(&frame));
+            let _ = tx.send(written);
+        });
+        let written = rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the write gives up");
+        assert!(written.is_err());
     }
 
     #[test]
