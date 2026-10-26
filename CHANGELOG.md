@@ -14,6 +14,14 @@ write now.
 
 ### Added
 
+- **Go: `guatiao-kind` reads a kind's description.** `guatiao-kind
+  -description <crate>.kinds.json` writes the same glue `-header` writes
+  from the C header, so a kind with no header (one written in
+  TypeScript) gets Go glue too; the marker's C table name may be left out
+  (`//guatiao:kind tally`, `<name>_vtable` by default).
+  `examples/greeter_kind/go` is generated from its description now.
+  `Registry.KindDescriptions(key)` answers the document a library
+  carries.
 - **A key can name the source a library came from.** `%source`, in a
   library's and a provider's key template, renders the name of the
   source that served it (the name it was added under, a source file's

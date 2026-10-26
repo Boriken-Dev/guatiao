@@ -28,7 +28,7 @@ application that carries it.
   instance from a configuration, call a provider through its table with
   Go values in and out.
 - **A kind is a Go interface** — `guatiao-kind`, run by `go generate`,
-  reads the kind's C header and the interfaces and writes the glue: a
+  reads the kind's description (or its C header) and the interfaces and writes the glue: a
   descriptor, a remote implementing the interfaces, and the cgo calling and
   serving each slot.
 - **Write a provider in Go** — any type implementing a kind's interface,
@@ -147,10 +147,10 @@ answer, err := greeter.Greet("ana") // greeterkind.Greeting{Greeting: "hello, an
 
 ### A kind, and a provider of it
 
-A kind is an interface, its glue written from its C header:
+A kind is an interface, its glue written from its description:
 
 ```go
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
 
 type Greeting struct {
 	Greeting string `guatiao:"greeting"`
