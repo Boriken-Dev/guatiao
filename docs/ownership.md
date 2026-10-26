@@ -279,7 +279,12 @@ the tree recorded before the call, and frees the original through its
 own: the same walk as `make_local_in(alloc)`, which you can call on any
 tree you hold. A callee that builds with `config.alloc()?` and the `_in`
 forms, as above, leaves that walk nothing to move, and it then allocates
-nothing.
+nothing. An allocator that refuses makes the walk fail, the tree left
+whole where it stands, and that refusal is the call's error when the
+callee itself answered (its own refusal comes first), what it answered
+dropped unread; every binding's caller reports it the same way. The
+proxy also removes, and reports, a key the callee wrote into a map that
+is not UTF-8.
 
 A tree lent this way is never freed or kept by the callee, so a library
 may hold nothing that points into it once it returns. In C it crosses as
