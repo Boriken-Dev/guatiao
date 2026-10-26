@@ -114,3 +114,31 @@ fn a_link_ended_by_either_side_ends_on_both() {
     source.disconnect();
     eventually("the server's link ends", || server.links() == 0);
 }
+
+#[test]
+fn a_client_that_never_sets_up_does_not_hold_up_the_next() {
+    use guatiao_source_remote::transport::Connect;
+    use guatiao_source_remote::transport::local::LocalConnect;
+    let (_server, name) = serve("silent");
+    // Connected, and never sends its rings' path.
+    let silent = LocalConnect::new(&name).connect().expect("connects");
+    let (linked_tx, linked_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (_source, registry) = host(&name);
+        let greeter = registry
+            .offers::<dyn Greeter>()
+            .next()
+            .unwrap()
+            .shared()
+            .unwrap();
+        let answer = greeter.greet("next").unwrap();
+        let greeting = answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref);
+        let _ = linked_tx.send(greeting.map(str::to_string));
+    });
+    assert_eq!(
+        linked_rx.recv_timeout(Duration::from_secs(5)),
+        Ok(Some("hello, next".to_string())),
+        "the next client waited for the silent one"
+    );
+    drop(silent);
+}

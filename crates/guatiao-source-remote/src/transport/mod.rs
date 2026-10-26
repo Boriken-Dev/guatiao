@@ -13,6 +13,8 @@
 #![deny(unsafe_code)]
 
 pub mod child;
+#[cfg(any(test, feature = "shm", all(feature = "rdma", target_os = "linux")))]
+mod deferred;
 #[cfg(feature = "local")]
 pub mod local;
 pub mod memory;

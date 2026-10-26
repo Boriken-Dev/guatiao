@@ -218,8 +218,10 @@ impl RdmaListen {
         self.tcp.local_addr()
     }
 
-    /// The next link, set up, or a peer the list denies, turned away
-    /// unread.
+    /// The next link, or a peer the list denies, turned away unread. A
+    /// link is set up on its first read, on the thread serving it, each
+    /// read of the set-up within the bound the link set for its reads
+    /// ([`SETUP_TIMEOUT`] when none is set): accepting reads nothing.
     pub fn accept(&self) -> io::Result<Accepted> {
         let (stream, peer) = match self.tcp.accept_stream()? {
             Ok(accepted) => accepted,
@@ -227,12 +229,20 @@ impl RdmaListen {
         };
         #[cfg(target_os = "linux")]
         {
-            Ok(Accepted::Connection(ring::establish(
-                stream,
-                &self.port,
-                self.timeout,
-                format!("rdma {peer}"),
-            )?))
+            let ending = stream.try_clone()?;
+            let port = self.port.clone();
+            let timeout = self.timeout;
+            let name = format!("rdma {peer}");
+            let words = name.clone();
+            Ok(Accepted::Connection(super::deferred::deferred(
+                name,
+                Box::new(move |bound| {
+                    ring::establish(stream, &port, bound.unwrap_or(timeout), words)
+                }),
+                Some(Box::new(move || {
+                    let _ = ending.shutdown(std::net::Shutdown::Both);
+                })),
+            )))
         }
         #[cfg(not(target_os = "linux"))]
         {
