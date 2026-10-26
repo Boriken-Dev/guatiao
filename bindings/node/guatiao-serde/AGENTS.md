@@ -52,6 +52,26 @@ using parsed = serde.loads(text, { format: 'json' });
 - `toml`/`yaml` throw `MissingSymbol` naming the feature when the loaded
   library lacks it; an unknown format is a `TypeError`.
 
+Straight to plain data, with no `Value` in between:
+
+```ts
+const config = serde.parse(text, { format: 'yaml' });   // plain objects
+const back = serde.render(config, { format: 'json' });  // a string
+```
+
+- `parse(text, { format = 'json', how = 0, numbers = 'auto', maps = 'object' })`:
+  the plain data `loads(text).toJS({ numbers, maps })` answers, with the
+  same errors. The document crosses once, as wire bytes, and is read in
+  JavaScript.
+- `render(data, { format = 'json', pretty = false, how = 0 }) -> string`:
+  what `dumps(data, ...)` writes for the same data (or a `Ref`), with the
+  same errors, written as wire bytes in JavaScript and crossing once.
+  Nesting deeper than 128 containers is a `BadValue`.
+
+Both are several times faster than `loads` then `toJS`, and `dumps` of
+plain data, for a document with structure; for a document that is one
+large string they are slower, since the string is copied once more.
+
 A number keeps its exact text, except that an exponent is read back with
 its sign (`1e400` is `1e+400`).
 

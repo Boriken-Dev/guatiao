@@ -12,6 +12,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { BadValue, NotFound, Tag, Value, WrongKind, type Ref } from 'guatiao';
+import { MAX_DEPTH, jsToWire, wireToJS } from 'guatiao/ffi';
 import * as wire from 'guatiao/wire';
 
 import { SIZE, WIRE_EVENT } from '../src/abi.js';
@@ -138,6 +139,95 @@ describe('values on the wire', () => {
     using value = new Value({ outer: { inner: [1, 'two'] } });
     using back = Value.fromWire(value.asMap().get('outer')!.toWire());
     expect(back.toJS()).toEqual({ inner: [1, 'two'] });
+  });
+});
+
+describe('wire bytes read and written in JavaScript', () => {
+  const modes = (['auto', 'bigint', 'text'] as const).flatMap((numbers) =>
+    (['object', 'map'] as const).map((maps) => ({ numbers, maps })),
+  );
+
+  it.each(VECTORS.values.map((v) => [v.name, v] as const))('%s reads as the tree does', (_name, v) => {
+    const data = fromHex(v.hex);
+    for (const options of modes) {
+      using value = Value.fromWire(data);
+      const expected = value.toJS(options);
+      const got = wireToJS(data, options);
+      expect(got, JSON.stringify(options)).toStrictEqual(expected);
+      using back = new Value(got);
+      expect(toHex(jsToWire(got))).toBe(toHex(back.toWire()));
+    }
+  });
+
+  it('refuses bytes cut short, and bytes after the value', () => {
+    using value = new Value({ a: [1, 'two', new Uint8Array([0])], 'ключ': 'значение' });
+    const data = value.toWire();
+    for (let end = 0; end < data.length; end++) {
+      expect(() => wireToJS(data.subarray(0, end)), `cut at ${end}`).toThrow(BadValue);
+    }
+    expect(() => wireToJS(Uint8Array.from([...data, 1]))).toThrow(BadValue);
+    expect(() => wireToJS(Uint8Array.of(9))).toThrow(BadValue);
+    expect(() => wireToJS(Uint8Array.of(4, 1, 0xff))).toThrow(BadValue);
+  });
+
+  it('writes text of every length as the tree does', () => {
+    // 43 three-byte characters are 129 bytes: a two-byte length after a
+    // guess of one.
+    for (const text of ['', 'a', 'é', '€'.repeat(42), '€'.repeat(43), 'x'.repeat(63), 'x'.repeat(64), 'ü'.repeat(70_000), '😀'.repeat(40)]) {
+      using value = new Value({ [text]: text });
+      const data = jsToWire({ [text]: text });
+      expect(toHex(data)).toBe(toHex(value.toWire()));
+      expect(wireToJS(data)).toStrictEqual({ [text]: text });
+    }
+  });
+
+  it('refuses what new Value refuses, and writes a Ref as its node', () => {
+    class Point {
+      x = 1;
+    }
+    const cyclic: unknown[] = [];
+    cyclic.push(cyclic);
+    for (const [bad, error] of [
+      [Number.NaN, RangeError],
+      [new Map([[1, 2]]), TypeError],
+      [Symbol('s'), TypeError],
+      [() => 1, TypeError],
+      [new Point(), TypeError],
+      [cyclic, TypeError],
+      ['\ud800', TypeError],
+      [{ '\udc00': 1 }, TypeError],
+    ] as const) {
+      expect(() => new Value(bad)).toThrow(error);
+      expect(() => jsToWire(bad)).toThrow(error);
+    }
+    using inner = new Value({ x: [true, null] });
+    using whole = new Value({ ref: { x: [true, null] } });
+    expect(toHex(jsToWire({ ref: inner }))).toBe(toHex(whole.toWire()));
+    // A key named `__proto__` is data both ways.
+    const odd: unknown = JSON.parse('{"__proto__": 1, "constructor": 2}');
+    const read = wireToJS<Record<string, unknown>>(jsToWire(odd));
+    expect(read).toStrictEqual(odd);
+    expect(Object.getPrototypeOf(read)).toBe(Object.prototype);
+  });
+
+  it(`nests ${MAX_DEPTH} deep and no deeper`, () => {
+    const nest = (depth: number): unknown => {
+      let v: unknown = [];
+      for (let i = 1; i < depth; i++) v = [v];
+      return v;
+    };
+    // A non-empty innermost list, so the reader opens every level.
+    const deepest = (depth: number): unknown => {
+      let v: unknown = [1];
+      for (let i = 1; i < depth; i++) v = [v];
+      return v;
+    };
+    const ok = jsToWire(deepest(MAX_DEPTH));
+    using value = Value.fromWire(ok);
+    expect(wireToJS(ok)).toStrictEqual(value.toJS());
+    expect(() => jsToWire(nest(MAX_DEPTH + 1))).toThrow(BadValue);
+    const tooDeep = Uint8Array.from([...Array<number>(MAX_DEPTH + 1).fill(0).flatMap(() => [6, 1]), 1]);
+    expect(() => wireToJS(tooDeep)).toThrow(BadValue);
   });
 });
 

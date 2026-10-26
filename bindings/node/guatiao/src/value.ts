@@ -133,7 +133,8 @@ function numberText(node: bigint | null): string {
 const INT64_MIN = -(2n ** 63n);
 const INT64_MAX = 2n ** 63n - 1n;
 
-function readNumber(text: string, numbers: ReadOptions['numbers']): number | bigint | string {
+/** A number's text read as `ReadOptions.numbers` says. @internal */
+export function readNumber(text: string, numbers: ReadOptions['numbers']): number | bigint | string {
   if (numbers === 'text') return text;
   const fractional = /[.eE]/.test(text);
   if (fractional) return Number(text);
@@ -189,18 +190,21 @@ function nodeToJS(node: bigint | null, options: ReadOptions): unknown {
 
 // ---- writing, through the library -----------------------------------------------
 
-function numberTextFor(value: number | bigint): string {
+/** The text a JS number or bigint is written as. @internal */
+export function numberTextFor(value: number | bigint): string {
   if (typeof value === 'bigint') return value.toString();
   if (!Number.isFinite(value)) throw new RangeError(`${value} is not a finite number`);
   return Object.is(value, -0) ? '-0' : String(value);
 }
 
-function isPlainObject(value: object): value is Record<string, unknown> {
+/** @internal */
+export function isPlainObject(value: object): value is Record<string, unknown> {
   const proto = Object.getPrototypeOf(value) as unknown;
   return proto === Object.prototype || proto === null;
 }
 
-function asBytes(value: unknown): Uint8Array | undefined {
+/** A byte view's bytes, without copying; `undefined` for anything else. @internal */
+export function asBytes(value: unknown): Uint8Array | undefined {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
