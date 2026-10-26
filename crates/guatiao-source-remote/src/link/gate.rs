@@ -29,12 +29,21 @@ pub(crate) struct Gate {
 struct State {
     /// `None` while a thread writes.
     writer: Option<Box<dyn FrameWrite>>,
-    /// Frames for the thread writing, in order, each with the call it
-    /// starts (0: none).
-    queued: Vec<(u64, Vec<u8>)>,
+    /// Frames for the thread writing, in order.
+    queued: Vec<Queued>,
     /// The last batch's vector, kept for the next.
-    spare: Vec<(u64, Vec<u8>)>,
+    spare: Vec<Queued>,
     closed: bool,
+}
+
+/// A frame waiting for the writer.
+struct Queued {
+    /// The call it starts (0: none).
+    call: u64,
+    head: Vec<u8>,
+    /// The frame's last bytes, kept out of `head`: a vector and where in it
+    /// they start.
+    tail: Option<(Vec<u8>, usize)>,
 }
 
 /// Why a frame was not written.
@@ -61,12 +70,36 @@ impl Gate {
     /// the writer is free, with whatever else is queued, else left for the
     /// thread writing. Never waits for another thread.
     pub(crate) fn send(&self, call: u64, frame: Vec<u8>) -> Result<(), Unsent> {
+        self.queue(Queued {
+            call,
+            head: frame,
+            tail: None,
+        })
+    }
+
+    /// Sends a frame whose last bytes are `tail[from..]`, as
+    /// [`send`](Gate::send) does: a large answer, encoded where it lies.
+    pub(crate) fn send_with_tail(
+        &self,
+        call: u64,
+        head: Vec<u8>,
+        tail: Vec<u8>,
+        from: usize,
+    ) -> Result<(), Unsent> {
+        self.queue(Queued {
+            call,
+            head,
+            tail: Some((tail, from)),
+        })
+    }
+
+    fn queue(&self, frame: Queued) -> Result<(), Unsent> {
         let writer = {
             let mut state = lock(&self.state);
             if state.closed {
                 return Err(Unsent::Closed);
             }
-            state.queued.push((call, frame));
+            state.queued.push(frame);
             match state.writer.take() {
                 Some(w) => w,
                 None => return Ok(()),
@@ -75,11 +108,42 @@ impl Gate {
         self.drain(writer)
     }
 
+    /// Sends a frame whose last bytes are `tail`, a large argument kept
+    /// out of `head`: written from where it lies if the writer is free,
+    /// else copied behind `head` and queued as [`send`](Gate::send) does.
+    pub(crate) fn send_parts(
+        &self,
+        call: u64,
+        mut head: Vec<u8>,
+        tail: &[u8],
+    ) -> Result<(), Unsent> {
+        let free = {
+            let mut state = lock(&self.state);
+            if state.closed {
+                return Err(Unsent::Closed);
+            }
+            state.writer.take()
+        };
+        let Some(mut writer) = free else {
+            // Copied outside the lock: the thread writing takes its next
+            // batch meanwhile.
+            head.extend_from_slice(tail);
+            return self.send(call, head);
+        };
+        if let Err(e) = writer.write_frame_parts(&head, tail) {
+            let mut state = lock(&self.state);
+            state.queued.clear();
+            state.writer = Some(writer);
+            return Err(Unsent::Failed(e));
+        }
+        self.drain(writer)
+    }
+
     /// Takes back call `call`'s frame if it is still queued: `true` when
     /// it never reached the peer.
     pub(crate) fn retract(&self, call: u64) -> bool {
         let mut state = lock(&self.state);
-        match state.queued.iter().position(|(c, _)| *c == call) {
+        match state.queued.iter().position(|q| q.call == call) {
             Some(at) => {
                 state.queued.remove(at);
                 true
@@ -127,15 +191,35 @@ impl Gate {
             }
             core::mem::swap(&mut batch, &mut state.queued);
             drop(state);
-            let frames: Vec<&[u8]> = batch.iter().map(|(_, f)| f.as_slice()).collect();
-            let written = writer.write_frames(&frames);
-            drop(frames);
-            if let Err(e) = written {
+            if let Err(e) = write_batch(&mut *writer, &batch) {
                 let mut state = lock(&self.state);
                 state.queued.clear();
                 state.writer = Some(writer);
                 return Err(Unsent::Failed(e));
             }
         }
+    }
+}
+
+/// Writes `batch` in order: runs of whole frames together, a frame with a
+/// tail as its two parts.
+fn write_batch(writer: &mut dyn FrameWrite, batch: &[Queued]) -> io::Result<()> {
+    let mut whole: Vec<&[u8]> = Vec::with_capacity(batch.len());
+    for q in batch {
+        match &q.tail {
+            None => whole.push(&q.head),
+            Some((tail, from)) => {
+                if !whole.is_empty() {
+                    writer.write_frames(&whole)?;
+                    whole.clear();
+                }
+                writer.write_frame_parts(&q.head, &tail[*from..])?;
+            }
+        }
+    }
+    if whole.is_empty() {
+        Ok(())
+    } else {
+        writer.write_frames(&whole)
     }
 }

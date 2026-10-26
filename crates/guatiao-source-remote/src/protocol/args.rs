@@ -25,7 +25,10 @@ use guatiao::library::kind::{
 use guatiao::{Alloc, List, Map, Value};
 
 use super::ProtocolError;
-use super::codec::{Reader, put_bytes, put_int, put_text, put_uint, put_value, put_walk};
+use super::codec::{
+    Reader, behind_length, put_bytes, put_int, put_text, put_uint, put_value, put_value_bare,
+    put_walk, put_walk_bare,
+};
 
 /// An object argument or answer as it crosses: whose numbering its id is
 /// in.
@@ -155,6 +158,35 @@ pub fn encode_args(
     refs: &[Option<ObjectRef>],
     out: &mut Vec<u8>,
 ) -> Result<(), ProtocolError> {
+    same_count(slot, args)?;
+    put_args(slot, args, refs, out)
+}
+
+/// The size from which a last text or bytes argument is sent from where
+/// it lies, behind the frame's head, rather than copied into the frame.
+pub(crate) const TAIL: usize = 64 << 10;
+
+/// As [`encode_args`], but a last text or bytes argument of [`TAIL`] bytes
+/// or more is left out after its length: the frame's last bytes, for the
+/// caller to send from where they lie.
+pub(crate) fn encode_args_tail<'s>(
+    slot: &SlotDescription,
+    args: &'s [Arg<'_>],
+    refs: &[Option<ObjectRef>],
+    out: &mut Vec<u8>,
+) -> Result<Option<&'s [u8]>, ProtocolError> {
+    same_count(slot, args)?;
+    let tail = match (slot.args().last().map(|d| d.ty()), args.last()) {
+        (Some(ArgType::Str), Some(Arg::Str(s))) if s.len() >= TAIL => s.as_bytes(),
+        (Some(ArgType::Bytes), Some(Arg::Bytes(b))) if b.len() >= TAIL => *b,
+        _ => return put_args(slot, args, refs, out).map(|()| None),
+    };
+    put_args(slot, &args[..args.len() - 1], refs, out)?;
+    put_uint(out, tail.len() as u64);
+    Ok(Some(tail))
+}
+
+fn same_count(slot: &SlotDescription, args: &[Arg<'_>]) -> Result<(), ProtocolError> {
     if args.len() != slot.args().len() {
         return Err(ProtocolError::Value(format!(
             "{} arguments for a slot that takes {}",
@@ -162,6 +194,17 @@ pub fn encode_args(
             slot.args().len()
         )));
     }
+    Ok(())
+}
+
+/// Appends `args` as the first `args.len()` of `slot`'s arguments type
+/// them.
+fn put_args(
+    slot: &SlotDescription,
+    args: &[Arg<'_>],
+    refs: &[Option<ObjectRef>],
+    out: &mut Vec<u8>,
+) -> Result<(), ProtocolError> {
     for (i, (arg, desc)) in args.iter().zip(slot.args()).enumerate() {
         match (desc.ty(), arg) {
             (ArgType::Scalar(Scalar::Bool), Arg::Bool(b)) => out.push(u8::from(*b)),
@@ -328,6 +371,47 @@ pub fn encode_answer(
     Ok(())
 }
 
+/// Whether a call of `slot` writes anything back after its answer.
+fn writes_back(slot: &SlotDescription) -> bool {
+    slot.args().iter().any(|d| {
+        matches!(
+            d.ty(),
+            ArgType::BytesMut
+                | ArgType::Tree {
+                    pass: Pass::Lent,
+                    ..
+                }
+        )
+    })
+}
+
+/// As [`encode_answer`], but a tree answered for a slot that writes nothing
+/// back, whose encoding is [`TAIL`] bytes or more, is left in `out` from
+/// the position answered, without its length: the frame's last bytes,
+/// behind a head the caller builds, so that nothing moves it.
+pub(crate) fn encode_answer_tail(
+    slot: &SlotDescription,
+    answer: Answer,
+    out: &mut Vec<u8>,
+    export: &mut dyn FnMut(RawObject) -> ObjectRef,
+) -> Result<Option<usize>, ProtocolError> {
+    if !matches!(slot.answer(), Some(AnswerType::Tree(_))) || writes_back(slot) {
+        return encode_answer(slot, answer, out, export).map(|()| None);
+    }
+    let at = out.len();
+    match &answer {
+        Answer::Value(v) => put_value_bare(out, v)?,
+        Answer::Map(m) => put_walk_bare(out, m)?,
+        Answer::List(l) => put_walk_bare(out, l)?,
+        _ => return encode_answer(slot, answer, out, export).map(|()| None),
+    }
+    if out.len() - at >= TAIL {
+        return Ok(Some(at));
+    }
+    behind_length(out, at);
+    Ok(None)
+}
+
 /// Reads a REPLY's answer, then writes what the callee wrote back into
 /// the caller's lent trees and buffers. An object answered is turned into
 /// the caller's handle by `object`.
@@ -415,4 +499,79 @@ pub fn decode_answer(
     }
     r.end()?;
     Ok(answer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use guatiao::library::kind::KindDescription;
+
+    const KIND: &str = r#"{"format": 1, "kinds": [{"name": "t", "floor_hash": 1, "object": false,
+      "slots": [
+        {"name": "text", "required": true, "fallible": false,
+         "args": [{"name": "n", "type": "i64"}, {"name": "s", "type": "str"}]},
+        {"name": "bytes", "required": true, "fallible": false,
+         "args": [{"name": "n", "type": "i64"}, {"name": "b", "type": "bytes"}]},
+        {"name": "tree", "required": true, "fallible": false, "args": [],
+         "answer": {"type": "map"}}]}]}"#;
+
+    fn kind() -> KindDescription {
+        KindDescription::document_json(KIND).unwrap().remove(0)
+    }
+
+    fn none(_: RawObject) -> ObjectRef {
+        unreachable!("no object here")
+    }
+
+    /// A frame's head then its tail: the bytes `encode_args` writes.
+    #[test]
+    fn a_large_last_argument_as_a_tail_is_the_same_bytes() {
+        let kind = kind();
+        let text = "t".repeat(TAIL);
+        let bytes = vec![7u8; TAIL];
+        let cases = [
+            (0, Arg::Str(&text[..TAIL - 1]), false),
+            (0, Arg::Str(&text), true),
+            (1, Arg::Bytes(&bytes[..TAIL - 1]), false),
+            (1, Arg::Bytes(&bytes), true),
+        ];
+        for (slot, last, tail_expected) in cases {
+            let slot = &kind.slots()[slot];
+            let args = [Arg::Int(-3), last];
+            let mut whole = Vec::new();
+            encode_args(slot, &args, &[None, None], &mut whole).unwrap();
+            let mut head = Vec::new();
+            let tail = encode_args_tail(slot, &args, &[None, None], &mut head).unwrap();
+            assert_eq!(tail.is_some(), tail_expected);
+            head.extend_from_slice(tail.unwrap_or_default());
+            assert_eq!(head, whole);
+        }
+    }
+
+    /// The bytes before the tail, its length, then the tail: the bytes
+    /// `encode_answer` writes.
+    #[test]
+    fn a_large_answer_as_a_tail_is_the_same_bytes() {
+        let kind = kind();
+        let slot = &kind.slots()[2];
+        for len in [10, TAIL] {
+            let mut map = Map::new();
+            map.set("k", "v".repeat(len).as_str());
+            let mut whole = b"head".to_vec();
+            encode_answer(slot, Answer::Map(map.clone()), &mut whole, &mut none).unwrap();
+            let mut out = b"head".to_vec();
+            let at = encode_answer_tail(slot, Answer::Map(map), &mut out, &mut none).unwrap();
+            let rebuilt = match at {
+                None => out,
+                Some(from) => {
+                    let mut head = out[..from].to_vec();
+                    put_uint(&mut head, (out.len() - from) as u64);
+                    head.extend_from_slice(&out[from..]);
+                    head
+                }
+            };
+            assert_eq!(at.is_some(), len == TAIL, "{len}");
+            assert_eq!(rebuilt, whole);
+        }
+    }
 }
