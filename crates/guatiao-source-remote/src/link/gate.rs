@@ -100,11 +100,15 @@ impl Gate {
         true
     }
 
-    /// Refuses every later frame and drops the queued ones.
+    /// Refuses every later frame. What is queued already is still written
+    /// by the thread writing, if one is: a GOODBYE queued behind a write in
+    /// progress reaches the peer.
     pub(crate) fn close(&self) {
         let mut state = lock(&self.state);
         state.closed = true;
-        state.queued.clear();
+        if state.writer.is_some() {
+            state.queued.clear();
+        }
     }
 
     /// Writes what is queued until nothing is, then gives the writer back.
@@ -113,8 +117,7 @@ impl Gate {
         loop {
             let mut state = lock(&self.state);
             batch.clear();
-            if state.queued.is_empty() || state.closed {
-                state.queued.clear();
+            if state.queued.is_empty() {
                 state.spare = batch;
                 state.writer = Some(writer);
                 return Ok(());
