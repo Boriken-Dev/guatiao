@@ -108,6 +108,43 @@ pub trait Engine: 'static {
         let _ = (library, object);
     }
 
+    /// An instance of the provider declared as `provider`, built from
+    /// `config`, for a provider declared with
+    /// [`Provided::config`]: the engine's id for it, which its slots'
+    /// calls name as [`Target::Instance`]. A host's `instantiate` (Rust or
+    /// C) checks `config` against the declared schema first when it can
+    /// read the schema; read it as input all the same. Refused by default.
+    fn create(
+        &self,
+        library: &Self::Library,
+        provider: &str,
+        config: &Value,
+    ) -> Result<u64, ProviderError> {
+        let _ = (library, provider, config);
+        Err(ProviderError::new(
+            guatiao::Status::GUATIAO_ERR_UNSUPPORTED,
+            "this engine builds no instances",
+        ))
+    }
+
+    /// The instance [`create`](Engine::create) answered as `instance` was
+    /// dropped by whoever held it last; called once. An instance never
+    /// dropped is never destroyed, and its lease keeps the library open.
+    fn destroy(&self, library: &Self::Library, instance: u64) {
+        let _ = (library, instance);
+    }
+
+    /// Whether the provider declared as `provider` can run now, or why
+    /// not, for a provider declared with
+    /// [`Provided::may_be_unavailable`]. Asked each time a host asks,
+    /// never cached; every distinct reason is kept until the library
+    /// closes (past 64, a fixed sentence stands for a new one), so answer
+    /// with stable words. Available by default.
+    fn available(&self, library: &Self::Library, provider: &str) -> Result<(), String> {
+        let _ = (library, provider);
+        Ok(())
+    }
+
     /// Lets a library go: the registry closed it, nothing holds it.
     fn close(&self, library: Self::Library);
 }
@@ -155,6 +192,9 @@ pub struct Provided {
     name: String,
     serves: Vec<(String, Vec<String>)>,
     meta: Option<guatiao::Map>,
+    config: Option<Value>,
+    instances_only: bool,
+    may_be_unavailable: bool,
 }
 
 impl Provided {
@@ -165,7 +205,35 @@ impl Provided {
             name: String::new(),
             serves: Vec::new(),
             meta: None,
+            config: None,
+            instances_only: false,
+            may_be_unavailable: false,
         }
+    }
+
+    /// Built from a configuration fitting `schema` (a JSON Schema as a
+    /// value): a host's `Offer::instantiate` reaches [`Engine::create`],
+    /// and dropping what it built reaches [`Engine::destroy`]. The
+    /// provider stays callable as itself too, unless
+    /// [`instances_only`](Provided::instances_only).
+    pub fn config(mut self, schema: Value) -> Provided {
+        self.config = Some(schema);
+        self
+    }
+
+    /// Callable only through instances [`config`](Provided::config)
+    /// builds: no default instance is offered.
+    pub fn instances_only(mut self) -> Provided {
+        self.instances_only = true;
+        self
+    }
+
+    /// Asked whether it can run before a host uses it: a host's
+    /// `available` reaches [`Engine::available`]. Without this the
+    /// provider is always available.
+    pub fn may_be_unavailable(mut self) -> Provided {
+        self.may_be_unavailable = true;
+        self
     }
 
     /// A name to show a person.
@@ -217,6 +285,21 @@ impl Provided {
     pub fn declared_meta(&self) -> Option<&guatiao::Map> {
         self.meta.as_ref()
     }
+
+    /// The schema of the configuration it is built from, when it is.
+    pub fn config_schema(&self) -> Option<&Value> {
+        self.config.as_ref()
+    }
+
+    /// Whether only instances of it are offered.
+    pub fn is_instances_only(&self) -> bool {
+        self.instances_only
+    }
+
+    /// Whether a host asks the engine if it can run.
+    pub fn asks_available(&self) -> bool {
+        self.may_be_unavailable
+    }
 }
 
 /// Who a call is for.
@@ -227,6 +310,8 @@ pub enum Target {
     Provider(String),
     /// An object the engine answered, by the id it gave.
     Object(u64),
+    /// An instance [`Engine::create`] built, by the id it gave.
+    Instance(u64),
 }
 
 /// One argument, as the engine receives it.

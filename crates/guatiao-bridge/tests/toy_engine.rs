@@ -19,7 +19,7 @@ use std::sync::Mutex;
 use std::thread::{self, ThreadId};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
-use guatiao::library::kind::{Arg, Caller, KindDescription, RawObject};
+use guatiao::library::kind::{Arg, Caller, InstantiateError, KindDescription, RawObject};
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Status, Value};
@@ -36,6 +36,10 @@ struct Lib {
     spin: bool,
     counted: Cell<i64>,
     conversations: RefCell<BTreeMap<u64, (RawObject, Vec<String>)>>,
+    /// Each instance's word, by the id the engine gave it.
+    instances: RefCell<BTreeMap<u64, String>>,
+    unplugged: bool,
+    panicky: bool,
 }
 
 /// The engine: not `Send` (its state is in `Rc`s and `RefCell`s).
@@ -46,6 +50,8 @@ struct Toy {
     libraries: RefCell<BTreeMap<u64, Rc<Lib>>>,
     next: Cell<u64>,
     closed: Cell<usize>,
+    created: Cell<usize>,
+    destroyed: RefCell<Vec<u64>>,
 }
 
 /// Reads `key = value` lines.
@@ -112,6 +118,8 @@ impl Engine for Toy {
             libraries: RefCell::new(BTreeMap::new()),
             next: Cell::new(0),
             closed: Cell::new(0),
+            created: Cell::new(0),
+            destroyed: RefCell::new(Vec::new()),
         })
     }
 
@@ -140,17 +148,32 @@ impl Engine for Toy {
                 spin: code.contains_key("spin"),
                 counted: Cell::new(0),
                 conversations: RefCell::new(BTreeMap::new()),
+                instances: RefCell::new(BTreeMap::new()),
+                unplugged: code.contains_key("unplugged"),
+                panicky: code.contains_key("panicky"),
             }),
         );
         let id = manifest.id();
+        let mut providers = vec![
+            Provided::new(&format!("{id}_greeter"))
+                .name("A toy greeter")
+                .serves("greeter", ["greet", "check", "start"])
+                .serves("counter", ["count"]),
+        ];
+        if code.contains_key("configured") {
+            let configured = Provided::new(&format!("{id}_configured"))
+                .serves("greeter", ["greet"])
+                .config(word_schema())
+                .may_be_unavailable();
+            providers.push(if code.contains_key("callable") {
+                configured
+            } else {
+                configured.instances_only()
+            });
+        }
         Ok(Opened::Described {
             library: handle,
-            providers: vec![
-                Provided::new(&format!("{id}_greeter"))
-                    .name("A toy greeter")
-                    .serves("greeter", ["greet", "check", "start"])
-                    .serves("counter", ["count"]),
-            ],
+            providers,
         })
     }
 
@@ -180,6 +203,20 @@ impl Engine for Toy {
                 }
                 let mut answer = Map::new();
                 answer.set("greeting", format!("{}, {name}", lib.word).as_str());
+                Ok(Reply::Value(Value::from(answer)))
+            }
+            (Target::Instance(instance), "greet") => {
+                let word = lib
+                    .instances
+                    .borrow()
+                    .get(&instance)
+                    .cloned()
+                    .ok_or_else(|| refused("no such instance"))?;
+                let mut answer = Map::new();
+                answer.set(
+                    "greeting",
+                    format!("{word}, {}", text(0).unwrap_or_default()).as_str(),
+                );
                 Ok(Reply::Value(Value::from(answer)))
             }
             (Target::Provider(_), "check") => {
@@ -249,10 +286,62 @@ impl Engine for Toy {
         }
     }
 
+    fn create(&self, handle: &u64, provider: &str, config: &Value) -> Result<u64, ProviderError> {
+        let lib = self.library(*handle)?;
+        if !provider.ends_with("_configured") {
+            return Err(refused("not this one"));
+        }
+        let word = TryAsRef::<Map>::try_as_ref(config)
+            .and_then(|m| m.get("word"))
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .ok_or_else(|| refused("no word"))?;
+        if word == "nobody" {
+            return Err(refused("`nobody` greets nobody"));
+        }
+        self.created.set(self.created.get() + 1);
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        lib.instances.borrow_mut().insert(id, word.to_string());
+        Ok(id)
+    }
+
+    fn destroy(&self, handle: &u64, instance: u64) {
+        if let Ok(lib) = self.library(*handle) {
+            lib.instances.borrow_mut().remove(&instance);
+        }
+        self.destroyed.borrow_mut().push(instance);
+    }
+
+    fn available(&self, handle: &u64, _provider: &str) -> Result<(), String> {
+        match self.library(*handle) {
+            Ok(lib) if lib.panicky => panic!("asked to"),
+            Ok(lib) if lib.unplugged => Err("the toy is unplugged".to_string()),
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.message().to_string()),
+        }
+    }
+
     fn close(&self, handle: u64) {
         self.libraries.borrow_mut().remove(&handle);
         self.closed.set(self.closed.get() + 1);
     }
+}
+
+/// `{"type": "object", "properties": {"word": {"type": "string"}},
+/// "required": ["word"], "additionalProperties": false}`
+fn word_schema() -> Value {
+    let mut word = Map::new();
+    word.set("type", "string");
+    let mut properties = Map::new();
+    properties.set("word", word);
+    let mut required = List::new();
+    required.push("word");
+    let mut schema = Map::new();
+    schema.set("type", "object");
+    schema.set("properties", properties);
+    schema.set("required", required);
+    schema.set("additionalProperties", false);
+    Value::from(schema)
 }
 
 /// The source the registry holds, shared with the test so it can ask the
@@ -544,6 +633,161 @@ fn objects_cross_the_engine_both_ways() {
         *heard.lock().unwrap(),
         ["one", "two", "<destroyed>"],
         "the engine let the listener go when the conversation was destroyed"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_described_provider_is_built_from_a_configuration_and_destroyed_once() {
+    let dir = scratch("instances");
+    put(
+        &dir,
+        "toy_conf",
+        "version = \"1.0.0\"\n",
+        "configured = yes\n",
+    );
+    let (mut registry, source) = serving(&dir, None);
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+
+    let offer = registry
+        .offer::<dyn Greeter>("toy_conf_configured")
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.builds_instances());
+    assert!(offer.default_instance().is_none(), "instances only");
+    assert!(offer.config_schema().is_some());
+
+    let mut config = Map::new();
+    config.set("word", "howdy");
+    let instance = offer.instantiate(&Value::from(config)).expect("built");
+    assert_eq!(
+        greeting(&instance.greet("ana").expect("greeted")),
+        "howdy, ana"
+    );
+    let mut other = Map::new();
+    other.set("word", "hey");
+    let second = offer.instantiate(&Value::from(other)).expect("built");
+    assert_eq!(greeting(&second.greet("bo").expect("greeted")), "hey, bo");
+    assert_eq!(source.run(|toy| toy.created.get()).expect("ran"), 2);
+
+    // Checked against the schema before the engine is asked.
+    let mut misspelled = Map::new();
+    misspelled.set("wrod", "x");
+    assert!(matches!(
+        offer.instantiate(&Value::from(misspelled)),
+        Err(InstantiateError::Invalid(_))
+    ));
+    assert_eq!(source.run(|toy| toy.created.get()).expect("ran"), 2);
+
+    drop(instance);
+    let destroyed = source
+        .run(|toy| toy.destroyed.borrow().clone())
+        .expect("ran");
+    assert_eq!(destroyed.len(), 1, "destroyed once");
+    // The other instance is still served after the first went.
+    assert_eq!(greeting(&second.greet("cy").expect("greeted")), "hey, cy");
+    drop(second);
+    assert_eq!(
+        source.run(|toy| toy.destroyed.borrow().len()).expect("ran"),
+        2
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_described_provider_is_asked_whether_it_can_run() {
+    let dir = scratch("available");
+    put(
+        &dir,
+        "toy_up",
+        "version = \"1.0.0\"\n",
+        "configured = yes\n",
+    );
+    put(
+        &dir,
+        "toy_down",
+        "version = \"1.0.0\"\n",
+        "configured = yes\nunplugged = yes\n",
+    );
+    let (mut registry, _source) = serving(&dir, None);
+    assert!(registry.refresh().refused.is_empty());
+
+    let up = registry.provider("toy_up_configured").expect("registered");
+    assert_eq!(up.available(), Ok(()));
+    let down = registry
+        .provider("toy_down_configured")
+        .expect("registered");
+    assert_eq!(down.available(), Err("the toy is unplugged"));
+    // A provider not declared as asking is available without asking.
+    let plain = registry.provider("toy_down_greeter").expect("registered");
+    assert_eq!(plain.available(), Ok(()));
+
+    let available: Vec<&str> = registry.available("greeter").map(|p| p.id()).collect();
+    assert!(available.contains(&"toy_up_configured"));
+    assert!(!available.contains(&"toy_down_configured"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_configured_provider_stays_callable_as_itself_and_its_refusals_cross() {
+    let dir = scratch("callable");
+    put(
+        &dir,
+        "toy_both",
+        "version = \"1.0.0\"\n",
+        "configured = yes\ncallable = yes\nword = hi\n",
+    );
+    put(
+        &dir,
+        "toy_panicky",
+        "version = \"1.0.0\"\n",
+        "configured = yes\npanicky = yes\n",
+    );
+    let (mut registry, source) = serving(&dir, None);
+    assert!(registry.refresh().refused.is_empty());
+
+    let offer = registry
+        .offer::<dyn Greeter>("toy_both_configured")
+        .expect("served")
+        .expect("as the trait");
+    let mut config = Map::new();
+    config.set("word", "yo");
+    let instance = offer.instantiate(&Value::from(config)).expect("built");
+    let itself = offer.default_instance().expect("callable as itself");
+    // The provider as itself, and the instance, each reach their own target.
+    assert_eq!(greeting(&itself.greet("ana").expect("greeted")), "hi, ana");
+    assert_eq!(
+        greeting(&instance.greet("ana").expect("greeted")),
+        "yo, ana"
+    );
+
+    // The engine's refusal crosses in its words; nothing was built.
+    let mut nobody = Map::new();
+    nobody.set("word", "nobody");
+    match offer.instantiate(&Value::from(nobody)) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "`nobody` greets nobody");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(source.run(|toy| toy.created.get()).expect("ran"), 1);
+    drop(instance);
+
+    // A panic in the engine's `available` reads as unavailable, in words.
+    let panicky = registry
+        .provider("toy_panicky_configured")
+        .expect("registered");
+    let why = panicky.available().expect_err("unavailable");
+    assert!(!why.is_empty());
+    // The engine carries on.
+    assert_eq!(
+        registry
+            .provider("toy_both_configured")
+            .expect("registered")
+            .available(),
+        Ok(())
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

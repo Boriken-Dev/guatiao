@@ -145,6 +145,7 @@ pub guatiao_bridge::Reply::Value(guatiao::value::value::Value)
 impl core::fmt::Debug for guatiao_bridge::Reply
 pub fn guatiao_bridge::Reply::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum guatiao_bridge::Target
+pub guatiao_bridge::Target::Instance(u64)
 pub guatiao_bridge::Target::Object(u64)
 pub guatiao_bridge::Target::Provider(alloc::string::String)
 impl core::clone::Clone for guatiao_bridge::Target
@@ -279,10 +280,16 @@ impl core::marker::Copy for guatiao_bridge::manifest::ManifestFormat
 impl core::marker::StructuralPartialEq for guatiao_bridge::manifest::ManifestFormat
 pub struct guatiao_bridge::Provided
 impl guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::asks_available(&self) -> bool
+pub fn guatiao_bridge::Provided::config(self, guatiao::value::value::Value) -> guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::config_schema(&self) -> core::option::Option<&guatiao::value::value::Value>
 pub fn guatiao_bridge::Provided::declared_meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
 pub fn guatiao_bridge::Provided::display_name(&self) -> &str
 pub fn guatiao_bridge::Provided::id(&self) -> &str
+pub fn guatiao_bridge::Provided::instances_only(self) -> guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::is_instances_only(&self) -> bool
 pub fn guatiao_bridge::Provided::kinds(&self) -> &[(alloc::string::String, alloc::vec::Vec<alloc::string::String>)]
+pub fn guatiao_bridge::Provided::may_be_unavailable(self) -> guatiao_bridge::Provided
 pub fn guatiao_bridge::Provided::meta(self, guatiao::value::types::map::Map) -> guatiao_bridge::Provided
 pub fn guatiao_bridge::Provided::name(self, &str) -> guatiao_bridge::Provided
 pub fn guatiao_bridge::Provided::new(&str) -> guatiao_bridge::Provided
@@ -300,8 +307,11 @@ pub trait guatiao_bridge::Engine: 'static
 pub type guatiao_bridge::Engine::Library: core::clone::Clone + core::marker::Send + core::marker::Sync + 'static
 pub const guatiao_bridge::Engine::MANIFESTS: guatiao_bridge::manifest::ManifestFormat
 pub const guatiao_bridge::Engine::THREADS: guatiao_bridge::ThreadModel
+pub fn guatiao_bridge::Engine::available(&self, &Self::Library, &str) -> core::result::Result<(), alloc::string::String>
 pub fn guatiao_bridge::Engine::call(&self, &Self::Library, &mut guatiao_bridge::Call) -> core::result::Result<guatiao_bridge::Reply, guatiao::library::kind::ProviderError>
 pub fn guatiao_bridge::Engine::close(&self, Self::Library)
+pub fn guatiao_bridge::Engine::create(&self, &Self::Library, &str, &guatiao::value::value::Value) -> core::result::Result<u64, guatiao::library::kind::ProviderError>
+pub fn guatiao_bridge::Engine::destroy(&self, &Self::Library, u64)
 pub fn guatiao_bridge::Engine::open(&self, &guatiao_bridge::manifest::Manifest, &str) -> core::result::Result<guatiao_bridge::Opened<Self::Library>, guatiao_bridge::BridgeError>
 pub fn guatiao_bridge::Engine::release(&self, &Self::Library, u64)
 pub fn guatiao_bridge::Engine::stack_size(&guatiao_bridge::Config) -> core::option::Option<usize> where Self: core::marker::Sized

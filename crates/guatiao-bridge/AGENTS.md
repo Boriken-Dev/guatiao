@@ -40,6 +40,10 @@ pub trait Engine: 'static {
     fn open(&self, m: &Manifest, version: &str) -> Result<Opened<Self::Library>, BridgeError>;
     fn call(&self, lib: &Self::Library, call: &mut Call) -> Result<Reply, ProviderError>; // default: UNSUPPORTED
     fn release(&self, lib: &Self::Library, object: u64);                // default: nothing
+    fn create(&self, lib: &Self::Library, provider: &str, config: &Value)
+        -> Result<u64, ProviderError>;                                  // default: UNSUPPORTED
+    fn destroy(&self, lib: &Self::Library, instance: u64);              // default: nothing
+    fn available(&self, lib: &Self::Library, provider: &str) -> Result<(), String>; // default: Ok
     fn close(&self, lib: Self::Library);
 }
 pub enum Opened<L> {
@@ -47,6 +51,9 @@ pub enum Opened<L> {
     Described { library: L, providers: Vec<Provided> },        // the bridge builds them (with_mechanism)
 }
 Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
+    .config(schema)          // built from a configuration: create/destroy served
+    .instances_only()        // no default instance (needs config)
+    .may_be_unavailable()    // available served: a host asks Engine::available
 ```
 
 - **`ThreadModel`**: `Any` (thread-safe, called at once), `Locked` (the
@@ -71,12 +78,25 @@ Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
   out of `serves` is null in the table, so the caller runs the kind's
   default; a required one left out refuses the library, naming the slot;
   a kind with no description given refuses it too.
+- **Instances** (`Provided::config(schema)`): a host's
+  `Offer::instantiate(&config)` checks `config` against `schema`, then
+  reaches `Engine::create(lib, provider_id, config)`; the id it answers is
+  what the instance's slots name as `Target::Instance(id)`, and dropping
+  the instance's last owner reaches `Engine::destroy(lib, id)` once. The
+  provider stays callable as itself (`Target::Provider`) unless
+  `instances_only()`, which offers no default instance; `instances_only()`
+  without `config` refuses the library.
+- **Availability** (`Provided::may_be_unavailable()`): every
+  `available()`/`why_not` a host asks reaches `Engine::available(lib,
+  provider_id)` on the engine's thread, never cached; `Err(words)` is the
+  reason the host reads. Every distinct reason is kept until the library
+  closes: answer with stable words. Without it a provider is available.
 
 ## A call (`Described`)
 
 ```rust
 pub struct Call { pub args: Vec<CallArg>, .. }      // target(), kind(), slot(), slot_description(), method()
-pub enum Target { Provider(String), Object(u64) }
+pub enum Target { Provider(String), Object(u64), Instance(u64) }   // #[non_exhaustive]
 pub enum CallArg { Value(Value), Lent(Value), Buffer(Vec<u8>),
                    Object(RawObject), LentObject(LentHandle) }      // guatiao::library::kind's
 pub enum Reply { Nothing, Value(Value), Object { kind: String, id: u64 }, Handed(RawObject) }
