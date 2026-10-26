@@ -63,6 +63,20 @@ map changed in place, `Taken{MapRef}` one handed over; an object kind is
 `greet`, `shout` and the rest call a table's slots. Code written against
 the kind (`f(g::Greeter)`) takes a remote or a Julia provider alike.
 
+A kind that has a description (the `<crate>.kinds.json` a kind crate
+commits beside its header) can be declared from it at run time instead:
+`Guatiao.kinds_of(read("greeter_kind.kinds.json", String))` evaluates the
+same `@kind` declarations into a module of its own and answers each kind
+by name; the library reads the JSON, so no JSON package is needed. A
+library built with `#[derive(Provider)]` carries the document itself:
+
+```julia
+kinds = Guatiao.kinds_of(Guatiao.kind_descriptions(reg, "derived_greeter_hello"))
+g = Guatiao.bind(reg, "derived_greeter_hello", kinds["greeter"])
+greet = getfield(parentmodule(kinds["greeter"]), :greet)
+Base.invokelatest(greet, g, "ana")   # declared after this code was compiled
+```
+
 ## As a host
 
 ```julia

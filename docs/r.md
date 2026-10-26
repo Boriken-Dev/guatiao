@@ -50,6 +50,14 @@ do. An object kind (`object = TRUE`) is passed `lent()` or `taken()`, and
 its `destroy` slot is `close()`. The declarations of the example kinds
 are `examples/greeter_kind/r/greeterkind`.
 
+A kind that has a description (the `<crate>.kinds.json` a kind crate
+commits beside its header) can be declared from it at run time:
+`kinds_of(paste(readLines("greeter_kind.kinds.json"), collapse = "\n"))`
+declares every kind as `kind()` would, in an environment of its own, and
+answers them by name; the library reads the JSON, so no JSON package is
+needed. A library built with `#[derive(Provider)]` carries the document
+itself, `reg$kind_descriptions("derived_greeter_hello")`.
+
 ## As a host
 
 ```r
