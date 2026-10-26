@@ -134,8 +134,8 @@ pub fn acl_of(value: &guatiao::Value) -> Result<coqui_net_acl::Acl, ProviderErro
 /// Reads a TLS policy from a value in coqui-peer-tls's text form, version
 /// 1: `profile` (`strict`, the default, `compatible`, `legacy`) and any
 /// field over it (`tls_versions`, `cipher_suites`, `kx_groups`,
-/// `pin_digests`, `check_validity`, `allow_chain_when_pinned`, the waiting
-/// caps, `acl`).
+/// `pin_digests`, `check_validity`, `allow_chain_when_pinned`,
+/// `allow_resumption`, the waiting caps, `acl`).
 #[cfg(feature = "tls")]
 pub fn policy_of(value: &guatiao::Value) -> Result<crate::transport::tls::Policy, ProviderError> {
     guatiao_serde::adapt::from_value(value).map_err(|e| refused(format!("not a TLS policy: {e}")))

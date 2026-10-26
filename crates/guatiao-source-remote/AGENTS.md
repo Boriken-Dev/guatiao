@@ -167,18 +167,24 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 - **TLS** (`tls`): `TlsConfig` trusts its pins when any are given, else
   its store's accepted peers; a server with a store records an unknown
   client as waiting (with its source address) once it proved its key, and
-  refuses it. Session resumption is off at both ends, so a peer removed
-  from the store is refused at its next link. Strict policy by default
-  (TLS 1.3); this build has no TLS 1.2, so `compatible` and `legacy`
-  policies are refused when the configuration is built; a client's
-  policy may hold no `acl`. ALPN `guatiao-remote` is required at both
+  refuses it; the waiting caps count an IPv6 source by its /64
+  (`TrustStore::with_ipv6_prefix`). Session resumption is off at both
+  ends unless the policy sets `allow_resumption` (a weakening), so a peer
+  removed from the store is refused at its next link. A refusal names its
+  reason (not pinned, not accepted, a chain where a pinned peer presents
+  one certificate), and a refused link is `BAD_VALUE`, never `GONE`.
+  Strict policy by default (TLS 1.3); this build has no TLS 1.2, so
+  `compatible` and `legacy` policies are refused when the configuration
+  is built; a client's policy may hold no `acl`. ALPN `guatiao-remote` is required at both
   ends. `TlsConnect::connect` runs the handshake within its timeout; a
   listener's runs on the serving thread's first read, bounded as a whole
   by the read timeout the link sets (its handshake timeout). The reader
   and writers share one rustls state: no lock is held across a socket
-  read, and after the handshake the reader never writes. A client whose
-  link the server ends before its first answer is told the server most
-  likely refused it, with its own fingerprint.
+  read, and after the handshake the reader never writes. A client the
+  server refuses hears `certificate_unknown` and is told the server does
+  not trust it, with its own fingerprint; one whose link the server ends
+  before its first answer otherwise is told the server most likely
+  refused it.
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it. `write_frames` gets frames queued while another
   thread wrote: by default one `write_frame` each, a stream writes them
