@@ -1583,9 +1583,12 @@ write now.
   and the `Encoder` that writes them (`to_bytes_of`, `encode_of`,
   `guatiao_wire_encode_walker`, `guatiao_json_to_wire` and the TOML and
   YAML ones), hashes each key once, under seeds drawn for the read or the
-  write, into a set sized from the map's count. A repeated key is still
-  refused on the wire at the byte where it starts, and where a format
-  allows one it still replaces the first in its place.
+  write, into a set sized from the map's count. A `Value` read from wire
+  bytes through `decode_as` appends each key, since the reader has
+  already refused any repeat, rather than looking it up a second time.
+  A repeated key is still refused on the wire at the byte where it
+  starts, and where a format allows one it still replaces the first in
+  its place.
 
 - **Building, copying and layering a wide map is linear in its keys.**
   Collecting or extending a `Map` from pairs, converting a `BTreeMap` or

@@ -413,6 +413,37 @@ controls. One Linux session alone showed the configuration rows 2-5%
 slower, the bytes walk among them, whose code did not change; the
 other, within 2% either way.
 
+## A wide map read into a value through the stream (`decode-as-keys*.json`)
+
+The 200 keys' wire bytes read into a `Value` through `decode_as`, before
+and after the value builder stops looking each key up a second time when
+the walker is the wire reader. Past sixteen keys that builder keeps an
+index of its own, hashing each key with SipHash and that hash again, so
+that a repeated key replaces the first where it stands; the wire reader
+had already refused any repeat (above). In an earlier session on
+Windows, taking the index out alone saved 7.7 of 24.2 us; reserving the
+map's room from its count as well saved about 0.2 more, and is not
+done. Every other walker still goes through the index. Local and
+provisional, as above: five alternating runs of three rounds each, on
+Windows ARM64 at high priority and in Linux on it. Microseconds per
+call, median.
+
+| metric | Windows before | Windows after | Linux before | Linux after |
+| --- | --- | --- | --- | --- |
+| 200 keys into a tree, `decode_as::<Value>` | 25.27 | 18.37 | 24.76 | 17.69 |
+| 200 keys into a tree, `decode` | 15.96 | 15.41 | 14.41 | 14.37 |
+| 200 keys to wire bytes, `to_bytes_of` | 5.98 | 6.04 | 6.05 | 6.07 |
+| 200 keys walked, bytes | 6.11 | 6.17 | 5.93 | 6.00 |
+| configuration to wire bytes, `to_bytes_of` | 4.06 | 4.05 | 3.76 | 3.71 |
+| configuration from wire bytes, `decode` then `from_value` | 11.97 | 12.10 | 12.33 | 12.31 |
+| configuration from wire bytes, `decode_as` | 5.26 | 5.30 | 4.77 | 4.80 |
+| configuration walked, bytes | 2.93 | 2.91 | 2.83 | 2.85 |
+
+Every row but the first is a control, its code unchanged. What still
+separates `decode_as::<Value>` from `decode`, about 3 us here, is the
+builder's path itself: each value read through the generic walk, each
+key copied out of the reader before its value is read.
+
 ## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
 
 A document to a binding's plain objects and back, three ways: through a
