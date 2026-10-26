@@ -1,0 +1,18 @@
+{
+  "name": "documents-r",
+  "metrics": {
+    "config_parse_value": {"min_ms": 0.097656, "median_ms": 0.105469, "max_ms": 0.128906},
+    "config_parse_tape": {"min_ms": 0.062500, "median_ms": 0.070313, "max_ms": 0.109375},
+    "config_render_value": {"min_ms": 0.136719, "median_ms": 0.140625, "max_ms": 0.160156},
+    "config_render_tape": {"min_ms": 0.101563, "median_ms": 0.109375, "max_ms": 0.140625},
+    "floats_10k_parse_value": {"min_ms": 1.437500, "median_ms": 1.562500, "max_ms": 1.875000},
+    "floats_10k_parse_tape": {"min_ms": 1.125000, "median_ms": 1.187500, "max_ms": 1.375000},
+    "floats_10k_render_value": {"min_ms": 2.375000, "median_ms": 2.375000, "max_ms": 2.500000},
+    "floats_10k_render_tape": {"min_ms": 2.125000, "median_ms": 2.250000, "max_ms": 2.562500},
+    "text_1mb_parse_value": {"min_ms": 1.093750, "median_ms": 1.125000, "max_ms": 1.281250},
+    "text_1mb_parse_tape": {"min_ms": 1.093750, "median_ms": 1.125000, "max_ms": 1.250000},
+    "text_1mb_render_value": {"min_ms": 1.312500, "median_ms": 1.375000, "max_ms": 1.500000},
+    "text_1mb_render_tape": {"min_ms": 2.125000, "median_ms": 2.250000, "max_ms": 2.750000}
+  },
+  "raw": {"processor": "aarch64", "os": "linux-gnu", "r": "4.6.1"}
+}
