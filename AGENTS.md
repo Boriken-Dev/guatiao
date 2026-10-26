@@ -68,6 +68,7 @@ public surface); this file is about the repository.
 | `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on; `src/markers.ts` the types a kind written as an interface is spelled with and `src/describe.ts` (`guatiao/describe`) reads such interfaces through the TypeScript 7 compiler API into a description |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
+| `bindings/node/guatiao-remote/` | the npm package `guatiao-remote`: guatiao's remote protocol in plain TypeScript for a browser page or any JavaScript program (codec, key proof through `@noble/hashes`, link, WebSocket), no koffi and nothing of `guatiao`; outside the workspace, with its own `package-lock.json` (its browser test harness's types would reach the other packages' type checks); its suites run in Node and in headless Chrome (vitest's browser mode driving the installed Chrome) against `guatiao-remote-server --listen ws://`, and pass the shared vectors |
 | `bindings/node/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
 | `bindings/go/guatiao/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (package `guatiao`) with its own `AGENTS.md`: what the other two modules build on (`Surface`, `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds its C and a copy of `guatiao.h` (a test compares it with the committed one); `cmd/guatiao-kind` writes a kind package's glue |
 | `bindings/go/guatiao-serde/`, `bindings/go/guatiao-intake/` | the modules `.../bindings/go/guatiao-serde` (package `serde`) and `.../bindings/go/guatiao-intake` (package `intake`), each with its own `AGENTS.md`, over its own library, requiring the core module at the same version; each carries copies of the headers it calls, compared with the committed ones by a test |
@@ -235,6 +236,17 @@ for p in guatiao guatiao-serde guatiao-intake; do   # each suite also runs alone
 done
 (cd bindings/node/guatiao-serde && npm run build) && (cd bindings/node/guatiao-intake && npm run build)
 (cd bindings/node/guatiao && npm pack --dry-run)      # what ships; the same in the other two
+```
+
+The TypeScript client of the remote protocol, a package of its own, after
+`cargo build -p guatiao-source-remote -p derived_greeter --features
+guatiao-source-remote/ws` (`GUATIAO_REMOTE_SERVER` names the server when
+the target directory is elsewhere; `CHROME_EXECUTABLE` the Chrome its
+browser project drives, else the platform's usual path):
+
+```bash
+(cd bindings/node/guatiao-remote && npm ci && npm run typecheck && npm test)   # Node and Chrome
+(cd bindings/node/guatiao-remote && npx vitest run --project node)             # where there is no Chrome
 ```
 
 After the greeter kinds' description changes, the Node module, the Dart
@@ -481,7 +493,9 @@ Four workflows:
   `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
   the guatiao-source-py bridge serving the Python greeters (a stated skip fails
-  it), and checks what `npm pack` ships for each. Its `go` job runs the three Go modules
+  it), and checks what `npm pack` ships for each; `guatiao-remote` (its
+  own install) runs its type checks and its suites in Node and, on Linux,
+  in Chrome against the server over WebSocket. Its `go` job runs the three Go modules
   through `bindings/go/go.work`, serde and intake again each alone (their
   own `go.mod`, the core replaced by the checkout's), and `examples` (vet,
   gofmt, tests) on Go 1.26 and 1.27 on the three
@@ -528,8 +542,9 @@ the same version the PEP 440 way in the `pyproject.toml` of
 `guatiao==x.y.z`); the `=x.y.z` pins between the crates;
 `crates/guatiao-source-py/Cargo.toml`'s own version and pins (a workspace of its
 own, so the workspace version does not reach it); the `package.json` of
-`bindings/node/guatiao`, `guatiao-serde` and `guatiao-intake` (the last two
-with their `guatiao` dependency), `bindings/node/package-lock.json` and the
+`bindings/node/guatiao`, `guatiao-serde`, `guatiao-intake` and `guatiao-remote` (the
+second and third with their `guatiao` dependency), `bindings/node/package-lock.json`,
+`bindings/node/guatiao-remote/package-lock.json` (`npm install` there) and the
 `../bindings/node/guatiao` entry of `examples/package-lock.json` (`npm
 install` in `bindings/node` and in `examples` rewrites them); the
 `Project.toml` of `bindings/julia/Guatiao`, `GuatiaoSerde` and
@@ -562,7 +577,7 @@ name.
 packages everything (`cargo publish --workspace --dry-run`; `python -m
 build` + `twine check` of the three Python packages; `dart pub publish
 --dry-run` of the three Dart packages; `npm pack --dry-run` then `npm
-pack` of the three Node packages; the three Go modules vetted, built
+pack` of the four Node packages; the three Go modules vetted, built
 and each built alone by a consumer outside the checkout; the
 Fortran package built as a dependency and with CMake; the three Julia
 packages resolved and loaded; the three R source packages built and
@@ -587,7 +602,7 @@ and intake packages after it.
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge`, `guatiao-libffi` or `guatiao-source-remote` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
-| npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
+| npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde`, `guatiao-intake` and `guatiao-remote` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the four for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | a tag per module, `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z` and `bindings/go/guatiao-intake/vx.y.z`, pushed by `release.yml` with the workflow's own token, the core first; the job then asks proxy.golang.org for each, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r/guatiao"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r/guatiao.serde"`) and `guatiao.intake` (`"subdir": "bindings/r/guatiao.intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |
 | fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`; one package, its serde and intake modules in it); a listing in the fpm registry only on the owner's word | the same |
