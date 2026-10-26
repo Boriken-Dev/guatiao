@@ -35,8 +35,6 @@ use std::time::Instant;
 use coqui_net_acl::{Acl, Outcome};
 use coqui_peer::DriveError;
 use coqui_peer_tls::{Digest, PeerError, Pins, TlsHandshake, Trust};
-use rustls::client::Resumption;
-use rustls::server::NoServerSessionStorage;
 use rustls::{ClientConfig, ServerConfig};
 
 pub use coqui_peer_tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening};
@@ -167,8 +165,9 @@ fn check_alpn(connection: &rustls::Connection) -> io::Result<()> {
 ///
 /// Trust is the fixed pins when any are given, else the peers the trust
 /// store has accepted; a server with a store records a client it does not
-/// know as waiting there. TLS session resumption is off at both ends, so a
-/// peer removed from the store is refused at its next link.
+/// know as waiting there. TLS session resumption is off at both ends unless
+/// the policy's `allow_resumption` keeps it, so a peer removed from the
+/// store is refused at its next link.
 #[derive(Clone)]
 pub struct TlsConfig {
     identity: Identity,
@@ -273,27 +272,24 @@ impl TlsConfig {
                 "the policy's `acl` admits peers to a listener; a client has none",
             ));
         }
-        let mut built = coqui_peer_tls::client_config_with(
+        let built = coqui_peer_tls::client_config_with(
             &self.identity,
             &self.trust()?,
             &[ALPN],
             &self.policy,
         )
         .map_err(|e| invalid(words(&e)))?;
-        built.config.resumption = Resumption::disabled();
         Ok(Arc::new(built.config))
     }
 
     fn server(&self) -> io::Result<Arc<ServerConfig>> {
-        let mut built = coqui_peer_tls::server_config_with(
+        let built = coqui_peer_tls::server_config_with(
             &self.identity,
             &self.trust()?,
             &[ALPN],
             &self.policy,
         )
         .map_err(|e| invalid(words(&e)))?;
-        built.config.session_storage = Arc::new(NoServerSessionStorage {});
-        built.config.send_tls13_tickets = 0;
         Ok(Arc::new(built.config))
     }
 }
