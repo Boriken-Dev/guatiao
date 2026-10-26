@@ -33,6 +33,15 @@ write now.
   imports the object kinds a separate document describes instead of
   refusing them. Node's `kindsOf` loads an object kind that names itself
   through its slots, or one naming it back, which it refused before.
+- **Dart: a kind born in Dart is written as its description.**
+  `package:guatiao/describe.dart` holds the marks a kind is declared with
+  as abstract interface classes (`U32`, `Lent<MapRef>`, `Taken<Listener>`,
+  `MapAnswer`, `implements ObjectKind`, `@fallible`, `@appended`), and
+  `dart run guatiao:kind describe FILE.dart -o DOCUMENT` reads them into
+  the description document, from which `dart run guatiao:kind` writes the
+  classes as from any other. The greeter kinds declared this way describe
+  byte for byte as the trait does, and the tally kinds as the TypeScript
+  declaration does.
 - **Go: a kind born in Go is written as its description.**
   `guatiao-kind -document <file>` reads a package's `//guatiao:kind`
   interfaces, with no description or header behind them, into the
