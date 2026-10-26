@@ -48,8 +48,9 @@ pub trait Store: Send + Sync {
   callee that keeps it longer than those calls `into_local()` on it. A
   provider served by one of the language bindings (Python, Dart, Node,
   Go, Julia, R, MATLAB and Octave, Fortran, C++) receives it already
-  moved into the binding's allocator; one written in C does what a Rust
-  callee does.
+  moved into the binding's allocator, and owns every tree and object
+  handed over in a call the binding refuses while receiving it; one
+  written in C does what a Rust callee does.
 - **An answer is returned by value**: `Map`, `Value`, `List`, `String`, or
   a type of yours. Never a reference into the provider: nothing on the
   caller's side owns what it would borrow, and the attribute refuses one.

@@ -1429,6 +1429,23 @@ write now.
 - **guatiao-source-remote: a call the peer cannot start a thread for
   answers `GUATIAO_ERR_BUSY` at once.** It was dropped unanswered, and its
   caller waited out the call's timeout.
+- **A provider in another language owns everything handed over in a
+  call it refuses.** A call refused while one of its arguments was
+  received (a null tree, a tree that could not be moved into the
+  binding's allocator, an object whose table is not its kind's) left the
+  trees and objects handed over after it never received, so never freed
+  or destroyed, in Python, Node, Dart, Go, Julia, R and MATLAB/Octave;
+  they are now taken and let go, and Python lets go of them when the
+  call returns rather than when its collector runs. R and MATLAB/Octave
+  refuse a null tree handed over with `GUATIAO_ERR_NULL`, where they gave
+  the method an absent value, and take an object handed over before any
+  other argument, so text they refuse no longer leaves it undestroyed;
+  MATLAB lets go of what it filed for such a call. R answers such a
+  refusal with its own status and words, where it answered
+  `GUATIAO_ERR_INTERNAL`, "an R error ended the call", and no longer
+  raises an R error back through the caller; text R or the MATLAB
+  gateway cannot take (holding a NUL, not UTF-8) is refused as
+  `GUATIAO_ERR_BAD_VALUE`.
 - **Go: Go data nests as deep as the library allows.** Converting Go data
   counted each interface and pointer on the way as a level of its own, so
   `[]any` nested 64 deep was refused as deeper than 128. Only values count
