@@ -797,6 +797,40 @@ VM, MTU 9000):
   the faults stop, the spread shrinks to a few percent and every build
   moves about 1.5x faster (server CPU per round 3-4 ms down to
   1.5-2 ms); that setting is how the VM's numbers above were taken.
+- **A link now keeps its large buffers** (the frames it reads, the replies
+  it writes, a reply's buffer once its answer is read; up to 16 MiB a
+  link besides the one its reader reads into), and the faults are gone
+  without touching the allocator. Where they came from, under glibc in
+  WSL: in a traced run (`strace -f -e trace=memory`) the server's thread
+  arena gave 8 MiB back to the kernel every round (`madvise(MADV_DONTNEED)`,
+  the arena's trim), and the next round faulted it in again; every base
+  server faulted so in the runs below (12 of 12). Raising only the trim
+  threshold moved the faults instead (`remote-buffers-wsl-trim-threshold.jsonl`:
+  setting it also fixes the mmap threshold, so each buffer was mapped
+  afresh, and the client faulted 1 015-1 028 pages a round as well). On
+  Windows the counts are consistent with the heap handing back blocks
+  that size on every free: 3 080 faults a round on the server and 2 053
+  on the client, in every run. Local and provisional; builds
+  alternating, `base` and `baseA` the same binary (A/A); 4 MiB round
+  trips, 100 a run, five runs, medians, MB/s; faults per round over 40
+  rounds less a run of none, three runs on Windows and four in WSL
+  (`remote-buffers-*.jsonl`):
+
+| 4 MiB round trips | base / baseA | kept | server faults a round, base / kept | server CPU ms a round, base / kept |
+| --- | --- | --- | --- | --- |
+| WSL, Unix socket | 1 847 / 1 865 | 2 327 | 1 589 / 6 | 3.72 / 2.53 |
+| WSL, shared memory | 2 675 / 2 550 | 3 937 | 1 589 / 0 | 2.50 / 1.23 |
+| WSL, TCP | 2 225 / 2 082 | 3 252 | 1 567 / 13 | 3.08 / 1.69 |
+| Windows, named pipe | 2 616 / 2 554 | 4 216 | 3 080 / 0 | 2.50 / 1.25 |
+| Windows, shared memory | 2 383 / 2 293 | 3 712 | 3 080 / 0 | 2.66 / 1.41 |
+| Windows, TCP | 1 355 / 1 569 | 1 733 | 3 080 / 0 | 2.81 / 1.56 |
+
+  Small calls stayed within the spread of `base` against `baseA`: p50
+  and the 32-thread rate on every transport (`remote-buffers-*-small.jsonl`;
+  in WSL a second shared-memory series with an A/A pair: p50 3.1 / 3.2 /
+  3.3 µs for base, baseA and kept, whose 32-thread rates swung 20 %
+  between base and baseA). Windows' TCP gained least, its runs
+  overlapping (base 1 158-1 502, baseA 1 085-1 596, kept 1 431-2 154).
 - **Polling pays only past the round trip.** At 50 µs a waiting thread
   polls, then sleeps and pays the wake-up as well; polling past the
   answer's arrival drops the wake-up for about the same CPU, and not
