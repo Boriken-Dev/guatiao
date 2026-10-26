@@ -80,12 +80,19 @@ server.registry() -> MutexGuard<Registry>
 server.end_links(); server.links(); server.links_holding(); server.objects_out()
 ```
 
-Serves every provider of a kind `described` describes; others are left
-out of the catalog. The catalog's `kinds` lists each description once.
+Serves every provider of a kind described either by `described` or by a
+provider's own document (`Provider::kind_descriptions()`, which derived
+and bridged providers carry); a provider of a kind neither describes is
+left out of the catalog. A kind `described` names is served through that
+description; otherwise the first provider describing a kind decides it
+for the server's life. A provider whose own description of a kind is
+called otherwise (a slot's arguments, answer or flags, the floor hash;
+docs and slots past the shorter description do not count) is left out.
+The catalog's `kinds` lists each description once.
 
 Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | ws://ADDR | tls://ADDR | quic://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
 `--trust`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`,
-`--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`..., `--load`,
+`--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`... (optional), `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`, `--max-handshakes N`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
 At most `--max-handshakes` connections (default 64) are in their handshake
@@ -314,7 +321,8 @@ bytes.
 
 - **The library file exports `guatiao_source`**: a binary linking this
   crate's rlib beside another crate that exports it does not link.
-- **A server serves a kind only with its description**: pass the kind
-  crate's `<crate>.kinds.json`.
+- **A server serves a kind only with its description**: a hand-written
+  C provider carries none, so pass the kind crate's `<crate>.kinds.json`
+  (or serve a provider that describes the kind beside it).
 - **Object proxies fill every slot**: a slot the far object leaves out
   answers `UNSUPPORTED`, not the kind's default.

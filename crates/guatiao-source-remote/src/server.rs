@@ -5,10 +5,11 @@
 //! The device's side: a registry's providers, served over links.
 //!
 //! A [`Server`] owns a [`Registry`] and the descriptions of the kinds it
-//! serves. A link lists the catalog, opens a library (which holds its
-//! providers for that link until it closes the library or the link
-//! ends), and calls their tables through the descriptions. A provider of
-//! a kind with no description is not served.
+//! serves: those it is given, and those each provider carries of its own.
+//! A link lists the catalog, opens a library (which holds its providers
+//! for that link until it closes the library or the link ends), and calls
+//! their tables through the descriptions. A provider of a kind with no
+//! description is not served.
 
 #![forbid(unsafe_code)]
 
@@ -17,9 +18,11 @@ use alloc::sync::Arc;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use guatiao::library::kind::{Answer, Arg, Caller, DescribedRemote, KindDescription};
-use guatiao::library::{ProviderError, Refreshed, Registry};
-use guatiao::value::convert::TryAsRef;
+use guatiao::library::kind::{
+    Answer, Arg, Caller, DescribedRemote, KindDescription, SlotDescription,
+};
+use guatiao::library::{Provider, ProviderError, Refreshed, Registry};
+use guatiao::value::convert::{ToValue, TryAsRef};
 use guatiao::{Alloc, List, Map, Status, Value};
 use guatiao_bridge::Kinds;
 use guatiao_libffi::Libffi;
@@ -114,6 +117,79 @@ impl Described {
 /// A library's tables held for a link, by id.
 type HeldTables = Vec<(u64, Arc<dyn Table>)>;
 
+/// Whether two slots are called alike: their docs aside.
+fn same_call(a: &SlotDescription, b: &SlotDescription) -> bool {
+    a.name() == b.name()
+        && a.required() == b.required()
+        && a.fallible() == b.fallible()
+        && a.args() == b.args()
+        && a.answer() == b.answer()
+}
+
+/// Whether a table built for one description is called rightly through
+/// the other: the same name, floor and slots as far as the shorter goes.
+/// Docs do not count, and a kind grown by slots past its floor agrees.
+fn agree(a: &KindDescription, b: &KindDescription) -> bool {
+    a.name() == b.name()
+        && a.object() == b.object()
+        && a.floor_hash() == b.floor_hash()
+        && a.slots()
+            .iter()
+            .zip(b.slots())
+            .all(|(x, y)| same_call(x, y))
+}
+
+/// The kinds a server serves: those it was given, then those providers'
+/// own documents add as each is first served. A name keeps the
+/// description it became known by for the server's life.
+struct Known {
+    kinds: Arc<Kinds>,
+    /// Each kind as the catalog lists it, in the order it became known.
+    values: Vec<Value>,
+}
+
+impl Known {
+    fn new(described: Described) -> Known {
+        Known {
+            kinds: Arc::new(described.kinds),
+            values: described.values,
+        }
+    }
+
+    /// Adds the kinds `own` describes that are not known yet. False, adding
+    /// nothing, when one disagrees with a kind known by that name.
+    fn learn(&mut self, own: &[KindDescription]) -> bool {
+        let mut fresh: Vec<(&KindDescription, Value)> = Vec::new();
+        for kind in own {
+            let known = self.kinds.get(kind.name()).map(|k| &**k);
+            let seen = fresh
+                .iter()
+                .map(|(k, _)| *k)
+                .find(|k| k.name() == kind.name());
+            match known.or(seen) {
+                Some(known) if agree(known, kind) => {}
+                Some(_) => return false,
+                None => match kind.to_value() {
+                    Ok(value) => fresh.push((kind, value)),
+                    Err(_) => return false,
+                },
+            }
+        }
+        if fresh.is_empty() {
+            return true;
+        }
+        let mut kinds = (*self.kinds).clone();
+        for (kind, value) in fresh {
+            if kinds.add(kind.clone()).is_err() {
+                return false;
+            }
+            self.values.push(value);
+        }
+        self.kinds = Arc::new(kinds);
+        true
+    }
+}
+
 /// One provider table, held open for a link.
 struct Held {
     remote: DescribedRemote,
@@ -148,8 +224,7 @@ struct TableKey {
 
 struct ServerInner {
     registry: Mutex<Registry>,
-    described: Described,
-    kinds: Arc<Kinds>,
+    known: Mutex<Known>,
     callers: Mutex<BTreeMap<String, Arc<Caller>>>,
     proxies: Proxies,
     /// Per library key, how many times it has loaded while served: part
@@ -211,17 +286,47 @@ impl ServerInner {
         format!("{key}#{version}#{generation}")
     }
 
+    /// The kinds `p` is served through, after learning those its own
+    /// document adds; `None` leaves it out. A document that cannot be read
+    /// counts as none.
+    fn kinds_for(&self, p: &Provider) -> Option<Arc<Kinds>> {
+        let own = p.kind_descriptions().unwrap_or_default();
+        let mut known = lock(&self.known);
+        known.learn(&own).then(|| Arc::clone(&known.kinds))
+    }
+
+    /// Every kind known now.
+    fn kinds(&self) -> Arc<Kinds> {
+        Arc::clone(&lock(&self.known).kinds)
+    }
+
+    /// Gives `link` every kind known now. Under the lock, so a link's
+    /// kinds only grow, whichever of its requests finishes last.
+    fn give_kinds(&self, link: &Arc<Inner>) {
+        let known = lock(&self.known);
+        link.set_kinds(Arc::clone(&known.kinds));
+    }
+
     fn catalog(&self) -> Result<Catalog, ProviderError> {
         let registry = lock(&self.registry);
+        // Every provider's document is read first, so a provider describing
+        // nothing is served through another's, whichever comes first.
+        let served: Vec<bool> = registry
+            .all()
+            .iter()
+            .map(|p| self.kinds_for(p).is_some())
+            .collect();
+        let kinds = self.kinds();
         let mut libraries = Vec::new();
         for loaded in registry.loaded() {
             let key: &str = &loaded.key;
             let stamp = self.stamp(key, &loaded.version);
             let mut providers = Vec::new();
-            for p in registry.all().iter().filter(|p| p.library() == key) {
+            let here = registry.all().iter().zip(&served);
+            for (p, _) in here.filter(|(p, served)| **served && p.library() == key) {
                 let mut tables = Vec::new();
                 for kind_name in p.kinds() {
-                    let Some(kind) = self.kinds.get(kind_name) else {
+                    let Some(kind) = kinds.get(kind_name) else {
                         continue;
                     };
                     if kind.object() {
@@ -269,7 +374,7 @@ impl ServerInner {
             });
         }
         Ok(Catalog {
-            kinds: self.described.values.clone(),
+            kinds: lock(&self.known).values.clone(),
             libraries,
         })
     }
@@ -289,8 +394,11 @@ impl ServerInner {
         let key: &str = &loaded.key;
         let mut held: Vec<(u64, Arc<dyn Table>)> = Vec::new();
         for p in registry.all().iter().filter(|p| p.library() == key) {
+            let Some(kinds) = self.kinds_for(p) else {
+                continue;
+            };
             for kind_name in p.kinds() {
-                let Some(kind) = self.kinds.get(kind_name) else {
+                let Some(kind) = kinds.get(kind_name) else {
                     continue;
                 };
                 if kind.object() {
@@ -313,12 +421,16 @@ impl ServerInner {
 }
 
 impl Handler for ServerInner {
-    fn list(&self, _link: &Arc<Inner>) -> Result<Value, ProviderError> {
-        Ok(self.catalog()?.to_value())
+    fn list(&self, link: &Arc<Inner>) -> Result<Value, ProviderError> {
+        let catalog = self.catalog()?;
+        // The link reads the objects of every kind its catalog lists.
+        self.give_kinds(link);
+        Ok(catalog.to_value())
     }
 
     fn open(&self, link: &Arc<Inner>, library: &str, stamp: &str) -> Result<(), ProviderError> {
         let held = self.hold(library, stamp)?;
+        self.give_kinds(link);
         let mut links = lock(&self.links);
         let opened = links.entry(link_key(link)).or_default();
         let key = (library.to_string(), stamp.to_string());
@@ -387,15 +499,17 @@ impl Handler for Handle {
 }
 
 impl Server {
-    /// Serves `registry`'s providers of the kinds `described` describes,
-    /// to links set up with `options`.
+    /// Serves `registry`'s providers to links set up with `options`, each
+    /// kind through the description `described` gives of it, else through
+    /// the one the first provider serving it carries. A provider whose own
+    /// description of a kind is called otherwise than the one served (docs
+    /// and slots past the shorter aside) is left out, as is one of a kind
+    /// described by neither.
     pub fn new(registry: Registry, described: Described, options: LinkOptions) -> Server {
-        let kinds = Arc::new(described.kinds.clone());
         Server {
             inner: Arc::new(ServerInner {
                 registry: Mutex::new(registry),
-                described,
-                kinds,
+                known: Mutex::new(Known::new(described)),
                 callers: Mutex::new(BTreeMap::new()),
                 proxies: Proxies::new(),
                 generations: Mutex::new(BTreeMap::new()),
@@ -421,7 +535,7 @@ impl Server {
             Setup {
                 handler: Arc::new(Handle(Arc::clone(&self.inner))),
                 proxies: self.inner.proxies.clone(),
-                kinds: Arc::clone(&self.inner.kinds),
+                kinds: self.inner.kinds(),
                 name: "guatiao-source-remote server".to_string(),
             },
         )?;
@@ -475,5 +589,90 @@ impl Server {
     /// Handles this server's providers hold on its peers' objects.
     pub fn objects_out(&self) -> usize {
         self.inner.proxies.live()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn document() -> serde_json::Value {
+        let text = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../examples/greeter_kind/include/greeter_kind.kinds.json"),
+        )
+        .unwrap();
+        serde_json::from_str(&text).unwrap()
+    }
+
+    fn read(document: &serde_json::Value) -> Vec<KindDescription> {
+        KindDescription::document_json(&document.to_string()).unwrap()
+    }
+
+    /// The example kinds, the greeter's doc replaced by `doc`.
+    fn kinds(doc: &str) -> Vec<KindDescription> {
+        let mut document = document();
+        document["kinds"][0]["doc"] = doc.into();
+        read(&document)
+    }
+
+    fn greeter(known: &Known) -> Option<String> {
+        known
+            .kinds
+            .get("greeter")
+            .and_then(|k| k.doc().map(str::to_string))
+    }
+
+    #[test]
+    fn a_provider_calling_a_kind_otherwise_is_left_out() {
+        let mut known = Known::new(Described::new());
+        assert!(known.learn(&kinds("Greets by name.")));
+        assert_eq!(known.values.len(), 5, "every kind listed once");
+        assert!(known.learn(&kinds("Greets by name.")), "the same again");
+        assert_eq!(known.values.len(), 5);
+
+        // Called otherwise: `greet` takes bytes.
+        let mut other = document();
+        other["kinds"][0]["slots"][0]["args"][0]["type"] = "bytes".into();
+        assert!(!known.learn(&read(&other)));
+        assert_eq!(known.values.len(), 5);
+    }
+
+    #[test]
+    fn docs_and_slots_past_the_shorter_do_not_count() {
+        let mut known = Known::new(Described::new());
+        assert!(known.learn(&kinds("Greets by name.")));
+        assert!(known.learn(&kinds("Greets otherwise.")), "a doc differs");
+        let mut shorter = document();
+        let slots = shorter["kinds"][0]["slots"].as_array_mut().unwrap();
+        let last = slots.pop().unwrap();
+        assert_eq!(last["required"], false, "a slot past the floor");
+        assert!(known.learn(&read(&shorter)), "a slot fewer");
+        assert_eq!(greeter(&known).as_deref(), Some("Greets by name."));
+    }
+
+    #[test]
+    fn a_document_naming_a_kind_twice_lists_it_once() {
+        let mut twice = document();
+        let first = twice["kinds"][0].clone();
+        twice["kinds"].as_array_mut().unwrap().push(first);
+        let mut known = Known::new(Described::new());
+        assert!(known.learn(&read(&twice)));
+        assert_eq!(known.values.len(), 5);
+    }
+
+    #[test]
+    fn a_given_description_is_the_one_served() {
+        let mut described = Described::new();
+        for kind in &kinds("Greets as given.") {
+            described.add_value(&kind.to_value().unwrap()).unwrap();
+        }
+        let mut known = Known::new(described);
+        assert!(known.learn(&kinds("Greets by name.")));
+        assert_eq!(greeter(&known).as_deref(), Some("Greets as given."));
+        assert_eq!(known.values.len(), 5, "nothing added over the given");
+        let mut other = document();
+        other["kinds"][0]["slots"][0]["args"][0]["type"] = "bytes".into();
+        assert!(!known.learn(&read(&other)), "called otherwise than given");
     }
 }

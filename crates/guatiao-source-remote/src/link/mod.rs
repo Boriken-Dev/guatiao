@@ -849,11 +849,7 @@ impl Link {
     }
 
     pub(crate) fn set_kinds(&self, kinds: Arc<Kinds>) {
-        *self
-            .inner
-            .kinds
-            .write()
-            .unwrap_or_else(PoisonError::into_inner) = kinds;
+        self.inner.set_kinds(kinds);
     }
 
     pub(crate) fn inner(&self) -> &Arc<Inner> {
@@ -1027,6 +1023,10 @@ impl Inner {
         {
             self.post(out);
         }
+    }
+
+    pub(crate) fn set_kinds(&self, kinds: Arc<Kinds>) {
+        *self.kinds.write().unwrap_or_else(PoisonError::into_inner) = kinds;
     }
 
     fn kind(&self, name: &str) -> Result<Arc<KindDescription>, ProviderError> {
