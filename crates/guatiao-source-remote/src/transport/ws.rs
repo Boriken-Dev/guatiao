@@ -167,6 +167,9 @@ struct WsReader {
     reading: Reading,
     socket: Socket,
     open: Arc<AtomicBool>,
+    /// Set once the peer's close has arrived (and been answered): the
+    /// writer then sends nothing more, its own close included.
+    closed: Arc<AtomicBool>,
 }
 
 impl WsReader {
@@ -219,6 +222,7 @@ impl FrameRead for WsReader {
                 Ok(Message::Close(_)) => {
                     // The reply to the close goes out now, not on a next read.
                     let _ = ws.flush();
+                    self.closed.store(true, Ordering::Release);
                     self.reading = Reading::Ended;
                     return Ok(false);
                 }
@@ -262,6 +266,7 @@ struct WsWriter {
     ws: WebSocket<Socket>,
     socket: Socket,
     open: Arc<AtomicBool>,
+    closed: Arc<AtomicBool>,
 }
 
 impl WsWriter {
@@ -270,6 +275,12 @@ impl WsWriter {
             return Err(io::Error::new(
                 io::ErrorKind::NotConnected,
                 "the WebSocket upgrade has not happened: a server's end reads first",
+            ));
+        }
+        if self.closed.load(Ordering::Acquire) {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "the peer closed the WebSocket",
             ));
         }
         self.ws.write(Message::Binary(body)).map_err(io_error)
@@ -310,7 +321,7 @@ impl FrameWrite for WsWriter {
     }
 
     fn shutdown(&mut self) {
-        if self.open.load(Ordering::Acquire) {
+        if self.open.load(Ordering::Acquire) && !self.closed.load(Ordering::Acquire) {
             let _ = self.ws.close(None);
             let _ = self.ws.flush();
         }
@@ -333,17 +344,20 @@ fn over(raw: Raw) -> Socket {
 
 fn connection(socket: Socket, peer: String, reading: Reading, role: Role) -> Connection {
     let open = Arc::new(AtomicBool::new(matches!(reading, Reading::Open(_))));
+    let closed = Arc::new(AtomicBool::new(false));
     let closing = socket.raw.clone();
     Connection {
         reader: Box::new(WsReader {
             reading,
             socket: socket.clone(),
             open: Arc::clone(&open),
+            closed: Arc::clone(&closed),
         }),
         writer: Box::new(WsWriter {
             ws: WebSocket::from_raw_socket(socket.clone(), role, Some(config())),
             socket,
             open,
+            closed,
         }),
         peer,
         closer: Some(Box::new(move || closing.shutdown(false))),
@@ -758,6 +772,36 @@ mod tests {
             .unwrap();
         assert!(!serving.join().unwrap().unwrap(), "a close is a clean end");
         assert_eq!(bytes(&mut raw, 1), [0x88], "the close is answered");
+    }
+
+    #[test]
+    fn after_the_peers_close_is_answered_nothing_more_is_sent() {
+        let l = listener();
+        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let Connection {
+            mut reader,
+            mut writer,
+            ..
+        } = accepted(&l);
+        let serving = std::thread::spawn(move || {
+            let mut frame = Vec::new();
+            let ended = reader.read_frame(&mut frame, 1 << 10);
+            (ended, reader)
+        });
+        upgrade(&mut raw);
+        raw.write_all(&masked(0x8, true, &1000u16.to_be_bytes()))
+            .unwrap();
+        let (ended, _reader) = serving.join().unwrap();
+        assert!(!ended.unwrap(), "a close is a clean end");
+        assert_eq!(bytes(&mut raw, 4), [0x88, 2, 0x03, 0xe8], "answered");
+        // A frame the link queued, then the link's own end.
+        let e = writer.write_frame(&[1, 0, 0, 0, 9]).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::BrokenPipe, "{e}");
+        writer.shutdown();
+        let mut rest = Vec::new();
+        let _ = raw.read_to_end(&mut rest);
+        assert!(rest.is_empty(), "sent after the close: {rest:?}");
     }
 
     #[test]
