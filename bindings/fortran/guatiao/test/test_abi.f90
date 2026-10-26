@@ -5,7 +5,8 @@
 !> The interfaces against the committed headers: every export this binding
 !> calls is declared there with as many arguments as its abstract
 !> interface takes; every status and tag has the header's number; every
-!> mirror has the header's size on a 64-bit platform. The repository's
+!> mirror has the header's size, in words (a pointer and a size_t) as the
+!> header states it, on the platform it runs on. The repository's
 !> root manifest (what an fpm git dependency reads) and the CMake project
 !> name this package as its own fpm.toml does.
 program test_abi
@@ -315,31 +316,34 @@ contains
     type(gt_str) :: s
     type(gt_owned) :: ow
     type(gt_wire_event) :: we
-    call size_is(c_sizeof(v), 40, 'guatiao_value')
-    call size_is(c_sizeof(e), 72, 'guatiao_entry')
-    call size_is(c_sizeof(a), 40, 'guatiao_alloc')
-    call size_is(c_sizeof(pe), 40, 'guatiao_provider_error')
-    call size_is(c_sizeof(k), 16, 'guatiao_kinds')
-    call size_is(c_sizeof(kt), 32, 'guatiao_kind_table')
-    call size_is(c_sizeof(kts), 24, 'guatiao_kind_tables')
-    call size_is(c_sizeof(pi), 168, 'guatiao_provider_info')
-    call size_is(c_sizeof(hs), 72, 'guatiao_host_services')
-    call size_is(c_sizeof(hi), 64, 'guatiao_host_info')
-    call size_is(c_sizeof(ps), 24, 'guatiao_providers')
-    call size_is(c_sizeof(li), 80, 'guatiao_library_info')
+    type(c_ptr) :: word
+    integer :: w
+    w = int(c_sizeof(word))
+    call size_is(c_sizeof(v), 8 + 4 * w, 'guatiao_value')
+    call size_is(c_sizeof(e), 8 + 8 * w, 'guatiao_entry')
+    call size_is(c_sizeof(a), 5 * w, 'guatiao_alloc')
+    call size_is(c_sizeof(pe), 5 * w, 'guatiao_provider_error')
+    call size_is(c_sizeof(k), 2 * w, 'guatiao_kinds')
+    call size_is(c_sizeof(kt), 8 + 3 * w, 'guatiao_kind_table')
+    call size_is(c_sizeof(kts), 3 * w, 'guatiao_kind_tables')
+    call size_is(c_sizeof(pi), 8 + 20 * w, 'guatiao_provider_info')
+    call size_is(c_sizeof(hs), 9 * w, 'guatiao_host_services')
+    call size_is(c_sizeof(hi), 8 + 7 * w, 'guatiao_host_info')
+    call size_is(c_sizeof(ps), 3 * w, 'guatiao_providers')
+    call size_is(c_sizeof(li), 8 + 9 * w, 'guatiao_library_info')
     call size_is(c_sizeof(sp), 64, 'guatiao_span')
-    call size_is(c_sizeof(te), 48, 'guatiao_text_error')
+    call size_is(c_sizeof(te), 8 + 5 * w, 'guatiao_text_error')
     call size_is(c_sizeof(d), 8, 'guatiao_date')
     call size_is(c_sizeof(t), 8, 'guatiao_time')
     call size_is(c_sizeof(dt), 16, 'guatiao_datetime')
     call size_is(c_sizeof(ts), 16, 'guatiao_timestamp')
     call size_is(c_sizeof(kh), 8, 'guatiao_kind_header')
-    call size_is(c_sizeof(o), 24, 'guatiao_object')
-    call size_is(c_sizeof(bm), 16, 'guatiao_bytes_mut')
-    call size_is(c_sizeof(per), 56, 'guatiao_parse_error')
-    call size_is(c_sizeof(s), 16, 'guatiao_str')
-    call size_is(c_sizeof(ow), 32, 'guatiao_string')
-    call size_is(c_sizeof(we), 144, 'guatiao_wire_event')
+    call size_is(c_sizeof(o), 3 * w, 'guatiao_object')
+    call size_is(c_sizeof(bm), 2 * w, 'guatiao_bytes_mut')
+    call size_is(c_sizeof(per), merge(16, 12, w == 8) + 8 + 4 * w, 'guatiao_parse_error')
+    call size_is(c_sizeof(s), 2 * w, 'guatiao_str')
+    call size_is(c_sizeof(ow), 4 * w, 'guatiao_string')
+    call size_is(c_sizeof(we), (16 + w + 3 * (8 + 4 * w) + 7) / 8 * 8, 'guatiao_wire_event')
   end subroutine
 
   subroutine size_is(got, want, what)

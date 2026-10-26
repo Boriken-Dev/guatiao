@@ -7,9 +7,10 @@
 ! dlopen/dlsym elsewhere. The one file the preprocessor chooses for.
 
 ! gfortran predefines no platform macro on Windows; only 64-bit Windows
-! is LLP64, so a 4-byte long names it. The macro is not named like
+! is LLP64, a 4-byte long beside an 8-byte pointer, which names it (a
+! 32-bit platform has both 4 bytes wide). The macro is not named like
 ! gt_windows below: Fortran names ignore case, and a preprocessor may too.
-#if defined(_WIN32) || (defined(__GFORTRAN__) && __SIZEOF_LONG__ == 4)
+#if defined(_WIN32) || (defined(__GFORTRAN__) && __SIZEOF_LONG__ == 4 && __SIZEOF_POINTER__ == 8)
 #define GUATIAO_ON_WINDOWS 1
 #endif
 

@@ -7,11 +7,11 @@
 !> value both ways, each malformed input refused, the frames the builders
 !> write, and a conversation with every refusal.
 program test_wire
-  use, intrinsic :: iso_c_binding, only: c_sizeof
+  use, intrinsic :: iso_c_binding, only: c_sizeof, c_ptr
   use, intrinsic :: iso_fortran_env, only: int8, int64
   use harness
   use guatiao
-  use guatiao_c, only: gt_wire_event
+  use guatiao_c, only: gt_wire_event, gt_value
   use guatiao_serde
   implicit none
 
@@ -346,6 +346,8 @@ contains
   subroutine codes_and_layout()
     character(:), allocatable :: header
     type(gt_wire_event) :: ev
+    type(gt_value) :: v
+    type(c_ptr) :: word
     call read_file(repo_path('crates/guatiao/include/guatiao.h'), header)
     call defined(header, 'GUATIAO_FRAME_SCHEMA', GUATIAO_FRAME_SCHEMA)
     call defined(header, 'GUATIAO_FRAME_VALUE', GUATIAO_FRAME_VALUE)
@@ -355,7 +357,9 @@ contains
     call defined(header, 'GUATIAO_WIRE_NO_SCHEMA', GUATIAO_WIRE_NO_SCHEMA)
     call defined(header, 'GUATIAO_WIRE_NOT_A_SCHEMA', GUATIAO_WIRE_NOT_A_SCHEMA)
     call defined(header, 'GUATIAO_WIRE_INVALID', GUATIAO_WIRE_INVALID)
-    call check(c_sizeof(ev) == 144, 'guatiao_wire_event is 144 bytes')
+    ! A uint64_t, two uint32_t, a size_t, three values; padded to 8.
+    call check(c_sizeof(ev) == (16 + c_sizeof(word) + 3 * c_sizeof(v) + 7) / 8 * 8, &
+               'guatiao_wire_event is the size a C compiler gives it')
   end subroutine
 
 end program test_wire
