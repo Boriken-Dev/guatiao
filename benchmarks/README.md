@@ -629,13 +629,36 @@ VM, MTU 9000):
   workstation a raw TCP echo of 4 MiB (a length, the bytes, back again)
   moves about 1.1 GB/s over loopback, about what the link moves; in a
   Linux (aarch64) VM on it raw TCP moves 3.5 GB/s and the link 1.5-1.8
-  GB/s. Writing a large last argument or answer from where it lies,
-  rather than copying it into its frame first, saved about 2 ms of a
-  9 ms round trip per stage on Windows but was not kept: over 300 rounds
-  a run, it moved the named pipe on Windows 38 % faster and shared memory
-  and the Unix socket in the VM 28 % and 12 % slower. Reading a frame
-  with `read_to_end` instead of over zeros halved every stream there: it
-  reads in small pieces a socket rarely fills.
+  GB/s. Reading a frame with `read_to_end` instead of over zeros halved
+  every stream there: it reads in small pieces a socket rarely fills.
+- **A large call is written from where it lies, in one write.** A large
+  last argument or answer goes as its frame's tail instead of being
+  copied into the frame, and a frame's head and tail, like every frame
+  queued together, leave in one vectored write (the socket wrappers once
+  dropped `write_vectored`, so each frame was a system call of its own).
+  4 MiB round trips, 300 a run, builds alternating, seven runs, median of
+  the paired ratios against the build before (`base`; `base2` is the same
+  binary run again, `tails` the first change alone, `tailsvec` both):
+  Windows named pipe +29 %, shared memory +20 %, TCP +20 %
+  (`remote-large-windows.jsonl`); in the VM, allocator held as below,
+  Unix socket +7 %, shared memory +12 %, TCP +10 %
+  (`remote-large-linux-vm.jsonl`). Windows to the VM over TCP, nine runs,
+  moved +11 % against `base2`'s +12 %: no change beyond the spread
+  (`remote-large-host-to-vm.jsonl`). The 32-thread small-call rate over
+  TCP rose 38 % on Windows and 20-38 % in the VM; latency and the other
+  small-call rates stayed within the spread of `base` against `base2`.
+- **In the VM a large call's throughput is bimodal from run to run**
+  (0.7-2.5 GB/s for one build): glibc's malloc serves the server's
+  4 MiB buffers now from fresh mappings, faulting about 1 560 pages back
+  in every round, now from memory it keeps (`/usr/bin/time` minor
+  faults, `remote-large-linux-vm-faults.jsonl`). Two runs of one build
+  then differ by up to 15 % in median over eleven runs, more than any
+  difference between builds: the 28 % and 12 % slower tails measured
+  before were inside that spread. With
+  `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=67108864:glibc.malloc.trim_threshold=268435456`
+  the faults stop, the spread shrinks to a few percent and every build
+  moves about 1.5x faster (server CPU per round 3-4 ms down to
+  1.5-2 ms); that setting is how the VM's numbers above were taken.
 - **Polling pays only past the round trip.** At 50 µs a waiting thread
   polls, then sleeps and pays the wake-up as well; polling past the
   answer's arrival drops the wake-up for about the same CPU, and not
