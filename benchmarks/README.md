@@ -524,6 +524,41 @@ between and no more; most of the time left is making R objects and
 spelling numbers. One large string is slower through the bytes, as in
 every binding.
 
+## Documents to MATLAB and Octave data (`documents-octave.json`)
+
+The same three documents, two ways, as for R: through a value
+(`guatiao.serde.parse(text).data()`, `guatiao.serde.emit(guatiao.Value(x))`)
+and through the tape (`guatiao.serde.data(text)`, `guatiao.serde.emit(x)`),
+the wire bytes read and written in the MEX gateway. No callback way, for
+R's reason: an error raised in M must never unwind through the library's
+frames.
+
+```bash
+cargo build --release -p guatiao -p guatiao-serde \
+  --features guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+GUATIAO_LIBRARY=target/release octave-cli --eval \
+  "addpath bindings/matlab/guatiao/inst benchmarks/matlab; guatiao.build(); documents('documents-octave')"
+```
+
+Local and provisional: Octave 10.3.0 on the ARM64 machine's Linux
+environment, one run of fifteen samples, microseconds per call, median.
+MATLAB was not measured.
+
+| Octave | value | tape | value / tape |
+| --- | --- | --- | --- |
+| configuration, parse | 956 | 862 | 1.11x |
+| configuration, render | 759 | 645 | 1.18x |
+| 10k floats, parse | 6463 | 6467 | 1.0x |
+| 10k floats, render | 5357 | 5266 | 1.02x |
+| 1 MiB string, parse | 1134 | 1089 | 1.04x |
+| 1 MiB string, render | 1382 | 2069 | 0.67x |
+
+The gateway takes the tape for both: it saves the tree built and freed in
+between, and little else, since Octave's own arrays cost most of the
+time (making one per element reading, inspecting one per element
+writing). One large string is slower through the bytes, as in every
+binding.
+
 ## guatiao-source-remote across a link (`remote-*.jsonl`)
 
 `guatiao-remote-bench` (`benchmarks/remote`) is a server of a provider
