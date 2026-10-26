@@ -11,7 +11,9 @@
 //! once the client has proved it holds its key, as waiting there until an
 //! operator accepts it. A listener admits peers by an access control list
 //! (the policy's `acl`): by address before anything is read, by
-//! fingerprint once the handshake has proved one.
+//! fingerprint once the handshake has proved one. A client the list will
+//! not admit is refused as it presents its certificate, so the store never
+//! records it as waiting.
 //!
 //! The link reads on one thread and writes from others, and a TLS state is
 //! one object. The socket is read with no lock held; the state's lock is
@@ -37,8 +39,14 @@ use std::time::Instant;
 use coqui_net_acl::{Acl, Outcome};
 use coqui_peer::DriveError;
 use coqui_peer_tls::{Digest, PeerError, Pins, Refusal, TlsHandshake, Trust};
-use rustls::pki_types::ServerName;
-use rustls::{AlertDescription, ClientConfig, ServerConfig};
+use rustls::client::danger::HandshakeSignatureValid;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::{
+    AlertDescription, ClientConfig, DigitallySignedStruct, DistinguishedName, ServerConfig,
+    SignatureScheme,
+};
 
 pub use coqui_peer_tls::{Identity, PeerId, Policy, Roots, TrustStore, WaitingEntry, Weakening};
 
@@ -221,6 +229,147 @@ pub(crate) fn untrusted_by_server(
             None => format!("the client's TLS handshake failed: {why}"),
         },
     )
+}
+
+/// Which certificate an [`Admitting`] verifier refused, and by which rule
+/// of the list (an index, `None` for its default).
+pub(crate) type Denied = Arc<OnceLock<(PeerId, Option<usize>)>>;
+
+/// A listener's client verifier for one connection: a certificate the
+/// access control list denies from that connection's addresses is refused
+/// as it is presented, before `inner` sees it, so a trust store never
+/// records as waiting a client the list will never admit. The client hears
+/// what any client the server does not trust hears.
+#[derive(Debug)]
+pub(crate) struct Admitting {
+    pub(crate) inner: Arc<dyn ClientCertVerifier>,
+    pub(crate) acl: Arc<Acl>,
+    pub(crate) source: SocketAddr,
+    pub(crate) local: SocketAddr,
+    pub(crate) denied: Denied,
+}
+
+impl ClientCertVerifier for Admitting {
+    fn offer_client_auth(&self) -> bool {
+        self.inner.offer_client_auth()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.inner.client_auth_mandatory()
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        self.inner.root_hint_subjects()
+    }
+
+    fn verify_client_cert(
+        &self,
+        certificate: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        let peer = PeerId::of(certificate.as_ref());
+        let decided = self
+            .acl
+            .decide_peer(self.source, self.local, &peer.canonical());
+        if decided.outcome != Outcome::Permit {
+            let _ = self.denied.set((peer, decided.rule_index));
+            return Err(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::Other(rustls::OtherError(Arc::new(Refusal::NotAccepted))),
+            ));
+        }
+        self.inner
+            .verify_client_cert(certificate, intermediates, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        certificate: &CertificateDer<'_>,
+        signed: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.inner
+            .verify_tls12_signature(message, certificate, signed)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        certificate: &CertificateDer<'_>,
+        signed: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.inner
+            .verify_tls13_signature(message, certificate, signed)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.inner.supported_verify_schemes()
+    }
+
+    fn requires_raw_public_keys(&self) -> bool {
+        self.inner.requires_raw_public_keys()
+    }
+}
+
+/// What a listener gives one connection a client verifier of its own with:
+/// the verifier its configuration was built with, and the certificate and
+/// key it presents.
+pub(crate) struct Verifying {
+    pub(crate) verifier: Arc<dyn ClientCertVerifier>,
+    pub(crate) certificate: CertificateDer<'static>,
+    pub(crate) key: PrivateKeyDer<'static>,
+}
+
+impl core::fmt::Debug for Verifying {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Verifying").finish_non_exhaustive()
+    }
+}
+
+impl Verifying {
+    /// What `config`, at mutual TLS, verifies its clients and presents
+    /// itself with.
+    pub(crate) fn of(config: &TlsConfig) -> io::Result<Verifying> {
+        let verifier = config
+            .client_trust()?
+            .client_cert_verifier_with(config.tls_policy())
+            .map_err(|e| invalid(words(&e)))?;
+        let identity = config.identity();
+        let pem = identity.to_pem().map_err(|e| invalid(words(&e)))?;
+        Ok(Verifying {
+            verifier,
+            certificate: CertificateDer::from(identity.certificate_der().to_vec()),
+            key: PrivateKeyDer::from_pem_slice(pem.as_bytes()).map_err(invalid)?,
+        })
+    }
+
+    /// `base`, presenting `certificate` and `key`, its clients verified by
+    /// `verifier`: rustls keeps a configuration's verifier to itself, so
+    /// one of a connection's own is a configuration rebuilt around it.
+    pub(crate) fn config(
+        base: &ServerConfig,
+        verifier: Arc<dyn ClientCertVerifier>,
+        certificate: &CertificateDer<'static>,
+        key: &PrivateKeyDer<'static>,
+    ) -> io::Result<Arc<ServerConfig>> {
+        let mut tls = ServerConfig::builder_with_provider(Arc::clone(base.crypto_provider()))
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .map_err(invalid)?
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(vec![certificate.clone()], key.clone_key())
+            .map_err(invalid)?;
+        tls.alpn_protocols.clone_from(&base.alpn_protocols);
+        tls.session_storage = Arc::clone(&base.session_storage);
+        tls.send_tls13_tickets = base.send_tls13_tickets;
+        tls.ticketer = Arc::clone(&base.ticketer);
+        Ok(Arc::new(tls))
+    }
+}
+
+/// Whether `acl` has a rule naming a fingerprint: only then can a source
+/// it admits to the handshake be one it would still deny.
+fn defers(acl: &Acl) -> bool {
+    acl.rules.iter().any(|r| r.fingerprint.is_some())
 }
 
 /// The access control list's refusal of `peer` from `source` once the
@@ -502,6 +651,18 @@ impl TlsConfig {
     }
 
     /// The pins, else the store's accepted peers, if either is given.
+    /// The list a listener of this configuration checks a client's
+    /// certificate against before its trust store sees it: `acl`, when the
+    /// store records clients it does not know as waiting and the list has
+    /// a rule naming a fingerprint (a source it admits to the handshake may
+    /// still be denied). `None` when the address decides, or nothing is
+    /// recorded.
+    pub(crate) fn admits_first(&self, acl: Option<&Arc<Acl>>) -> Option<Arc<Acl>> {
+        let waits = self.mutual && !self.checks_nobody && self.pins.is_empty();
+        acl.filter(|acl| waits && self.store.is_some() && defers(acl))
+            .cloned()
+    }
+
     fn pinned(&self) -> Option<Pins> {
         if !self.pins.is_empty() {
             return Some(Pins::fixed(self.pins.iter().copied()));
@@ -779,12 +940,31 @@ struct Pending {
     alpn: bool,
     /// Whether the client presents a certificate: false at server TLS.
     mutual: bool,
+    /// Set when the list deferred this source to a fingerprint rule: the
+    /// connection then verifies its client through an [`Admitting`].
+    verifying: Option<Arc<Verifying>>,
 }
 
 impl Pending {
     fn run(self, core: &Core) -> io::Result<()> {
+        let denied = Denied::default();
+        let config = match (&self.verifying, &self.acl) {
+            (Some(v), Some(acl)) => Verifying::config(
+                &self.config,
+                Arc::new(Admitting {
+                    inner: Arc::clone(&v.verifier),
+                    acl: Arc::clone(acl),
+                    source: self.source,
+                    local: self.local,
+                    denied: Arc::clone(&denied),
+                }),
+                &v.certificate,
+                &v.key,
+            )?,
+            _ => Arc::clone(&self.config),
+        };
         let handshake =
-            TlsHandshake::server(self.config, Some(self.source)).map_err(|e| invalid(words(&e)))?;
+            TlsHandshake::server(config, Some(self.source)).map_err(|e| invalid(words(&e)))?;
         // The bound the link set on a read bounds the whole handshake.
         let bound = core.socket.read_timeout()?;
         let mut io = Bounded {
@@ -794,10 +974,13 @@ impl Pending {
         let completed = coqui_peer::complete_stream(handshake, &mut io);
         core.socket.set_read_timeout(bound)?;
         core.socket.set_write_timeout(None)?;
-        let completed = completed.map_err(|e| match e {
-            DriveError::Io(e) => e,
-            DriveError::Handshake(e) => untrusted_by_server(e.refusal(), words(&e)),
-            other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
+        let completed = completed.map_err(|e| match (e, denied.get()) {
+            (DriveError::Handshake(_), Some((peer, rule))) => {
+                denied_by_acl(peer, self.source, *rule)
+            }
+            (DriveError::Io(e), _) => e,
+            (DriveError::Handshake(e), None) => untrusted_by_server(e.refusal(), words(&e)),
+            (other, _) => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
         // A mutual handshake names the client; at server TLS there is none.
         let (session, peer) = completed
@@ -1201,6 +1384,9 @@ pub struct TlsListen {
     alpn: bool,
     /// Whether clients present a certificate: false at server TLS.
     mutual: bool,
+    /// At mutual TLS under a list with fingerprint rules: what a
+    /// connection the list deferred verifies its client through.
+    verifying: Option<Arc<Verifying>>,
 }
 
 impl core::fmt::Debug for TlsListen {
@@ -1228,12 +1414,17 @@ impl TlsListen {
             Some(acl) => Some(Arc::new(canonical_acl(acl)?)),
             None => None,
         };
+        let verifying = match config.admits_first(acl.as_ref()) {
+            Some(_) => Some(Arc::new(Verifying::of(config)?)),
+            None => None,
+        };
         Ok(TlsListen {
             listener,
             config: config.server()?,
             acl,
             alpn: true,
             mutual: config.is_mutual(),
+            verifying,
         })
     }
 
@@ -1273,9 +1464,11 @@ impl TlsListen {
     fn accept_pending(&self) -> io::Result<Result<(Core, Pending, SocketAddr), SocketAddr>> {
         let (socket, source) = self.listener.accept()?;
         let local = socket.local_addr()?;
-        if let Some(acl) = &self.acl
-            && acl.decide(source, local).outcome == Outcome::Deny
-        {
+        let outcome = self
+            .acl
+            .as_ref()
+            .map(|acl| acl.decide(source, local).outcome);
+        if outcome == Some(Outcome::Deny) {
             let _ = socket.shutdown(Shutdown::Both);
             return Ok(Err(source));
         }
@@ -1287,6 +1480,10 @@ impl TlsListen {
             acl: self.acl.clone(),
             alpn: self.alpn,
             mutual: self.mutual,
+            verifying: self
+                .verifying
+                .clone()
+                .filter(|_| outcome == Some(Outcome::Deferred)),
         };
         Ok(Ok((Core::new(socket, None), pending, source)))
     }

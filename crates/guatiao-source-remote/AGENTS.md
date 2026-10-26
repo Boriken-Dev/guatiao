@@ -227,7 +227,9 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 - **TLS** (`tls`): `TlsConfig` trusts its pins when any are given, else
   its store's accepted peers; a server with a store records an unknown
   client as waiting (with its source address) once it proved its key, and
-  refuses it; the waiting caps count an IPv6 source by its /64
+  refuses it, unless the access control list would deny that fingerprint
+  from that source (then it is refused as it presents its certificate and
+  not recorded); the waiting caps count an IPv6 source by its /64
   (`TrustStore::with_ipv6_prefix`). Session resumption is off at both
   ends unless the policy sets `allow_resumption` (a weakening), so a peer
   removed from the store is refused at its next link. A refusal names its

@@ -48,14 +48,14 @@ use wtransport::endpoint::{IncomingSessionFuture, SessionRequest};
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 use super::quic::{
-    ABRUPT, CLEAN, CLOSE_WAIT, DROP_WAIT, Kept, REFUSED, Rt, Sourced, Watched, fingerprint, left,
-    transport_config, wait, wait_at_most,
+    ABRUPT, CLEAN, CLOSE_WAIT, DROP_WAIT, Kept, REFUSED, Rt, Sourced, Watched, admitting,
+    fingerprint, left, transport_config, wait, wait_at_most,
 };
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
 use super::tls::{
-    TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, host_of, server_name,
-    untrusted_by_server, untrusted_server, words,
+    Denied, TlsConfig, Verifying, canonical_acl, denied_by_acl, ended_before_answering, host_of,
+    server_name, untrusted_by_server, untrusted_server, words,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
 
@@ -322,31 +322,29 @@ impl Listener {
     /// The server configuration for one connection: the certificate
     /// presented now, and at mutual TLS a client verifier scoped to the
     /// connection's address.
-    fn config(&self, source: SocketAddr, refusal: &Kept) -> io::Result<Arc<quinn::ServerConfig>> {
+    fn config(
+        &self,
+        source: SocketAddr,
+        local: SocketAddr,
+        refusal: &Kept,
+        denied: &Denied,
+    ) -> io::Result<Arc<quinn::ServerConfig>> {
         let presented = self.current()?;
         let base = &presented.tls;
         let tls = match &self.verifier {
             Some(inner) => {
                 let verifier = Arc::new(Sourced {
-                    inner: Arc::clone(inner),
+                    inner: admitting(
+                        inner,
+                        self.config.admits_first(self.acl.as_ref()).as_ref(),
+                        source,
+                        local,
+                        denied,
+                    ),
                     source,
                     refusal: Arc::clone(refusal),
                 });
-                let mut tls =
-                    ServerConfig::builder_with_provider(Arc::clone(base.crypto_provider()))
-                        .with_protocol_versions(&[&rustls::version::TLS13])
-                        .map_err(invalid)?
-                        .with_client_cert_verifier(verifier)
-                        .with_single_cert(
-                            vec![presented.certificate.clone()],
-                            presented.key.clone_key(),
-                        )
-                        .map_err(invalid)?;
-                tls.alpn_protocols.clone_from(&base.alpn_protocols);
-                tls.session_storage = Arc::clone(&base.session_storage);
-                tls.send_tls13_tickets = base.send_tls13_tickets;
-                tls.ticketer = Arc::clone(&base.ticketer);
-                Arc::new(tls)
+                Verifying::config(base, verifier, &presented.certificate, &presented.key)?
             }
             None => Arc::clone(base),
         };
@@ -370,7 +368,10 @@ impl Pending {
     fn run(self, shared: &Shared, bound: Option<Duration>) -> io::Result<wtransport::RecvStream> {
         let until = bound.map(|b| Instant::now() + b);
         let refusal = Kept::default();
-        let config = self.listener.config(self.source, &refusal)?;
+        let denied = Denied::default();
+        let config = self
+            .listener
+            .config(self.source, self.local, &refusal, &denied)?;
         let handle = shared.rt.handle();
         // quinn spawns the connection's driver on the runtime it is called
         // inside.
@@ -382,6 +383,9 @@ impl Pending {
         let session = IncomingSessionFuture::with_quic_connecting(connecting);
         let request: SessionRequest =
             wait_at_most(handle, left(until)?, session)?.map_err(|e| {
+                if let Some((peer, rule)) = denied.get() {
+                    return denied_by_acl(peer, self.source, *rule);
+                }
                 match refusal.get().copied() {
                     Some(refused) => untrusted_by_server(Some(refused), &e),
                     None => io::Error::new(
