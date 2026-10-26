@@ -41,13 +41,20 @@ Future<RemoteChannel> openWebSocket(
   Duration timeout, [
   RemoteTls? tls,
 ]) async {
+  final connecting = WebSocket.connect(
+    url.toString(),
+    customClient: _client(tls),
+  );
   try {
-    final ws = await WebSocket.connect(
-      url.toString(),
-      customClient: _client(tls),
-    ).timeout(timeout);
-    return _IoChannel(ws);
+    return _IoChannel(await connecting.timeout(timeout));
   } on TimeoutException {
+    // One that opens after all is closed, not left open with nobody on it.
+    unawaited(
+      connecting.then(
+        (late) => late.close(WebSocketStatus.goingAway),
+        onError: (Object _) {},
+      ),
+    );
     throw Gone(Status.gone.code, 'the WebSocket to $url did not open in time');
   } on Exception catch (e) {
     throw Gone(Status.gone.code, 'the WebSocket to $url did not open: $e');
