@@ -338,11 +338,15 @@ slots: [{name, required, fallible, args, answer}]}]}`, the format on the
 docs site's encodings page), and
 
 ```text
-dart run guatiao:kind DOCUMENT -o FILE [--check]
+dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]
 ```
 
 writes the Dart for it (commit the file; `--check` writes nothing and
-exits 1 when it is stale). For each kind, named in PascalCase
+exits 1 when it is stale). `--import listener=listener_kind.dart` names an
+object kind a slot takes or answers that another document describes, with
+the library written for that document, which is imported rather than
+written again (`generateKinds(document, imports: {...})` from code); a
+kind may name itself. For each kind, named in PascalCase
 (`greeter` is `Greeter`), it declares:
 
 | declaration | what |
@@ -640,8 +644,6 @@ A process whose pointers are not four or eight bytes wide gets
 ## Not offered
 
 - Kinds and providers on the web: a kind table is native code's.
-- A kind whose slots name an object kind outside its own description
-  document: `dart run guatiao:kind` refuses it.
 - Serving Dart to a host that is not this Dart process (a bridge, as
   guatiao-source-py is for Python).
 

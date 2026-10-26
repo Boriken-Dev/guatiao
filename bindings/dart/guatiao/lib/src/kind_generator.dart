@@ -217,9 +217,13 @@ const _none = _Answer(
 );
 
 final class _Generator {
-  _Generator(this.document);
+  _Generator(this.document, this.kindImports);
 
   final Map<String, Object?> document;
+
+  /// Object kinds another document describes, each with the library
+  /// `dart run guatiao:kind` wrote for it.
+  final Map<String, String> kindImports;
   final Map<String, String> names = {};
   final Set<String> imports = {};
   final Set<String> declared = {};
@@ -457,7 +461,20 @@ final class _Generator {
       }
       names[name] = type;
     }
+    for (final MapEntry(key: kind, value: uri) in kindImports.entries) {
+      if (names.containsKey(kind)) {
+        throw FormatException(
+          '$kind is in this document and imported from $uri',
+        );
+      }
+      final type = typeNameOf(kind);
+      if (names.containsValue(type)) {
+        throw FormatException('two kinds are $type in Dart');
+      }
+      names[kind] = type;
+    }
     final body = <String>[for (final kind in kinds) ...declareKind(kind)];
+    final libraries = kindImports.values.toSet().toList()..sort();
     final text = body.join('\n');
     final structs = {
       for (final m in RegExp(r'\bguatiao_[a-z_]+\b').allMatches(text)) m[0]!,
@@ -482,6 +499,8 @@ final class _Generator {
         "import 'package:guatiao/guatiao.dart' show ${shown.join(', ')};",
       "import 'package:guatiao/kind_glue.dart';",
       "import 'package:guatiao/kinds.dart';",
+      if (libraries.isNotEmpty) '',
+      for (final uri in libraries) "import '$uri';",
       '',
       ...body,
     ];
@@ -759,11 +778,17 @@ final class _Generator {
 /// static `kind`, one per appended slot, a `<Kind>Remote` a caller holds,
 /// and the `<Kind>Kind` that calls and serves a table. [FormatException]
 /// for a document it cannot write.
+///
+/// [imports] names an object kind a slot takes or answers that another
+/// document describes, with the library `dart run guatiao:kind` wrote for
+/// that document (`{'listener': 'listener_kind.dart'}`): it is imported,
+/// not written again.
 String generateKinds(
   Map<String, Object?> document, {
   String? source,
   String? command,
-}) => _Generator(document).generate(source: source, command: command);
+  Map<String, String> imports = const {},
+}) => _Generator(document, imports).generate(source: source, command: command);
 
 /// The top-level scalars of a `pubspec.yaml` this needs: `name`,
 /// `version`, `description` (folded or literal blocks too), and the URLs.
