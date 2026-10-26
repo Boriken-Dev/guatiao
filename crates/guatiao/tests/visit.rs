@@ -174,6 +174,39 @@ fn a_wide_map_is_read_in_linear_time_and_a_repeat_anywhere_is_found() {
     }
 }
 
+/// Around the width where a reader stops comparing keys one by one and
+/// keeps a set from the map's count, every repeat is still found, by the
+/// tree decoder, the streamed one and the walk, and a map with none reads.
+#[test]
+fn a_repeat_is_found_on_either_side_of_the_set() {
+    for n in [2, 15, 16, 17, 18, 40] {
+        let (bytes, _) = wide_map(n, None);
+        assert!(decode(&bytes).is_ok(), "{n} keys");
+        assert!(decode_as::<Value>(&bytes).is_ok(), "{n} keys streamed");
+        assert!(built(&Encoded(&bytes)).is_ok(), "{n} keys walked");
+        for (from, to) in [(0, 1), (0, n - 1), (n - 2, n - 1)] {
+            let (bytes, at) = wide_map(n, Some((from, to)));
+            let tree_error = decode(&bytes).unwrap_err();
+            assert_eq!(
+                tree_error,
+                WireError::DuplicateKey { at },
+                "{n}: k{from} at k{to}"
+            );
+            assert_eq!(
+                decode_as::<Value>(&bytes).unwrap_err(),
+                tree_error,
+                "{n}: streamed"
+            );
+            match built(&Encoded(&bytes)) {
+                Err(ValueError::Unparsed { at: walked, .. }) => {
+                    assert_eq!(walked, at, "{n}: k{from} at k{to}, walked")
+                }
+                other => panic!("{n}: walked: {other:?}"),
+            }
+        }
+    }
+}
+
 /// A sink finds a key it already holds through a hash past a few keys, so
 /// a wide map from events is built in linear time, and a repeated key,
 /// which a text format or a C walker may send, still replaces the first

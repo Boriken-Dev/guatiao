@@ -10,7 +10,9 @@
 
 #![forbid(unsafe_code)]
 
+use core::hash::{BuildHasher, BuildHasherDefault};
 use std::collections::HashSet;
+use std::hash::RandomState;
 
 use super::{Reader, Token, WireError, put_len};
 use crate::value::convert::MapError;
@@ -22,19 +24,84 @@ use crate::value::visit::{
     Walk, Walker,
 };
 
-/// Past this many keys, a map's repeated-key check hashes rather than
-/// comparing with every earlier key.
+/// A map counting more than this many keys checks each against a set
+/// rather than comparing it with every earlier key.
 pub(super) const LINEAR: usize = 16;
 
+/// How many more keys a map's count may reserve room for: a count is
+/// bounded only by the bytes that remain.
+const RESERVE: usize = 1024;
+
 /// The keys of every map open while reading, innermost last, each map's
-/// from where it started. A map past [`LINEAR`] keys also keeps them in a
-/// set: bytes anyone wrote can make a map as large as they like, and a scan
-/// per key is quadratic in it.
+/// from where it started. A map counting more than [`LINEAR`] keys also
+/// keeps their hashes in a set, sized from its count: bytes anyone wrote
+/// can make a map as large as they like, and a scan per key is quadratic
+/// in it.
 #[derive(Debug, Default)]
 struct OpenKeys<'b> {
     list: Vec<&'b str>,
-    /// A set for each open map past `LINEAR` keys, with where it started.
-    sets: Vec<(usize, HashSet<&'b str>)>,
+    /// The key hashes of each open map counting more than `LINEAR` keys,
+    /// with where its keys start.
+    sets: Vec<(usize, HashSet<u64, BuildHasherDefault<Prehashed>>)>,
+    /// Drawn with the first set, so bytes cannot be written to collide.
+    seeds: Option<Seeded>,
+}
+
+/// Hashes keys under seeds drawn from the standard library's random
+/// state: a multiply-and-fold per eight bytes, a few nanoseconds for a
+/// short key where SipHash takes several times that. A collision costs a
+/// comparison with the earlier keys, never a wrong answer.
+#[derive(Debug)]
+struct Seeded([u64; 2]);
+
+impl Seeded {
+    fn new() -> Seeded {
+        let state = RandomState::new();
+        Seeded([state.hash_one(1u64), state.hash_one(2u64)])
+    }
+
+    fn hash_one(&self, key: &str) -> u64 {
+        const M: u64 = 0x9e37_79b9_7f4a_7c15;
+        let fold = |a: u64, b: u64| {
+            let p = u128::from(a) * u128::from(b);
+            (p as u64) ^ ((p >> 64) as u64)
+        };
+        let [s0, s1] = self.0;
+        let bytes = key.as_bytes();
+        let mut h = s0 ^ (bytes.len() as u64).wrapping_mul(M);
+        let (words, rest) = bytes.as_chunks::<8>();
+        for &w in words {
+            h = fold(h ^ u64::from_le_bytes(w), s1 ^ M);
+        }
+        if !rest.is_empty() {
+            let mut last = [0u8; 8];
+            last[..rest.len()].copy_from_slice(rest);
+            h = fold(h ^ u64::from_le_bytes(last), s1);
+        }
+        fold(h, s0 ^ M)
+    }
+}
+
+/// The set's hasher: its elements are hashes already.
+#[derive(Debug, Default)]
+struct Prehashed(u64);
+
+impl core::hash::Hasher for Prehashed {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    // Only `write_u64` is reached, by `HashSet<u64>`; this keeps the
+    // trait's contract for anything else.
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(b);
+        }
+    }
+
+    fn write_u64(&mut self, n: u64) {
+        self.0 = n;
+    }
 }
 
 impl<'b> OpenKeys<'b> {
@@ -42,21 +109,29 @@ impl<'b> OpenKeys<'b> {
         self.list.len()
     }
 
-    /// Adds `key` to the map whose keys start at `start`: false, adding
-    /// nothing, when that map already has it.
-    fn insert(&mut self, start: usize, key: &'b str) -> bool {
+    /// Adds `key` to the map whose keys start at `start` and which holds
+    /// `left` more entries after this one: false, adding nothing, when
+    /// that map already has it.
+    fn insert(&mut self, start: usize, key: &'b str, left: u64) -> bool {
         let hashed = matches!(self.sets.last(), Some((s, _)) if *s == start);
-        let repeated = match self.sets.last_mut() {
-            Some((_, set)) if hashed => !set.insert(key),
-            _ => self.list[start..].contains(&key),
-        };
-        if repeated {
+        if hashed {
+            let seeds = self.seeds.as_ref().expect("drawn with the first set");
+            let set = &mut self.sets.last_mut().expect("checked above").1;
+            // A hash seen before is a repeat only if the key itself is.
+            if !set.insert(seeds.hash_one(key)) && self.list[start..].contains(&key) {
+                return false;
+            }
+        } else if self.list[start..].contains(&key) {
             return false;
         }
         self.list.push(key);
-        if !hashed && self.list.len() - start > LINEAR {
-            self.sets
-                .push((start, self.list[start..].iter().copied().collect()));
+        let held = self.list.len() - start;
+        if !hashed && held as u64 + left > LINEAR as u64 {
+            let seeds = self.seeds.get_or_insert_with(Seeded::new);
+            let room = usize::try_from(left).unwrap_or(usize::MAX).min(RESERVE);
+            let mut set = HashSet::with_capacity_and_hasher(held + room, Default::default());
+            set.extend(self.list[start..].iter().map(|k| seeds.hash_one(k)));
+            self.sets.push((start, set));
         }
         true
     }
@@ -411,13 +486,13 @@ impl<'b> Decoder<'b> {
                 continue;
             }
             top.0 -= 1;
-            if let Some(start) = top.1 {
+            if let (left, Some(start)) = *top {
                 let at = self.reader.offset();
                 let key = match self.reader.text() {
                     Ok(key) => key,
                     Err(e) => break Err(e),
                 };
-                if !self.keys.insert(start, key) {
+                if !self.keys.insert(start, key, left) {
                     break Err(WireError::DuplicateKey { at });
                 }
             }
@@ -555,7 +630,7 @@ impl MapWalker for Entries<'_, '_> {
             Ok(key) => key,
             Err(e) => return Err(d.fail(e)),
         };
-        if !d.keys.insert(self.frame.start, key) {
+        if !d.keys.insert(self.frame.start, key, self.frame.left) {
             return Err(d.fail(WireError::DuplicateKey { at }));
         }
         self.frame.pending = true;
@@ -709,10 +784,10 @@ impl Walk for Node<'_, '_> {
                 let start = self.keys.borrow().len();
                 let mut entries = visitor.map(len)?;
                 let walked = (|| -> Result<(), V::Error> {
-                    for _ in 0..count {
+                    for left in (0..count).rev() {
                         let at = reader.offset();
                         let key = reader.text().map_err(unparsed)?;
-                        if !self.keys.borrow_mut().insert(start, key) {
+                        if !self.keys.borrow_mut().insert(start, key, left) {
                             return Err(unparsed(WireError::DuplicateKey { at }).into());
                         }
                         let child = self.child(reader.at);
@@ -748,5 +823,29 @@ impl Walk for Encoded<'_> {
             return Err(unparsed(WireError::Trailing { at: end }).into());
         }
         Ok(walked)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OpenKeys, Seeded};
+
+    /// Seeds that send every key shorter than eight bytes to one hash: the
+    /// set then says "seen" for each, and only the bytes tell them apart.
+    #[test]
+    fn keys_whose_hashes_collide_are_told_apart_by_their_bytes() {
+        let seeds = Seeded([7, 0]);
+        assert_eq!(seeds.hash_one("a"), seeds.hash_one("bcd"));
+        let names: Vec<String> = (0..40).map(|i| format!("k{i}")).collect();
+        let mut keys = OpenKeys {
+            seeds: Some(seeds),
+            ..OpenKeys::default()
+        };
+        for (i, name) in names.iter().enumerate() {
+            assert!(keys.insert(0, name, (names.len() - 1 - i) as u64), "{name}");
+        }
+        assert!(!keys.insert(0, "k17", 0));
+        assert!(!keys.insert(0, "k0", 0));
+        assert!(keys.insert(0, "k40", 0));
     }
 }
