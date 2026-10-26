@@ -560,6 +560,15 @@ JavaScript classes (`describeKinds`) into the same document, and a floor
 hash it is not given is the FNV-1a of the shape and the required slots
 spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
 
+A provider carries the same document in its descriptor
+(`guatiao_provider_info.kind_descriptions`, JSON text): the kinds it
+serves and every object kind their slots take or answer, each once, so a
+host binds them with no file. `#[derive(Provider)]` writes it; a provider
+written by hand may leave it empty. A host reads it parsed with
+`guatiao_registry_kind_descriptions` (ABSENT when the provider carries
+none), `Provider::kind_descriptions` in Rust, `kindDescriptions` in Node
+and Dart and `kind_descriptions` in Python.
+
 ## A library manifest
 
 A library one of guatiao's sources serves (a Python module, a JavaScript

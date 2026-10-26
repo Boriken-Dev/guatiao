@@ -60,6 +60,14 @@ import { kindsOf } from 'guatiao/kinds';
 const { greeter: Greeter } = kindsOf(readFileSync('greeter_kind.kinds.json', 'utf8'));
 ```
 
+A library built with `#[derive(Provider)]` carries the same document, so
+a host can bind its kinds with no file at all:
+
+```js
+const { greeter: Greeter } = kindsOf(reg.kindDescriptions('derived_greeter_hello'));
+const greeter = reg.bind('derived_greeter_hello', Greeter);
+```
+
 ### A kind defined in JavaScript
 
 A kind with no header behind it, defined here for other code to serve or

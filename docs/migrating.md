@@ -694,6 +694,16 @@ let fields = KeyFields::library("device", "1.0.0").with_source("device-0");
 assert_eq!(template.render(fields), "device-0/device");
 ```
 
+### A provider descriptor carries its kinds' descriptions
+
+`ProviderInfo` gains `kind_descriptions`, appended after `destroy`: the
+JSON document describing the kinds the provider serves. A descriptor
+built with `ProviderParts::builder` or `#[derive(Provider)]` needs
+nothing; a `ProviderInfo` written as a Rust struct literal names the new
+field, `kind_descriptions: Str::new("")` for none. A library compiled
+before the field keeps loading, read as carrying none, and C, C++ and
+every binding's descriptor are unchanged unless they set it.
+
 ## guatiao-serde
 
 ### Reading a JSON number exactly is its own feature
