@@ -232,6 +232,38 @@ module guatiao_c
     type(gt_value) :: detail
   end type
 
+  !> `GUATIAO_LEN_UNKNOWN`, UINT64_MAX: a container that did not say how
+  !> many items follow.
+  integer(c_int64_t), parameter :: GUATIAO_LEN_UNKNOWN = -1_c_int64_t
+
+  !> `guatiao_visitor`: thirteen words. What receives a walk's events:
+  !> `struct_size` (`c_sizeof` of this type), `ctx` handed back to each
+  !> function, then a function per event; a null one refuses its event
+  !> with GUATIAO_ERR_WRONG_KIND.
+  type, bind(c) :: gt_visitor
+    integer(c_int32_t) :: struct_size = 0
+    type(c_ptr) :: ctx = c_null_ptr
+    type(c_funptr) :: absent = c_null_funptr
+    type(c_funptr) :: null = c_null_funptr
+    type(c_funptr) :: boolean = c_null_funptr
+    type(c_funptr) :: number = c_null_funptr
+    type(c_funptr) :: string = c_null_funptr
+    type(c_funptr) :: bytes = c_null_funptr
+    type(c_funptr) :: list_begin = c_null_funptr
+    type(c_funptr) :: list_end = c_null_funptr
+    type(c_funptr) :: map_begin = c_null_funptr
+    type(c_funptr) :: key = c_null_funptr
+    type(c_funptr) :: map_end = c_null_funptr
+  end type
+
+  !> `guatiao_walker`: three words. What hands its own data to a visitor:
+  !> `walk(ctx, into)` writes one value's events into `into`.
+  type, bind(c) :: gt_walker
+    integer(c_int32_t) :: struct_size = 0
+    type(c_ptr) :: ctx = c_null_ptr
+    type(c_funptr) :: walk = c_null_funptr
+  end type
+
   !> One export this binding calls: its name, how many arguments the
   !> header gives it, and the build feature it needs ('' for none).
   type :: gt_export
