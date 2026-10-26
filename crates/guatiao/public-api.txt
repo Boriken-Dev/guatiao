@@ -607,6 +607,19 @@ pub fn guatiao::library::kind::ArgType::eq(&self, &Self) -> bool
 impl core::fmt::Debug for guatiao::library::kind::ArgType
 pub fn guatiao::library::kind::ArgType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::kind::ArgType
+#[non_exhaustive] pub enum guatiao::library::kind::CReturn
+pub guatiao::library::kind::CReturn::Bool
+pub guatiao::library::kind::CReturn::Nothing
+pub guatiao::library::kind::CReturn::Status
+impl core::clone::Clone for guatiao::library::kind::CReturn
+pub fn guatiao::library::kind::CReturn::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::CReturn
+impl core::cmp::PartialEq for guatiao::library::kind::CReturn
+pub fn guatiao::library::kind::CReturn::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::CReturn
+pub fn guatiao::library::kind::CReturn::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::library::kind::CReturn
+impl core::marker::StructuralPartialEq for guatiao::library::kind::CReturn
 #[non_exhaustive] pub enum guatiao::library::kind::CType
 pub guatiao::library::kind::CType::F32
 pub guatiao::library::kind::CType::F64
@@ -789,9 +802,12 @@ pub fn guatiao::library::kind::BytesMut<'a>::fmt(&self, &mut core::fmt::Formatte
 pub struct guatiao::library::kind::CSignature
 impl guatiao::library::kind::CSignature
 pub fn guatiao::library::kind::CSignature::args(&self) -> &[guatiao::library::kind::CType]
+pub fn guatiao::library::kind::CSignature::available() -> guatiao::library::kind::CSignature
+pub fn guatiao::library::kind::CSignature::create() -> guatiao::library::kind::CSignature
 pub fn guatiao::library::kind::CSignature::destroy() -> guatiao::library::kind::CSignature
+pub fn guatiao::library::kind::CSignature::destroy_instance() -> guatiao::library::kind::CSignature
 pub fn guatiao::library::kind::CSignature::of_slot(&guatiao::library::kind::KindDescription, usize) -> core::result::Result<guatiao::library::kind::CSignature, guatiao::library::kind::TableError>
-pub fn guatiao::library::kind::CSignature::returns_status(&self) -> bool
+pub fn guatiao::library::kind::CSignature::returns(&self) -> guatiao::library::kind::CReturn
 impl core::clone::Clone for guatiao::library::kind::CSignature
 pub fn guatiao::library::kind::CSignature::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::library::kind::CSignature
@@ -1046,6 +1062,15 @@ impl<K: ?core::marker::Sized> core::clone::Clone for guatiao::library::kind::Rem
 pub fn guatiao::library::kind::Remote<K>::clone(&self) -> guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Send for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Sync for guatiao::library::kind::Remote<K>
+pub struct guatiao::library::kind::ServedProvider
+impl guatiao::library::kind::ServedProvider
+pub fn guatiao::library::kind::ServedProvider::available_slot(&self) -> core::option::Option<fn(*mut core::ffi::c_void, *mut guatiao::value::types::text::Str<'_>) -> bool>
+pub fn guatiao::library::kind::ServedProvider::create_slot(&self) -> core::option::Option<guatiao::library::raw::CreateFn>
+pub fn guatiao::library::kind::ServedProvider::destroy_slot(&self) -> core::option::Option<guatiao::library::raw::DestroyFn>
+pub fn guatiao::library::kind::ServedProvider::new(usize, bool, bool, alloc::sync::Arc<dyn guatiao::library::kind::Serve>, &dyn guatiao::library::kind::Mechanism) -> core::result::Result<guatiao::library::kind::ServedProvider, guatiao::library::kind::TableError>
+pub fn guatiao::library::kind::ServedProvider::slots(self, guatiao::library::kind::ProviderPartsBuilder) -> guatiao::library::kind::ProviderPartsBuilder
+impl core::fmt::Debug for guatiao::library::kind::ServedProvider
+pub fn guatiao::library::kind::ServedProvider::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::kind::ServedTable
 impl guatiao::library::kind::ServedTable
 pub fn guatiao::library::kind::ServedTable::as_ptr(&self) -> *const core::ffi::c_void
@@ -1099,8 +1124,11 @@ pub trait guatiao::library::kind::ProviderDecl
 pub const guatiao::library::kind::ProviderDecl::KINDS: &'static [&'static str]
 pub fn guatiao::library::kind::ProviderDecl::provider(guatiao::library::raw::Host, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::library::kind::ProviderParts, guatiao::value::error::ValueError>
 pub trait guatiao::library::kind::Serve: core::marker::Send + core::marker::Sync + 'static
+pub fn guatiao::library::kind::Serve::available(&self, usize) -> core::result::Result<(), alloc::string::String>
 pub fn guatiao::library::kind::Serve::call(&self, usize, &guatiao::library::kind::KindDescription, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::Serve::create(&self, usize, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::kind::Serve::destroy(&self, usize)
+pub fn guatiao::library::kind::Serve::destroy_instance(&self, usize, usize)
 pub fn guatiao::library::kind::kind_document(&[guatiao::library::kind::Describe]) -> alloc::string::String
 pub type guatiao::library::kind::Describe = fn(&mut alloc::vec::Vec<&'static str>, &mut alloc::vec::Vec<alloc::string::String>)
 pub mod guatiao::library::notices

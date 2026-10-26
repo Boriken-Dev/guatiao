@@ -497,8 +497,8 @@ fn a_signature_is_read_from_the_slot() {
         signature.args(),
         &[CType::Pointer, view, CType::Pointer, CType::Pointer]
     );
-    assert!(signature.returns_status());
-    assert!(!CSignature::destroy().returns_status());
+    assert_eq!(signature.returns(), CReturn::Status);
+    assert_eq!(CSignature::destroy().returns(), CReturn::Nothing);
     assert_eq!(CSignature::destroy().args(), &[CType::Pointer]);
 }
 
@@ -624,4 +624,237 @@ fn a_lent_object_is_called_from_another_thread_while_lent_and_refused_after() {
     );
     // Its `destroy` is a marker: let it go without calling it.
     let _ = object.into_raw();
+}
+
+// --- a provider's own slots ----------------------------------------------------
+
+/// Builds instances numbered from 100, remembering each provider's
+/// configuration, and answers `available` from `down`.
+#[derive(Default)]
+struct Instances {
+    built: Mutex<Vec<(usize, usize, Value)>>,
+    gone: Mutex<Vec<(usize, usize)>>,
+    down: Mutex<Option<String>>,
+}
+
+impl Serve for Instances {
+    fn call(
+        &self,
+        _: usize,
+        _: &KindDescription,
+        _: usize,
+        _: Vec<Arg<'_>>,
+    ) -> Result<Answer, ProviderError> {
+        Ok(Answer::Nothing)
+    }
+
+    fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError> {
+        if TryAsRef::<Map>::try_as_ref(config).is_some_and(|m| m.get("refuse").is_some()) {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "refused, as asked",
+            ));
+        }
+        if TryAsRef::<Map>::try_as_ref(config).is_some_and(|m| m.get("zero").is_some()) {
+            return Ok(0);
+        }
+        let mut built = self.built.lock().unwrap();
+        let instance = 100 + built.len();
+        built.push((provider, instance, config.clone()));
+        Ok(instance)
+    }
+
+    fn destroy_instance(&self, provider: usize, instance: usize) {
+        self.gone.lock().unwrap().push((provider, instance));
+    }
+
+    fn available(&self, _provider: usize) -> Result<(), String> {
+        match self.down.lock().unwrap().clone() {
+            Some(why) if why == "panic" => panic!("asked to"),
+            Some(why) => Err(why),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Runs the closure at `code` that `mechanism` made, on `args`, as a call
+/// through it would.
+fn run(mechanism: &Direct, code: usize, args: &[*mut c_void]) -> u32 {
+    let handler = mechanism
+        .made
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map(|(_, h)| Arc::clone(h))
+        .expect("a closure the mechanism made");
+    // SAFETY: the array of a call with the slot's signature.
+    unsafe { handler.call(args.as_ptr()) }
+}
+
+fn create_through(
+    mechanism: &Direct,
+    slots: &ServedProvider,
+    config: Option<&Value>,
+) -> (u32, *mut c_void, ProviderError) {
+    let code = slots.create_slot().expect("a create slot") as usize;
+    let mut c = core::ptr::null_mut::<c_void>();
+    let mut config_p: *const Value = config.map_or(core::ptr::null(), |c| c);
+    let mut out = core::ptr::null_mut::<c_void>();
+    let mut out_p: *mut *mut c_void = &mut out;
+    let mut err = ProviderError::none();
+    let mut err_p: *mut ProviderError = &mut err;
+    let args = array(&mut [&mut c, &mut config_p, &mut out_p, &mut err_p]);
+    let status = run(mechanism, code, &args);
+    (status, out, err)
+}
+
+#[test]
+fn a_served_provider_builds_and_destroys_instances_through_its_handler() {
+    let mechanism = Direct::default();
+    let serve = Arc::new(Instances::default());
+    let slots = ServedProvider::new(7, true, false, serve.clone(), &mechanism).expect("built");
+    assert!(slots.available_slot().is_none());
+
+    let mut config = Map::new();
+    config.set("word", "hi");
+    let config = Value::from(config);
+    let (status, out, _) = create_through(&mechanism, &slots, Some(&config));
+    assert_eq!(status, u32::from(Status::GUATIAO_OK));
+    assert_eq!(out.addr(), 100);
+    assert_eq!(serve.built.lock().unwrap()[0], (7, 100, config));
+
+    // Refused in the provider's words; no configuration at all; an
+    // instance of 0, which would read as none.
+    let mut refuse = Map::new();
+    refuse.set("refuse", true);
+    let (status, out, err) = create_through(&mechanism, &slots, Some(&Value::from(refuse)));
+    assert_eq!(status, u32::from(Status::GUATIAO_ERR_BAD_VALUE));
+    assert!(out.is_null());
+    assert_eq!(err.message(), "refused, as asked");
+    let (status, _, err) = create_through(&mechanism, &slots, None);
+    assert_eq!(status, u32::from(Status::GUATIAO_ERR_NULL));
+    assert_eq!(err.message(), "no configuration");
+    let mut zero = Map::new();
+    zero.set("zero", true);
+    let (status, out, _) = create_through(&mechanism, &slots, Some(&Value::from(zero)));
+    assert_eq!(status, u32::from(Status::GUATIAO_ERR_INTERNAL));
+    assert!(out.is_null());
+
+    let destroy = slots.destroy_slot().expect("a destroy slot") as usize;
+    let mut c = core::ptr::null_mut::<c_void>();
+    let mut instance = ctx(100);
+    let args = array(&mut [&mut c, &mut instance]);
+    assert_eq!(run(&mechanism, destroy, &args), 0);
+    assert_eq!(*serve.gone.lock().unwrap(), [(7, 100)]);
+}
+
+#[test]
+fn a_served_provider_answers_available_and_keeps_every_reason_it_gave() {
+    let mechanism = Direct::default();
+    let serve = Arc::new(Instances::default());
+    let slots = ServedProvider::new(3, false, true, serve.clone(), &mechanism).expect("built");
+    assert!(slots.create_slot().is_none() && slots.destroy_slot().is_none());
+    let code = slots.available_slot().expect("an available slot") as usize;
+    let ask = || {
+        let mut c = core::ptr::null_mut::<c_void>();
+        let mut reason = Str::empty();
+        let mut reason_p: *mut Str = &mut reason;
+        let args = array(&mut [&mut c, &mut reason_p]);
+        let answer = run(&mechanism, code, &args);
+        (answer, reason)
+    };
+
+    let (answer, reason) = ask();
+    assert_eq!((answer, <&[u8]>::from(reason)), (1, &b""[..]));
+
+    *serve.down.lock().unwrap() = Some("no device".to_string());
+    let (answer, first) = ask();
+    assert_eq!(answer, 0);
+    // Many other reasons later, the first one's words are still there.
+    for i in 0..40 {
+        *serve.down.lock().unwrap() = Some(format!("reason {i}"));
+        assert_eq!(ask().0, 0);
+    }
+    assert_eq!(<&[u8]>::from(first), b"no device");
+    *serve.down.lock().unwrap() = Some("no device".to_string());
+    let (_, again) = ask();
+    assert_eq!(<&[u8]>::from(again).as_ptr(), <&[u8]>::from(first).as_ptr());
+}
+
+/// Leaks the panic's payload by design, so Miri runs it with leaks
+/// ignored (its name is what the Miri command skips otherwise).
+#[test]
+fn a_panic_or_no_place_for_the_reason_still_answers_unavailable() {
+    let mechanism = Direct::default();
+    let serve = Arc::new(Instances::default());
+    let slots = ServedProvider::new(3, false, true, serve.clone(), &mechanism).expect("built");
+    let code = slots.available_slot().expect("an available slot") as usize;
+
+    *serve.down.lock().unwrap() = Some("no device".to_string());
+    let mut c = core::ptr::null_mut::<c_void>();
+    let mut nowhere = core::ptr::null_mut::<Str>();
+    let args = array(&mut [&mut c, &mut nowhere]);
+    assert_eq!(run(&mechanism, code, &args), 0);
+
+    // A panic is an answer too: unavailable, and saying so.
+    *serve.down.lock().unwrap() = Some("panic".to_string());
+    let mut reason = Str::empty();
+    let mut reason_p: *mut Str = &mut reason;
+    let args = array(&mut [&mut c, &mut reason_p]);
+    assert_eq!(run(&mechanism, code, &args), 0);
+    assert_eq!(
+        <&[u8]>::from(reason),
+        b"the provider's `available` panicked"
+    );
+}
+
+#[test]
+fn a_provider_slots_signature_is_fixed() {
+    assert_eq!(CSignature::create().args(), vec![CType::Pointer; 4]);
+    assert_eq!(CSignature::create().returns(), CReturn::Status);
+    assert_eq!(
+        CSignature::destroy_instance().args(),
+        vec![CType::Pointer; 2]
+    );
+    assert_eq!(CSignature::destroy_instance().returns(), CReturn::Nothing);
+    assert_eq!(CSignature::available().args(), vec![CType::Pointer; 2]);
+    assert_eq!(CSignature::available().returns(), CReturn::Bool);
+}
+
+/// Reasons asked for from several threads at once, each view still read
+/// after the others have grown the store, and new ones past the bound
+/// answered with the fixed sentence.
+#[test]
+fn reasons_from_many_threads_stay_readable_and_are_bounded() {
+    let reasons = Arc::new(Reasons::default());
+    let per = if cfg!(miri) { 3 } else { 20 };
+    let workers: Vec<_> = (0..4)
+        .map(|t| {
+            let reasons = Arc::clone(&reasons);
+            std::thread::spawn(move || {
+                let mut views = Vec::new();
+                for i in 0..per {
+                    let why = format!("thread {t} reason {i}");
+                    views.push((why.clone(), reasons.keep(why)));
+                }
+                // Every view this thread was handed, after the others grew
+                // the store behind it.
+                for (why, view) in &views {
+                    let read = <&[u8]>::from(*view);
+                    assert!(read == why.as_bytes() || read == TOO_MANY_REASONS.as_bytes());
+                }
+            })
+        })
+        .collect();
+    for w in workers {
+        w.join().expect("the thread ran");
+    }
+    if !cfg!(miri) {
+        // 80 asked, 64 kept: the rest read as the fixed sentence.
+        assert_eq!(reasons.0.lock().unwrap().len(), REASONS);
+        let past = reasons.keep("one more".to_string());
+        assert_eq!(<&[u8]>::from(past), TOO_MANY_REASONS.as_bytes());
+        assert_eq!(reasons.0.lock().unwrap().len(), REASONS);
+    }
 }

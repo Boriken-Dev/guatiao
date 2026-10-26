@@ -31,7 +31,7 @@ use core::mem::ManuallyDrop;
 
 use super::description::{AnswerType, ArgType, KindDescription, Pass, Scalar, Tree};
 use super::*;
-use crate::library::raw::{Hold, ProviderView};
+use crate::library::raw::{CreateFn, DestroyFn, Hold, ProviderView};
 use crate::value::convert::FromValue;
 use crate::value::types::Bytes;
 
@@ -153,6 +153,33 @@ pub trait Serve: Send + Sync + 'static {
     fn destroy(&self, ctx: usize) {
         let _ = ctx;
     }
+
+    /// A provider's `create` ([`ServedProvider`]): an instance of the
+    /// provider numbered `provider` built from `config`, answered as the
+    /// `ctx` every table slot gets for it, which must not be 0. Refused
+    /// `GUATIAO_ERR_UNSUPPORTED` by default.
+    fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError> {
+        let _ = (provider, config);
+        Err(ProviderError::new(
+            Status::GUATIAO_ERR_UNSUPPORTED,
+            "this provider builds no instances",
+        ))
+    }
+
+    /// A provider's `destroy`: the instance [`create`](Serve::create)
+    /// answered as `instance` is let go. Nothing by default.
+    fn destroy_instance(&self, provider: usize, instance: usize) {
+        let _ = (provider, instance);
+    }
+
+    /// A provider's `available`: `Ok` when the provider numbered
+    /// `provider` can run now, or why not. Asked every time, never cached;
+    /// each distinct reason is kept as long as the provider's slots (up to
+    /// a bound), so stable words are best. Available by default.
+    fn available(&self, provider: usize) -> Result<(), String> {
+        let _ = provider;
+        Ok(())
+    }
 }
 
 /// Why a table could not be built or called from a description.
@@ -257,13 +284,25 @@ fn arg_type(ty: &ArgType) -> Result<CType, TableError> {
     })
 }
 
+/// What a signature returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CReturn {
+    /// Nothing (`void`).
+    Nothing,
+    /// A `uint32_t` status.
+    Status,
+    /// A C `bool`, one byte: a provider's `available`.
+    Bool,
+}
+
 /// A slot's C signature: `ctx`, its arguments, `out` when it answers,
-/// `err` when it can fail, and a `u32` status back; or an object kind's
-/// `destroy`, `ctx` and nothing back.
+/// `err` when it can fail, and a `u32` status back; an object kind's
+/// `destroy`, `ctx` and nothing back; or one of a provider's own slots.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CSignature {
     args: Vec<CType>,
-    returns_status: bool,
+    returns: CReturn,
 }
 
 impl CSignature {
@@ -288,7 +327,7 @@ impl CSignature {
         }
         Ok(CSignature {
             args,
-            returns_status: true,
+            returns: CReturn::Status,
         })
     }
 
@@ -296,7 +335,33 @@ impl CSignature {
     pub fn destroy() -> CSignature {
         CSignature {
             args: vec![CType::Pointer],
-            returns_status: false,
+            returns: CReturn::Nothing,
+        }
+    }
+
+    /// A provider's `create`: `ctx`, the configuration, `out` and `err`,
+    /// a status back.
+    pub fn create() -> CSignature {
+        CSignature {
+            args: vec![CType::Pointer; 4],
+            returns: CReturn::Status,
+        }
+    }
+
+    /// A provider's `destroy`: `ctx` and the instance, nothing back.
+    pub fn destroy_instance() -> CSignature {
+        CSignature {
+            args: vec![CType::Pointer; 2],
+            returns: CReturn::Nothing,
+        }
+    }
+
+    /// A provider's `available`: `ctx` and where the reason goes, a `bool`
+    /// back.
+    pub fn available() -> CSignature {
+        CSignature {
+            args: vec![CType::Pointer; 2],
+            returns: CReturn::Bool,
         }
     }
 
@@ -305,9 +370,10 @@ impl CSignature {
         &self.args
     }
 
-    /// Whether it returns a `u32` status; otherwise it returns nothing.
-    pub fn returns_status(&self) -> bool {
-        self.returns_status
+    /// What it returns: a mechanism refuses a [`CReturn`] it does not
+    /// know rather than guess.
+    pub fn returns(&self) -> CReturn {
+        self.returns
     }
 }
 
@@ -322,10 +388,12 @@ impl CSignature {
 ///   callable with exactly that C signature, from any thread, until the
 ///   closure drops; each call runs the handler's [`SlotHandler::call`] once
 ///   with an array holding one address per argument, in order, each
-///   addressing a value of that argument's [`CType`], and returns the
-///   status it answers (nothing, for a signature that returns nothing);
+///   addressing a value of that argument's [`CType`], and returns what it
+///   answers as the signature's [`CReturn`] says: the `u32` status, a
+///   `bool` that is the answer's low bit (0 or 1), or nothing;
 /// - [`Prepared::call`] calls `f` with that C signature, passing the values
-///   `args` addresses, and returns the status `f` returned.
+///   `args` addresses, and returns what `f` returned (a `bool` as 0 or 1,
+///   nothing as 0).
 pub unsafe trait Mechanism: Send + Sync + 'static {
     /// Prepares `signature` once, for every closure and call of it.
     fn prepare(&self, signature: &CSignature) -> Result<Arc<dyn Prepared>, TableError>;
@@ -382,28 +450,45 @@ impl core::fmt::Debug for Closure {
     }
 }
 
-/// What a closure calls: one slot of a [`ServedTable`], or an object
-/// kind's `destroy`, reading its arguments and calling the table's
-/// [`Serve`] handler.
+/// What a closure calls: one slot of a [`ServedTable`], an object kind's
+/// `destroy`, or one of a [`ServedProvider`]'s slots, reading its
+/// arguments and calling the [`Serve`] handler.
 pub struct SlotHandler {
     serve: Arc<dyn Serve>,
-    kind: Arc<KindDescription>,
-    /// An index into the kind's slots, or `None` for `destroy`.
-    slot: Option<usize>,
+    role: Role,
+}
+
+/// Which slot a [`SlotHandler`] is.
+enum Role {
+    /// A kind's slot, by its index.
+    Slot(Arc<KindDescription>, usize),
+    /// An object kind's `destroy`.
+    Destroy(Arc<KindDescription>),
+    /// A provider's `create`, the provider by its number.
+    Create(usize),
+    /// A provider's `destroy`.
+    DestroyInstance(usize),
+    /// A provider's `available`, and the reasons it has given.
+    Available(usize, Arc<Reasons>),
 }
 
 impl core::fmt::Debug for SlotHandler {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("SlotHandler")
-            .field("kind", &self.kind.name())
-            .field("slot", &self.slot)
-            .finish()
+        let mut d = f.debug_struct("SlotHandler");
+        match &self.role {
+            Role::Slot(kind, slot) => d.field("kind", &kind.name()).field("slot", slot),
+            Role::Destroy(kind) => d.field("kind", &kind.name()).field("slot", &"destroy"),
+            Role::Create(p) => d.field("provider", p).field("slot", &"create"),
+            Role::DestroyInstance(p) => d.field("provider", p).field("slot", &"destroy"),
+            Role::Available(p, _) => d.field("provider", p).field("slot", &"available"),
+        }
+        .finish()
     }
 }
 
 impl SlotHandler {
-    /// Runs the slot on a call's arguments: the status it answers, or 0
-    /// for `destroy`, which answers nothing.
+    /// Runs the slot on a call's arguments: the status it answers, 1 or 0
+    /// for `available`, and 0 for a slot that answers nothing.
     ///
     /// # Safety
     ///
@@ -411,19 +496,149 @@ impl SlotHandler {
     /// [`CSignature`]: one address per argument, each addressing a value
     /// of its type, valid for the call.
     pub unsafe fn call(&self, args: *const *mut c_void) -> u32 {
-        match self.slot {
-            None => {
-                // SAFETY: `destroy(ctx)`: one pointer argument.
-                let ctx = unsafe { args.cast::<*const *mut c_void>().read().read() };
+        // SAFETY (every read below): the caller's contract: argument `i`
+        // addresses a value of the signature's type, every one a pointer
+        // for the slots read this way.
+        let pointer = |i: usize| unsafe { args.add(i).read().cast::<*mut c_void>().read() };
+        match &self.role {
+            Role::Destroy(_) => {
+                let ctx = pointer(0);
                 catch_unit(|| self.serve.destroy(ctx.addr()));
                 0
             }
-            Some(slot) => {
+            Role::Slot(kind, slot) => {
                 // SAFETY: the caller's contract.
-                let status = unsafe { dispatch(&*self.serve, &self.kind, slot, args) };
+                let status = unsafe { dispatch(&*self.serve, kind, *slot, args) };
                 u32::from(status)
             }
+            Role::Create(provider) => {
+                let (config, out, err) = (pointer(1), pointer(2), pointer(3));
+                // SAFETY: `create(ctx, config, out, err)`: the caller's
+                // contract on the slot.
+                let status = unsafe {
+                    create(
+                        &*self.serve,
+                        *provider,
+                        config.cast::<Value>(),
+                        out.cast::<*mut c_void>(),
+                        err.cast::<ProviderError>(),
+                    )
+                };
+                u32::from(status)
+            }
+            Role::DestroyInstance(provider) => {
+                let instance = pointer(1);
+                catch_unit(|| self.serve.destroy_instance(*provider, instance.addr()));
+                0
+            }
+            Role::Available(provider, reasons) => {
+                let reason = pointer(1).cast::<Str<'static>>();
+                let mut asked = Err(String::from("the provider's `available` panicked"));
+                catch_unit(|| asked = self.serve.available(*provider));
+                match asked {
+                    Ok(()) => 1,
+                    Err(why) => {
+                        if !reason.is_null() {
+                            // SAFETY: `available(ctx, reason)`: `reason` is
+                            // writable; the words live as long as `reasons`,
+                            // which the provider's slots keep.
+                            unsafe { reason.write(reasons.keep(why)) };
+                        }
+                        0
+                    }
+                }
+            }
         }
+    }
+}
+
+/// A provider's `create`: reads the configuration, asks the handler,
+/// writes the instance or the error.
+///
+/// # Safety
+///
+/// `config` is null or addresses a value for the call; `out` and `err`
+/// are null or writable.
+unsafe fn create(
+    serve: &dyn Serve,
+    provider: usize,
+    config: *const Value,
+    out: *mut *mut c_void,
+    err: *mut ProviderError,
+) -> Status {
+    catch(|| {
+        // SAFETY: the caller's contract.
+        let built = match unsafe { config.as_ref() } {
+            None => Err(ProviderError::new(
+                Status::GUATIAO_ERR_NULL,
+                "no configuration",
+            )),
+            Some(config) => serve.create(provider, config).and_then(|ctx| match ctx {
+                0 => Err(ProviderError::new(
+                    Status::GUATIAO_ERR_INTERNAL,
+                    "the provider answered an instance of 0",
+                )),
+                ctx => Ok(ctx),
+            }),
+        };
+        match built {
+            Ok(ctx) if out.is_null() => {
+                // Nowhere to hand it: let it go again.
+                serve.destroy_instance(provider, ctx);
+                Status::GUATIAO_ERR_NULL
+            }
+            Ok(ctx) => {
+                // SAFETY: the caller's contract.
+                unsafe { out.write(core::ptr::without_provenance_mut(ctx)) };
+                Status::GUATIAO_OK
+            }
+            Err(mut e) => {
+                if e.status == Status::GUATIAO_OK {
+                    e.status = Status::GUATIAO_ERR_INTERNAL;
+                }
+                // SAFETY: the caller's contract.
+                unsafe { write_err(err, e) }
+            }
+        }
+    })
+}
+
+/// Every reason a provider's `available` gave, each kept once for as long
+/// as the provider's slots: a reader may hold one as long as the library
+/// lives, from any thread, so no reason is ever freed or rewritten while
+/// the slots stand. Past [`REASONS`] distinct ones, a fixed sentence
+/// stands for any new one, so words that change with every call cannot
+/// grow the store without end.
+#[derive(Default)]
+struct Reasons(std::sync::Mutex<Vec<String>>);
+
+/// How many distinct reasons one provider's `available` keeps.
+const REASONS: usize = 64;
+
+/// What stands for a reason past [`REASONS`].
+const TOO_MANY_REASONS: &str =
+    "unavailable (the provider has given more distinct reasons than are kept)";
+
+impl Reasons {
+    /// `why`, as a view of the copy kept here.
+    fn keep(&self, why: String) -> Str<'static> {
+        let mut kept = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let at = match kept.iter().position(|k| *k == why) {
+            Some(at) => at,
+            None if kept.len() >= REASONS => return Str::new(TOO_MANY_REASONS),
+            None => {
+                kept.push(why);
+                kept.len() - 1
+            }
+        };
+        // SAFETY: the text is a `String`'s heap storage, never removed or
+        // changed while this lives; moving the string as the vector grows
+        // leaves its text where it is (a `String`, unlike a `Box`, is not
+        // retagged when it moves).
+        unsafe { crate::library::raw::view_of_owned(&kept[at]) }
     }
 }
 
@@ -504,10 +719,13 @@ impl ServedTable {
         }
         let mut closures = Vec::with_capacity(made.len());
         for (signature, slot) in made {
+            let role = match slot {
+                None => Role::Destroy(Arc::clone(&kind)),
+                Some(i) => Role::Slot(Arc::clone(&kind), i),
+            };
             let closure = mechanism.prepare(&signature)?.closure(SlotHandler {
                 serve: Arc::clone(&serve),
-                kind: Arc::clone(&kind),
-                slot,
+                role,
             })?;
             let word = match slot {
                 None => 0,
@@ -561,6 +779,120 @@ impl ServedTable {
                 ctx: core::ptr::without_provenance_mut(ctx),
             },
         })
+    }
+}
+
+/// A provider's own slots -- `create` and `destroy`, `available` -- built
+/// at run time, each calling a [`Serve`] handler with the provider's
+/// number: what lets a provider whose kinds are served from descriptions
+/// be built from a configuration and asked whether it can run.
+///
+/// Its slots and the reasons `available` gave live exactly as long as
+/// this value: [`slots`](ServedProvider::slots) keeps it with the
+/// provider's parts.
+pub struct ServedProvider {
+    // Each keeps its signature and its handler alive.
+    _closures: Vec<Closure>,
+    create: Option<(CreateFn, DestroyFn)>,
+    available: Option<AvailableFn>,
+}
+
+/// [`ProviderInfo::available`](super::ProviderInfo::available)'s slot.
+type AvailableFn = unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool;
+
+impl core::fmt::Debug for ServedProvider {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ServedProvider")
+            .field("create", &self.create.is_some())
+            .field("available", &self.available.is_some())
+            .finish()
+    }
+}
+
+impl ServedProvider {
+    /// The slots of the provider `serve` knows as `provider`, made by
+    /// `mechanism`: `create` and `destroy` when `create` is set
+    /// ([`Serve::create`], [`Serve::destroy_instance`]), `available` when
+    /// `available` is ([`Serve::available`]). A slot left out stays null:
+    /// a provider that builds no instances, or one always available.
+    pub fn new(
+        provider: usize,
+        create: bool,
+        available: bool,
+        serve: Arc<dyn Serve>,
+        mechanism: &dyn Mechanism,
+    ) -> Result<ServedProvider, TableError> {
+        let make = |signature: CSignature, role: Role| -> Result<Closure, TableError> {
+            mechanism.prepare(&signature)?.closure(SlotHandler {
+                serve: Arc::clone(&serve),
+                role,
+            })
+        };
+        let mut closures = Vec::new();
+        let mut served = ServedProvider {
+            _closures: Vec::new(),
+            create: None,
+            available: None,
+        };
+        if create {
+            let made = make(CSignature::create(), Role::Create(provider))?;
+            let gone = make(
+                CSignature::destroy_instance(),
+                Role::DestroyInstance(provider),
+            )?;
+            // SAFETY: each code address is callable with exactly that
+            // signature while its closure lives (the `Mechanism`
+            // contract), and the closures live as long as `served`.
+            served.create = Some(unsafe {
+                (
+                    core::mem::transmute::<unsafe extern "C" fn(), CreateFn>(made.code()),
+                    core::mem::transmute::<unsafe extern "C" fn(), DestroyFn>(gone.code()),
+                )
+            });
+            closures.push(made);
+            closures.push(gone);
+        }
+        if available {
+            let asked = make(
+                CSignature::available(),
+                Role::Available(provider, Arc::new(Reasons::default())),
+            )?;
+            // SAFETY: as above.
+            served.available = Some(unsafe {
+                core::mem::transmute::<unsafe extern "C" fn(), AvailableFn>(asked.code())
+            });
+            closures.push(asked);
+        }
+        served._closures = closures;
+        Ok(served)
+    }
+
+    /// `builder` with these slots, keeping this value with the parts it
+    /// builds.
+    pub fn slots(self, builder: ProviderPartsBuilder) -> ProviderPartsBuilder {
+        let mut builder = builder;
+        if let Some((create, destroy)) = self.create {
+            builder = builder.create(create).destroy(destroy);
+        }
+        if let Some(available) = self.available {
+            builder = builder.available(available);
+        }
+        builder.keep(self)
+    }
+
+    /// Its `create` slot, or `None`.
+    pub fn create_slot(&self) -> Option<CreateFn> {
+        self.create.map(|(create, _)| create)
+    }
+
+    /// Its `destroy` slot, or `None`.
+    pub fn destroy_slot(&self) -> Option<DestroyFn> {
+        self.create.map(|(_, destroy)| destroy)
+    }
+
+    /// Its `available` slot, or `None`.
+    pub fn available_slot(&self) -> Option<AvailableFn> {
+        self.available
     }
 }
 
