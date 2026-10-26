@@ -749,6 +749,14 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
     }
     // MIG-LOADED-END
 
+    // MIG-KEYFIELDS-BEGIN
+    use guatiao::library::{KeyFields, KeyTemplate};
+
+    let template = KeyTemplate::library("%source/%id")?;
+    let fields = KeyFields::library("device", "1.0.0").with_source("device-0");
+    assert_eq!(template.render(fields), "device-0/device");
+    // MIG-KEYFIELDS-END
+
     // MIG-MALFORMED-BEGIN
     use guatiao::library::LoadError;
 
@@ -781,6 +789,7 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
         "MIG-LOCAL",
         "MIG-MALFORMED",
         "MIG-LOADED",
+        "MIG-KEYFIELDS",
     ]
     .into_iter()
     .enumerate()
@@ -826,7 +835,7 @@ fn migrating_serde_and_intake() -> Result<(), Box<dyn core::error::Error>> {
     // MIG-SPLIT-END
 
     for (n, name) in ["MIG-SYNTAX", "MIG-SPLIT"].into_iter().enumerate() {
-        assert_eq!(rust_block(MIGRATING, 21 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 22 + n), marked(name), "{name}");
     }
     Ok(())
 }

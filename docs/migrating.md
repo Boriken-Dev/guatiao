@@ -679,6 +679,21 @@ for (path, key) in &report.loaded {
 }
 ```
 
+### `KeyFields` has a `source`
+
+A key template may name `%source`, the source a library came from, so
+`KeyFields` gained a field for it. A `KeyFields` written out field by
+field names it too; `KeyFields::library` sets it empty, and
+`with_source` sets it.
+
+```rust
+use guatiao::library::{KeyFields, KeyTemplate};
+
+let template = KeyTemplate::library("%source/%id")?;
+let fields = KeyFields::library("device", "1.0.0").with_source("device-0");
+assert_eq!(template.render(fields), "device-0/device");
+```
+
 ## guatiao-serde
 
 ### Reading a JSON number exactly is its own feature
