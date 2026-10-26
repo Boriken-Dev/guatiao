@@ -201,6 +201,15 @@ typedef struct gt_read_opts {
 /* A tree as plain MATLAB data. */
 int gt_read(gt_call *c, const guatiao_value *v, const gt_read_opts *o, mxArray **out);
 
+/* MATLAB data `x` as wire bytes, with no tree: what gt_build would build,
+ * refused alike, in `*bytes` (malloc'd; the caller frees it). May run M
+ * code, as gt_build may. */
+int gt_wire_of(gt_call *c, const mxArray *x, uint8_t **bytes, size_t *len);
+
+/* Wire bytes a guatiao library wrote as the MATLAB data gt_read reads for
+ * the tree they hold. */
+int gt_read_wire(gt_call *c, guatiao_bytes data, const gt_read_opts *o, mxArray **out);
+
 /* Tree arguments at positions `at`: a guatiao.Value or view read in
  * place, or MATLAB data built into `tmp`, which the caller frees with
  * gt_free. MATLAB data is built for every argument before any node is

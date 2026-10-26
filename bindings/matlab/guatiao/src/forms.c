@@ -366,6 +366,35 @@ typedef guatiao_status (*parse_fn)(guatiao_str, uint32_t, const guatiao_alloc *,
                                    guatiao_parse_error *);
 typedef guatiao_status (*emit_fn)(const guatiao_value *, uint32_t, const guatiao_alloc *, guatiao_value *);
 
+/* A document that did not parse, `out` and the error's words freed: with
+ * `soft`, [] and a problem answered; else the refusal. */
+static int parse_refused(gt_call *c, int f, guatiao_parse_error *e, guatiao_value *out, int soft) {
+  guatiao_str m = guatiao_string_text(&e->message);
+  char reason[512];
+  snprintf(reason, sizeof reason, "%.*s", (int)(m.len < 511 ? m.len : 511), m.ptr ? (const char *)m.ptr : "");
+  gt_free(&e->message);
+  gt_free(out);
+  const char *fmt = e->format <= 2 ? format_names[e->format] : format_names[f];
+  if (soft) {
+    const char *names[4] = {"format", "line", "column", "reason"};
+    mxArray *p = mxCreateStructMatrix(1, 1, 4, names);
+    mxSetField(p, 0, "format", gt_cstr_mx(fmt));
+    mxSetField(p, 0, "line", mxCreateDoubleScalar((double)e->line));
+    mxSetField(p, 0, "column", mxCreateDoubleScalar((double)e->column));
+    mxSetField(p, 0, "reason", gt_cstr_mx(reason));
+    gt_answer(c, 0, mxCreateDoubleMatrix(0, 0, mxREAL));
+    gt_answer(c, 1, p);
+    return 1;
+  }
+  char upper[8];
+  snprintf(upper, sizeof upper, "%s", fmt);
+  for (char *p = upper; *p; p++) *p = (char)(*p - 32);
+  if (e->line > 0)
+    return gt_fail_detail(c, GUATIAO_ERR_BAD_VALUE, "parse", "%s does not parse at line %u, column %u: %s", upper,
+                          (unsigned)e->line, (unsigned)e->column, reason);
+  return gt_fail_detail(c, GUATIAO_ERR_BAD_VALUE, "parse", "%s does not parse: %s", upper, reason);
+}
+
 /* serde_parse(format, text, how, alloc, soft) -> id (and a problem with soft) */
 int cmd_serde_parse(gt_call *c) {
   int f = 0, soft = 0;
@@ -386,32 +415,7 @@ int cmd_serde_parse(gt_call *c) {
   guatiao_parse_error e;
   memset(&e, 0, sizeof e);
   guatiao_status st = fn(t, (uint32_t)how, a, &out, &e);
-  if (st == GUATIAO_ERR_BAD_VALUE) {
-    guatiao_str m = guatiao_string_text(&e.message);
-    char reason[512];
-    snprintf(reason, sizeof reason, "%.*s", (int)(m.len < 511 ? m.len : 511), m.ptr ? (const char *)m.ptr : "");
-    gt_free(&e.message);
-    gt_free(&out);
-    const char *fmt = e.format <= 2 ? format_names[e.format] : format_names[f];
-    if (soft) {
-      const char *names[4] = {"format", "line", "column", "reason"};
-      mxArray *p = mxCreateStructMatrix(1, 1, 4, names);
-      mxSetField(p, 0, "format", gt_cstr_mx(fmt));
-      mxSetField(p, 0, "line", mxCreateDoubleScalar((double)e.line));
-      mxSetField(p, 0, "column", mxCreateDoubleScalar((double)e.column));
-      mxSetField(p, 0, "reason", gt_cstr_mx(reason));
-      gt_answer(c, 0, mxCreateDoubleMatrix(0, 0, mxREAL));
-      gt_answer(c, 1, p);
-      return 1;
-    }
-    char upper[8];
-    snprintf(upper, sizeof upper, "%s", fmt);
-    for (char *p = upper; *p; p++) *p = (char)(*p - 32);
-    if (e.line > 0)
-      return gt_fail_detail(c, GUATIAO_ERR_BAD_VALUE, "parse", "%s does not parse at line %u, column %u: %s", upper,
-                            (unsigned)e.line, (unsigned)e.column, reason);
-    return gt_fail_detail(c, GUATIAO_ERR_BAD_VALUE, "parse", "%s does not parse: %s", upper, reason);
-  }
+  if (st == GUATIAO_ERR_BAD_VALUE) return parse_refused(c, f, &e, &out, soft);
   gt_free(&e.message);
   if (st) {
     gt_free(&out);
@@ -426,11 +430,77 @@ int cmd_serde_parse(gt_call *c) {
   return 1;
 }
 
-/* serde_emit(format, tree, how, pretty) -> text */
+/* serde_data(format, text, how, numbers, maps, soft) -> MATLAB data (and a
+ * problem with soft): the document crosses once, as wire bytes read here. */
+int cmd_serde_data(gt_call *c) {
+  int f = 0, soft = 0;
+  double how = 0, numbers = 0, maps = 0;
+  guatiao_str t;
+  if (!arg_format(c, 0, &f) || !gt_arg_text(c, 1, "the document", &t) || !gt_arg_double(c, 2, "how", &how) ||
+      !gt_arg_double(c, 3, "numbers", &numbers) || !gt_arg_double(c, 4, "maps", &maps))
+    return 0;
+  if (gt_arg(c, 5) && !gt_arg_bool(c, 5, "soft", &soft)) return 0;
+  int have = f == 0 ? GT_NEED_SERDE(c, guatiao_json_to_wire)
+             : f == 1 ? GT_NEED_SERDE(c, guatiao_toml_to_wire)
+                      : GT_NEED_SERDE(c, guatiao_yaml_to_wire);
+  if (!have || !gt_need(c, GT_LIB_CORE)) return 0;
+  parse_fn fn = f == 0 ? gt_serde.guatiao_json_to_wire : f == 1 ? gt_serde.guatiao_toml_to_wire : gt_serde.guatiao_yaml_to_wire;
+  guatiao_value out;
+  set_absent(&out);
+  guatiao_parse_error e;
+  memset(&e, 0, sizeof e);
+  guatiao_status st = fn(t, (uint32_t)how, &gt_binding_alloc, &out, &e);
+  if (st == GUATIAO_ERR_BAD_VALUE) return parse_refused(c, f, &e, &out, soft);
+  gt_free(&e.message);
+  if (st) {
+    gt_free(&out);
+    return gt_fail(c, st, "the document was refused");
+  }
+  gt_read_opts o = {(int)numbers, (int)maps};
+  mxArray *x = NULL;
+  int ok = gt_read_wire(c, guatiao_bytes_data(&out), &o, &x);
+  gt_free(&out);
+  if (ok) gt_answer(c, 0, x);
+  return ok;
+}
+
+typedef guatiao_status (*from_wire_fn)(guatiao_bytes, uint32_t, const guatiao_alloc *, guatiao_value *);
+
+/* MATLAB data as text: written as wire bytes here, with no tree. */
+static int emit_data(gt_call *c, int f, const mxArray *x, uint32_t how) {
+  int have = f == 0 ? GT_NEED_SERDE(c, guatiao_json_from_wire)
+             : f == 1 ? GT_NEED_SERDE(c, guatiao_toml_from_wire)
+                      : GT_NEED_SERDE(c, guatiao_yaml_from_wire);
+  if (!have) return 0;
+  from_wire_fn fn = f == 0 ? gt_serde.guatiao_json_from_wire
+                    : f == 1 ? gt_serde.guatiao_toml_from_wire
+                             : gt_serde.guatiao_yaml_from_wire;
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (!gt_wire_of(c, x, &bytes, &len)) return 0;
+  guatiao_value out;
+  set_absent(&out);
+  guatiao_status st = fn(guatiao_bytes_from(bytes, len), how, &gt_binding_alloc, &out);
+  free(bytes);
+  if (st) {
+    gt_free(&out);
+    return gt_fail(c, st, "%s", f == 1 ? "TOML writes only a map, and no null" : "the value cannot be written");
+  }
+  return take_text(c, &out);
+}
+
+/* serde_emit(format, x, how, pretty) -> text: a value or view written as
+ * it is, MATLAB data through emit_data. */
 int cmd_serde_emit(gt_call *c) {
   int f = 0, pretty = 0;
   double how = 0;
   if (!arg_format(c, 0, &f) || !gt_arg_double(c, 2, "how", &how) || !gt_arg_bool(c, 3, "pretty", &pretty)) return 0;
+  const mxArray *x = gt_arg(c, 1);
+  if (!x) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "a value is missing");
+  mxArray *ref = NULL;
+  if (!gt_node_ref(c, x, &ref)) return 0;
+  if (!ref) return emit_data(c, f, x, (uint32_t)how | (f == 0 && pretty ? GUATIAO_PRETTY : 0));
+  mxDestroyArray(ref);
   int have = f == 0 ? (pretty ? GT_NEED_SERDE(c, guatiao_json_emit_pretty) : GT_NEED_SERDE(c, guatiao_json_emit))
              : f == 1 ? GT_NEED_SERDE(c, guatiao_toml_emit)
                       : GT_NEED_SERDE(c, guatiao_yaml_emit);

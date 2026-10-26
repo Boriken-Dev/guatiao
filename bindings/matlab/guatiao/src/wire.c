@@ -115,6 +115,36 @@ int cmd_wire_decode(gt_call *c) {
   return 1;
 }
 
+/* wire_read(bytes, numbers, maps) -> the MATLAB data the bytes hold, read
+ * here with no tree: what a document is read through */
+int cmd_wire_read(gt_call *c) {
+  guatiao_bytes b;
+  double numbers = 0, maps = 0;
+  if (!arg_bytes(c, 0, "the bytes", &b) || !gt_arg_double(c, 1, "numbers", &numbers) ||
+      !gt_arg_double(c, 2, "maps", &maps))
+    return 0;
+  gt_read_opts o = {(int)numbers, (int)maps};
+  mxArray *x = NULL;
+  if (!gt_read_wire(c, b, &o, &x)) return 0;
+  gt_answer(c, 0, x);
+  return 1;
+}
+
+/* wire_of(x) -> MATLAB data as wire bytes, written here with no tree: what
+ * data is written through */
+int cmd_wire_of(gt_call *c) {
+  const mxArray *x = gt_arg(c, 0);
+  if (!x) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "a value is missing");
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (!gt_wire_of(c, x, &bytes, &len)) return 0;
+  mxArray *out = mxCreateNumericMatrix(1, (mwSize)len, mxUINT8_CLASS, mxREAL);
+  if (len) memcpy(mxGetData(out), bytes, len);
+  free(bytes);
+  gt_answer(c, 0, out);
+  return 1;
+}
+
 /* wire_frame(kind, channel[, tree]) -> the frame, a uint8 row; kind 0
  * announces a schema, 1 carries a value, 2 ends the channel */
 int cmd_wire_frame(gt_call *c) {

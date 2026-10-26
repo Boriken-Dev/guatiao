@@ -276,6 +276,16 @@ struct(format, line, column, reason). `guatiao.serde.emit(x, format,
 `how` is `'data_uri'` (default), `'base64'`, `'array'` or `'refuse'`.
 TOML writes only a map, and no null. A number keeps its exact text.
 
+`[x, problem] = guatiao.serde.data(text, format, 'ReadDataUris', tf,
+'Numbers', n, 'Maps', m)`: the MATLAB data `parse(text).data('Numbers', n,
+'Maps', m)` answers, with no value built (the document crosses once, as
+wire bytes read in the gateway); the same `guatiao:BadValue:parse`, and
+with two outputs `problem` is `[]` when it parsed. MATLAB data given to
+`emit` is written the same way, as wire bytes in the gateway with no
+value built, and refused as `guatiao.Value` refuses it. Either is faster
+than the value for a document with structure; a single string of
+megabytes is faster through the value.
+
 ## Intake
 
 ```matlab

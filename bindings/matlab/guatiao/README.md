@@ -89,7 +89,7 @@ the platform's library search is tried by file name.
 | Exports from | Needed for |
 | --- | --- |
 | `guatiao` | values, the registry, kinds and providers, schemas, time, redaction, the wire and channels |
-| `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them; found through `GUATIAO_SERDE_LIBRARY` first, or named with `guatiao.serde.use_library` |
+| `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.data`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them; found through `GUATIAO_SERDE_LIBRARY` first, or named with `guatiao.serde.use_library` |
 | `guatiao_intake` | the `guatiao.intake` functions; found through `GUATIAO_INTAKE_LIBRARY` first, or named with `guatiao.intake.use_library` |
 
 MATLAB R2024a or later, or GNU Octave 8.4 or later, on a 64-bit platform
@@ -194,6 +194,8 @@ s.host                                % '0.0.0.0'
 ```matlab
 doc = guatiao.serde.parse('{"name": "ana", "n": 1.10}');
 guatiao.serde.emit(doc, 'yaml')
+x = guatiao.serde.data('{"name": "ana", "n": 1.10}');   % the same as doc.data(), no value built
+guatiao.serde.emit(x)                                   % MATLAB data: no value built either
 ```
 
 ### Dates and spans
@@ -239,7 +241,7 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 | `guatiao.Date`, `TimeOfDay`, `DateTime`, `Timestamp`, `Span`, `Duration`, `guatiao.time.*` | dates, times, spans, exact lengths |
 | `guatiao.redact` | secrets hidden |
 | `guatiao.wire.announce`, `send`, `close`, `guatiao.wire.Receiver` | values on the wire and channels |
-| `guatiao.serde.parse`, `guatiao.serde.emit` | JSON, TOML, YAML |
+| `guatiao.serde.parse`, `guatiao.serde.data`, `guatiao.serde.emit` | JSON, TOML, YAML, as a value or as MATLAB data |
 | `guatiao.intake.*` | forms and the flat projection |
 | `guatiao.Registry`, `guatiao.Instance` | hosting plugins: `scan_dir`, `providers`, `bind`, `create`, `refresh`, ... |
 | `guatiao.Kind`, `guatiao.slot`, `guatiao.lent`, `guatiao.taken`, `guatiao.Buffer` | a kind, declared from its C header |

@@ -12,6 +12,8 @@ function text = emit(x, varargin)
 % The format is 'json' (default), 'toml' or 'yaml'. Options: 'Pretty'
 % (JSON only); 'Bytes', how bytes are written: 'data_uri' (default),
 % 'base64', 'array' or 'refuse'. TOML writes only a map, and no null.
+% MATLAB data is written as wire bytes in the gateway and crosses once,
+% with no guatiao.Value built.
   [format, rest] = guatiao.internal.format_arg(varargin);
   o = guatiao.internal.options(rest, struct('Pretty', false, 'Bytes', 'data_uri'));
   how = find(strcmpi(o.Bytes, {'data_uri', 'base64', 'array', 'refuse'})) - 1;
