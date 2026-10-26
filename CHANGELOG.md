@@ -1549,6 +1549,13 @@ write now.
 
 ### Fixed
 
+- **TypeScript: the remote client (npm `guatiao-remote`) as the Rust
+  one.** A call refused before it runs releases the peer's objects handed
+  in it and drops the page's own given back, and a call refused while its
+  objects are received lets each later one go; a call waiting for a place
+  under the peer's `max_calls` answers `Busy` at its timeout, which bounds
+  the wait and the answer together; an object lent for a call named back
+  as handed over, in a call or an answer, is `WrongKind` and stays lent.
 - **Dart: the remote client (`package:guatiao/remote.dart`) as the Rust
   one.** A call refused before it runs releases the peer's objects handed
   in it and drops the page's own given back; a call waiting for a place
