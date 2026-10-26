@@ -43,6 +43,14 @@ fn every_slot_shape_crosses() {
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(e.message(), "nobody to greet");
 
+    // Large text in and a large map out, each a frame of its own over a
+    // transport that carries whole messages.
+    let big = "b".repeat(1 << 20);
+    assert_eq!(
+        greeting(&greeter.greet(&big).unwrap()),
+        format!("hello, {big}")
+    );
+
     // Text answered.
     assert_eq!(greeter.shout("ana"), "HELLO, ANA");
 
