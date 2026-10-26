@@ -471,9 +471,11 @@ pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mu
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub struct guatiao_source_remote::transport::stream::StreamWriter<W: core::io::write::Write>
 impl<W: core::io::write::Write + core::marker::Send> guatiao_source_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::bounded_by(self, impl core::ops::function::FnMut(&mut W, core::option::Option<core::time::Duration>) -> core::io::error::Result<()> + core::marker::Send + 'static) -> guatiao_source_remote::transport::stream::StreamWriter<W>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::new(W) -> guatiao_source_remote::transport::stream::StreamWriter<W>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::with_shutdown(W, impl core::ops::function::FnMut() + core::marker::Send + 'static) -> guatiao_source_remote::transport::stream::StreamWriter<W>
 impl<W: core::io::write::Write + core::marker::Send> guatiao_source_remote::transport::FrameWrite for guatiao_source_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
@@ -551,10 +553,12 @@ impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::trans
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mut self, &mut alloc::vec::Vec<u8>, usize) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub trait guatiao_source_remote::transport::FrameWrite: core::marker::Send
+pub fn guatiao_source_remote::transport::FrameWrite::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::FrameWrite::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::FrameWrite::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::FrameWrite::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>
 impl<W: core::io::write::Write + core::marker::Send> guatiao_source_remote::transport::FrameWrite for guatiao_source_remote::transport::stream::StreamWriter<W>
+pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::shutdown(&mut self)
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame(&mut self, &[u8]) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamWriter<W>::write_frame_parts(&mut self, &[u8], &[u8]) -> core::io::error::Result<()>

@@ -367,6 +367,8 @@ struct Writer {
     shared: Arc<Shared>,
     /// Bytes written to the peer's inbox.
     head: u32,
+    /// How long a write waits for room the reader frees none of.
+    stall: Option<Duration>,
 }
 
 impl Writer {
@@ -375,6 +377,7 @@ impl Writer {
     fn room(&self) -> io::Result<usize> {
         let counter = self.shared.inbox.word(COUNTER);
         let mut waited = 0u32;
+        let mut since: Option<Instant> = None;
         loop {
             let completed = {
                 let mut s = lock(&self.shared.sends);
@@ -403,7 +406,18 @@ impl Writer {
             waited += 1;
             if waited < 1000 {
                 core::hint::spin_loop();
-            } else if waited < 2000 {
+                continue;
+            }
+            // A yield on a loaded machine can last a whole time slice.
+            if let Some(stall) = self.stall
+                && since.get_or_insert_with(Instant::now).elapsed() >= stall
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("the peer took nothing in for {stall:?}"),
+                ));
+            }
+            if waited < 2000 {
                 std::thread::yield_now();
             } else {
                 std::thread::sleep(Duration::from_micros(200));
@@ -446,6 +460,11 @@ impl FrameWrite for Writer {
     fn write_frame_parts(&mut self, head: &[u8], tail: &[u8]) -> io::Result<()> {
         self.write_all(head)?;
         self.write_all(tail)
+    }
+
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
+        self.stall = timeout;
+        Ok(())
     }
 
     fn shutdown(&mut self) {
@@ -548,7 +567,11 @@ pub(super) fn establish(
             ended: false,
             done: Vec::new(),
         }),
-        writer: Box::new(Writer { shared, head: 0 }),
+        writer: Box::new(Writer {
+            shared,
+            head: 0,
+            stall: None,
+        }),
         peer: peer_name,
         closer: Some(Box::new(move || closing.end())),
     })

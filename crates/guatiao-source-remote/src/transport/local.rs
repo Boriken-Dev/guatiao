@@ -109,9 +109,12 @@ mod imp {
                 Shared(Arc::clone(&stream)),
                 |s: &Shared, t| s.0.set_read_timeout(t),
             )),
-            writer: Box::new(StreamWriter::with_shutdown(Shared(stream), move || {
-                let _ = shutting.shutdown(Shutdown::Both);
-            })),
+            writer: Box::new(
+                StreamWriter::with_shutdown(Shared(stream), move || {
+                    let _ = shutting.shutdown(Shutdown::Both);
+                })
+                .bounded_by(|s: &mut Shared, t| s.0.set_write_timeout(t)),
+            ),
             peer,
             closer: Some(Box::new(move || {
                 let _ = closing.shutdown(Shutdown::Both);

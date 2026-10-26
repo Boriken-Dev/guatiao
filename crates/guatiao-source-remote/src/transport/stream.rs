@@ -78,10 +78,15 @@ impl<R: Read + Send> FrameRead for StreamReader<R> {
     }
 }
 
+/// Bounds a stream's writes: called with the stream the writer writes.
+type SetWriteTimeout<W> =
+    Box<dyn FnMut(&mut W, Option<core::time::Duration>) -> io::Result<()> + Send>;
+
 /// Writes frames to a byte stream, each at once.
 pub struct StreamWriter<W: Write> {
     inner: W,
     shutdown: Option<Box<dyn FnMut() + Send>>,
+    timeout: Option<SetWriteTimeout<W>>,
 }
 
 impl<W: Write + Send> StreamWriter<W> {
@@ -90,6 +95,7 @@ impl<W: Write + Send> StreamWriter<W> {
         StreamWriter {
             inner,
             shutdown: None,
+            timeout: None,
         }
     }
 
@@ -98,7 +104,18 @@ impl<W: Write + Send> StreamWriter<W> {
         StreamWriter {
             inner,
             shutdown: Some(Box::new(shutdown)),
+            timeout: None,
         }
+    }
+
+    /// Bounds the writes of the stream it is handed, which is `inner`,
+    /// through `timeout` when asked.
+    pub fn bounded_by(
+        mut self,
+        timeout: impl FnMut(&mut W, Option<core::time::Duration>) -> io::Result<()> + Send + 'static,
+    ) -> StreamWriter<W> {
+        self.timeout = Some(Box::new(timeout));
+        self
     }
 }
 
@@ -112,6 +129,13 @@ impl<W: Write + Send> FrameWrite for StreamWriter<W> {
         self.inner.write_all(head)?;
         self.inner.write_all(tail)?;
         self.inner.flush()
+    }
+
+    fn set_timeout(&mut self, timeout: Option<core::time::Duration>) -> io::Result<()> {
+        match &mut self.timeout {
+            Some(set) => set(&mut self.inner, timeout),
+            None => Ok(()),
+        }
     }
 
     fn shutdown(&mut self) {

@@ -9,7 +9,10 @@
 //! routes it: a reply to the thread waiting for it; a call made during one
 //! of this side's calls (its parent) to the thread waiting for that call,
 //! which runs it and goes on waiting; any other call to the link's pool.
-//! Writers take the link's lock for one frame. A sender keeps at most the
+//! Writers take the link's writer for one frame, a caller at most until its
+//! call's deadline; a frame nobody waits on is queued for the thread
+//! holding the writer, so it never waits on a write the peer is slow to
+//! take. A sender keeps at most the
 //! peer's `max_calls` top-level calls in flight; nested calls are not
 //! counted, since they run on threads already waiting, so the reader never
 //! stops reading and a reply can always arrive.
@@ -21,6 +24,7 @@
 
 #![forbid(unsafe_code)]
 
+mod gate;
 mod handshake;
 mod pool;
 mod proxies;
@@ -53,6 +57,7 @@ use crate::protocol::{
     decode_args, encode_answer, encode_args,
 };
 use crate::transport::{Connection, FrameRead, FrameWrite};
+use gate::{Gate, Unsent};
 use handshake::Offer;
 use pool::{Permits, Pool};
 
@@ -153,7 +158,9 @@ impl LinkOptions {
     }
 
     /// How long a call waits for its answer before it is cancelled and
-    /// answers `GUATIAO_ERR_GONE`; `None` waits as long as the link lives.
+    /// answers `GUATIAO_ERR_GONE`, and how long a write waits for a peer
+    /// that takes nothing in before the link ends; `None` waits as long as
+    /// the link lives.
     pub fn timeout(mut self, timeout: Option<Duration>) -> LinkOptions {
         self.timeout = timeout;
         self
@@ -362,7 +369,7 @@ impl Mailbox {
 }
 
 pub(crate) struct Inner {
-    writer: Mutex<Box<dyn FrameWrite>>,
+    gate: Gate,
     closer: Option<Box<dyn Fn() + Send + Sync>>,
     state: Mutex<State>,
     /// What this side reads.
@@ -553,6 +560,7 @@ impl Link {
         }
         let _ = (server_nonce, proof);
         reader.set_timeout(None)?;
+        writer.set_timeout(options.timeout)?;
         Ok(Link::start(
             reader, writer, closer, peer, options, &theirs, setup,
         ))
@@ -671,6 +679,7 @@ impl Link {
         }
         let _ = client_nonce;
         reader.set_timeout(None)?;
+        writer.set_timeout(options.timeout)?;
         Ok(Link::start(
             reader, writer, closer, peer, options, &theirs, setup,
         ))
@@ -686,7 +695,7 @@ impl Link {
         setup: Setup,
     ) -> Link {
         let inner = Arc::new(Inner {
-            writer: Mutex::new(writer),
+            gate: Gate::new(writer),
             closer,
             state: Mutex::new(State {
                 alive: true,
@@ -778,7 +787,7 @@ impl Link {
             .encode(&mut out, usize::MAX)
             .is_ok()
         {
-            let _ = self.inner.write(&out);
+            self.inner.post(out);
         }
     }
 
@@ -886,9 +895,10 @@ impl Inner {
             })
             .encode(&mut out, usize::MAX)
             .is_ok()
-                && let Ok(mut writer) = self.writer.try_lock()
             {
-                let _ = writer.write_frame(&out);
+                self.gate.try_with(|w| {
+                    let _ = w.write_frame(&out);
+                });
             }
         }
         self.end(why);
@@ -921,24 +931,57 @@ impl Inner {
             let _ = waiting.tx.send(Inbound::Gone(why.clone()));
         }
         self.permits.wake_all();
+        self.gate.close();
         if let Some(close) = &self.closer {
             close();
         }
-        if let Ok(mut writer) = self.writer.try_lock() {
-            writer.shutdown();
-        }
+        self.gate.try_with(|w| w.shutdown());
         // Every object held for the peer goes here, on this thread.
         drop(exports);
         self.handler.ended(self);
     }
 
     fn write(self: &Arc<Self>, frame: &[u8]) -> Result<(), ProviderError> {
-        let written = lock(&self.writer).write_frame(frame);
-        written.map_err(|e| {
-            let why = format!("the link failed: {e}");
-            self.end(&why);
-            gone(&why)
-        })
+        let sent = self.gate.send(frame, None);
+        self.unsent(sent)
+    }
+
+    /// Writes call `id`'s frame, waiting for the writer at most until
+    /// `deadline`; a frame not sent by then forgets the call.
+    fn write_call(
+        self: &Arc<Self>,
+        id: u64,
+        frame: &[u8],
+        deadline: Option<Instant>,
+    ) -> Result<(), ProviderError> {
+        match self.gate.send(frame, deadline) {
+            Err(Unsent::Late) => {
+                lock(&self.state).calls.remove(&id);
+                Err(gone(&format!(
+                    "no answer within {:?}: the call was never sent, the link's writer was busy",
+                    self.timeout.unwrap_or_default()
+                )))
+            }
+            sent => self.unsent(sent),
+        }
+    }
+
+    /// Sends a frame nobody waits on, never waiting for the writer.
+    fn post(self: &Arc<Self>, frame: Vec<u8>) {
+        let posted = self.gate.post(frame);
+        let _ = self.unsent(posted);
+    }
+
+    fn unsent(self: &Arc<Self>, sent: Result<(), Unsent>) -> Result<(), ProviderError> {
+        match sent {
+            Ok(()) => Ok(()),
+            Err(Unsent::Failed(e)) => {
+                let why = format!("the link failed: {e}");
+                self.end(&why);
+                Err(gone(&why))
+            }
+            Err(Unsent::Closed | Unsent::Late) => Err(gone(&self.why())),
+        }
     }
 
     pub(crate) fn release(self: &Arc<Self>, remote: u64) {
@@ -950,7 +993,7 @@ impl Inner {
             .encode(&mut out, usize::MAX)
             .is_ok()
         {
-            let _ = self.write(&out);
+            self.post(out);
         }
     }
 
@@ -1056,7 +1099,7 @@ impl Inner {
             lock(&self.state).calls.remove(&id);
             return Err(bad(e));
         }
-        self.write(&frame)?;
+        self.write_call(id, &frame, deadline)?;
         let reply = self.wait(id, &rx, &queued, deadline, None)?;
         let Frame::Reply { status, body, .. } =
             Frame::decode(&reply, Alloc::rust()).map_err(bad)?
@@ -1127,7 +1170,7 @@ impl Inner {
             .encode(&mut out, usize::MAX)
             .is_ok()
         {
-            let _ = self.write(&out);
+            self.post(out);
         }
     }
 
@@ -1249,7 +1292,7 @@ impl Inner {
             Frame::Ping { n } => {
                 let mut out = Vec::new();
                 if (Frame::Pong { n }).encode(&mut out, usize::MAX).is_ok() {
-                    let _ = self.write(&out);
+                    self.post(out);
                 }
             }
             Frame::Goodbye { message, .. } => {
@@ -1273,14 +1316,14 @@ impl Inner {
         .encode(&mut out, usize::MAX)
         .is_ok()
         {
-            let _ = lock(&self.writer).write_frame(&out);
+            self.post(out);
         }
     }
 
     fn refuse(self: &Arc<Self>, call: u64, status: Status, why: &str) {
         let mut out = Vec::new();
         protocol::refusal(&mut out, call, status.into(), why);
-        let _ = self.write(&out);
+        self.post(out);
     }
 
     fn answer_list(self: &Arc<Self>, call: u64) {
@@ -1698,7 +1741,13 @@ impl Inner {
             }
             return Err(bad(e));
         }
-        self.write(&frame)?;
+        if let Err(e) = self.write_call(id, &frame, deadline) {
+            // Never sent: what was handed for it is dropped here.
+            for id in handed {
+                self.unexport(*id);
+            }
+            return Err(e);
+        }
         let reply = self.wait(id, &rx, &queued, deadline, Some(desc))?;
         let Frame::Reply { status, body, .. } =
             Frame::decode(&reply, Alloc::rust()).map_err(bad)?

@@ -72,7 +72,10 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 - **Dropping a `Link` ends it.** Calls waiting answer `GONE`; objects held
   for the peer are dropped.
 - **A call past its timeout** is cancelled (CANCEL) and answers `GONE`; an
-  object its late answer carries is released.
+  object its late answer carries is released. A call waits for the link's
+  writer at most until its deadline, and CANCEL never waits: it is queued
+  for the thread writing. A write the peer takes nothing of for the
+  timeout ends the link (`FrameWrite::set_timeout`, set from it).
 - **Nested calls** (a callback during a call) run on the thread waiting
   for the outer call; a call with no parent runs on the link's pool (at
   most `max_calls` threads; past it, `GUATIAO_ERR_BUSY`).
@@ -86,13 +89,14 @@ LinkError::{Io, Protocol, Refused { status, why }, Trust}   // -> ProviderError
 
 ```rust
 trait FrameRead { fn read_frame(&mut self, &mut Vec<u8>, max) -> io::Result<bool>; fn set_timeout(..) }
-trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frame_parts(&mut self, head, tail); fn shutdown(&mut self) }
+trait FrameWrite { fn write_frame(&mut self, &[u8]); fn write_frame_parts(&mut self, head, tail); fn set_timeout(..); fn shutdown(&mut self) }
 struct Connection { reader, writer, peer: String, closer: Option<Box<dyn Fn()>> }
 trait Connect { fn connect(&self) -> io::Result<Connection>; fn describe(&self) -> String }
 memory::pair() -> (Connection, Connection)        // tests
 child::ChildCommand::new(program).arg(..).args(..).env(..)   // Connect: the child's stdio
 child::stdio() -> Connection                       // a server started as a child
 stream::{StreamReader, StreamWriter}               // u32 LE length + body over any Read/Write
+StreamWriter::with_shutdown(w, f).bounded_by(|w, timeout| ..)   // how the stream bounds a write
 tcp::{TcpConnect::new("host:port").timeout(d), TcpListen::bind(addr, &[Range])?, Range::parse("10.0.0.0/8")?}   // tcp
 tcp::TcpListen::accept() -> io::Result<Accepted::{Connection, Refused(SocketAddr)}>
 tcp::{TcpListen::from_listener(TcpListener, &[Range])?, from_stream(TcpStream)?}   // sockets the caller set up
@@ -108,6 +112,10 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   unread (`Accepted::Refused`).
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it.
+- **`FrameWrite::set_timeout`**: shared memory and RDMA fail a write
+  that finds no room for that long; TCP and Unix sockets set the send
+  timeout, which on Windows bounds a whole `send` once earlier bytes are
+  still unsent; a named pipe, a child's stdio and memory ignore it.
 - **A Unix socket** is created `0600`; `LocalListen::bind` replaces a
   socket left by a listener that is gone and refuses anything else at the
   path. **A named pipe** has Windows' default access, and nothing can end

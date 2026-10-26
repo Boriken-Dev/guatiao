@@ -57,6 +57,14 @@ pub trait FrameWrite: Send {
         self.write_frame(&joined)
     }
 
+    /// Bounds how long a write waits while the peer takes nothing in, or
+    /// lifts the bound: past it the write fails and the link ends. A
+    /// transport that cannot bound a write ignores it.
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
+        let _ = timeout;
+        Ok(())
+    }
+
     /// Ends the link: the peer's reads end, and so do this side's.
     fn shutdown(&mut self) {}
 }
