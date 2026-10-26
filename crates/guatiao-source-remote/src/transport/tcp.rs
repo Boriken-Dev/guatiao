@@ -37,6 +37,10 @@ impl Write for Shared {
         (&*self.0).write(buf)
     }
 
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        (&*self.0).write_vectored(bufs)
+    }
+
     fn flush(&mut self) -> io::Result<()> {
         (&*self.0).flush()
     }
@@ -206,6 +210,20 @@ impl TcpListen {
 mod tests {
     use super::*;
     use coqui_net_acl::{Action, Rule};
+
+    #[test]
+    fn a_vectored_write_reaches_the_socket_whole() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        let mut shared = Shared(Arc::new(client));
+        let parts = [io::IoSlice::new(b"head"), io::IoSlice::new(b"tail")];
+        // Not the default, which writes only the first part.
+        assert_eq!(shared.write_vectored(&parts).unwrap(), 8);
+        let mut got = [0u8; 8];
+        server.read_exact(&mut got).unwrap();
+        assert_eq!(&got, b"headtail");
+    }
 
     fn permit(sources: &[&str]) -> Acl {
         let mut acl = Acl::default();

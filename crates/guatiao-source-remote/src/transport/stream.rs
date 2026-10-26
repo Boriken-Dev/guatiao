@@ -126,9 +126,9 @@ impl<W: Write + Send> FrameWrite for StreamWriter<W> {
     }
 
     fn write_frame_parts(&mut self, head: &[u8], tail: &[u8]) -> io::Result<()> {
-        self.inner.write_all(head)?;
-        self.inner.write_all(tail)?;
-        self.inner.flush()
+        // One vectored write: the head goes out alone, waking the reader
+        // for nothing, only where the stream writes one buffer at a time.
+        self.write_frames(&[head, tail])
     }
 
     fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
@@ -194,6 +194,45 @@ mod tests {
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
+    }
+
+    /// Counts the calls that reach it, keeping what they wrote.
+    #[derive(Default)]
+    struct Calls {
+        written: Vec<u8>,
+        writes: usize,
+        vectored: usize,
+    }
+
+    impl Write for Calls {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.writes += 1;
+            self.written.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+            self.vectored += 1;
+            let n = bufs.iter().map(|b| b.len()).sum();
+            bufs.iter().for_each(|b| self.written.extend_from_slice(b));
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_frame_in_two_parts_goes_out_in_one_write() {
+        let mut w = StreamWriter::new(Calls::default());
+        w.write_frame_parts(b"\x05\0\0\0ab", b"cde").unwrap();
+        assert_eq!(w.inner.written, b"\x05\0\0\0abcde");
+        assert_eq!((w.inner.writes, w.inner.vectored), (0, 1));
+
+        let mut w = StreamWriter::new(Trickle(Vec::new()));
+        w.write_frame_parts(b"\x05\0\0\0ab", b"cde").unwrap();
+        assert_eq!(w.inner.0, b"\x05\0\0\0abcde", "taken three bytes at a time");
     }
 
     #[test]

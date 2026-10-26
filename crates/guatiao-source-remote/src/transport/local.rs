@@ -96,6 +96,10 @@ mod imp {
             (&*self.0).write(buf)
         }
 
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            (&*self.0).write_vectored(bufs)
+        }
+
         fn flush(&mut self) -> io::Result<()> {
             (&*self.0).flush()
         }
@@ -154,6 +158,23 @@ mod imp {
         let (stream, _) = listener.accept()?;
         Ok(connection(stream, format!("local {name}")))
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_vectored_write_reaches_the_socket_whole() {
+            let (ours, mut theirs) = UnixStream::pair().unwrap();
+            let mut shared = Shared(Arc::new(ours));
+            let parts = [io::IoSlice::new(b"head"), io::IoSlice::new(b"tail")];
+            // Not the default, which writes only the first part.
+            assert_eq!(shared.write_vectored(&parts).unwrap(), 8);
+            let mut got = [0u8; 8];
+            theirs.read_exact(&mut got).unwrap();
+            assert_eq!(&got, b"headtail");
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -186,6 +207,10 @@ mod imp {
     impl Write for Shared {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             (&*self.0).write(buf)
+        }
+
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            (&*self.0).write_vectored(bufs)
         }
 
         fn flush(&mut self) -> io::Result<()> {
