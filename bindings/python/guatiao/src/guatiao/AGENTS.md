@@ -245,7 +245,7 @@ What crosses, each way:
 | bytes / out-buffer | bytes-like / a writable buffer | `bytes` / a `bytearray`, copied back when it returns |
 | borrowed `Ref`, `Map` | a `Value`, `Ref` or plain data | a read-only `Ref`/`Map`, valid for the call |
 | `Taken[..]` tree | a `Value` (moved: left ABSENT), a `Ref` (cloned) or plain data | a `Map`/`List` over a whole tree it owns, or a `Value`, moved into this binding's allocator on arrival (copied only where the caller built it elsewhere), so it may be kept past the caller's library; taken, and freed, even when another argument refuses the call |
-| `Lent[..]` tree | a `Value` or `Ref`, changed where it stands; what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent, and a refused move is the call's error (the slot's own refusal first) | a writable `Map`/`List`/`Ref`, valid for the call; what it adds is built in the allocator the tree records |
+| `Lent[..]` tree | a `Value` or `Ref`, changed where it stands; what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent, and a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value) | a writable `Map`/`List`/`Ref`, valid for the call; what it adds is built in the allocator the tree records |
 | tree answer | a `Value` the caller closes | a `Value` or a view of a whole one (moved), another `Ref`, or plain data, built in the allocator the carrier names |
 | text answer | `str` | `str` |
 | `Taken[K]` | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |

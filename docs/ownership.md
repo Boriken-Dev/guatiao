@@ -287,9 +287,12 @@ forms, as above, leaves that walk nothing to move, and it then allocates
 nothing. An allocator that refuses makes the walk fail, the tree left
 whole where it stands, and that refusal is the call's error when the
 callee itself answered (its own refusal comes first), what it answered
-dropped unread; every binding's caller reports it the same way. The
-proxy also removes, and reports, a key the callee wrote into a map that
-is not UTF-8.
+dropped unread. A top-level key the callee wrote into a lent map that is
+not UTF-8 is removed and freed, and reported the same way
+(`GUATIAO_ERR_BAD_VALUE`).
+Every binding's caller does both, as the proxy does; a C caller calls
+`guatiao_map_settle_lent` on a lent map, `guatiao_value_make_local` on a
+lent list or value.
 
 A tree lent this way is never freed or kept by the callee, so a library
 may hold nothing that points into it once it returns. In C it crosses as
@@ -342,7 +345,9 @@ for the call, not handed over".
   through the allocator it records, never free it or keep the pointer. A
   C caller lending one gets back whatever the callee built; a Rust callee
   following the rule above builds it in the tree's own allocator, and
-  `guatiao_value_make_local` moves home what another built elsewhere.
+  `guatiao_value_make_local` moves home what another built elsewhere;
+  for a lent map, `guatiao_map_settle_lent` also removes a key the callee
+  wrote that is not UTF-8, as a Rust caller does.
 - **Writing a provider in C**, the same rules from the other side: build
   the answer through the carrier's `alloc` and write it over the carrier
   without freeing it; free or keep what was handed over, through the
