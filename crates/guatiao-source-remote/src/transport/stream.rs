@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, IoSlice, Read, Write};
 
 use super::{FrameRead, FrameWrite};
 
@@ -131,6 +131,24 @@ impl<W: Write + Send> FrameWrite for StreamWriter<W> {
         self.inner.flush()
     }
 
+    fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
+        if let [frame] = frames {
+            return self.write_frame(frame);
+        }
+        let mut slices: Vec<IoSlice<'_>> = frames.iter().map(|f| IoSlice::new(f)).collect();
+        let mut left = &mut slices[..];
+        IoSlice::advance_slices(&mut left, 0);
+        while !left.is_empty() {
+            match self.inner.write_vectored(left) {
+                Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+                Ok(n) => IoSlice::advance_slices(&mut left, n),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        self.inner.flush()
+    }
+
     fn set_timeout(&mut self, timeout: Option<core::time::Duration>) -> io::Result<()> {
         match &mut self.timeout {
             Some(set) => set(&mut self.inner, timeout),
@@ -143,5 +161,46 @@ impl<W: Write + Send> FrameWrite for StreamWriter<W> {
         if let Some(f) = &mut self.shutdown {
             f();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Takes at most three bytes a write, across buffers.
+    struct Trickle(Vec<u8>);
+
+    impl Write for Trickle {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let n = buf.len().min(3);
+            self.0.extend_from_slice(&buf[..n]);
+            Ok(n)
+        }
+
+        fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+            let mut n = 0;
+            for b in bufs {
+                let take = b.len().min(3 - n);
+                self.0.extend_from_slice(&b[..take]);
+                n += take;
+                if n == 3 {
+                    break;
+                }
+            }
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn frames_written_together_arrive_whole_and_in_order() {
+        let mut w = StreamWriter::new(Trickle(Vec::new()));
+        let frames: [&[u8]; 4] = [b"\x01\0\0\0a", b"", b"\x02\0\0\0bc", b"\x03\0\0\0def"];
+        w.write_frames(&frames).unwrap();
+        assert_eq!(w.inner.0, frames.concat());
     }
 }

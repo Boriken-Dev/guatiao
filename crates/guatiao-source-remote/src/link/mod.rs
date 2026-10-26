@@ -9,10 +9,10 @@
 //! routes it: a reply to the thread waiting for it; a call made during one
 //! of this side's calls (its parent) to the thread waiting for that call,
 //! which runs it and goes on waiting; any other call to the link's pool.
-//! Writers take the link's writer for one frame, a caller at most until its
-//! call's deadline; a frame nobody waits on is queued for the thread
-//! holding the writer, so it never waits on a write the peer is slow to
-//! take. A sender keeps at most the
+//! A frame is queued for the link's writer and written by whichever thread
+//! finds it free, with every frame queued meanwhile: no thread waits for
+//! another's write, and a call that times out takes back a frame not yet
+//! written. A sender keeps at most the
 //! peer's `max_calls` top-level calls in flight; nested calls are not
 //! counted, since they run on threads already waiting, so the reader never
 //! stops reading and a reply can always arrive.
@@ -941,34 +941,20 @@ impl Inner {
         self.handler.ended(self);
     }
 
-    fn write(self: &Arc<Self>, frame: &[u8]) -> Result<(), ProviderError> {
-        let sent = self.gate.send(frame, None);
+    fn write(self: &Arc<Self>, frame: Vec<u8>) -> Result<(), ProviderError> {
+        let sent = self.gate.send(0, frame);
         self.unsent(sent)
     }
 
-    /// Writes call `id`'s frame, waiting for the writer at most until
-    /// `deadline`; a frame not sent by then forgets the call.
-    fn write_call(
-        self: &Arc<Self>,
-        id: u64,
-        frame: &[u8],
-        deadline: Option<Instant>,
-    ) -> Result<(), ProviderError> {
-        match self.gate.send(frame, deadline) {
-            Err(Unsent::Late) => {
-                lock(&self.state).calls.remove(&id);
-                Err(gone(&format!(
-                    "no answer within {:?}: the call was never sent, the link's writer was busy",
-                    self.timeout.unwrap_or_default()
-                )))
-            }
-            sent => self.unsent(sent),
-        }
+    /// Sends call `id`'s frame: written now, or by the thread writing.
+    fn write_call(self: &Arc<Self>, id: u64, frame: Vec<u8>) -> Result<(), ProviderError> {
+        let sent = self.gate.send(id, frame);
+        self.unsent(sent)
     }
 
-    /// Sends a frame nobody waits on, never waiting for the writer.
+    /// Sends a frame nobody waits on.
     fn post(self: &Arc<Self>, frame: Vec<u8>) {
-        let posted = self.gate.post(frame);
+        let posted = self.gate.send(0, frame);
         let _ = self.unsent(posted);
     }
 
@@ -980,7 +966,7 @@ impl Inner {
                 self.end(&why);
                 Err(gone(&why))
             }
-            Err(Unsent::Closed | Unsent::Late) => Err(gone(&self.why())),
+            Err(Unsent::Closed) => Err(gone(&self.why())),
         }
     }
 
@@ -1099,7 +1085,7 @@ impl Inner {
             lock(&self.state).calls.remove(&id);
             return Err(bad(e));
         }
-        self.write_call(id, &frame, deadline)?;
+        self.write_call(id, frame)?;
         let reply = self.wait(id, &rx, &queued, deadline, None)?;
         let Frame::Reply { status, body, .. } =
             Frame::decode(&reply, Alloc::rust()).map_err(bad)?
@@ -1164,6 +1150,10 @@ impl Inner {
                 }
                 state.cancelled.insert(id, slot.clone());
             }
+        }
+        if self.gate.retract(id) {
+            // It never reached the peer.
+            return;
         }
         let mut out = Vec::new();
         if (Frame::Cancel { call: id })
@@ -1345,7 +1335,7 @@ impl Inner {
             }
             Err(e) => protocol::refusal(&mut out, call, e.status.into(), e.message()),
         }
-        let _ = self.write(&out);
+        let _ = self.write(out);
     }
 
     fn answer_open(self: &Arc<Self>, call: u64, frame: &[u8]) {
@@ -1357,7 +1347,7 @@ impl Inner {
             Ok(()) => protocol::refusal(&mut out, call, 0, ""),
             Err(e) => protocol::refusal(&mut out, call, e.status.into(), e.message()),
         }
-        let _ = self.write(&out);
+        let _ = self.write(out);
     }
 
     /// Runs one of the peer's calls on this thread and answers it.
@@ -1392,14 +1382,14 @@ impl Inner {
         lock(&self.state).running.remove(&call);
         match served {
             Ok(true) => {
-                let _ = self.write(&out);
+                let _ = self.write(out);
             }
             Ok(false) => {}
             Err(e) => {
                 if !cancelled.load(Ordering::Acquire) {
                     out.clear();
                     protocol::refusal(&mut out, call, e.status.into(), e.message());
-                    let _ = self.write(&out);
+                    let _ = self.write(out);
                 }
             }
         }
@@ -1741,7 +1731,7 @@ impl Inner {
             }
             return Err(bad(e));
         }
-        if let Err(e) = self.write_call(id, &frame, deadline) {
+        if let Err(e) = self.write_call(id, frame) {
             // Never sent: what was handed for it is dropped here.
             for id in handed {
                 self.unexport(*id);

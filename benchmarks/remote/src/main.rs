@@ -307,6 +307,21 @@ impl FrameWrite for CountWrite {
         self.0.write_frame(frame)
     }
 
+    fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
+        let n: usize = frames.iter().map(|f| f.len()).sum();
+        *self.1.bytes.lock().unwrap() += n as u64;
+        self.0.write_frames(frames)
+    }
+
+    fn write_frame_parts(&mut self, head: &[u8], tail: &[u8]) -> io::Result<()> {
+        *self.1.bytes.lock().unwrap() += (head.len() + tail.len()) as u64;
+        self.0.write_frame_parts(head, tail)
+    }
+
+    fn set_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
+        self.0.set_timeout(t)
+    }
+
     fn shutdown(&mut self) {
         self.0.shutdown();
     }
