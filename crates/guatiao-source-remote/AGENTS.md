@@ -20,6 +20,7 @@ until they are published there.
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
 | `ws` | `tcp` and `transport::ws`: WebSocket, what a browser opens (`tungstenite`); `ws://` with no TLS, `wss://` over `tls`'s |
+| `webtransport` | `quic` and `transport::webtransport`: WebTransport (HTTP/3 over QUIC), what a browser opens with the server's certificate pinned by its hash (`wtransport` over the same quinn) |
 | `rdma` | `tcp` and `transport::rdma`: RDMA, experimental, Linux only; libibverbs opened at run time (`libloading`, `libc`, Linux only), so building needs no rdma-core |
 
 ## A host
@@ -90,8 +91,8 @@ called otherwise (a slot's arguments, answer or flags, the floor hash;
 docs and slots past the shorter description do not count) is left out.
 The catalog's `kinds` lists each description once.
 
-Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | tls://ADDR | quic://ADDR | ws://ADDR | wss://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
-`--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`,
+Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | tls://ADDR | quic://ADDR | ws://ADDR | wss://ADDR | https://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
+`--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`, `--hashes-file PATH`,
 `--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`... (optional), `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`, `--max-handshakes N`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
@@ -102,7 +103,13 @@ once a minute per address, with how often it was held back (past 1024
 addresses in a minute, a new one goes unreported).
 `--security` is none on `--stdio`, `local://` and `shm://` (the only one
 they run) and mutual-tls on the network transports unless told; `ws://`
-and `rdma://` run none alone, `wss://` and `tls://` TLS alone.
+and `rdma://` run none alone, `wss://` and `tls://` TLS alone,
+`quic://` and `https://` any. `https://` (WebTransport) presents
+certificates it makes, a new one every `ROTATE_EVERY`, unless
+`--identity` (at any security) or `--state-dir` names one; its second stderr line is
+`guatiao-remote-server: certificate hashes sha256:<hex> sha256:<hex>`
+(the one presented, the next), said again at every change, and
+`--hashes-file` writes them as a JSON list, written before the line.
 `--trust` is refused with what to write now. No security across a
 network needs `--range` or `--acl`; mutual TLS needs `--state-dir` or
 `--identity`; server TLS needs those and `--key-file`, and refuses
@@ -182,6 +189,10 @@ tls::{Identity, PeerId, Policy, TrustStore, WaitingEntry, Weakening, IDENTITY_FI
 quic::{QuicConnect::new("host:port", &TlsConfig)?.timeout(d), QuicListen::bind(addr, &TlsConfig)?, QuicListen::from_socket(UdpSocket, &TlsConfig)?}   // quic
 quic::{QuicConnect::trusted("host:port")?, QuicListen::bind_trusted(addr, Acl)?, QuicListen::from_socket_trusted(UdpSocket, Acl)?}   // quic, no security
 quic::QuicListen::accept() -> io::Result<tcp::Accepted>    // the handshake runs on the first read
+webtransport::{WtConnect::new("https://host:port/path", &TlsConfig)?.timeout(d), WtConnect::trusted(url)?}   // webtransport
+webtransport::{WtListen::bind(addr, &TlsConfig)?, WtListen::bind_trusted(addr, Acl)?, from_socket(UdpSocket, &TlsConfig)?, from_socket_trusted(UdpSocket, Acl)?}
+webtransport::WtListen::{rotating(self, Duration)?, presenting(self, Identity)?, certificate_hashes()? -> Vec<PeerId>, accept() -> io::Result<tcp::Accepted>}
+webtransport::{ROTATE_EVERY, ROTATE_MAX}                   // six days; six days and 22 hours
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names; the rings are mapped on the first read
 ws::{WsConnect::new("ws://host:port/path").timeout(d), WsListen::bind(addr, Acl)?}   // ws
@@ -192,7 +203,7 @@ rdma::{RdmaListen::from_listener(TcpListener, Acl)?, RdmaListen::accept() -> io:
 rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices() -> io::Result<Vec<String>>, RING, SETUP_TIMEOUT}
 ```
 
-- **Admission.** `TcpListen`, `WsListen`, `RdmaListen`, `TlsListen` and `QuicListen`
+- **Admission.** `TcpListen`, `WsListen`, `RdmaListen`, `TlsListen`, `QuicListen` and `WtListen`
   bind any address, a wildcard included; nothing about the address or
   the list is refused (an empty `Acl` denies every peer). The first rule
   matching the source (and the local address and port) decides, else
@@ -238,6 +249,21 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   certificate it generated and nobody checks either: the list decides
   by address alone, the link's key proof decides the link, and
   `peer_id()` answers `None`.
+- **WebTransport** (`webtransport`): QUIC's TLS, admission, Retry and
+  words, under ALPN `h3`, every session taken whatever its path; one
+  bidirectional stream per session carries the frames as over QUIC, and
+  `datagrams()` are HTTP/3 datagrams. At no security the client
+  presents no certificate and a native one checks none. A browser takes
+  a certificate pinned by hash only when it is valid for at most 14
+  days: `rotating(every)` presents certificates it makes (each valid
+  two periods and two hours, the next made a period ahead, a fresh one
+  after an idle period), `certificate_hashes()` names the one presented
+  and the next. A server's handshake, HTTP/3 session and stream all run
+  on the first read; a client's in `connect`. Chrome 155 refuses a
+  pinned certificate with no X.509v3 extension, which coqui-peer-tls
+  17426be's generated certificates are, so a page reaches a rotating
+  listener only once they carry one; `presenting` a certificate with
+  one works today.
   Datagrams (`FrameRead::datagrams`, `Link::datagrams`) are
   the payload alone, one QUIC DATAGRAM frame each, lost or whole; before
   the server's handshake `send` is `NotConnected` and `max_size` `None`;
@@ -321,7 +347,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 
 | key | holds |
 | --- | --- |
-| `connect` | `tcp://host:port`, `tls://host:port`, `quic://host:port`, `ws://host:port/path`, `wss://host:port/path`, `local://name`, `shm://name`, `rdma://host:port` |
+| `connect` | `tcp://host:port`, `tls://host:port`, `quic://host:port`, `ws://host:port/path`, `wss://host:port/path`, `https://host:port/path` (WebTransport), `local://name`, `shm://name`, `rdma://host:port` |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 | `child` | list: the server program and its arguments |
 | `security` | `none`, `server-tls`, `mutual-tls` (`config::Security`); none on a child, `local://`, `shm://`, mutual-tls elsewhere unless named |
@@ -339,7 +365,7 @@ a TLS security in a build without `tls`. At server TLS a client names
 `pins` (or a store) and needs no identity.
 `ws://`, `rdma://`, `local://`, `shm://` and a child run `none` alone,
 `wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix,
-as is the former `trust` key. `tcp://` and `quic://` run any.
+as is the former `trust` key. `tcp://`, `quic://` and `https://` run any.
 `config::{security_of, Security::default_for, Security::trust, acl_of,
 policy_of, tls_config_of}` read those values.
 

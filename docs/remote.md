@@ -293,6 +293,7 @@ from 5 ms up to a second while the failures last.
 | `tcp://host:port` | another machine: with no TLS (feature `tcp`), or TLS 1.3 (feature `tls`; `tls://` names the same) | no TLS 22–36 µs on loopback, 114–123 µs from a host to a VM on it; mutual TLS 33–37 µs on loopback |
 | `quic://host:port` | any network (feature `quic`): TLS 1.3 inside QUIC, with datagrams beside the calls | 58–83 µs on loopback (Windows), about 220 µs in WSL, at mutual TLS |
 | `ws://host:port/path`, `wss://host:port/path` | a browser, or any WebSocket client (feature `ws`; `wss://` with `tls`): one binary message per frame body; `ws://` with no TLS, `wss://` with it | not measured |
+| `https://host:port/path` | WebTransport, HTTP/3 over QUIC (feature `webtransport`): what a browser opens with the server's certificate pinned by its hash; one stream per link, datagrams beside it | not measured |
 | `rdma://host:port` | another machine with an RDMA device, with no TLS; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -407,7 +408,7 @@ every client. Nothing listens on a network unless told where.
     socket and the shared file are created for their owner alone
     (`0600`), a named pipe takes Windows' default access, and a child's
     stdio is the host's own. The HELLO names trust `local`.
-  - Across a network (`tcp://`, `ws://`, `quic://`, `rdma://`), for one
+  - Across a network (`tcp://`, `ws://`, `quic://`, `https://`, `rdma://`), for one
     the owner isolates between known devices: the listener admits peers
     by an access control list (below), and **a peer the list denies is
     closed unread**; both sides prove a pre-shared key in the handshake,
@@ -417,7 +418,9 @@ every client. Nothing listens on a network unless told where.
     itself is the boundary. QUIC always runs TLS, so over `quic://` the
     bytes are encrypted, but no certificate is checked (each side
     presents one it generated) and the key alone decides: still no
-    defence against a peer in the middle.
+    defence against a peer in the middle. Over WebTransport (`https://`)
+    likewise, except that no client presents a certificate and a page's
+    browser still checks the server's.
 - **`server-tls`**: TLS 1.3 proves the server by its certificate, and the
   client proves itself inside the encrypted channel: by the pre-shared
   key, when the server holds one (its WELCOME then carries a proof), or
@@ -428,7 +431,8 @@ every client. Nothing listens on a network unless told where.
   its identity and a key or token (`--key-file`), and lists "client_auth
   = none" among the settings weaker than strict. In Rust,
   `TlsConfig::server_tls()` on either side (`TlsConfig::without_identity()`
-  for a client with none) over `tls://`, `quic://` or `wss://`, and
+  for a client with none) over `tls://`, `quic://`, `wss://` or
+  `https://` (WebTransport), and
   `LinkOptions::new(Trust::ServerTls)`.
 - **`mutual-tls`**: TLS 1.3 proves both sides by certificate, through
   [coqui-peer-tls](https://github.com/Boriken-Dev/coqui-peer-tls) (below,
@@ -455,6 +459,7 @@ Where a URL says whether it runs TLS, it must agree with the security:
 | `quic://` | QUIC, no certificate checked | QUIC | QUIC (default) |
 | `ws://` | WebSocket | refused: use `wss://` | refused: use `wss://` |
 | `wss://` | refused: use `ws://` | WebSocket over TLS | WebSocket over TLS (default) |
+| `https://` | WebTransport, no certificate asked of the client | WebTransport | WebTransport (default) |
 | `rdma://` | RDMA | refused | refused |
 | `local://`, `shm://`, a child | the default | refused | refused |
 
@@ -670,9 +675,65 @@ runs to milliseconds and a 4 MiB round trip moved 40 to 374 MB/s from
 run to run. The causes are not measured. Prefer `tls://` unless
 datagrams are wanted. Not measured: across a real network.
 
-Not in this build: WebTransport, clients verifying a server by a
-certificate authority (a host pins the server instead), CA-signed client
-certificates (coqui-peer-tls's `ca` feature) and TLS 1.2.
+### Over WebTransport
+
+`https://host:port/path` (feature `webtransport`) is WebTransport: an
+HTTP/3 session over QUIC, what a browser opens with `new
+WebTransport(url)`. It runs `quic://`'s TLS (the same identity, pins or
+trust store, policy, access control list, Retry, no migration) under
+HTTP/3's application protocol `h3`, and any of the three securities. A
+page uses server TLS (the key or a token inside the link) or none (the
+key alone); mutual TLS needs its browser to present a client
+certificate, which Chrome did not to a profile holding none (whether it
+presents one a user installed is not measured). A session carries one bidirectional stream with the frames
+exactly as over TCP; the server takes every session, whatever its path,
+and does not read the `Origin` a browser sends. Datagrams are the
+session's (HTTP/3 datagrams): `Link::datagrams()` as over QUIC.
+
+A browser trusts a certificate no authority issued when the page names
+its SHA-256 (`serverCertificateHashes`), and only one valid for at most
+14 days. So unless `--identity` or `--state-dir` names a certificate,
+`guatiao-remote-server --listen https://ADDRESS:PORT` presents
+certificates it makes itself: a
+new one every six days, each valid for twelve days and two hours, the
+next one made a period ahead. Its second line says the hashes a page
+pins, the one presented and the next, and again whenever they change:
+
+```text
+guatiao-remote-server: serving https://192.0.2.21:7443/ (WebTransport), trusting clients by the key (server TLS), admitting every source
+guatiao-remote-server: certificate hashes sha256:9f86d0... sha256:60303a...
+```
+
+`--hashes-file PATH` writes them as a JSON list (`["sha256:...",
+"sha256:..."]`) at every change, for whatever serves the page to hand
+on. A page that pinned both before a rotation still links after it; one
+loaded more than a period before must fetch them again. A fingerprint is
+the SHA-256 of the certificate's DER encoding, so a page passes its 32
+bytes as `{ algorithm: 'sha-256', value }`. With `--identity` the server
+presents that certificate instead, at any security: one an authority
+issued for the server's name, which pages trust as they trust any site.
+With `--state-dir` (TLS) it presents the identity there, which native
+peers pin; the trust store decides clients as on every TLS transport.
+
+Chrome refuses a certificate pinned by hash that carries no X.509v3
+extension, and the ones this build makes carry none
+(coqui-peer-tls's generated identities): until they do, a page reaches a
+rotating server only by a certificate given with `--identity` that has
+one (any extension: a subjectAltName, a subject key identifier) and is
+valid for at most 14 days.
+
+In Rust, `transport::webtransport::{WtConnect, WtListen}`:
+`WtListen::bind(address, &config)` presents the configuration's
+identity, `.rotating(every)` (at most `ROTATE_MAX`, six days and 22
+hours) makes and rotates its own, `.presenting(identity)` presents
+another, and `certificate_hashes()` answers what a page pins;
+`WtListen::bind_trusted(address, acl)` and `WtConnect::trusted(url)` run
+no security. A source file's configuration names `connect =
+"https://host:port/path"` with the keys of `quic://`. Not measured.
+
+Not in this build: clients verifying a server by a certificate authority
+(a host pins the server instead), CA-signed client certificates
+(coqui-peer-tls's `ca` feature) and TLS 1.2.
 
 ## The protocol
 
