@@ -1771,7 +1771,7 @@ jobs:
       - name: Build the modules
         run: cargo build -p myapp -p guatiao-intake --target wasm32-unknown-unknown --release
       - name: Build the remote server the remote suites call over WebSocket
-        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
@@ -1829,7 +1829,7 @@ jobs:
       - name: Build the remote server for the runner
         # The remote suites call it over WebSocket from the emulated VM: a
         # separate process, so it runs natively.
-        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls
       - name: Dart for linux-arm
         # The stable channel's latest release, the one the other legs'
         # `sdk: stable` resolves to, with its published checksum.

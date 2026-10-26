@@ -83,7 +83,7 @@ export async function setup(project: TestProject): Promise<void> {
   if (!existsSync(server) || !existsSync(greeter)) {
     throw new Error(
       `no ${server} beside ${greeter}: build them with ` +
-        '`cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws` ' +
+        '`cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls` ' +
         '(or name the server in GUATIAO_REMOTE_SERVER)',
     );
   }
