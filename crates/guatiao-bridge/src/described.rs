@@ -342,7 +342,9 @@ pub(crate) fn library<E: Engine>(
             builder = builder.kinds(&[kind.as_str()]).table(table.kind_table());
             tables.push(table);
         }
-        builder = builder.ctx(core::ptr::without_provenance_mut(at + 1));
+        builder = builder
+            .ctx(core::ptr::without_provenance_mut(at + 1))
+            .kind_descriptions(kinds.document(provider.kinds().iter().map(|(k, _)| k.as_str()))?);
         if let Some(meta) = provider.declared_meta() {
             builder = builder.meta(meta.clone());
         }

@@ -1345,6 +1345,8 @@ through `kind_document(&[<dyn K as Kind>::describe, ..])` (each
 `impl Kind` describes nothing); empty text, or a descriptor whose
 `struct_size` ends before the field, reads as none. Read lazily: a
 malformed document refuses at `kind_descriptions()`, never at load.
+guatiao-bridge's described providers and guatiao-source-remote's
+providers carry one too, written from the descriptions they serve.
 
 **Loading or registering a library is the trust decision.** A
 descriptor's fields are its producer's contract — a loaded library, the
@@ -1927,6 +1929,8 @@ learns at run time, and call one -- is a `Mechanism`'s, and
 KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"format": 1, "kinds": [..]}
 KindDescription::document_json(text)?               // the same from JSON text; an error at "byte N"
                                                     // where it stops being JSON
+kind.to_value()? / kind.to_value_in(alloc)?         // ToValue: written back key for key, in the
+                                                    // order the kind macro writes it
 // C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;
 //    BAD_VALUE with `why` (a string, or null) naming the byte or the place
 kind.name() .floor_hash() .object() .slots() .slot("greet") -> Option<(usize, &SlotDescription)>

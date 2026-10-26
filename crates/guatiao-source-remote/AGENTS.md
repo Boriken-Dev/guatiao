@@ -51,7 +51,11 @@ source.disconnect(); source.objects_out() -> usize  // every peer's
 - **open** sends OPEN (the server holds the library's providers for the
   link) and builds a provider per catalog entry, one `ServedTable` per
   kind, filling only the slots the catalog lists: a slot the far table
-  leaves out runs the kind's default here.
+  leaves out runs the kind's default here. Each provider carries its
+  kinds' document, written from the catalog's descriptions (the kinds its
+  tables serve and every object kind they reach), so
+  `Provider::kind_descriptions()` answers on the host as it would for the
+  peer's own provider.
 - **close** sends CLOSE when the link that opened it still lives.
 - A provider whose link has ended answers `GUATIAO_ERR_GONE` until a
   refresh opens it anew.

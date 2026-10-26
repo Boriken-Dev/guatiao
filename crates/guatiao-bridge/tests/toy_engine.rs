@@ -19,7 +19,7 @@ use std::sync::Mutex;
 use std::thread::{self, ThreadId};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
-use guatiao::library::kind::{Arg, Caller, RawObject};
+use guatiao::library::kind::{Arg, Caller, KindDescription, RawObject};
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Status, Value};
@@ -386,6 +386,15 @@ fn a_toy_greeter_is_served_through_tables_built_from_its_description() {
         .expect("an instance");
     assert_eq!(counter.count(), 1);
     assert_eq!(counter.count(), 2);
+
+    // The provider carries its kinds' document, as a derived one does.
+    let carried = registry
+        .provider("toy_hello_greeter")
+        .expect("registered")
+        .kind_descriptions()
+        .expect("a document");
+    let names: Vec<&str> = carried.iter().map(KindDescription::name).collect();
+    assert_eq!(names, ["greeter", "listener", "conversation", "counter"]);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

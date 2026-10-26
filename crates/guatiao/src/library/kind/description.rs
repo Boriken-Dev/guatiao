@@ -4,7 +4,7 @@
 
 //! A kind as data: the description `#[guatiao::kind]` writes
 //! (`<Trait>Vtable::description()`) and a kind crate commits as
-//! `<crate>.kinds.json`, read from a [`Value`].
+//! `<crate>.kinds.json`, read from a [`Value`] and written back as one.
 //!
 //! The format is stated in `docs/encodings.md`, "A kind, described". A
 //! description is read from a value; the JSON text a provider carries in
@@ -16,7 +16,8 @@
 mod json;
 
 use crate::value::alloc::Alloc;
-use crate::value::convert::{FromValue, TryAsRef};
+use crate::value::convert::{FromValue, ToValue, TryAsRef};
+use crate::value::error::ValueError;
 use crate::value::types::{List, Map, Value};
 
 /// A scalar argument or answer, under its Rust name.
@@ -594,6 +595,109 @@ impl KindDescription {
     }
 }
 
+/// The kind as `<Trait>Vtable::description()` writes it, key for key and
+/// in the same order: what [`KindDescription::from_value`] reads back.
+/// How a host that holds a description, but not its text, hands it on,
+/// as a provider's document or to a language that loads it.
+impl ToValue for KindDescription {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        let mut kind = Map::new_in(alloc);
+        put(&mut kind, "name", self.name.as_str(), alloc)?;
+        put(&mut kind, "floor_hash", self.floor_hash, alloc)?;
+        put(&mut kind, "object", self.object, alloc)?;
+        if let Some(doc) = &self.doc {
+            put(&mut kind, "doc", doc.as_str(), alloc)?;
+        }
+        let mut slots = List::new_in(alloc);
+        for slot in &self.slots {
+            slots.push_in(slot_value(slot, alloc)?, alloc)?;
+        }
+        kind.set_in("slots", slots, alloc)?;
+        Ok(kind.into())
+    }
+}
+
+fn put(map: &mut Map, key: &str, value: impl ToValue, alloc: Alloc) -> Result<(), ValueError> {
+    map.set_in(key, value.to_value_in(alloc)?, alloc)
+}
+
+fn tree_name(tree: Tree) -> &'static str {
+    match tree {
+        Tree::Value => "value",
+        Tree::Map => "map",
+        Tree::List => "list",
+    }
+}
+
+fn pass_name(pass: Pass) -> &'static str {
+    match pass {
+        Pass::Borrowed => "borrowed",
+        Pass::Taken => "taken",
+        Pass::Lent => "lent",
+    }
+}
+
+fn slot_value(slot: &SlotDescription, alloc: Alloc) -> Result<Value, ValueError> {
+    let mut map = Map::new_in(alloc);
+    put(&mut map, "name", slot.name.as_str(), alloc)?;
+    put(&mut map, "required", slot.required, alloc)?;
+    put(&mut map, "fallible", slot.fallible, alloc)?;
+    let mut args = List::new_in(alloc);
+    for arg in &slot.args {
+        args.push_in(arg_value(arg, alloc)?, alloc)?;
+    }
+    map.set_in("args", args, alloc)?;
+    if let Some(answer) = &slot.answer {
+        map.set_in("answer", answer_value(answer, alloc)?, alloc)?;
+    }
+    if let Some(doc) = &slot.doc {
+        put(&mut map, "doc", doc.as_str(), alloc)?;
+    }
+    Ok(map.into())
+}
+
+fn arg_value(arg: &ArgDescription, alloc: Alloc) -> Result<Value, ValueError> {
+    let mut map = Map::new_in(alloc);
+    put(&mut map, "name", arg.name.as_str(), alloc)?;
+    match &arg.ty {
+        ArgType::Scalar(scalar) => put(&mut map, "type", scalar.name(), alloc)?,
+        ArgType::Str => put(&mut map, "type", "str", alloc)?,
+        ArgType::Bytes => put(&mut map, "type", "bytes", alloc)?,
+        ArgType::BytesMut => put(&mut map, "type", "bytes_mut", alloc)?,
+        ArgType::Tree {
+            tree,
+            pass,
+            nullable,
+        } => {
+            put(&mut map, "type", tree_name(*tree), alloc)?;
+            put(&mut map, "pass", pass_name(*pass), alloc)?;
+            if *nullable {
+                put(&mut map, "nullable", true, alloc)?;
+            }
+        }
+        ArgType::Object { kind, pass } => {
+            put(&mut map, "type", "object", alloc)?;
+            put(&mut map, "kind", kind.as_str(), alloc)?;
+            put(&mut map, "pass", pass_name(*pass), alloc)?;
+        }
+    }
+    Ok(map.into())
+}
+
+fn answer_value(answer: &AnswerType, alloc: Alloc) -> Result<Value, ValueError> {
+    let mut map = Map::new_in(alloc);
+    match answer {
+        AnswerType::Scalar(scalar) => put(&mut map, "type", scalar.name(), alloc)?,
+        AnswerType::Text => put(&mut map, "type", "text", alloc)?,
+        AnswerType::Tree(tree) => put(&mut map, "type", tree_name(*tree), alloc)?,
+        AnswerType::Object { kind } => {
+            put(&mut map, "type", "object", alloc)?;
+            put(&mut map, "kind", kind.as_str(), alloc)?;
+        }
+    }
+    Ok(map.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,5 +877,78 @@ mod tests {
         assert_eq!(kind.word_of(0), 1);
         assert_eq!(kind.size(), 8 + 2 * word);
         assert_eq!(kind.floor(), 8 + 2 * word);
+    }
+
+    /// Each kind of the committed document, read and written back, is the
+    /// value it was read from, key for key and in order: the writer spells
+    /// a kind as the kind macro does.
+    #[test]
+    fn a_kind_written_back_is_the_value_it_was_read_from() {
+        let document = KindDescription::document_value(
+            include_str!("../../../../../examples/greeter_kind/include/greeter_kind.kinds.json"),
+            Alloc::rust(),
+        )
+        .expect("the committed document reads");
+        let kinds = TryAsRef::<Map>::try_as_ref(&document)
+            .and_then(|m| m.get("kinds"))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .expect("a list of kinds");
+        assert!(kinds.len() >= 5);
+        for value in kinds.iter() {
+            let kind = KindDescription::from_value(value).expect("a kind");
+            let written = kind.to_value().expect("written");
+            assert_eq!(written, *value, "`{}`", kind.name());
+            assert_eq!(KindDescription::from_value(&written), Ok(kind));
+        }
+    }
+
+    /// What the committed document has no example of: a nullable value,
+    /// a scalar answer, a kind with no docs.
+    #[test]
+    fn a_nullable_value_and_a_scalar_answer_are_written_back() {
+        let arg = |name: &str, ty: &str, extra: Vec<(&str, Value)>| {
+            let mut entries = vec![("name", text_value(name)), ("type", text_value(ty))];
+            entries.extend(extra);
+            map_of(entries)
+        };
+        let kind = map_of(vec![
+            ("name", text_value("probe")),
+            ("floor_hash", Value::from(7u32)),
+            ("object", Value::from(false)),
+            (
+                "slots",
+                list_of(vec![map_of(vec![
+                    ("name", text_value("weigh")),
+                    ("required", Value::from(true)),
+                    ("fallible", Value::from(false)),
+                    (
+                        "args",
+                        list_of(vec![
+                            arg(
+                                "maybe",
+                                "value",
+                                vec![
+                                    ("pass", text_value("borrowed")),
+                                    ("nullable", Value::from(true)),
+                                ],
+                            ),
+                            arg("items", "list", vec![("pass", text_value("lent"))]),
+                            arg(
+                                "who",
+                                "object",
+                                vec![
+                                    ("kind", text_value("listener")),
+                                    ("pass", text_value("lent")),
+                                ],
+                            ),
+                            arg("scale", "f64", vec![]),
+                        ]),
+                    ),
+                    ("answer", map_of(vec![("type", text_value("u64"))])),
+                ])]),
+            ),
+        ]);
+        let read = KindDescription::from_value(&kind).expect("a kind");
+        assert_eq!(read.to_value().expect("written"), kind);
     }
 }

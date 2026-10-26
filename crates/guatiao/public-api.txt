@@ -874,6 +874,9 @@ pub fn guatiao::library::kind::KindDescription::eq(&self, &Self) -> bool
 impl core::fmt::Debug for guatiao::library::kind::KindDescription
 pub fn guatiao::library::kind::KindDescription::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::kind::KindDescription
+impl guatiao::value::convert::ToValue for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::library::kind::KindDescription::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(C)] pub struct guatiao::library::kind::KindHeader
 pub guatiao::library::kind::KindHeader::floor_hash: u32
 pub guatiao::library::kind::KindHeader::struct_size: u32
@@ -4278,6 +4281,9 @@ pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::library::kind::KindDescription::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8881,6 +8887,9 @@ pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::library::kind::KindDescription::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -11271,6 +11280,9 @@ pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::library::kind::KindDescription::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
