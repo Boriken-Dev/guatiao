@@ -13,6 +13,7 @@ SEXP C_alloc_address(SEXP);
 SEXP C_alloc_binding(void);
 SEXP C_alloc_counting(void);
 SEXP C_alloc_live(SEXP);
+SEXP C_alloc_refuse(SEXP, SEXP);
 SEXP C_answer(SEXP, SEXP);
 SEXP C_date_add_span(SEXP, SEXP);
 SEXP C_datetime_add_span(SEXP, SEXP);
@@ -101,6 +102,7 @@ static const R_CallMethodDef calls[] = {
     {"C_alloc_binding", (DL_FUNC)(void (*)(void)) & C_alloc_binding, 0},
     {"C_alloc_counting", (DL_FUNC)(void (*)(void)) & C_alloc_counting, 0},
     {"C_alloc_live", (DL_FUNC)(void (*)(void)) & C_alloc_live, 1},
+    {"C_alloc_refuse", (DL_FUNC)(void (*)(void)) & C_alloc_refuse, 2},
     {"C_answer", (DL_FUNC)(void (*)(void)) & C_answer, 2},
     {"C_date_add_span", (DL_FUNC)(void (*)(void)) & C_date_add_span, 2},
     {"C_datetime_add_span", (DL_FUNC)(void (*)(void)) & C_datetime_add_span, 2},

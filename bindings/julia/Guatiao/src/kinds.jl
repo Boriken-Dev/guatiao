@@ -113,8 +113,9 @@ mutable struct Scope
     given::Vector{Any}   # undone by close unless the call happened
     blocks::Vector{Ptr{Cvoid}}   # C memory released last, after every `after` and `given`
     taken::Vector{Any}           # what a served call was handed: closed if it refuses
+    lent::Vector{Tuple{Ptr{GValue},Ptr{GAlloc}}}   # lent trees, each with the allocator it recorded when lent
 end
-Scope() = Scope(true, Any[], Any[], Any[], Ptr{Cvoid}[], Any[])
+Scope() = Scope(true, Any[], Any[], Any[], Ptr{Cvoid}[], Any[], Tuple{Ptr{GValue},Ptr{GAlloc}}[])
 own!(s::Scope, p::Ptr) = (push!(s.blocks, Ptr{Cvoid}(p)); p)
 keep!(s::Scope, x) = (push!(s.keep, x); x)
 after!(f, s::Scope) = (push!(s.after, f); nothing)
@@ -122,10 +123,45 @@ given!(f, s::Scope) = (push!(s.given, f); nothing)
 called!(s::Scope) = (empty!(s.given); nothing)
 check_scope(s::Scope) = s.open || throw(InvalidStateException("this view was lent for one call, which has returned", :returned))
 
+"""
+Moves every tree lent for the call into the allocator it recorded when it
+was lent, so what the callee grew it with, or wrote over it, outlives the
+callee's library. The first refusal's status, else 0; a refused tree is
+left whole, where it stands.
+"""
+function settle_lent!(s::Scope)
+    status = UInt32(0)
+    for (node, home) in s.lent
+        moved = guatiao_value_make_local(node, home)
+        moved != 0 && status == 0 && (status = UInt32(moved))
+    end
+    empty!(s.lent)
+    return status
+end
+
+"A refused settle after a call that answered: what it answered into `out` freed unread, and the refusal thrown."
+function settled!(status::UInt32, out, where::String)
+    status == 0 && return nothing
+    drop_answer(out)
+    throw(GuatiaoError(status, "moving what $where put into a lent tree into that tree's allocator"))
+end
+drop_answer(_) = nothing
+drop_answer(out::Ref{GValue}) = drop_root(out[])
+drop_answer(out::Ref{GMap}) = drop_root(node_of(TAG_MAP, out[]))
+drop_answer(out::Ref{GList}) = drop_root(node_of(TAG_LIST, out[]))
+drop_answer(out::Ref{GString}) = drop_root(node_of(TAG_STRING, out[]))
+drop_answer(out::Ref{GObject}) = destroy_object(out[])
+function drop_root(node::GValue)
+    root = new_root()
+    unsafe_store!(root, node)
+    free_root(root)
+end
+
 function close_scope(s::Scope)
     s.open || return nothing
     s.open = false
     failure = nothing
+    settle_lent!(s)
     for f in Iterators.reverse(s.after)
         try
             f()
@@ -320,10 +356,7 @@ function pass_lent(x, scope::Scope, kind::Symbol)
     # What the callee grew it with may be in its library's allocator: moved
     # into the one the tree records now, which a callee writing a fresh
     # tree over it would change.
-    if makes_local()
-        home = recorded_alloc(node)
-        after!(() -> guatiao_value_make_local(node, home), scope)
-    end
+    makes_local() && push!(scope.lent, (node, recorded_alloc(node)))
     return arm_ptr(node, kind, "a lent argument")
 end
 
@@ -987,7 +1020,10 @@ macro kind(name::Symbol, args...)
                         status
                     end
                     $G.called!($scope_)
+                    # Answered or refused; the slot's own refusal wins over the settle's.
+                    local __gq_settled = $G.settle_lent!($scope_)
                     $G.finish_call($st_, $err_, $(s.fallible), $where)
+                    $G.settled!(__gq_settled, $out_, $where)
                     return $answer_expr
                 finally
                     $G.close_scope($scope_)

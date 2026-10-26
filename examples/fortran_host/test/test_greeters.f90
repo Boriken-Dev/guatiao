@@ -44,6 +44,7 @@ program test_greeters
   end do
   call an_answer_built_in_the_librarys_allocator_outlives_the_unload()
   call what_a_slot_grew_a_lent_map_with_outlives_the_unload()
+  call a_refused_move_of_a_lent_tree_is_the_calls_error()
   call a_table_that_is_not_the_kinds_is_refused()
   call a_configured_provider_builds_instances()
   call native_threads_call_the_fortran_greeter()
@@ -263,6 +264,45 @@ contains
     call guatiao_emit(config, GUATIAO_FORMAT_JSON, text)
     call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map outlives the unload')
     call config%close()
+    call own%close()
+  end subroutine
+
+  subroutine a_refused_move_of_a_lent_tree_is_the_calls_error()
+    type(guatiao_registry) :: own
+    type(greeter_remote) :: g
+    type(guatiao_value) :: config
+    type(guatiao_error), allocatable :: error
+    type(refusing), pointer :: r
+    character(:), allocatable :: text
+    logical :: usable
+    integer :: st
+    ! check rebuilds the lent map in its own allocator; moving it back into
+    ! the map's, which refuses, fails the call and leaves the map whole
+    ! where it stands.
+    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-refused', 'c_greeter', &
+                    'GREETER_IGNORES_CARRIER')) == 0) then
+      call skip('no C compiler: the greeter written in C is not built')
+      return
+    end if
+    own = guatiao_open_registry('fortran-refused', '0.1')
+    call own%scan_dir('build/c-refused', rules=['kind=greeter'])
+    call greeter_bind(own, 'c_greeter', g, st)
+    call check(st == GUATIAO_OK, 'the greeter binds')
+    r => refusing_new()
+    config = guatiao_map(refusing_allocator(r))
+    call config%set('name', 'ivy')
+    r%refuse = .true.
+    call g%check(config, usable, error)
+    r%refuse = .false.
+    call check(allocated(error), 'a refused settle is the call''s error')
+    if (allocated(error)) then
+      call check(error%status == GUATIAO_ERR_ALLOC, 'as ALLOC')
+      call check(index(error%message, 'lent tree') > 0, 'naming the lent tree')
+    end if
+    call guatiao_emit(config, GUATIAO_FORMAT_JSON, text)
+    call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map stands whole')
+    call config%close()
+    call check(r%live == 0, 'every block of the refusing allocator is back')
     call own%close()
   end subroutine
 

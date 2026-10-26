@@ -191,6 +191,35 @@ end
             close(own)
         end
     end
+    @testset "a refused move of a lent tree is the call's error" begin
+        # `check` rebuilds the lent map in its own allocator; moving it back
+        # into the map's, which refuses, fails the call and leaves the map
+        # whole where it stands.
+        dir = build_c_greeter(; ignores_carrier = true)
+        if dir === nothing
+            absent_greeter(:c, "no C compiler: the greeter written in C is not built")
+        else
+            own = Registry("julia-refused", "0.1")
+            Guatiao.scan_dir(own, dir; rules = "kind=greeter")
+            c = Counting()
+            config = Value(Dict("name" => "ivy"); alloc = c.alloc)
+            g = Guatiao.bind(own, "c_greeter", Greeter)
+            REFUSING[] = true
+            refused = try
+                GreeterKind.check(g, config)
+            catch e
+                e
+            finally
+                REFUSING[] = false
+            end
+            @test refused isa Guatiao.GuatiaoError && refused.status == Guatiao.AllocFailed &&
+                  occursin("lent tree", refused.message)
+            @test config[] == Dict("name" => "ivy", "checked_by" => "C")
+            close(config)
+            @test live(c) == 0
+            close(own)
+        end
+    end
 end
 
 @testset "the Rust proxy calls every greeter: $which" for (which, key, greeting) in GREETERS

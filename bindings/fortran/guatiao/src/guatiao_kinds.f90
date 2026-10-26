@@ -734,20 +734,24 @@ contains
   !> returned, answered or refused: moved where it stands into `home`, the
   !> allocator it recorded before the call, so what the callee grew it
   !> with, or wrote over it, outlives the callee's library. A refusal
-  !> leaves it whole, where it was.
-  recursive subroutine guatiao_settle_lent(v, tag, home)
+  !> leaves it whole, where it was, and is `stat` when given: the error of
+  !> a call that answered, as the slot's own refusal is of one that did not.
+  recursive subroutine guatiao_settle_lent(v, tag, home, stat)
     type(guatiao_value), intent(in) :: v
     integer(c_int32_t), intent(in) :: tag
     type(c_ptr), intent(in) :: home
+    integer, intent(out), optional :: stat
     type(c_ptr) :: node, alloc
-    integer :: stat
+    integer :: st
     integer(c_int32_t) :: moved
     character(:), allocatable :: msg
+    if (present(stat)) stat = GUATIAO_OK
     if (.not. associated(gt_value_make_local)) return
-    call gt_writable_node(v, tag, node, alloc, stat, msg)
-    if (stat /= GUATIAO_OK) return
+    call gt_writable_node(v, tag, node, alloc, st, msg)
+    if (st /= GUATIAO_OK) return
     if (c_associated(home)) alloc = home
     moved = gt_value_make_local(node, alloc)
+    if (present(stat)) stat = int(moved)
   end subroutine
 
   !> The error a remote slot answered: its status and the callee's words,

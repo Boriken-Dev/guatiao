@@ -29,6 +29,12 @@ classdef Allocator
       n = guatiao_mex('alloc_live', self.Id);
     end
 
+    function refuse(self, on)
+    % Whether every allocation is refused from now on, to walk a caller's
+    % failure paths.
+      guatiao_mex('alloc_refuse', self.Id, logical(on));
+    end
+
     function tf = records(self, node)
     % Whether a node's container (or its text, number or bytes) records this
     % allocator.

@@ -254,6 +254,8 @@ export class Scope {
   readonly #after: (() => void)[] = [];
   #given: (() => void)[] = [];
   readonly #blocks: bigint[] = [];
+  /** Trees lent for the call, each with the allocator it recorded when lent. */
+  #lent: [bigint, bigint][] = [];
 
   get open(): boolean {
     return this.#open;
@@ -279,6 +281,26 @@ export class Scope {
     this.#given = [];
   }
 
+  /** A tree lent for the call, settled into `home` once it returns. */
+  lend(node: bigint, home: bigint): void {
+    this.#lent.push([node, home]);
+  }
+
+  /**
+   * Moves every tree lent for the call into the allocator it recorded when
+   * it was lent, so what the callee grew it with, or wrote over it,
+   * outlives the callee's library. The first refusal's status, else OK; a
+   * refused tree is left whole, where it stands.
+   */
+  settle(): number {
+    let status: number = Status.OK;
+    for (const [node, home] of this.#lent.splice(0)) {
+      const moved = makeLocal(node, home);
+      if (moved !== Status.OK && status === Status.OK) status = moved;
+    }
+    return status;
+  }
+
   /** `len` zeroed bytes, released when the scope closes. */
   block(len: number): bigint {
     return this.own(n.alloc(len));
@@ -298,6 +320,7 @@ export class Scope {
     if (!this.#open) return;
     this.#open = false;
     let failure: unknown;
+    this.settle();
     const run = (fns: (() => void)[]): void => {
       for (const fn of fns.reverse()) {
         try {
@@ -456,6 +479,8 @@ abstract class ShapeImpl {
   answer(_out: bigint, _scope: Scope): unknown {
     throw new TypeError(`${this.name} is not an answer`);
   }
+  /** Frees what a call answered into `out`, which nobody will read. */
+  drop(_out: bigint): void {}
 
   // the callee
   receive(_arg: unknown, _scope: Scope): unknown {
@@ -677,6 +702,9 @@ class Text extends ShapeImpl {
       n.freeString(out);
     }
   }
+  override drop(out: bigint): void {
+    n.freeString(out);
+  }
   override write(out: bigint, result: unknown): void {
     if (typeof result !== 'string') throw new TypeError(`a text answer is a string, not ${typeof result}`);
     const text = new Value(result);
@@ -757,10 +785,7 @@ class Tree extends ShapeImpl {
       // What the callee grew it with may be in its library's allocator:
       // moved into the one the tree records now, which a callee writing a
       // fresh tree over it would change.
-      if (makesLocal()) {
-        const home = recordedAlloc(node);
-        scope.after(() => void makeLocal(node, home));
-      }
+      if (makesLocal()) scope.lend(node, recordedAlloc(node));
       return this.#arm(node);
     }
     // Handed over: given up now; freed if the call never happens.
@@ -792,6 +817,12 @@ class Tree extends ShapeImpl {
       }
     }
     return adopt(node, binding());
+  }
+
+  override drop(out: bigint): void {
+    const node = this.#nodeOver(out, n.alloc(SIZE.value));
+    n.freeNode(node);
+    n.release(node);
   }
 
   // -- the callee
@@ -929,6 +960,10 @@ class ObjectShape extends ShapeImpl {
 
   override answer(out: bigint): unknown {
     return this.kind.handle(readRaw(out));
+  }
+
+  override drop(out: bigint): void {
+    destroyRaw(readRaw(out));
   }
 
   override receive(arg: unknown, scope: Scope): unknown {
@@ -1627,9 +1662,16 @@ export class RemoteImpl {
       const extra = [...(out !== undefined ? [out] : []), ...(err !== undefined ? [err] : [])];
       const status = fn(this.ctx, ...cArgs, ...extra);
       scope.called();
+      // Answered or refused; the slot's own refusal wins over the
+      // settle's, which is otherwise the call's error.
+      const settled = scope.settle();
       if (status !== Status.OK) {
         if (err !== undefined) n.check(status, err);
         throw errorFor(status, `${slot.name} failed, which its kind says it cannot`);
+      }
+      if (settled !== Status.OK) {
+        if (out !== undefined) slot.answer!.drop(out);
+        throw errorFor(settled, `moving what ${slot.name} put into a lent tree into that tree's allocator`);
       }
       return slot.answer?.answer(out!, scope);
     } finally {

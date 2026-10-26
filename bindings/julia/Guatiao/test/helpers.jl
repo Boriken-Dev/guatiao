@@ -16,8 +16,11 @@ const VECTORS = joinpath(REPO, "crates", "guatiao", "tests", "vectors", "time.js
 # ---- a counting allocator -------------------------------------------------------
 
 const COUNTS = Threads.Atomic{Int}[]
+"Set, every counting allocator refuses every allocation: a caller's failure paths."
+const REFUSING = Threads.Atomic{Bool}(false)
 
 function counting_alloc(ctx::Ptr{Cvoid}, size::Csize_t, align::Csize_t)::Ptr{Cvoid}
+    REFUSING[] && return C_NULL
     base = unsafe_load(binding_alloc())
     p = ccall(base.alloc, Ptr{Cvoid}, (Ptr{Cvoid}, Csize_t, Csize_t), base.ctx, size, align)
     p == C_NULL || Threads.atomic_add!(COUNTS[Int(ctx)], 1)

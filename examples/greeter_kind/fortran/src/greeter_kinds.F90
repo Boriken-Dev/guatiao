@@ -1112,9 +1112,14 @@ contains
     end if
     out = GUATIAO_C_FALSE
     st = f(self%r%ctx, lent, c_loc(out), c_loc(err))
-    call guatiao_settle_lent(config, GUATIAO_TAG_MAP, home)
+    call guatiao_settle_lent(config, GUATIAO_TAG_MAP, home, ist)
     call guatiao_call_error(st, err, error)
-    if (st == GUATIAO_OK) answer = out /= GUATIAO_C_FALSE
+    if (st /= GUATIAO_OK) return
+    if (ist /= GUATIAO_OK) then
+      call guatiao_fail(error, ist, "moving what check put into a lent tree into that tree's allocator")
+      return
+    end if
+    answer = out /= GUATIAO_C_FALSE
   end subroutine
 
   !> Whether the table has the slot named `slot` (`greet`, `shout`, ...).

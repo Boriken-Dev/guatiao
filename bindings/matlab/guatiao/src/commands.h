@@ -29,6 +29,7 @@
   X(number_read)                                                               \
   X(alloc_counting)                                                            \
   X(alloc_live)                                                                \
+  X(alloc_refuse)                                                              \
   X(node_alloc_is)                                                             \
   X(handles)                                                                   \
   X(node_pointer)                                                              \

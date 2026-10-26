@@ -375,6 +375,55 @@ void what_a_slot_grew_a_lent_map_with_outlives_the_unload() {
   check(json_of(config) == "{\"name\":\"ivy\",\"checked_by\":\"C\"}", "the lent map outlives the unload");
 }
 
+/// An allocator that counts the blocks it has out and refuses every
+/// allocation while `refuse` is set.
+struct refusing {
+  guatiao_alloc a{};
+  bool refuse = false;
+  long live = 0;
+  refusing() noexcept {
+    a.struct_size = static_cast<std::uint32_t>(sizeof(guatiao_alloc));
+    a.ctx = this;
+    a.alloc = [](void* ctx, std::size_t size, std::size_t) -> void* {
+      auto* self = static_cast<refusing*>(ctx);
+      if (self->refuse || size == 0) return nullptr;
+      void* p = std::malloc(size);
+      if (p) ++self->live;
+      return p;
+    };
+    a.free = [](void* ctx, void* p, std::size_t, std::size_t) {
+      if (!p) return;
+      --static_cast<refusing*>(ctx)->live;
+      std::free(p);
+    };
+  }
+};
+
+void a_refused_move_of_a_lent_tree_is_the_calls_error() {
+  // check rebuilds the lent map in its own allocator; moving it back into
+  // the map's, which refuses, fails the call and leaves the map whole where
+  // it stands.
+  refusing alloc;
+  guatiao::registry own("cpp-refused", "0.1");
+  own.scan_dir(C_CARELESS_GREETER_DIR, guatiao::rules({"kind=greeter"}));
+  auto bound = gk::greeter::try_bind(own, "c_greeter");
+  check(bound.ok(), "the greeter binds");
+  if (!bound.ok()) return;
+  guatiao::remote<gk::greeter> g = *bound;
+  {
+    guatiao::map config({{"name", "ivy"}}, &alloc.a);
+    alloc.refuse = true;
+    auto usable = g.try_check(config.ref());
+    alloc.refuse = false;
+    check(!usable.ok() && usable.error().code() == guatiao::status::alloc,
+          "a refused settle is the call's error, as ALLOC");
+    check(!usable.ok() && std::string(usable.error().what()).find("lent tree") != std::string::npos,
+          "naming the lent tree");
+    check(json_of(config) == "{\"name\":\"ivy\",\"checked_by\":\"C\"}", "the lent map stands whole");
+  }
+  check(alloc.live == 0, "every block of the refusing allocator is back");
+}
+
 }  // namespace
 
 int main() {
@@ -399,6 +448,7 @@ int main() {
   }
   an_answer_built_in_the_librarys_allocator_outlives_the_unload();
   what_a_slot_grew_a_lent_map_with_outlives_the_unload();
+  a_refused_move_of_a_lent_tree_is_the_calls_error();
   std::printf("greeters: %d passed, %d failed, %d skipped\n", passed, failed, skipped);
   return failed ? 1 : 0;
 }

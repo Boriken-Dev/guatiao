@@ -35,6 +35,8 @@ function allocProtos(): { alloc: unknown; free: unknown } {
 /** The library's default allocator, wrapped to count live blocks. */
 export class Counting implements Disposable {
   live = 0;
+  /** Set, every allocation is refused: a caller's failure paths. */
+  refusing = false;
   readonly alloc: bigint;
   readonly #callbacks: bigint[];
 
@@ -55,6 +57,7 @@ export class Counting implements Disposable {
       align: number,
     ) => void;
     const onAlloc = k.register((_c: unknown, size: number, align: number) => {
+      if (this.refusing) return null;
       const p = baseAlloc(ctx, size, align);
       if (p) this.live += 1;
       return p;

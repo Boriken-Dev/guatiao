@@ -17,11 +17,15 @@ class Counting:
     def __init__(self) -> None:
         base = _lib.core().alloc
         self.live = 0
+        # Set, every allocation is refused: a caller's failure paths.
+        self.refusing = False
         alloc_type = _abi.Alloc._fields_[2][1]
         free_type = _abi.Alloc._fields_[3][1]
         realloc_type = _abi.Alloc._fields_[4][1]
 
         def _alloc(_ctx, size, align):
+            if self.refusing:
+                return None
             ptr = base.alloc(base.ctx, size, align)
             if ptr:
                 self.live += 1

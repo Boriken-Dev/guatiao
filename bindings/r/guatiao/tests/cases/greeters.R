@@ -177,6 +177,31 @@ case("what a slot grew a lent map with outlives the unload", with_examples({
   }
 }))
 
+case("a refused move of a lent tree is the call's error", with_examples({
+  # `check` rebuilds the lent map in its own allocator; moving it back into
+  # the map's, which refuses, fails the call and leaves the map whole where
+  # it stands.
+  dir <- build_c_greeter("GREETER_IGNORES_CARRIER")
+  if (is.null(dir)) {
+    absent_greeter("c", "no C compiler: the greeter written in C is not built")
+  } else {
+    own <- registry("r-refused", "0.1")
+    own$scan_dir(dir, rules = "kind=greeter")
+    a <- counting()
+    config <- value(list(name = "ivy"), alloc = a)
+    g <- own$bind("c_greeter", Greeter)
+    refuse(a, TRUE)
+    refused <- tryCatch(check(g, config), error = function(e) e)
+    refuse(a, FALSE)
+    expect_true(inherits(refused, "guatiao_error") && identical(refused$status, "AllocFailed"))
+    expect_true(grepl("lent tree", conditionMessage(refused), fixed = TRUE))
+    expect_equal(value_data(config), list(name = "ivy", checked_by = "C"))
+    close(config)
+    expect_equal(live(a), 0)
+    own$close()
+  }
+}))
+
 case("the Rust proxy calls every greeter", with_examples({
   if (is.null(fixture())) {
     skip_case("no C compiler: the fixture is not built")

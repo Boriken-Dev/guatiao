@@ -420,6 +420,40 @@ void main() {
       expect(config.toDart(), {'name': 'ivy', 'checked_by': 'C'});
     });
 
+    test("a refused move of a lent tree is the call's error", () {
+      // `check` rebuilds the lent map in the C file's own allocator; moving
+      // it back into the map's, which refuses, fails the call and leaves
+      // the map whole where it stands.
+      final dir = _buildCGreeter(ignoresCarrier: true);
+      if (dir == null) {
+        markTestSkipped('no C compiler');
+        return;
+      }
+      final own = Registry('dart-kinds-refused', '0.1');
+      addTearDown(own.close);
+      expect(own.scanDir(dir, rules: 'kind=greeter')['failed'], isEmpty);
+      final alloc = _refusingAlloc();
+      final config = Value.fromDart({'name': 'ivy'}, alloc: alloc);
+      // Closed before the registry is, whatever the case answers.
+      addTearDown(config.close);
+      addTearDown(() => _refusing = false);
+      _refusing = true;
+      expect(
+        () => own.bind('c_greeter', Greeter.kind).check(config),
+        throwsA(
+          isA<AllocFailed>().having(
+            (e) => e.message,
+            'message',
+            contains('lent tree'),
+          ),
+        ),
+      );
+      _refusing = false;
+      expect(config.toDart(), {'name': 'ivy', 'checked_by': 'C'});
+      config.close();
+      expect(_refusingLive, 0);
+    });
+
     test('a table of another kind is refused before anything runs', () {
       expect(
         () => reg.bind('hello_library_greeter', Greeter.kind),
@@ -657,4 +691,34 @@ void main() {
       expect(liveObjects(), before - 2);
     });
   });
+}
+
+/// Whether [_refusingAlloc]'s allocator refuses, and the blocks it has out.
+bool _refusing = false;
+int _refusingLive = 0;
+
+Pointer<Void> _refusingAllocFn(Pointer<Void> ctx, int size, int align) {
+  if (_refusing) return nullptr;
+  _refusingLive++;
+  return malloc.allocate<Uint8>(size, alignment: align).cast();
+}
+
+void _refusingFreeFn(
+  Pointer<Void> ctx,
+  Pointer<Void> ptr,
+  int size,
+  int align,
+) {
+  if (ptr == nullptr) return;
+  _refusingLive--;
+  malloc.free(ptr);
+}
+
+/// An allocator over package:ffi's malloc that refuses while [_refusing].
+Pointer<guatiao_alloc> _refusingAlloc() {
+  final a = calloc<guatiao_alloc>();
+  a.ref.struct_size = sizeOf<guatiao_alloc>();
+  a.ref.alloc = Pointer.fromFunction(_refusingAllocFn);
+  a.ref.free = Pointer.fromFunction(_refusingFreeFn);
+  return a;
 }

@@ -703,6 +703,13 @@ SEXP C_alloc_live(SEXP a) {
   return Rf_ScalarReal((double)gt_counting_live((const gt_counting *)R_ExternalPtrAddr(a)));
 }
 
+SEXP C_alloc_refuse(SEXP a, SEXP on) {
+  if (TYPEOF(a) != EXTPTRSXP || R_ExternalPtrTag(a) != Rf_install("guatiao_counting"))
+    gt_raise(GUATIAO_ERR_WRONG_KIND, "not a counting allocator");
+  ((gt_counting *)R_ExternalPtrAddr(a))->refusing = Rf_asLogical(on) == TRUE;
+  return R_NilValue;
+}
+
 SEXP C_alloc_binding(void) { return R_MakeExternalPtr((void *)&gt_binding_alloc, R_NilValue, R_NilValue); }
 
 /* The allocator a node's container records, as an address for a test. */

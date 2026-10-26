@@ -385,6 +385,30 @@ def test_what_a_slot_grew_a_lent_tree_with_outlives_the_unload(tmp_path):
             assert config.to_python() == {"name": "ivy", "checked_by": "C"}
 
 
+def test_a_refused_move_of_a_lent_tree_is_the_calls_error(tmp_path):
+    # This greeter's `check` rebuilds the lent map in its own allocator;
+    # moving it back into the map's, which refuses, fails the call, and
+    # leaves the map whole where it stands.
+    from counting import Counting
+
+    from guatiao import AllocFailed
+
+    built = native.build_c_greeter(tmp_path, ignores_carrier=True)
+    if built is None:
+        pytest.skip("no C compiler: the greeter written in C is not built")
+    counting = Counting()
+    with Registry("py-kinds", "0.1") as registry:
+        registry.scan_dir(str(built), rules="kind=greeter")
+        greeter = registry.bind("c_greeter", Greeter.kind)
+        with Value({"name": "ivy"}, alloc=counting.alloc) as config:
+            counting.refusing = True
+            with pytest.raises(AllocFailed, match="lent tree"):
+                greeter.check(config)
+            counting.refusing = False
+            assert config.to_python() == {"name": "ivy", "checked_by": "C"}
+    assert counting.live == 0
+
+
 def test_64_bit_integers_cross_a_slot_in_c_exactly(c_greeter_dir):
     with Registry("py-kinds", "0.1") as registry:
         registry.scan_dir(str(c_greeter_dir), rules="kind=greeter")

@@ -171,10 +171,14 @@ write now.
   recorded when it was lent, so a slot that wrote a fresh map over it in
   its own allocator is moved home too. Neither then crashes when freed
   after the unload. In R and MATLAB an answer whose move is refused now
-  refuses the call, where it was kept as the slot built it. A Fortran
-  kind module's remote calls `guatiao_settle_lent(v, tag, home)` right
-  after a slot it lent a tree to, with the `home` that
-  `guatiao_lend_tree(v, tag, ptr, stat, home)` answers, and reads a
+  refuses the call, where it was kept as the slot built it. A refused
+  move of a lent tree is the call's error in every binding, as it is
+  through a kind's Rust proxy: the slot's own refusal comes first, and
+  what the slot answered is freed unread. A Fortran
+  kind module's remote calls `guatiao_settle_lent(v, tag, home, stat)`
+  right after a slot it lent a tree to, with the `home` that
+  `guatiao_lend_tree(v, tag, ptr, stat, home)` answers, and reports a
+  non-zero `stat` as the call's error; it reads a
   refused move of an answer from `guatiao_settle_home(answer, stat)`;
   the binding's `AGENTS.md` lists every helper a remote uses.
 - **C++: `guatiao_check_kinds` holds a kind's declaration to its
