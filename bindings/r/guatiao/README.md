@@ -189,8 +189,8 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
   as with jsonlite. A data frame is refused: give its rows or columns.
 - `v[[i]] <- x` replaces an element in place; there is no slice
   assignment.
-- A remote cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: `has_slot(r, "slot")` asks, and the call
+- A remote cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: `has_slot(r, "slot")` asks, and the call
   answers `Unsupported`.
 - An R library is registered in a host in the same session; there is no
   library file a foreign host's scan loads, since that would need R

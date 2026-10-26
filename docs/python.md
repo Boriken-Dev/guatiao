@@ -93,7 +93,7 @@ with Registry("my-host", "1.0") as reg:
 `bind` checks the table's size and floor hash before anything in it
 runs, and answers a `Remote` whose methods take and return Python values.
 A refusal raises the status's error class (`guatiao.BadValue`, ...) with
-the provider's own words; a slot an older table lacks raises
+the provider's own words; a slot the provider leaves out raises
 `guatiao.Unsupported`. An object a slot takes, such as a listener, is any
 Python object with the kind's methods; an object a slot answers is closed
 with `with`. A provider configured per instance is built with
@@ -221,8 +221,8 @@ are the bridge's.
 
 ## What Python cannot do
 
-- **Run a kind's default body.** A Rust caller runs one for a slot an
-  older table lacks; a Python caller raises `guatiao.Unsupported`.
+- **Run a kind's default body.** A Rust caller runs one for a slot a
+  provider leaves out; a Python caller raises `guatiao.Unsupported`.
 - **Run calls in parallel.** Every call into Python takes the GIL.
 - **Keep libraries' modules apart.** The bridge keeps one interpreter for
   the program: libraries share `sys.modules`, so two that need different

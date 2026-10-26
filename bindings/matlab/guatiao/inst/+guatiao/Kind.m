@@ -71,8 +71,8 @@ classdef Kind < handle
 
   methods
     function tf = has_slot(self, name)
-    % Whether this remote's table carries the slot (a slot appended after a
-    % library was built is missing from its older table).
+    % Whether this remote's table fills the slot (a provider may leave an
+    % optional one null).
       self.check_bound();
       [~, i] = guatiao.internal.kinds('slot', class(self), name);
       tf = guatiao_mex('remote_has', self.RemoteId, i);

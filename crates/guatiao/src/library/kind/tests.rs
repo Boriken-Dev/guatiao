@@ -480,16 +480,16 @@ fn a_zero_hash_is_accepted_only_at_the_raw_door() {
         }
     );
 
-    // And the legacy `vtable` is never a typed table: no per-kind
+    // And an untyped `vtable` is never a typed table: no per-kind
     // entry means no table, whatever `vtable` holds.
-    let legacy = ProviderView {
+    let untyped = ProviderView {
         tables: Vec::new(),
         vtable: &HELLO_TABLE as *const GreeterVtable as *const c_void,
         vtable_size: size_of::<GreeterVtable>(),
         ..view.clone()
     };
     assert_eq!(
-        Remote::<dyn Greeter>::from_view(&legacy).unwrap_err(),
+        Remote::<dyn Greeter>::from_view(&untyped).unwrap_err(),
         KindMismatch::NoTable
     );
 }

@@ -182,8 +182,8 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
   `Span` and `Length` keep every nanosecond.
 - A `@kwdef` struct's defaults cannot be read back from it: `@config`
   records them for the schema.
-- A remote cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: `Guatiao.has(r, :slot)` asks, and the
+- A remote cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: `Guatiao.has(r, :slot)` asks, and the
   call answers `Unsupported`.
 - A process builds at most 64 libraries and 256 providers in Julia: a
   descriptor's own slots come from fixed pools of C function pointers.

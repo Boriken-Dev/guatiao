@@ -384,9 +384,9 @@ description a `GuatiaoError` (`BadValue`) naming where.
 | answer `K` | `guatiao_object *out` | `KRemote`, owned | any value implementing `K`, or a remote it owns |
 
 **A remote** (`GreeterRemote`) has a method of each of the kind's
-functions; `Guatiao.has(r, :slot)` says whether its table carries a slot
-(a slot appended after the library was built is missing from an older
-table, and calling it is `Unsupported`: a Rust caller would run the
+functions; `Guatiao.has(r, :slot)` says whether its table fills a slot
+(a provider may leave an optional one null, and calling it is
+`Unsupported`: a Rust caller would run the
 kind's default body, which Julia cannot); a refusal is a `GuatiaoError`
 with the provider's status and words; a slot that cannot fail and fails
 answers its status. `Guatiao.bind(K, table, size, ctx; keep)` makes one

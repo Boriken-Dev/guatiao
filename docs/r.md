@@ -191,7 +191,7 @@ Rust frames between the library and R; it crosses as a status
 - **Run on Windows ARM64 as released.** CRAN builds only an experimental
   R-devel for it; the x64 R runs under emulation, against an x64 build of
   the library.
-- **Run a kind's default body** for a slot an older table lacks, as a
+- **Run a kind's default body** for a slot a provider leaves out, as a
   Rust caller does: a remote answers `Unsupported`, as in Python, Node,
   Go and Julia.
 

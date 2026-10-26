@@ -159,7 +159,7 @@ final class Silent extends Provider {}
 final String? cGreeterDir = _buildCGreeter();
 
 /// The same greeter built to ignore the carrier: its answers are built in
-/// its own allocator, as an older or careless library's are.
+/// its own allocator, as a careless library's are.
 final String? carelessCGreeterDir = _buildCGreeter(ignoresCarrier: true);
 
 /// Compiles with `CC` where it is set, as the other suites do: the default

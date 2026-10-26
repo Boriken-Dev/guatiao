@@ -71,7 +71,7 @@ proxy, and call the Julia greeter from threads Julia did not start.
   Go, Python and Julia greeters are called through the same
   `GreeterRemote`; a table whose `FLOOR_HASH` is not the kind's is refused
   before anything in it runs (`FloorMismatch`).
-- **A table may be older than the kind.** The C greeter fills four of six
+- **A provider may leave optional slots out.** The C greeter fills four of six
   slots; `Guatiao.has(g, :slot)` asks before calling, and calling a
   missing slot answers `Unsupported`.
 - **A refusal crosses with its words**: `greet("")` throws a

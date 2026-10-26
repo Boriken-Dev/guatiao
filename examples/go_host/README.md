@@ -66,7 +66,7 @@ proxy, and calls the Go greeter from native threads.
   Python and Go greeters are called through the same `GreeterRemote`; a
   table whose `FLOOR_HASH` is not the kind's is refused before anything
   in it runs (`*guatiao.FloorMismatch`).
-- **A table may be older than the kind.** The C greeter fills four of
+- **A provider may leave optional slots out.** The C greeter fills four of
   six slots; `Has(name)` asks before calling, and calling a missing slot
   answers `guatiao.ErrUnsupported`.
 - **A refusal crosses with its words**: `Greet("")` answers an

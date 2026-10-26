@@ -425,11 +425,11 @@ shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
 
 **A remote** is an instance of the kind's class bound to a table
 (`Registry.bind`, `Instance.bind`, an object a slot answers): its methods
-call the slots. `has_slot(name)` says whether its table carries a slot (a
-slot appended after a library was built is missing from an older table,
-and calling it raises `Unsupported`); `is_bound()`; `close()`. A refusal
-raises `guatiao:<Status>:provider` with the provider's words. A table
-smaller than the kind's required slots or with another floor hash is
+call the slots. `has_slot(name)` says whether its table fills a slot (a
+provider may leave an optional one null, and calling it raises
+`Unsupported`); `is_bound()`; `close()`. A refusal raises
+`guatiao:<Status>:provider` with the provider's words. A table smaller
+than the kind's or with another floor hash is
 refused (`guatiao:WrongKind:floor`). A remote from `Registry.bind` is valid
 while the registry is open and the library loaded (`guatiao:Gone:closed`
 once the registry is closed); one from `Instance.bind` until the instance

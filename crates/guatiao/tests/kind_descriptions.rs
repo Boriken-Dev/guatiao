@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! What a provider carries in `kind_descriptions`, read back by a host in
-//! Rust and in C: a document as it was written, none for empty text or a
-//! descriptor older than the field, and a refusal naming where for text
+//! Rust and in C: a document as it was written, none for empty text, and
+//! a refusal naming where for text
 //! that is not a description. Each case is a library this binary links,
 //! written by hand as a C library would write it.
 

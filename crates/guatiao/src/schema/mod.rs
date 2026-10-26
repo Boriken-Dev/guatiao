@@ -60,8 +60,8 @@
 //!
 //! # Anything outside the vocabulary is an annotation
 //!
-//! Carried, and never interpreted. A newer producer's keyword survives a
-//! round trip through an older reader, and a consumer can hang its own
+//! Carried, and never interpreted. A keyword this build does not know
+//! survives a round trip through it, and a consumer can hang its own
 //! hints on a field without asking for a vocabulary change. What gives
 //! one of those a meaning is whoever reads it — `guatiao::schema::merge`
 //! is an example, reading `x-merge` from over in the merge module because

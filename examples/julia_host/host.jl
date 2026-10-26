@@ -47,9 +47,9 @@ function exercise(io, g, say)
         e isa GuatiaoError || rethrow()
         say("greet(\"\") refused: ", e.status, ": ", e.message)
     end
-    # The other slots were appended to the kind: an older table may lack them.
+    # The other slots are optional: a provider may leave them out.
     missing = [String(s) for s in (:shout, :check, :greet_from, :greet_into, :start) if !Guatiao.has(g, s)]
-    isempty(missing) || say("an older table, with no ", join(missing, ", "))
+    isempty(missing) || say("a table leaving out ", join(missing, ", "))
     Guatiao.has(g, :shout) && say("shout: ", GreeterKind.shout(g, "ana"))
     if Guatiao.has(g, :check)
         config = Value(Dict("name" => "bo"))

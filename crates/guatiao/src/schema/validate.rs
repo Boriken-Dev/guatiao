@@ -258,12 +258,12 @@ fn against(schema: &Value, key: &str, value: &str, depth: u32) -> Result<(), Val
         // rather than the lenient one. The structural check is in
         // [`validate_value`], which has the value rather than its text.
         Kind::Bytes | Kind::List { .. } | Kind::Tuple(_) | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
-        // A kind from a newer producer: this build cannot say whether the
-        // value is acceptable, so it does not pretend to. Accepting is the
-        // right answer rather than the lenient one — rejecting would make
-        // every value of that field unusable on an older consumer, which
-        // is worse than letting the provider have the last word, and the
-        // provider validates again on entry.
+        // A kind this build does not know: it cannot say whether the value
+        // is acceptable, so it does not pretend to. Accepting is the right
+        // answer rather than the lenient one — rejecting would make every
+        // value of that field unusable here, which is worse than letting
+        // the provider have the last word, and the provider validates
+        // again on entry.
         Kind::Unknown(_) => Ok(()),
         Kind::Missing => Err(bad(key, "a declared kind — this field declares none")),
     }

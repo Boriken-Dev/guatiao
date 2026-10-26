@@ -212,8 +212,8 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
   thread that waits for such a thread never returns.
 - A provider answers synchronously: a method returning a promise is
   refused.
-- A `Remote` cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: it throws `Unsupported`.
+- A `Remote` cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: it throws `Unsupported`.
 - Describe kinds (`kind()`, `kindsOf()`, a kind class's first use) and
   build libraries (`library()`) at module level, not inside a call a
   library is making: koffi cannot register a callback there.

@@ -377,7 +377,7 @@ impl Provider {
     /// The descriptions of the kinds this provider serves and of every
     /// object kind their slots reach: what a host binds a kind from when
     /// it has no file for it. Empty when the provider carries none, as a
-    /// provider written by hand or built before descriptors carried them.
+    /// provider written by hand may.
     ///
     /// # Errors
     ///

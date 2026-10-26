@@ -51,8 +51,8 @@ end
 end
 ```
 
-`@required` marks the slots every table has, the ones the floor hash
-covers; the rest were appended, and an older table may lack them.
+`@required` marks the slots every provider fills, the ones the floor hash
+covers; the rest are optional, which a provider may leave out.
 `@fallible` marks a slot ending in `guatiao_provider_error *err`. A slot
 is found by its position, so its Julia name is free. `MapRef` answers a
 map, `String` a text, `Nothing` nothing; `Lent{MapRef}` is the caller's
@@ -106,8 +106,8 @@ close(reg)
 The registry answers plain Julia data (`providers`, `libraries`, `best`,
 `why_not`); `create` checks a configuration against the provider's schema
 before the provider sees it. A table whose floor hash is not the kind's is
-refused before anything in it runs (`FloorMismatch`); a slot an older
-table lacks answers `Unsupported`, which `Guatiao.has(g, :shout)` asks
+refused before anything in it runs (`FloorMismatch`); a slot the provider
+leaves out answers `Unsupported`, which `Guatiao.has(g, :shout)` asks
 first. A refusal is a `GuatiaoError` with the provider's status and words.
 
 Libraries that come and go are a **source**: `watch_dir!` makes a
@@ -209,7 +209,7 @@ first).
   and 256 providers per process.
 - **Run on Windows ARM64.** Julia ships no build for it; an x64 Julia
   there runs under emulation, against an x64 build of the library.
-- **Run a kind's default body** for a slot an older table lacks, as a
+- **Run a kind's default body** for a slot a provider leaves out, as a
   Rust caller does: a remote answers `Unsupported`, as in Python, Node and
   Go.
 

@@ -223,8 +223,8 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
   (`greeter_serving(h, shout=.true.)`).
 - Single inheritance: a provider serving two kinds is one object per
   kind, sharing state through a pointer.
-- A remote cannot run a kind's default body for a slot an older table
-  lacks, as a Rust caller does: it answers `GUATIAO_ERR_UNSUPPORTED`.
+- A remote cannot run a kind's default body for a slot a provider leaves
+  out, as a Rust caller does: it answers `GUATIAO_ERR_UNSUPPORTED`.
 - An object handed to another side is moved, never copied; keep state
   that must be seen from outside behind a pointer component.
 - A process holds at most 64 providers that build instances and

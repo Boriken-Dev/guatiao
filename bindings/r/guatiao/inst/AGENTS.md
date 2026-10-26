@@ -445,9 +445,9 @@ in any spelling an argument takes; an answer out of range is refused
 naming the slot (`wide.echo_u64 answered: out of range for uint64`).
 
 **A remote** (`GreeterRemote`) has a method of each of the kind's
-generics; `has_slot(r, "shout")` says whether its table carries a slot
-(a slot appended after the library was built is missing from an older
-table, and calling it is `Unsupported`); a refusal is a `guatiao_error`
+generics; `has_slot(r, "shout")` says whether its table fills a slot
+(a provider may leave an optional one null, and calling it is
+`Unsupported`); a refusal is a `guatiao_error`
 with the provider's status and words. `bind_table(K, table, size, ctx,
 keep = NULL)` makes one over any table; `reg$bind` refuses a table
 smaller than the kind's required slots or with another floor hash

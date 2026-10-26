@@ -141,11 +141,11 @@ function exercise(g, tell)
     parts = strsplit(err.identifier, ':');
     tell('greet('''') refused: %s: %s', parts{2}, regexprep(err.message, '^guatiao_mex: ', ''));
   end
-  % The other slots were appended to the kind: an older table may lack them.
+  % The other slots are optional: a provider may leave them out.
   slots = {'shout', 'check', 'greet_from', 'greet_into', 'start'};
   missing = slots(~cellfun(@(s) g.has_slot(s), slots));
   if ~isempty(missing)
-    tell('an older table, with no %s', strjoin(missing, ', '));
+    tell('a table leaving out %s', strjoin(missing, ', '));
   end
   if g.has_slot('shout')
     tell('shout: %s', g.shout('ana'));

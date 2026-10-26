@@ -75,7 +75,7 @@ refuses.
   Go, Python and R greeters are called through the same `GreeterRemote`;
   a table whose `FLOOR_HASH` is not the kind's is refused before anything
   in it runs (`guatiao_floor_mismatch`).
-- **A table may be older than the kind.** The C greeter fills four of six
+- **A provider may leave optional slots out.** The C greeter fills four of six
   slots; `has_slot(g, "slot")` asks before calling, and calling a missing
   slot answers `Unsupported`.
 - **A refusal crosses with its words**: `greet(g, "")` signals a

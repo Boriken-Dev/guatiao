@@ -185,7 +185,7 @@ library's.
   which would need one embedded in a bridge.
 - **Run without a compiler.** The MEX file is built on the user's machine
   (or by `pkg install`), against libffi.
-- **Run a kind's default body** for a slot an older table lacks, as a
+- **Run a kind's default body** for a slot a provider leaves out, as a
   Rust caller does: a remote raises `Unsupported`, as in Python, Node, Go,
   Julia and R.
 - **Index a package function's result in place, in Octave.**

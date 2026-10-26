@@ -64,7 +64,7 @@ node examples/node_host/host.ts target/debug \
   Python and TypeScript greeters are called through the same `Remote`; a
   table whose `FLOOR_HASH` is not the kind's is refused before anything
   in it runs.
-- **A table may be older than the kind.** The C greeter fills four of
+- **A provider may leave optional slots out.** The C greeter fills four of
   six slots; `has(name)` asks before calling, and calling a missing slot
   throws `Unsupported`.
 - **A refusal crosses with its words**: `greet('')` throws `BadValue`
