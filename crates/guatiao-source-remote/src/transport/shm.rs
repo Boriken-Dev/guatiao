@@ -208,7 +208,14 @@ impl RingReader {
 
 impl Write for RingWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.is_empty() {
+        self.write_vectored(&[io::IoSlice::new(bytes)])
+    }
+
+    /// Copies as much of `parts` as there is room for, in order, and
+    /// publishes it once: one wake-up for all of it.
+    fn write_vectored(&mut self, parts: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let total: usize = parts.iter().map(|p| p.len()).sum();
+        if total == 0 {
             return Ok(0);
         }
         let head = self.ring.counter(HEAD).load(Ordering::Relaxed);
@@ -238,8 +245,17 @@ impl Write for RingWriter {
                 std::thread::sleep(Duration::from_micros(200));
             }
         };
-        let n = (room as usize).min(bytes.len());
-        self.ring.copy_in(head, &bytes[..n]);
+        let n = (room as usize).min(total);
+        let mut done = 0usize;
+        for part in parts {
+            if done == n {
+                break;
+            }
+            let take = part.len().min(n - done);
+            self.ring
+                .copy_in(head.wrapping_add(done as u64), &part[..take]);
+            done += take;
+        }
         self.ring
             .counter(HEAD)
             .store(head.wrapping_add(n as u64), Ordering::Release);
@@ -588,6 +604,51 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("the write gives up");
         assert_eq!(written.unwrap_err().kind(), io::ErrorKind::TimedOut);
+    }
+
+    /// Counts the bytes rung.
+    struct Rung(Arc<Mutex<usize>>);
+
+    impl Write for Rung {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            *self.0.lock().unwrap() += buf.len();
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn parts_are_copied_in_order_across_the_end_and_published_once() {
+        let ring = heap_ring();
+        // Five bytes from the end, with room for nine.
+        let start = RING - 5;
+        ring.counter(HEAD).store(start, Ordering::Relaxed);
+        ring.counter(TAIL)
+            .store(start - (RING - 9), Ordering::Relaxed);
+        ring.counter(SLEEPING).store(1, Ordering::Relaxed);
+        let rung = Arc::new(Mutex::new(0));
+        let mut writer = RingWriter {
+            ring,
+            bell: Arc::new(Mutex::new(Box::new(Rung(Arc::clone(&rung))))),
+            gone: Arc::new(AtomicBool::new(false)),
+            stall: None,
+        };
+        let parts = [io::IoSlice::new(b"head"), io::IoSlice::new(b"tail-end")];
+        assert_eq!(
+            writer.write_vectored(&parts).unwrap(),
+            9,
+            "as much as there is room for"
+        );
+        assert_eq!(*rung.lock().unwrap(), 1, "one wake-up for both parts");
+        let ring = &writer.ring;
+        let head = ring.counter(HEAD).load(Ordering::Acquire);
+        assert_eq!(head, start + 9);
+        let mut out = vec![0u8; 9];
+        ring.copy_out(start, &mut out);
+        assert_eq!(out, b"headtail-");
     }
 
     #[test]

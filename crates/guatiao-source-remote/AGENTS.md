@@ -227,7 +227,12 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 - A frame a writer gets already carries its 4-byte length; a message
   transport drops it. `write_frames` gets frames queued while another
   thread wrote: by default one `write_frame` each, a stream writes them
-  in one vectored write; a wrapper around a writer forwards it.
+  in one vectored write; a wrapper around a writer forwards it, and so
+  does a wrapper around a stream's `Write` (`write_vectored`, else each
+  frame is a system call of its own). `write_frame_parts` (a large last
+  argument or answer as the frame's tail, from where it lies) is one
+  vectored write on a stream; shared memory publishes every part it has
+  room for at once.
 - **`FrameWrite::set_timeout`**: shared memory and RDMA fail a write
   that finds no room for that long; TCP and Unix sockets set the send
   timeout, which on Windows bounds a whole `send` once earlier bytes are
