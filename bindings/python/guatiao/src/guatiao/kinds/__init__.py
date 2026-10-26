@@ -69,7 +69,7 @@ from ._protocol import (
     kind_of,
     required,
 )
-from ._description import generate, kinds_of
+from ._description import describe_kinds, generate, kinds_of
 from ._spec import Kind, Method, Object, Remote, live_objects
 from ._table import FloorMismatch, table
 
@@ -103,5 +103,6 @@ __all__ = [
     "live_objects",
     "kinds_of",
     "generate",
+    "describe_kinds",
     "shapes",
 ]

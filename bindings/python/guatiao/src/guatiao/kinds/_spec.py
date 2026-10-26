@@ -35,7 +35,9 @@ class Method:
     that answers nothing. `required` marks a method every table must fill:
     the ones the kind was born with, which its `FLOOR_HASH` covers. A
     method appended later is not required, and a caller finds it absent
-    in an older table.
+    in an older table. `arg_names` and `doc` are what a description of
+    the kind says of it (`kinds.describe_kinds`); unnamed arguments are
+    `arg0`, `arg1`, ...
     """
 
     def __init__(
@@ -46,6 +48,8 @@ class Method:
         *,
         fallible: bool = False,
         required: bool = False,
+        arg_names: Sequence[str] = (),
+        doc: "str | None" = None,
     ) -> None:
         for shape in args:
             if getattr(shape, "is_object", False):
@@ -59,6 +63,11 @@ class Method:
         self.returns = answer_shape(returns) if returns is not None else None
         self.fallible = fallible
         self.required = required
+        names = list(arg_names) + [f"arg{i}" for i in range(len(arg_names), len(self.args))]
+        if len(names) != len(self.args):
+            raise TypeError(f"`{name}`: {len(arg_names)} names for {len(self.args)} arguments")
+        self.arg_names = tuple(names)
+        self.doc = doc
 
     def slot_type(self) -> Any:
         """The slot's function-pointer type, for a struct written by hand."""
@@ -99,8 +108,10 @@ class Kind:
         floor_hash: int,
         methods: Sequence[Method],
         is_object: bool = False,
+        doc: "str | None" = None,
     ) -> None:
         self.name = name
+        self.doc = doc
         self.floor_hash = int(floor_hash)
         self.methods = tuple(methods)
         self.is_object = bool(is_object)
