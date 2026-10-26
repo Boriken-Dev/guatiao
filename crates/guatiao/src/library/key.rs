@@ -21,6 +21,15 @@
 //! A library has no display name and does not belong to another library,
 //! so `%name` and `%library` are not fields of a library key — and naming
 //! one is refused where it is written rather than rendering as empty.
+//!
+//! # Where it came from
+//!
+//! `%source` is the name of the source that served it, as a refresh
+//! reports it: the name a source was added
+//! under, a source file's path, a watched directory. A library the host
+//! loaded or registered itself came from no source, and renders it empty.
+//! `%source/%id` is how one registry holds the same library from several
+//! sources, such as identical devices each reached through its own.
 
 #![forbid(unsafe_code)]
 
@@ -29,9 +38,9 @@ use alloc::fmt;
 /// Which descriptor a template names the fields of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subject {
-    /// A library: `%id`, `%version`.
+    /// A library: `%id`, `%version`, `%source`.
     Library,
-    /// A provider: `%id`, `%name`, `%library`, `%version`.
+    /// A provider: `%id`, `%name`, `%library`, `%version`, `%source`.
     Provider,
 }
 
@@ -39,8 +48,8 @@ impl Subject {
     /// What a template for this may name, for a diagnostic.
     fn fields(self) -> &'static str {
         match self {
-            Subject::Library => "%id, %version",
-            Subject::Provider => "%id, %name, %library, %version",
+            Subject::Library => "%id, %version, %source",
+            Subject::Provider => "%id, %name, %library, %version, %source",
         }
     }
 }
@@ -52,6 +61,7 @@ enum Field {
     Name,
     Library,
     Version,
+    Source,
 }
 
 impl Field {
@@ -61,10 +71,11 @@ impl Field {
             "name" => Field::Name,
             "library" => Field::Library,
             "version" => Field::Version,
+            "source" => Field::Source,
             _ => return None,
         };
         let allowed = match subject {
-            Subject::Library => matches!(field, Field::Id | Field::Version),
+            Subject::Library => matches!(field, Field::Id | Field::Version | Field::Source),
             Subject::Provider => true,
         };
         allowed.then_some(field)
@@ -79,8 +90,9 @@ enum Part {
 
 /// What a template can be built from.
 ///
-/// A library fills `id` and `version` and leaves the rest empty; a
-/// template for a library cannot name the rest, so they are never read.
+/// A library fills `id`, `version` and `source` and leaves the rest
+/// empty; a template for a library cannot name the rest, so they are never
+/// read.
 #[derive(Debug, Clone, Copy)]
 pub struct KeyFields<'a> {
     /// `%id` — the library's or the provider's own identifier.
@@ -91,17 +103,26 @@ pub struct KeyFields<'a> {
     pub library: &'a str,
     /// `%version` — its version.
     pub version: &'a str,
+    /// `%source` — the source that served it, or empty for one the host
+    /// loaded or registered itself.
+    pub source: &'a str,
 }
 
 impl<'a> KeyFields<'a> {
-    /// The two fields a library has.
+    /// The fields a library has, from no source.
     pub fn library(id: &'a str, version: &'a str) -> KeyFields<'a> {
         KeyFields {
             id,
             name: "",
             library: id,
             version,
+            source: "",
         }
+    }
+
+    /// The same fields, served by `source`.
+    pub fn with_source(self, source: &'a str) -> KeyFields<'a> {
+        KeyFields { source, ..self }
     }
 }
 
@@ -164,6 +185,7 @@ impl core::error::Error for KeyError {}
 /// | `%version` | yes | yes |
 /// | `%name` | — | its display name, which may be empty |
 /// | `%library` | — | the id of the library offering it |
+/// | `%source` | the source that served it | its library's |
 ///
 /// `%%` is a literal `%`. Anything else is text and appears as written.
 ///
@@ -272,6 +294,7 @@ impl KeyTemplate {
                 Part::Field(Field::Name) => out.push_str(fields.name),
                 Part::Field(Field::Library) => out.push_str(fields.library),
                 Part::Field(Field::Version) => out.push_str(fields.version),
+                Part::Field(Field::Source) => out.push_str(fields.source),
             }
         }
         out
@@ -302,6 +325,7 @@ mod tests {
             name: "Hello",
             library: "hello_library",
             version: "0.1.0",
+            source: "device-0",
         }
     }
 
@@ -344,6 +368,19 @@ mod tests {
         // And the same spellings are fine for a provider.
         assert!(KeyTemplate::provider("%id-%name").is_ok());
         assert!(KeyTemplate::provider("%library").is_ok());
+    }
+
+    /// The same library from two sources renders two keys under
+    /// `%source/%id`, and one from no source renders the field empty.
+    #[test]
+    fn the_source_tells_one_library_from_two_sources_apart() {
+        let t = KeyTemplate::library("%source/%id").unwrap();
+        let device = KeyFields::library("device", "1.0.0");
+        assert_eq!(t.render(device.with_source("device-0")), "device-0/device");
+        assert_eq!(t.render(device.with_source("device-1")), "device-1/device");
+        assert_eq!(t.render(device), "/device");
+        let p = KeyTemplate::provider("%source/%id").unwrap();
+        assert_eq!(p.render(fields()), "device-0/hello_greeter");
     }
 
     #[test]

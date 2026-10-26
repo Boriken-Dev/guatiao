@@ -308,3 +308,66 @@ fn a_served_library_unloads_once_nothing_holds_it() {
         .expect("nothing holds it, and its source's close is its promise");
     assert_eq!(shelf.closed(), [pair("a", "1")]);
 }
+
+/// Two sources serving the same library: under `%id` the second is the
+/// first again and is skipped; under `%source/%id` each is its own, with
+/// its own providers, retired and closed by its own source.
+#[test]
+fn the_same_library_from_two_sources_is_two_libraries_under_source_keys() {
+    let two_sources = |registry: &mut Registry| {
+        let (one, two) = (Arc::new(Shelf::default()), Arc::new(Shelf::default()));
+        one.put("device", "1");
+        two.put("device", "1");
+        registry
+            .add_source("device-0", OnShelf(Arc::clone(&one)))
+            .unwrap();
+        registry
+            .add_source("device-1", OnShelf(Arc::clone(&two)))
+            .unwrap();
+        (one, two)
+    };
+
+    let mut by_id = Registry::new("source-tests", "1.0");
+    let (_, skipped) = two_sources(&mut by_id);
+    let report = by_id.refresh();
+    assert_eq!(report.loaded.len(), 1, "{report:?}");
+    assert!(matches!(
+        report.skipped.as_slice(),
+        [(source, id, Skipped::AlreadyLoaded { .. })] if source == "device-1" && id == "device"
+    ));
+    assert_eq!(
+        skipped.closed(),
+        [pair("device", "1")],
+        "passed over at once"
+    );
+
+    let mut apart = Registry::new("source-tests", "1.0");
+    apart.libraries_keyed_by("%source/%id").unwrap();
+    apart.keyed_by("%source/%id").unwrap();
+    let (one, two) = two_sources(&mut apart);
+    let report = apart.refresh();
+    let keys: Vec<&str> = report.loaded.iter().map(|s| s.key.as_str()).collect();
+    assert_eq!(keys, ["device-0/device", "device-1/device"], "{report:?}");
+    let providers: Vec<(&str, &str)> = apart.all().iter().map(|p| (p.key(), p.source())).collect();
+    assert_eq!(
+        providers,
+        [
+            ("device-0/device_p", "device-0"),
+            ("device-1/device_p", "device-1")
+        ]
+    );
+    assert_eq!(apart.loaded()[1].source, "device-1");
+
+    // Re-keyed while loaded, the source is still each one's own.
+    apart.keyed_by("%id@%source").unwrap();
+    assert!(apart.provider("device_p@device-1").is_some());
+
+    two.take("device");
+    let report = apart.refresh();
+    assert_eq!(ids(&report.retired), [("device", "1")], "{report:?}");
+    assert_eq!(report.retired[0].key, "device-1/device");
+    apart.collect();
+    assert_eq!(two.closed(), [pair("device", "1")]);
+    assert!(one.closed().is_empty(), "the other source's library stays");
+    assert!(apart.provider("device_p@device-0").is_some());
+}

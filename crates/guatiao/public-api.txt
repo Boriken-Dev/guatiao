@@ -503,9 +503,11 @@ pub struct guatiao::library::key::KeyFields<'a>
 pub guatiao::library::key::KeyFields::id: &'a str
 pub guatiao::library::key::KeyFields::library: &'a str
 pub guatiao::library::key::KeyFields::name: &'a str
+pub guatiao::library::key::KeyFields::source: &'a str
 pub guatiao::library::key::KeyFields::version: &'a str
 impl<'a> guatiao::library::key::KeyFields<'a>
 pub fn guatiao::library::key::KeyFields<'a>::library(&'a str, &'a str) -> guatiao::library::key::KeyFields<'a>
+pub fn guatiao::library::key::KeyFields<'a>::with_source(self, &'a str) -> guatiao::library::key::KeyFields<'a>
 impl<'a> core::clone::Clone for guatiao::library::key::KeyFields<'a>
 pub fn guatiao::library::key::KeyFields<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::key::KeyFields<'a>
@@ -1283,6 +1285,7 @@ pub guatiao::library::registry::Loaded::meta: core::option::Option<guatiao::valu
 pub guatiao::library::registry::Loaded::path: std::path::PathBuf
 pub guatiao::library::registry::Loaded::providers: usize
 pub guatiao::library::registry::Loaded::skipped: alloc::vec::Vec<guatiao::library::registry::Skipped>
+pub guatiao::library::registry::Loaded::source: alloc::string::String
 pub guatiao::library::registry::Loaded::version: alloc::string::String
 impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1302,6 +1305,7 @@ pub fn guatiao::library::registry::Provider::library(&self) -> &str
 pub fn guatiao::library::registry::Provider::meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
 pub fn guatiao::library::registry::Provider::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::registry::Provider::priority(&self) -> i32
+pub fn guatiao::library::registry::Provider::source(&self) -> &str
 pub fn guatiao::library::registry::Provider::supports(&self, &str) -> bool
 pub fn guatiao::library::registry::Provider::table_for(&self, &str) -> core::option::Option<(*const core::ffi::c_void, usize)>
 pub fn guatiao::library::registry::Provider::version(&self) -> &str
@@ -1901,9 +1905,11 @@ pub struct guatiao::library::KeyFields<'a>
 pub guatiao::library::KeyFields::id: &'a str
 pub guatiao::library::KeyFields::library: &'a str
 pub guatiao::library::KeyFields::name: &'a str
+pub guatiao::library::KeyFields::source: &'a str
 pub guatiao::library::KeyFields::version: &'a str
 impl<'a> guatiao::library::key::KeyFields<'a>
 pub fn guatiao::library::key::KeyFields<'a>::library(&'a str, &'a str) -> guatiao::library::key::KeyFields<'a>
+pub fn guatiao::library::key::KeyFields<'a>::with_source(self, &'a str) -> guatiao::library::key::KeyFields<'a>
 impl<'a> core::clone::Clone for guatiao::library::key::KeyFields<'a>
 pub fn guatiao::library::key::KeyFields<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::key::KeyFields<'a>
@@ -2029,6 +2035,7 @@ pub guatiao::library::Loaded::meta: core::option::Option<guatiao::value::types::
 pub guatiao::library::Loaded::path: std::path::PathBuf
 pub guatiao::library::Loaded::providers: usize
 pub guatiao::library::Loaded::skipped: alloc::vec::Vec<guatiao::library::registry::Skipped>
+pub guatiao::library::Loaded::source: alloc::string::String
 pub guatiao::library::Loaded::version: alloc::string::String
 impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2129,6 +2136,7 @@ pub fn guatiao::library::registry::Provider::library(&self) -> &str
 pub fn guatiao::library::registry::Provider::meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
 pub fn guatiao::library::registry::Provider::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::registry::Provider::priority(&self) -> i32
+pub fn guatiao::library::registry::Provider::source(&self) -> &str
 pub fn guatiao::library::registry::Provider::supports(&self, &str) -> bool
 pub fn guatiao::library::registry::Provider::table_for(&self, &str) -> core::option::Option<(*const core::ffi::c_void, usize)>
 pub fn guatiao::library::registry::Provider::version(&self) -> &str

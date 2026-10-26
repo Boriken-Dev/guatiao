@@ -5,12 +5,13 @@
 //! One call fanned out to several peers.
 //!
 //! Three servers stand in for three devices, each a `Server` over a
-//! registry of its own on a loopback port. The host keeps a registry per
-//! device: identical devices serve the same library, and one registry
-//! files one build of a library under its id, so a second device's would
-//! be skipped. It refreshes each once, then asks every greeter the same
-//! question at once, one thread per peer, and gathers the answers. A peer
-//! that is gone answers `GUATIAO_ERR_GONE` and the others carry on.
+//! registry of its own on a loopback port. The host holds them in one
+//! registry, a source per device. Identical devices serve the same
+//! library, so the host files libraries and providers under
+//! `%source/%id`: each device's under the name its source was added by.
+//! It refreshes once, then asks every greeter the same question at once,
+//! one thread per peer, and gathers the answers. A peer that is gone
+//! answers `GUATIAO_ERR_GONE` and the others carry on.
 //!
 //! ```text
 //! cargo run -p remote_pool
@@ -88,42 +89,53 @@ fn device() -> Result<SocketAddr, String> {
     Ok(address)
 }
 
-/// One peer: its registry, which holds the link, and its greeter.
+/// One peer's greeter, and the source it came through.
 struct Peer {
     name: String,
     greeter: Arc<dyn Greeter>,
-    _registry: Registry,
-}
-
-fn peer(name: &str, address: &str) -> Result<Peer, String> {
-    let mut registry = Registry::new("pool-host", "1.0");
-    let source = RemoteSource::new(Box::new(TcpConnect::new(address)), options());
-    registry
-        .add_source(name, source)
-        .map_err(|e| e.to_string())?;
-    if let Some(refused) = registry.refresh().refused.first() {
-        return Err(format!("{name}: {}", refused.reason));
-    }
-    let greeter = registry
-        .offers::<dyn Greeter>()
-        .next()
-        .and_then(|offer| offer.shared())
-        .ok_or_else(|| format!("{name} offers no greeter"))?;
-    Ok(Peer {
-        name: name.to_string(),
-        greeter,
-        _registry: registry,
-    })
 }
 
 /// Runs the example; answers how many peers greeted.
 fn run() -> Result<usize, String> {
-    let mut greeters = Vec::new();
+    let mut registry = Registry::new("pool-host", "1.0");
+    registry
+        .libraries_keyed_by("%source/%id")
+        .map_err(|e| e.to_string())?;
+    registry
+        .keyed_by("%source/%id")
+        .map_err(|e| e.to_string())?;
     for i in 0..3 {
         let address = device()?.to_string();
-        greeters.push(peer(&format!("device-{i}"), &address)?);
+        let source = RemoteSource::new(Box::new(TcpConnect::new(&address)), options());
+        registry
+            .add_source(&format!("device-{i}"), source)
+            .map_err(|e| e.to_string())?;
     }
-    println!("{} peers offer a greeter", greeters.len());
+    let refreshed = registry.refresh();
+    if let Some(refused) = refreshed.refused.first() {
+        return Err(format!("{}: {}", refused.source, refused.reason));
+    }
+    let greeters: Vec<Peer> = registry
+        .all()
+        .iter()
+        .filter_map(|p| {
+            let greeter = p.offer::<dyn Greeter>().ok()?.shared()?;
+            Some(Peer {
+                name: p.source().to_string(),
+                greeter,
+            })
+        })
+        .collect();
+    println!(
+        "{} peers offer a greeter: {}",
+        greeters.len(),
+        registry
+            .all()
+            .iter()
+            .map(|p| p.key())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
     // The same call to every peer at once: the wait is the slowest
     // peer's, not the sum of them.

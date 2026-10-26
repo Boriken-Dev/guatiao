@@ -275,7 +275,7 @@ library declares before it is mapped), `libraries`, `providers(reg, kind
 = "")`, `available(reg, kind = "")`, `why_not`, `provider(reg, key)`,
 `best`, `provider_available(reg, key) -> (Bool, reason)`,
 `keyed_by!(reg, template)` / `libraries_keyed_by!` (`%id` by default;
-`%name`, `%library`, `%version`), `set_priority!` / `priority`,
+`%name`, `%library`, `%version`, `%source`), `set_priority!` / `priority`,
 `provider_table(reg, key; kind) -> (table, size, ctx)` (`C_NULL` for
 none; no `kind` for a single table), `provider_config(reg, key)` (a
 borrowed, read-only view of the schema, or `nothing`),
