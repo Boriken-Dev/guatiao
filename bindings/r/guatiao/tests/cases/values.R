@@ -47,6 +47,17 @@ case("numbers keep their exact text", with_library({
   expect_equal(as_json(v), '{"big":18446744073709551615,"frac":1.10,"int":3000000000,"neg":-2147483647,"exp":1e400,"close":9007199254740993,"held":9007199254740992,"negzero":-0}')
   expect_equal(value_data(v$negzero, numbers = "text"), number("-0"))
   expect_equal(as_json(list(a = 0.1, b = 1/3, c = 2^1000, d = 2^60)), '{"a":0.1,"b":0.3333333333333333,"c":1.0715086071862673e+301,"d":1152921504606846976}')
+  # Every double is written as the fewest significant digits that read back as it,
+  # subnormals among them. No long literal and no libm result: R's parser and libm
+  # are an ulp apart between platforms.
+  shortest <- list("0.30000000000000004" = 0.1 + 0.2, "5e-324" = 5e-324,
+    "1.7976931348623157e+308" = .Machine$double.xmax, "1.5e-05" = 1.5e-5, "123456.75" = 123456.75,
+    "1.5e-323" = 3 * 2^-1074, "1e-07" = 1e-7, "-1.4932217896051502e-300" = -2^-996,
+    "3.141592653589793" = pi, "0.14285714285714285" = 1 / 7, "100.5" = 100.5, "1e+22" = 1e22,
+    "8.691694759794e-311" = 2^-1030, "6.099e-320" = 12345 * 2^-1074,
+    "-2.225073858507201e-308" = -(2^52 - 1) * 2^-1074, "9.313225746154785e-10" = 2^-30, "0.3" = 0.3,
+    "0.9999999999999999" = 1 - 2^-53, "4.35" = 4.35, "1000000000000000.5" = 1e15 + 0.5,"1.0000000000000001e+21" = 1e21 + 2^17)
+  for (text in names(shortest)) expect_equal(as_json(shortest[[text]]), text, text)
   expect_error(value(NaN), "guatiao_error")
   expect_error(value(Inf), "guatiao_error")
   expect_error(value(number("1.2.3")), "guatiao_error")
