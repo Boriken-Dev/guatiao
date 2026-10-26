@@ -27,6 +27,21 @@ fn spawn(builder: thread::Builder, f: Box<dyn FnOnce() + Send>) -> io::Result<()
     builder.spawn(f).map(drop)
 }
 
+/// Where a test stops a pool's threads to order a race between them.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Point {
+    /// `run` has taken an idle thread's place and not yet sent it the job.
+    Taken,
+    /// An idle thread's wait has just timed out.
+    TimedOut,
+    /// A thread has given up its place and is about to end.
+    Leaving,
+}
+
+#[cfg(test)]
+type Hook = Arc<dyn Fn(Point) + Send + Sync>;
+
 /// Why the pool did not take a job, which the caller then refuses as BUSY.
 #[derive(Debug)]
 pub(crate) struct Busy(Option<io::Error>);
@@ -76,7 +91,11 @@ pub(crate) struct Pool {
     name: String,
     /// How long an idle thread polls for its next job.
     waiting: Waiting,
+    /// How long an idle thread waits for work before it ends.
+    idle: Duration,
     spawn: Spawn,
+    #[cfg(test)]
+    hook: Option<Hook>,
 }
 
 struct PoolState {
@@ -97,7 +116,17 @@ impl Pool {
             max: max.max(1),
             name: name.to_string(),
             waiting: Waiting::new(spin),
+            idle: IDLE,
             spawn,
+            #[cfg(test)]
+            hook: None,
+        }
+    }
+
+    #[cfg(test)]
+    fn at(&self, point: Point) {
+        if let Some(hook) = &self.hook {
+            hook(point);
         }
     }
 
@@ -109,10 +138,19 @@ impl Pool {
         loop {
             let mut state = lock(&self.state);
             if let Some((_, tx)) = state.idle.pop() {
+                // Immediately before the send, which the race test orders.
+                #[cfg(test)]
+                self.at(Point::Taken);
+                // Sent under the lock (an unbounded send never blocks): a
+                // thread whose wait timed out gives up its place under the
+                // same lock and then checks its channel once, so the job is
+                // either there when it checks or its place is already gone.
+                let sent = tx.send(job);
                 drop(state);
-                match tx.send(job) {
+                match sent {
                     Ok(()) => return Ok(()),
-                    // That thread has just ended: try the next.
+                    // Not expected (a thread gives up its place before it
+                    // ends); the next thread or a new one takes the job.
                     Err(mpsc::SendError(back)) => {
                         job = back;
                         continue;
@@ -158,12 +196,14 @@ impl Pool {
                 job = Some(j);
                 continue;
             }
-            match rx.recv_timeout(IDLE) {
+            match rx.recv_timeout(self.idle) {
                 Ok(j) => {
                     self.waiting.saw(idle.elapsed());
                     job = Some(j);
                 }
                 Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
+                    #[cfg(test)]
+                    self.at(Point::TimedOut);
                     let mut state = lock(&self.state);
                     state.idle.retain(|(id, _)| *id != me);
                     // A job sent after the timeout and before the retain.
@@ -173,6 +213,9 @@ impl Pool {
                         continue;
                     }
                     state.threads -= 1;
+                    drop(state);
+                    #[cfg(test)]
+                    self.at(Point::Leaving);
                     return;
                 }
             }
@@ -255,6 +298,74 @@ mod tests {
             assert!(busy.words("full").contains("no threads left"), "{busy:?}");
         }
         assert_eq!(lock(&pool.state).threads, 0);
+    }
+
+    /// The points a race has reached, and the test's own marks.
+    #[derive(Default)]
+    struct Race {
+        reached: Mutex<Vec<&'static str>>,
+        moved: Condvar,
+    }
+
+    impl Race {
+        fn mark(&self, what: &'static str) {
+            lock(&self.reached).push(what);
+            self.moved.notify_all();
+        }
+
+        /// Whether `what` was marked within `within`.
+        fn wait(&self, what: &'static str, within: Duration) -> bool {
+            let reached = lock(&self.reached);
+            let (reached, _) = self
+                .moved
+                .wait_timeout_while(reached, within, |r| !r.contains(&what))
+                .unwrap_or_else(PoisonError::into_inner);
+            reached.contains(&what)
+        }
+    }
+
+    #[test]
+    fn a_job_sent_to_a_thread_whose_wait_just_timed_out_still_runs() {
+        let race = Arc::new(Race::default());
+        let mut pool = Pool::new(1, "pool-test", Duration::ZERO);
+        pool.idle = Duration::from_millis(1);
+        let seen = Arc::clone(&race);
+        pool.hook = Some(Arc::new(move |point| match point {
+            // Hold the timed-out thread until `run` has taken its place.
+            Point::TimedOut => {
+                if !lock(&seen.reached).contains(&"timed out") {
+                    seen.mark("timed out");
+                    seen.wait("taken", Duration::from_secs(10));
+                }
+            }
+            // Let the thread give up its place before the job is sent; a
+            // pool sending under its lock waits here in vain, and goes on.
+            Point::Taken => {
+                seen.mark("taken");
+                seen.wait("leaving", Duration::from_millis(300));
+            }
+            // Keep the thread's receiver alive until the job was sent.
+            Point::Leaving => {
+                if !lock(&seen.reached).contains(&"leaving") {
+                    seen.mark("leaving");
+                    seen.wait("sent", Duration::from_secs(10));
+                }
+            }
+        }));
+        let pool = Arc::new(pool);
+        let (done_tx, done_rx) = mpsc::channel::<u32>();
+        let done = done_tx.clone();
+        pool.run(Box::new(move || done.send(1).unwrap())).unwrap();
+        assert_eq!(done_rx.recv_timeout(Duration::from_secs(10)), Ok(1));
+        assert!(race.wait("timed out", Duration::from_secs(10)));
+        pool.run(Box::new(move || done_tx.send(2).unwrap()))
+            .expect("the idle thread takes it");
+        race.mark("sent");
+        assert_eq!(
+            done_rx.recv_timeout(Duration::from_secs(5)),
+            Ok(2),
+            "the job was lost with the thread that was ending"
+        );
     }
 
     #[test]
