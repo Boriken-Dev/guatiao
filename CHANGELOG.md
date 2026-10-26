@@ -1574,11 +1574,13 @@ write now.
   through them JSON, TOML and YAML read by guatiao-serde) looked each key
   up the same way. So a document anyone wrote could make a reader spend
   seconds on a few hundred kilobytes and hours on megabytes. Past 16 keys
-  a map's keys are now found through a hash; the streaming readers
-  (`decode_as`, `Decoder`, `Encoded`) hash each key once, under seeds
-  drawn for the read, into a set sized from the map's count. A repeated
-  key is still refused on the wire at the byte where it starts, and where
-  a format allows one it still replaces the first in its place.
+  a map's keys are now found through a hash: every reader of wire bytes,
+  and the `Encoder` that writes them (`to_bytes_of`, `encode_of`,
+  `guatiao_wire_encode_walker`, `guatiao_json_to_wire` and the TOML and
+  YAML ones), hashes each key once, under seeds drawn for the read or the
+  write, into a set sized from the map's count. A repeated key is still
+  refused on the wire at the byte where it starts, and where a format
+  allows one it still replaces the first in its place.
 
 - **Building, copying and layering a wide map is linear in its keys.**
   Collecting or extending a `Map` from pairs, converting a `BTreeMap` or
