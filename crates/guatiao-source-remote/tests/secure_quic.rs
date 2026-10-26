@@ -898,8 +898,8 @@ fn pairing_across_two_processes_through_the_servers_commands() {
             .args([
                 "--listen",
                 "quic://127.0.0.1:0",
-                "--trust",
-                "secure",
+                "--security",
+                "mutual-tls",
                 "--state-dir",
             ])
             .arg(&server_dir)
@@ -981,7 +981,6 @@ fn a_configuration_map_reaches_the_secure_level_over_quic() {
 
     let mut config = guatiao::Map::new();
     config.set("connect", format!("quic://{address}").as_str());
-    config.set("trust", "secure");
     config.set(
         "state_dir",
         dir.join("client").display().to_string().as_str(),
@@ -994,15 +993,12 @@ fn a_configuration_map_reaches_the_secure_level_over_quic() {
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(greeting(&registry), "hello, quic");
 
-    config.set("trust", "trusted");
-    let refused = RemoteSource::from_config(&config).unwrap_err();
-    assert!(
-        refused
-            .message()
-            .contains("`quic://` runs the secure level"),
-        "{}",
-        refused.message()
-    );
+    // Server TLS against this mutual-TLS server: refused there.
+    config.set("security", "server-tls");
+    config.set("key", "k");
+    let (registry, refused) = refresh(&RemoteSource::from_config(&config).unwrap());
+    assert_eq!(registry.offers::<dyn Greeter>().count(), 0);
+    assert!(!refused.is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1022,7 +1018,7 @@ fn a_peer_manifest_names_a_peer_over_quic() {
     std::fs::write(
         peers.join("lab.guatiao.toml"),
         format!(
-            "type = \"remote\"\nname = \"lab\"\nconnect = \"quic://{address}\"\ntrust = \"secure\"\n\
+            "type = \"remote\"\nname = \"lab\"\nconnect = \"quic://{address}\"\nsecurity = \"mutual-tls\"\n\
              identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n",
             server.fingerprint()
         ),
@@ -1040,4 +1036,88 @@ fn a_peer_manifest_names_a_peer_over_quic() {
     assert_eq!(refreshed.loaded.len(), 1, "{refreshed:?}");
     assert_eq!(greeting(&registry), "hello, quic");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A QUIC server at no security on loopback, admitting `permit`: its
+/// address.
+fn serve_trusted(permit: &str, key: &[u8]) -> String {
+    let listener = QuicListen::bind_trusted(
+        "127.0.0.1:0",
+        acl(vec![Rule::new(Action::Permit, permit.parse().unwrap())]),
+    )
+    .unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(key));
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            if let Accepted::Connection(conn) = accepted {
+                let server = server.clone();
+                std::thread::spawn(move || {
+                    let _ = server.serve(conn);
+                });
+            }
+        }
+    });
+    address
+}
+
+#[test]
+fn at_no_security_quic_links_by_the_key_and_proves_no_peer() {
+    let address = serve_trusted("127.0.0.1", b"k");
+    let keyed = RemoteSource::new(
+        Box::new(QuicConnect::trusted(&address).unwrap()),
+        LinkOptions::new(Trust::Trusted).key(b"k"),
+    );
+    let (registry, refused) = refresh(&keyed);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, quic");
+    let link = keyed.link().unwrap();
+    assert_eq!(link.trust(), Trust::Trusted);
+    assert_eq!(
+        link.peer_id(),
+        None,
+        "a certificate nobody checked proves nothing"
+    );
+    assert!(link.datagrams().is_some());
+
+    let wrong = RemoteSource::new(
+        Box::new(QuicConnect::trusted(&address).unwrap()),
+        LinkOptions::new(Trust::Trusted).key(b"other"),
+    );
+    let (registry, refused) = refresh(&wrong);
+    assert_eq!(registry.offers::<dyn Greeter>().count(), 0);
+    assert!(
+        refused
+            .iter()
+            .any(|r| r.contains("does not hold this link's key")),
+        "{refused:?}"
+    );
+
+    // A client pinning some server is refused: no certificate it pins.
+    let client = TlsConfig::new(Identity::generate().unwrap())
+        .pins([Identity::generate().unwrap().fingerprint()]);
+    let (_, refused) = refresh(&source(&address, &client));
+    assert!(!refused.is_empty());
+}
+
+#[test]
+fn at_no_security_a_denied_source_is_refused_before_the_handshake() {
+    let address = serve_trusted("10.0.0.0/8", b"k");
+    let connect = QuicConnect::trusted(&address)
+        .unwrap()
+        .timeout(Duration::from_secs(3));
+    let e = connect.connect().unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::ConnectionRefused, "{e}");
+}
+
+#[test]
+fn a_configuration_names_quic_at_no_security() {
+    let address = serve_trusted("127.0.0.1", b"k");
+    let mut config = guatiao::Map::new();
+    config.set("connect", format!("quic://{address}").as_str());
+    config.set("security", "none");
+    config.set("key", "k");
+    let (registry, refused) = refresh(&RemoteSource::from_config(&config).unwrap());
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, quic");
 }

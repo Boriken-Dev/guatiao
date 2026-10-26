@@ -1,5 +1,5 @@
 {
- "about": "Shared vectors for the remote protocol (docs/remote.md). Every implementation reads this file. The bytes were written from the grammar by an encoder of their own, not by the code under test. 'frames' are whole frames, the u32 little-endian length first, with their fields; a tree is written as wire.json writes it ([tag] or [tag, x]); a frame's 'args' and 'body' are hex. 'args' and 'answers' are a CALL's arguments and a REPLY's answer then write-backs, typed by the named slot of greeter_kind's kinds: ['str', text], ['int', n], ['uint', n], ['buffer', length], ['map', tree], ['object', 'senders' | 'receivers', id], ['text', text], ['bool', b], ['nothing']. 'malformed' are bodies (no length) refused with the error named and, where given, the offset into the body. 'proofs' are the trusted level's HMAC-SHA256 over the label, the client's nonce and the server's.",
+ "about": "Shared vectors for the remote protocol (docs/remote.md). Every implementation reads this file. The bytes were written from the grammar by an encoder of their own, not by the code under test. 'frames' are whole frames, the u32 little-endian length first, with their fields; a tree is written as wire.json writes it ([tag] or [tag, x]); a frame's 'args' and 'body' are hex. 'args' and 'answers' are a CALL's arguments and a REPLY's answer then write-backs, typed by the named slot of greeter_kind's kinds: ['str', text], ['int', n], ['uint', n], ['buffer', length], ['map', tree], ['object', 'senders' | 'receivers', id], ['text', text], ['bool', b], ['nothing']. 'malformed' are bodies (no length) refused with the error named and, where given, the offset into the body. A HELLO's 'trust' is 'local', 'trusted', 'secure' or 'server-tls' (bytes 0 to 3). 'proofs' are the trusted level's (and server TLS's) HMAC-SHA256 over the label, the client's nonce and the server's.",
  "frames": [
   {
    "name": "hello, trusted",
@@ -77,6 +77,97 @@
     "proof": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
    },
    "hex": "220000000320bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+   "name": "hello at server TLS, with a token",
+   "frame": {
+    "type": "hello",
+    "trust": "server-tls",
+    "nonce": "000102030405060708090a0b0c0d0e0f",
+    "options": [
+     "map",
+     [
+      [
+       "max_frame",
+       [
+        "number",
+        "65536"
+       ]
+      ],
+      [
+       "max_calls",
+       [
+        "number",
+        "8"
+       ]
+      ],
+      [
+       "token",
+       [
+        "string",
+        "t0k"
+       ]
+      ]
+     ]
+    ]
+   },
+   "hex": "43000000014754524d0103000102030405060708090a0b0c0d0e0f2b0703096d61785f6672616d6503053635353336096d61785f63616c6c7303013805746f6b656e040374306b"
+  },
+  {
+   "name": "welcome at server TLS asking for the key: the server's proof",
+   "frame": {
+    "type": "welcome",
+    "nonce": "101112131415161718191a1b1c1d1e1f",
+    "proof": "60f3aa2be8eccb2a75c9353981f9a5fe15421d41cf27536389bf8611fd420ca5",
+    "options": [
+     "map",
+     [
+      [
+       "max_frame",
+       [
+        "number",
+        "67108864"
+       ]
+      ],
+      [
+       "max_calls",
+       [
+        "number",
+        "64"
+       ]
+      ]
+     ]
+    ]
+   },
+   "hex": "5c000000024754524d01101112131415161718191a1b1c1d1e1f2060f3aa2be8eccb2a75c9353981f9a5fe15421d41cf27536389bf8611fd420ca5240702096d61785f6672616d6503083637313038383634096d61785f63616c6c7303023634"
+  },
+  {
+   "name": "welcome at server TLS asking for no key",
+   "frame": {
+    "type": "welcome",
+    "nonce": "101112131415161718191a1b1c1d1e1f",
+    "proof": "",
+    "options": [
+     "map",
+     [
+      [
+       "max_frame",
+       [
+        "number",
+        "67108864"
+       ]
+      ],
+      [
+       "max_calls",
+       [
+        "number",
+        "64"
+       ]
+      ]
+     ]
+    ]
+   },
+   "hex": "3c000000024754524d01101112131415161718191a1b1c1d1e1f00240702096d61785f6672616d6503083637313038383634096d61785f63616c6c7303023634"
   },
   {
    "name": "list",

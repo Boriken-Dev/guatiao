@@ -144,6 +144,7 @@ fn vectors_header() -> String {
         let trust = match f.get("trust").and_then(Json::as_str) {
             Some("trusted") => 1,
             Some("secure") => 2,
+            Some("server-tls") => 3,
             _ => 0,
         };
         let nonce = f

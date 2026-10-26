@@ -26,15 +26,20 @@ library it loaded itself, in any language.
   arguments typed by the kind's description, calls pipelined and answered
   in any order: `greet("world")` is a 15-byte frame.
 - **One protocol, stated for every language** — frames, the handshake and
-  the trust levels in `docs/remote.md`, shared vectors, and a C client and
-  server in the tests.
+  the security choices in `docs/remote.md`, shared vectors, and a C client
+  and server in the tests.
+- **One security choice per link, the same on every transport** —
+  `none` (peers admitted by an access control list, a pre-shared key
+  proved both ways), `server-tls` (the server proven by its certificate,
+  the client by the key or a token inside TLS: what a browser page can
+  do) or `mutual-tls` (each side known by its certificate's fingerprint,
+  unknown clients waiting until an operator accepts them): none on the
+  same machine and mutual TLS across a network unless named.
 - **Transports** — a server in a child process (isolation); the same
   machine through a Unix socket or a named pipe, or through shared memory
-  (a few microseconds a call); TCP at the trusted level: peers admitted
-  by an access control list, a pre-shared key proved both ways; TLS 1.3
-  at the secure level: mutual TLS, each side known by its certificate's
-  fingerprint, unknown clients waiting until an operator accepts them;
-  the same over QUIC, with datagrams beside the calls.
+  (a few microseconds a call); TCP, QUIC (with datagrams beside the
+  calls) and WebSocket (`ws://`, `wss://`, what a page opens) at any
+  security; RDMA (experimental, Linux) with none.
 
 ## Installation
 
@@ -45,12 +50,12 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 
 | Flag | Adds | Needed for |
 | --- | --- | --- |
-| `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP at the trusted level |
-| `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3 at the secure level |
-| `quic` | `tls`, `quinn`, `tokio` | the secure level over QUIC, with datagrams |
+| `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl` | TCP with no TLS |
+| `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3: server TLS and mutual TLS (over TCP, and `wss://` with `ws`) |
+| `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
-| `ws` | `tcp`, `tungstenite` | WebSocket at the trusted level: what a browser page connects to |
+| `ws` | `tcp`, `tungstenite` | WebSocket: what a browser page connects to |
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
 from C). `coqui-net-acl`, `coqui-peer` and `coqui-peer-tls` are git
@@ -75,7 +80,7 @@ greeter.greet("ana")?;
 ```
 
 A host in any other language adds the library file with a configuration
-map (`{"connect": "tcp://192.0.2.21:7000", "trust": "trusted", "key_file":
+map (`{"connect": "tcp://192.0.2.21:7000", "security": "none", "key_file":
 "link.key"}`, or `{"child": [...]}` for a server in a child process), or
 names directories of peer manifests (`{"dirs": ["peers"]}`): each
 `<name>.guatiao.toml` of `type = "remote"` is a peer, its libraries
@@ -84,17 +89,17 @@ served as `<name>/<id>`.
 A server:
 
 ```text
-guatiao-remote-server --listen tcp://192.0.2.21:7000 --trust trusted \
+guatiao-remote-server --listen tcp://192.0.2.21:7000 --security none \
     --range 192.0.2.0/24 --key-file link.key \
     --kinds greeter_kind.kinds.json --scan /opt/providers
-guatiao-remote-server --listen tls://0.0.0.0:7000 --trust secure \
+guatiao-remote-server --listen tcp://0.0.0.0:7000 \
     --state-dir /var/lib/guatiao-remote --kinds greeter_kind.kinds.json --scan /opt/providers
 ```
 
-A host reaches the secure one with `{"connect": "tls://192.0.2.21:7000",
-"trust": "secure", "state_dir": "state", "pins": ["sha256:..."]}`; the
-server lists it as waiting (`--state-dir DIR --waiting`) until accepted
-(`--accept sha256:...`).
+A host reaches the second, at mutual TLS (a network's default), with
+`{"connect": "tcp://192.0.2.21:7000", "state_dir": "state", "pins":
+["sha256:..."]}`; the server lists it as waiting (`--state-dir DIR
+--waiting`) until accepted (`--accept sha256:...`).
 
 ## License
 

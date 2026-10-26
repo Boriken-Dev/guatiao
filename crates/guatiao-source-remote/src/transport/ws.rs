@@ -2,10 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! WebSocket (RFC 6455) over TCP, at the trusted level: what a browser
-//! can open. Each frame's body is one binary message, with no length in
-//! front; the listener admits peers by an access control list as
-//! [`TcpListen`] does.
+//! WebSocket (RFC 6455) over TCP, what a browser can open: `ws://` with no
+//! TLS, and `wss://` over the TLS of the `tls` transport (feature `tls`).
+//! Each frame's body is one binary message, with no length in front; the
+//! listener admits peers by an access control list as [`TcpListen`] and
+//! `TlsListen` do.
 
 #![forbid(unsafe_code)]
 
@@ -23,14 +24,86 @@ use tungstenite::{Message, WebSocket};
 use coqui_net_acl::Acl;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, TcpListen};
+#[cfg(feature = "tls")]
+use super::tls::{TlsConfig, TlsConnect, TlsDuplex, TlsListen};
 use super::{Connect, Connection, FrameRead, FrameWrite};
 
-/// The socket both halves use. Every write goes out whole under one lock:
+/// The byte stream under the WebSocket: a TCP socket, or a TLS session
+/// over one.
+#[derive(Clone)]
+enum Raw {
+    Plain(Arc<TcpStream>),
+    #[cfg(feature = "tls")]
+    Tls(Arc<TlsDuplex>),
+}
+
+impl Raw {
+    fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Raw::Plain(s) => (&**s).read(buf),
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.read(buf),
+        }
+    }
+
+    fn write_all(&self, buf: &[u8]) -> io::Result<()> {
+        match self {
+            Raw::Plain(s) => (&**s).write_all(buf),
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.write_all(buf),
+        }
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        match self {
+            Raw::Plain(s) => s.set_read_timeout(timeout),
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.set_read_timeout(timeout),
+        }
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        match self {
+            Raw::Plain(s) => s.set_write_timeout(timeout),
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.set_write_timeout(timeout),
+        }
+    }
+
+    /// Ends the stream both ways, telling a TLS peer when `cleanly`.
+    fn shutdown(&self, cleanly: bool) {
+        #[cfg(not(feature = "tls"))]
+        let _ = cleanly;
+        match self {
+            Raw::Plain(s) => {
+                let _ = s.shutdown(Shutdown::Both);
+            }
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) if cleanly => t.close(),
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.shut(),
+        }
+    }
+
+    fn peer_id(&self) -> Option<String> {
+        match self {
+            Raw::Plain(_) => None,
+            #[cfg(feature = "tls")]
+            Raw::Tls(t) => t.peer_id(),
+        }
+    }
+
+    fn encrypted(&self) -> bool {
+        !matches!(self, Raw::Plain(_))
+    }
+}
+
+/// The stream both halves use. Every write goes out whole under one lock:
 /// tungstenite hands a write only whole frames, so the reader's pongs and
 /// close replies never land inside a frame the writer is sending.
 #[derive(Clone)]
 struct Socket {
-    stream: Arc<TcpStream>,
+    raw: Raw,
     writing: Arc<Mutex<()>>,
     /// The reader's: a write that finds the writer busy answers
     /// `WouldBlock` having written nothing, and tungstenite sends the
@@ -41,7 +114,7 @@ struct Socket {
 
 impl Read for Socket {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        (&*self.stream).read(buf)
+        self.raw.read(buf)
     }
 }
 
@@ -57,7 +130,7 @@ impl Write for Socket {
             Err(TryLockError::Poisoned(p)) => p.into_inner(),
             Err(TryLockError::WouldBlock) => return Err(io::ErrorKind::WouldBlock.into()),
         };
-        (&*self.stream).write_all(buf)?;
+        self.raw.write_all(buf)?;
         Ok(buf.len())
     }
 
@@ -175,7 +248,15 @@ impl FrameRead for WsReader {
     }
 
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
-        self.socket.stream.set_read_timeout(timeout)
+        self.socket.raw.set_read_timeout(timeout)
+    }
+
+    fn peer_id(&self) -> Option<String> {
+        self.socket.raw.peer_id()
+    }
+
+    fn encrypted(&self) -> bool {
+        self.socket.raw.encrypted()
     }
 }
 
@@ -227,7 +308,7 @@ impl FrameWrite for WsWriter {
     }
 
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
-        self.socket.stream.set_write_timeout(timeout)
+        self.socket.raw.set_write_timeout(timeout)
     }
 
     fn shutdown(&mut self) {
@@ -235,22 +316,26 @@ impl FrameWrite for WsWriter {
             let _ = self.ws.close(None);
             let _ = self.ws.flush();
         }
-        let _ = self.socket.stream.shutdown(Shutdown::Both);
+        self.socket.raw.shutdown(true);
     }
 }
 
 fn shared(stream: TcpStream) -> io::Result<Socket> {
     stream.set_nodelay(true)?;
-    Ok(Socket {
-        stream: Arc::new(stream),
+    Ok(over(Raw::Plain(Arc::new(stream))))
+}
+
+fn over(raw: Raw) -> Socket {
+    Socket {
+        raw,
         writing: Arc::new(Mutex::new(())),
         yields: false,
-    })
+    }
 }
 
 fn connection(socket: Socket, peer: String, reading: Reading, role: Role) -> Connection {
     let open = Arc::new(AtomicBool::new(matches!(reading, Reading::Open(_))));
-    let closing = Arc::clone(&socket.stream);
+    let closing = socket.raw.clone();
     Connection {
         reader: Box::new(WsReader {
             reading,
@@ -263,17 +348,24 @@ fn connection(socket: Socket, peer: String, reading: Reading, role: Role) -> Con
             open,
         }),
         peer,
-        closer: Some(Box::new(move || {
-            let _ = closing.shutdown(Shutdown::Both);
-        })),
+        closer: Some(Box::new(move || closing.shutdown(false))),
     }
 }
 
-/// Connects to a WebSocket URL, `ws://host:port/path`.
-#[derive(Debug, Clone)]
+/// Connects to a WebSocket URL: `ws://host:port/path`, or
+/// `wss://host:port/path` once given TLS (`WsConnect::tls`).
+#[derive(Clone)]
 pub struct WsConnect {
     url: String,
     timeout: Duration,
+    #[cfg(feature = "tls")]
+    tls: Option<TlsConnect>,
+}
+
+impl core::fmt::Debug for WsConnect {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("WsConnect").field("url", &self.url).finish()
+    }
 }
 
 impl WsConnect {
@@ -282,7 +374,26 @@ impl WsConnect {
         WsConnect {
             url: url.to_string(),
             timeout: CONNECT_TIMEOUT,
+            #[cfg(feature = "tls")]
+            tls: None,
         }
+    }
+
+    /// Over TLS as `config` says (a `wss://` URL): mutual TLS, the server
+    /// known by its pins or the trust store, this side presenting its
+    /// identity. The TLS offers HTTP's application protocol, as a browser
+    /// does, and requires none.
+    #[cfg(feature = "tls")]
+    pub fn tls(mut self, config: &TlsConfig) -> io::Result<WsConnect> {
+        self.tls = Some(TlsConnect::for_websocket(config)?);
+        Ok(self)
+    }
+
+    fn encrypted(&self) -> bool {
+        #[cfg(feature = "tls")]
+        return self.tls.is_some();
+        #[cfg(not(feature = "tls"))]
+        false
     }
 
     /// Within `timeout` per address tried, and again for the upgrade.
@@ -297,21 +408,37 @@ impl WsConnect {
             .url
             .parse()
             .map_err(|_| invalid(&format!("`{}` is not a URL", self.url)))?;
-        match uri.scheme_str() {
-            Some("ws") => {}
-            Some("wss") => {
+        let port = match (uri.scheme_str(), self.encrypted()) {
+            (Some("ws"), false) => 80,
+            (Some("wss"), true) => 443,
+            (Some("ws"), true) => {
+                return Err(invalid(&format!(
+                    "`{}` carries no TLS, and this connect was given TLS: connect to wss://",
+                    self.url
+                )));
+            }
+            (Some("wss"), false) => {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
-                    "wss:// is the secure level, which this build does not run",
+                    if cfg!(feature = "tls") {
+                        "wss:// runs TLS: give the connect a TLS configuration (`WsConnect::tls`)"
+                    } else {
+                        "wss:// runs TLS, which this build lacks (guatiao-source-remote's `tls` feature)"
+                    },
                 ));
             }
-            _ => return Err(invalid(&format!("`{}` is not a ws:// URL", self.url))),
-        }
+            _ => {
+                return Err(invalid(&format!(
+                    "`{}` is not a ws:// or wss:// URL",
+                    self.url
+                )));
+            }
+        };
         let host = uri
             .host()
             .ok_or_else(|| invalid(&format!("`{}` names no host", self.url)))?;
         let host = host.trim_start_matches('[').trim_end_matches(']');
-        let port = uri.port_u16().unwrap_or(80);
+        let port = uri.port_u16().unwrap_or(port);
         Ok(if host.contains(':') {
             format!("[{host}]:{port}")
         } else {
@@ -338,8 +465,20 @@ impl Connect for WsConnect {
             return Err(last);
         };
         let socket = shared(stream)?;
-        socket.stream.set_read_timeout(Some(self.timeout))?;
-        socket.stream.set_write_timeout(Some(self.timeout))?;
+        #[cfg(feature = "tls")]
+        let socket = match (&self.tls, socket.raw) {
+            (Some(tls), Raw::Plain(stream)) => {
+                let stream = Arc::try_unwrap(stream).map_err(|_| {
+                    io::Error::other("the socket is shared before its TLS handshake")
+                })?;
+                over(Raw::Tls(Arc::new(
+                    tls.clone().timeout(self.timeout).duplex(stream, addr)?,
+                )))
+            }
+            (_, raw) => over(raw),
+        };
+        socket.raw.set_read_timeout(Some(self.timeout))?;
+        socket.raw.set_write_timeout(Some(self.timeout))?;
         let (ws, _) = tungstenite::client::client_with_config(
             self.url.as_str(),
             socket.clone(),
@@ -352,15 +491,16 @@ impl Connect for WsConnect {
                 "the server's WebSocket upgrade did not arrive in time",
             ),
         })?;
-        socket.stream.set_read_timeout(None)?;
-        socket.stream.set_write_timeout(None)?;
+        socket.raw.set_read_timeout(None)?;
+        socket.raw.set_write_timeout(None)?;
         // The handshake's object reads on: it holds what arrived past the
         // upgrade.
         let mut ws = Box::new(ws);
         ws.get_mut().yields = true;
+        let scheme = if self.encrypted() { "wss" } else { "ws" };
         Ok(connection(
             socket,
-            format!("ws {addr}"),
+            format!("{scheme} {addr}"),
             Reading::Open(ws),
             Role::Client,
         ))
@@ -377,7 +517,14 @@ impl Connect for WsConnect {
 /// that thread; a write before then is refused.
 #[derive(Debug)]
 pub struct WsListen {
-    tcp: TcpListen,
+    under: Under,
+}
+
+#[derive(Debug)]
+enum Under {
+    Tcp(TcpListen),
+    #[cfg(feature = "tls")]
+    Tls(TlsListen),
 }
 
 impl WsListen {
@@ -385,33 +532,68 @@ impl WsListen {
     /// permits.
     pub fn bind(address: &str, acl: Acl) -> io::Result<WsListen> {
         Ok(WsListen {
-            tcp: TcpListen::bind(address, acl)?,
+            under: Under::Tcp(TcpListen::bind(address, acl)?),
         })
     }
 
     /// A listener the caller bound itself, under the same gate.
     pub fn from_listener(listener: TcpListener, acl: Acl) -> WsListen {
         WsListen {
-            tcp: TcpListen::from_listener(listener, acl),
+            under: Under::Tcp(TcpListen::from_listener(listener, acl)),
         }
+    }
+
+    /// Binds `address` for `wss://`: mutual TLS as `config` says (its
+    /// identity, its pins or trust store, its policy, whose `acl` admits
+    /// peers as [`TlsListen`] does). The TLS names HTTP's application
+    /// protocol, as a browser offers it, and requires none.
+    #[cfg(feature = "tls")]
+    pub fn bind_tls(address: &str, config: &TlsConfig) -> io::Result<WsListen> {
+        let addr = address
+            .to_socket_addrs()?
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))?;
+        WsListen::from_listener_tls(TcpListener::bind(addr)?, config)
+    }
+
+    /// A listener the caller bound itself, for `wss://`.
+    #[cfg(feature = "tls")]
+    pub fn from_listener_tls(listener: TcpListener, config: &TlsConfig) -> io::Result<WsListen> {
+        Ok(WsListen {
+            under: Under::Tls(TlsListen::for_websocket(listener, config)?),
+        })
     }
 
     /// Where it listens.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.tcp.local_addr()
+        match &self.under {
+            Under::Tcp(tcp) => tcp.local_addr(),
+            #[cfg(feature = "tls")]
+            Under::Tls(tls) => tls.local_addr(),
+        }
     }
 
-    /// The next connection, or a peer the list denies, closed unread.
+    /// The next connection, or a peer the list denies, closed unread. Over
+    /// TLS, the handshake runs on the connection's first read, before its
+    /// upgrade.
     pub fn accept(&self) -> io::Result<Accepted> {
-        Ok(match self.tcp.accept_stream()? {
-            Ok((stream, peer)) => Accepted::Connection(connection(
-                shared(stream)?,
-                format!("ws {peer}"),
-                Reading::Upgrade,
-                Role::Server,
-            )),
-            Err(refused) => Accepted::Refused(refused),
-        })
+        let (socket, peer) = match &self.under {
+            Under::Tcp(tcp) => match tcp.accept_stream()? {
+                Ok((stream, peer)) => (shared(stream)?, format!("ws {peer}")),
+                Err(refused) => return Ok(Accepted::Refused(refused)),
+            },
+            #[cfg(feature = "tls")]
+            Under::Tls(tls) => match tls.accept_duplex()? {
+                Ok((duplex, peer)) => (over(Raw::Tls(Arc::new(duplex))), format!("wss {peer}")),
+                Err(refused) => return Ok(Accepted::Refused(refused)),
+            },
+        };
+        Ok(Accepted::Connection(connection(
+            socket,
+            peer,
+            Reading::Upgrade,
+            Role::Server,
+        )))
     }
 }
 
@@ -525,7 +707,11 @@ mod tests {
         let l = listener();
         let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
         raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        let (stream, _) = l.tcp.accept_stream().unwrap().unwrap();
+        #[allow(irrefutable_let_patterns)]
+        let Under::Tcp(tcp) = &l.under else {
+            unreachable!("a plain listener")
+        };
+        let (stream, _) = tcp.accept_stream().unwrap().unwrap();
         let socket = shared(stream).unwrap();
         let writing = Arc::clone(&socket.writing);
         let mut conn = connection(socket, "test".into(), Reading::Upgrade, Role::Server);
@@ -648,6 +834,7 @@ mod tests {
     fn a_url_that_is_not_ws_is_refused() {
         let kind = |url: &str| WsConnect::new(url).connect().unwrap_err().kind();
         assert_eq!(kind("wss://127.0.0.1:1/"), io::ErrorKind::Unsupported);
+        assert_eq!(kind("http://127.0.0.1:1/"), io::ErrorKind::InvalidInput);
         assert_eq!(kind("tcp://127.0.0.1:1"), io::ErrorKind::InvalidInput);
         assert_eq!(kind("not a url"), io::ErrorKind::InvalidInput);
     }

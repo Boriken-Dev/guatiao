@@ -351,6 +351,10 @@ impl FrameRead for CountRead {
         self.0.peer_id()
     }
 
+    fn encrypted(&self) -> bool {
+        self.0.encrypted()
+    }
+
     fn datagrams(&self) -> Option<Arc<dyn transport::Datagrams>> {
         self.0.datagrams()
     }

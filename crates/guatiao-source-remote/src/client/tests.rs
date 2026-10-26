@@ -151,7 +151,7 @@ fn scratch(name: &str) -> PathBuf {
 
 fn manifest(dir: &Path, port: u16) {
     let text = format!(
-        "type = \"remote\"\nname = \"lab\"\nconnect = \"tcp://127.0.0.1:{port}\"\ntrust = \"trusted\"\n"
+        "type = \"remote\"\nname = \"lab\"\nconnect = \"tcp://127.0.0.1:{port}\"\nsecurity = \"none\"\n"
     );
     std::fs::write(dir.join("lab.guatiao.toml"), text).unwrap();
 }

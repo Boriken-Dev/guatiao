@@ -77,7 +77,9 @@ fn frame_of<'a>(f: &Json, keep: &'a [Vec<u8>]) -> Frame<'a> {
             trust: match f["trust"].as_str().unwrap() {
                 "local" => Trust::Local,
                 "trusted" => Trust::Trusted,
-                _ => Trust::Secure,
+                "secure" => Trust::Secure,
+                "server-tls" => Trust::ServerTls,
+                other => panic!("a trust level `{other}`"),
             },
             nonce: nonce(f["nonce"].as_str().unwrap()),
             options: tree(&f["options"]),
