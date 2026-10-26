@@ -20,6 +20,17 @@
 // The C table name in the marker is needed only with -header; without
 // it, it is <kind name>_vtable.
 //
+// A kind born in Go has no document to read: with -document instead, the
+// interfaces are read into the document, which is written there (from the
+// package's directory), and the glue from it. What a Go type cannot say is
+// said by a directive in a doc comment: on the kind's interface
+// //guatiao:appended (the interfaces of its appended slots, in table
+// order) and //guatiao:floorhash; on a method //guatiao:infallible,
+// //guatiao:lent, //guatiao:taken, //guatiao:nullable and //guatiao:mut,
+// each naming arguments:
+//
+//	//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -document ../include/tally_kind.kinds.json
+//
 // A kind's interface holds its required slots, an object kind's its
 // Close (the destroy slot) too; each other slot is a method of an
 // interface of its own in the package. A slot's Go method is its C name
@@ -38,19 +49,32 @@ import (
 func main() {
 	header := flag.String("header", "", "the kinds' C header, from the package's directory")
 	description := flag.String("description", "", "the kinds' description document, from the package's directory")
+	document := flag.String("document", "", "where to write the document of kinds born in Go, from the package's directory")
 	dir := flag.String("dir", ".", "the package's directory")
 	out := flag.String("o", "guatiao_kinds", "the base name of what is written")
 	check := flag.Bool("check", false, "write nothing; fail when what is there is not what would be written")
 	flag.Parse()
-	from := *header
-	if (*header == "") == (*description == "") {
-		fmt.Fprintln(os.Stderr, "guatiao-kind: -description names the kinds' document, or -header their C header: one of them")
+	given := 0
+	for _, s := range []string{*header, *description, *document} {
+		if s != "" {
+			given++
+		}
+	}
+	if given != 1 {
+		fmt.Fprintln(os.Stderr, "guatiao-kind: -description names the kinds' document, -header their C header, "+
+			"or -document where to write the document of kinds born in Go: one of them")
 		os.Exit(2)
 	}
-	if *description != "" {
-		from = *description
+	var err error
+	switch {
+	case *document != "":
+		err = runBorn(*dir, *document, *out, *check)
+	case *description != "":
+		err = run(*dir, *description, *out, *check)
+	default:
+		err = run(*dir, *header, *out, *check)
 	}
-	if err := run(*dir, from, *out, *check); err != nil {
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "guatiao-kind:", err)
 		os.Exit(1)
 	}
