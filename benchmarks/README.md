@@ -881,6 +881,39 @@ VM, MTU 9000):
   3.3 µs for base, baseA and kept, whose 32-thread rates swung 20 %
   between base and baseA). Windows' TCP gained least, its runs
   overlapping (base 1 158-1 502, baseA 1 085-1 596, kept 1 431-2 154).
+- **A link that has gone quiet lets its large buffers go.** The side
+  serving a link's calls frees what the link kept once its pool's last
+  thread leaves (30 s without a call), the buffer parked for the reader's
+  next large frame included. Measured with `guatiao-remote-bench` and a
+  temporary `idle` mode (50 links over TCP, each making one or three
+  4 MiB calls, then holding the link; the server's memory sampled every
+  5 s; `remote-buffers-idle-{windows,wsl}.jsonl`), two runs a build:
+
+| server, 50 idle links | base, after the calls / 40 s on | quiet-release, after the calls / 40 s on |
+| --- | --- | --- |
+| Windows, one call each, private MB | 415 / 409 | 415 / 8 |
+| Windows, three calls each, private MB | 616 / 610 | 616 / 8 |
+| WSL, one call each, resident MB | 614-625 / 613-624 | 611 / 296-298 |
+| WSL, three calls each, resident MB | 810-811 / 809-811 | 810-811 / 220-221 |
+
+  glibc keeps what it is given back in its arenas (released to the
+  kernel only at a heap's top, or by `malloc_trim`, which is the host's
+  to call), so in WSL resident memory falls by half to three quarters.
+  A busy link keeps its gain: faults per 4 MiB round stayed at 0 on
+  Windows and within ±10 in WSL, on both builds (three runs of 100
+  rounds, TCP, named pipe or Unix socket, shared memory;
+  `remote-buffers-idle-*-faults.jsonl`),
+  and 4 MiB round trips stayed within the A/A spread
+  (`remote-buffers-idle-*-big.jsonl`, MB/s medians, 200 rounds a run):
+  Windows named pipe 3 724 / 3 679, shared memory 3 425 / 3 421, TCP
+  (eight runs) 1 710 / A/A 1 686 / 1 722; WSL Unix socket 2 090 / 2 078 /
+  2 093, shared memory 3 473 / 3 562 / 3 303 (runs of every build
+  1 993-3 752), TCP (eight runs) 2 896 / 3 006 / 3 010. Small calls
+  unchanged (three alternating full runs on Windows TCP, not kept in a
+  file: p50 29 µs, 32 threads 122-131 k calls/s on both). Reading a large frame
+  straight into a kept buffer chosen at read time, rather than the one
+  parked when the last frame left, measured 1 025 faults a round on each
+  side on Windows: which buffer serves which use matters to the heap.
 - **Polling pays only past the round trip.** At 50 µs a waiting thread
   polls, then sleeps and pays the wake-up as well; polling past the
   answer's arrival drops the wake-up for about the same CPU, and not
