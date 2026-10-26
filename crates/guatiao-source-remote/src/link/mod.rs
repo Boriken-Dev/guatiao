@@ -29,6 +29,8 @@ mod gate;
 mod handshake;
 mod pool;
 mod proxies;
+#[cfg(test)]
+mod tests;
 mod waiting;
 
 pub(crate) use proxies::Proxies;
@@ -36,9 +38,11 @@ pub(crate) use proxies::Proxies;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cell::RefCell;
+use core::panic::AssertUnwindSafe;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::io;
+use std::panic::catch_unwind;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock};
 use std::thread::{self, ThreadId};
@@ -1392,7 +1396,7 @@ impl Inner {
             }
             Frame::List { call } => {
                 let inner = Arc::clone(self);
-                let job = Box::new(move || inner.answer_list(call));
+                let job = Box::new(move || inner.answering(call, || inner.answer_list(call)));
                 if let Err(busy) = self.pool.run(job) {
                     self.refuse(
                         call,
@@ -1403,7 +1407,8 @@ impl Inner {
             }
             Frame::Open { call, .. } => {
                 let inner = Arc::clone(self);
-                let job = Box::new(move || inner.answer_open(call, &frame));
+                let job =
+                    Box::new(move || inner.answering(call, || inner.answer_open(call, &frame)));
                 if let Err(busy) = self.pool.run(job) {
                     self.refuse(
                         call,
@@ -1447,6 +1452,26 @@ impl Inner {
         .is_ok()
         {
             self.post(out);
+        }
+    }
+
+    /// Runs `answer`, which answers the peer's `call`; if it panics, answers
+    /// INTERNAL, so the peer does not wait out its timeout for an answer
+    /// that will never come.
+    fn answering(self: &Arc<Self>, call: u64, answer: impl FnOnce()) {
+        if let Err(payload) = catch_unwind(AssertUnwindSafe(answer)) {
+            let running = lock(&self.state).running.remove(&call);
+            // A cancelled call is answered nothing, panic or not.
+            if running.is_some_and(|c| c.load(Ordering::Acquire)) {
+                return;
+            }
+            let what = payload
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("no message");
+            let why = format!("the call panicked on the peer: {what}");
+            self.refuse(call, Status::GUATIAO_ERR_INTERNAL, &why);
         }
     }
 
@@ -1510,34 +1535,36 @@ impl Inner {
             );
             return;
         }
-        let cancelled = Arc::new(AtomicBool::new(false));
-        lock(&self.state)
-            .running
-            .insert(call, Arc::clone(&cancelled));
-        let mut out = self.gate.buffers().take();
-        out.reserve(128);
-        let mut tail = None;
-        let served = {
-            let _running = Running::enter(self.key(), call);
-            self.serve(call, target, slot, args, &cancelled, &mut out, &mut tail)
-        };
-        lock(&self.state).running.remove(&call);
-        match served {
-            Ok(true) => {
-                let _ = match tail {
-                    Some((tail, from)) => self.write_with_tail(out, tail, from),
-                    None => self.write(out),
-                };
-            }
-            Ok(false) => {}
-            Err(e) => {
-                if !cancelled.load(Ordering::Acquire) {
-                    out.clear();
-                    protocol::refusal(&mut out, call, e.status.into(), e.message());
-                    let _ = self.write(out);
+        self.answering(call, || {
+            let cancelled = Arc::new(AtomicBool::new(false));
+            lock(&self.state)
+                .running
+                .insert(call, Arc::clone(&cancelled));
+            let mut out = self.gate.buffers().take();
+            out.reserve(128);
+            let mut tail = None;
+            let served = {
+                let _running = Running::enter(self.key(), call);
+                self.serve(call, target, slot, args, &cancelled, &mut out, &mut tail)
+            };
+            lock(&self.state).running.remove(&call);
+            match served {
+                Ok(true) => {
+                    let _ = match tail {
+                        Some((tail, from)) => self.write_with_tail(out, tail, from),
+                        None => self.write(out),
+                    };
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    if !cancelled.load(Ordering::Acquire) {
+                        out.clear();
+                        protocol::refusal(&mut out, call, e.status.into(), e.message());
+                        let _ = self.write(out);
+                    }
                 }
             }
-        }
+        });
         self.gate.buffers().give(frame);
     }
 

@@ -1543,6 +1543,13 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a call that panics on the side serving it
+  answers `GUATIAO_ERR_INTERNAL` and gives its place back.** A panic
+  while serving a call, a listing or an open left the call unanswered (its
+  caller waited out the timeout) and the pool thread it ran on counted
+  against `max_calls` for the link's life, so enough of them refused every
+  later call `GUATIAO_ERR_BUSY`. A provider's own code runs behind its C
+  table, where a panic still ends the process.
 - **guatiao-source-remote: a call the peer cannot start a thread for
   answers `GUATIAO_ERR_BUSY` at once.** It was dropped unanswered, and its
   caller waited out the call's timeout.
