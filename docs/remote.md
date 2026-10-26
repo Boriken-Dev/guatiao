@@ -219,7 +219,10 @@ user installed in the browser, chosen by the user. So from a page:
   `guatiao-remote-server --listen wss://ADDRESS:PORT --security
   server-tls --identity server.pem --key-file link.key`, the identity a
   certificate for the server's name a certificate authority issued, with
-  its chain in the same file, where a browser is to trust it.
+  its chain in the same file, where a browser is to trust it. A page that
+  should not hold the key presents a token instead: `--token-file
+  link.token` in place of `--key-file`, every client then presenting the
+  file's text (a last line end left out).
 
 On the Dart VM, which owns its TLS, `RemoteTls(pins: [...], identity:
 pem)` pins the server by fingerprint and presents an identity file's
@@ -428,8 +431,11 @@ every client. Nothing listens on a network unless told where.
   page and a host with no identity of its own can use it. The HELLO
   names trust `server-tls`. A client needs the server's `pins` (or a
   trust store) and a `key` or `token`, and no identity; a server needs
-  its identity and a key or token (`--key-file`), and lists "client_auth
-  = none" among the settings weaker than strict. In Rust,
+  its identity and a key or token (`--key-file`, `--token-file`), and
+  lists "client_auth = none" among the settings weaker than strict. A
+  server's token is required at mutual TLS as well; with no TLS the
+  server refuses `--token-file`, a token adding nothing to the key's
+  proof there. In Rust,
   `TlsConfig::server_tls()` on either side (`TlsConfig::without_identity()`
   for a client with none) over `tls://`, `quic://`, `wss://` or
   `https://` (WebTransport), and
