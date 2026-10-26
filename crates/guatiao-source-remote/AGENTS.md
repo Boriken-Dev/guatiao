@@ -20,10 +20,28 @@ C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`).
 
 ```rust
 RemoteSource::new(connect: Box<dyn Connect>, options: LinkOptions) -> RemoteSource   // Clone: one source
+RemoteSource::from_config(&Map) -> Result<RemoteSource, ProviderError>  // as the source file reads it
 impl Source for RemoteSource                       // registry.add_source(name, source)
-source.link() -> Result<Arc<Link>, ProviderError> // connects unless connected
-source.disconnect(); source.objects_out() -> usize
+source.link() -> Result<Arc<Link>, ProviderError> // connects unless connected; NOT_FOUND for described peers
+source.disconnect(); source.objects_out() -> usize  // every peer's
 ```
+
+- **Peers described by manifests** (`dirs`, `manifests` in the
+  configuration): every refresh reads the `type = "remote"` manifests
+  there, a peer per manifest, named by its `name`. A peer's libraries and
+  providers are `<name>/<id>`, so identical devices sit in one registry
+  under the default keys. A manifest that changed (or whose key file did:
+  its path and a hash of its bytes) is a new peer over a new link, the
+  old link ended at once; one that vanished takes its peer's libraries
+  with it. The source's own settings are checked once, by `from_config`.
+  Peers are listed one after another, each connecting under its link's
+  lock.
+- A manifest describing no peer, and a peer that cannot be listed, are
+  listed under the manifest's path as a candidate whose open refuses in
+  words naming the file: a refresh reports a manifest once per content
+  and a peer once per outage. A peer that cannot be listed (not reached,
+  or its new link failing to list) keeps what its last listing answered,
+  its calls answering `GONE`, until it is back.
 
 - **list** connects when there is no live link (a `ChildCommand` starts
   its child again), asks the catalog, and lists each library under
@@ -164,8 +182,15 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 | `token` | a secure client's token |
 | `timeout_ms` | per call; `0` none |
 | `max_frame`, `max_calls` | the link's bounds |
+| `dirs`, `manifests` | instead of `connect`/`child` (both is `BAD_VALUE`): peer manifests, the keys above every peer's unless its manifest names them |
 
-A scheme this build lacks is `GUATIAO_ERR_UNSUPPORTED`, naming it.
+A scheme this build lacks is `GUATIAO_ERR_UNSUPPORTED`, naming it, as is
+`trust = "secure"` (its transports live outside this build).
+
+A peer manifest (`docs/encodings.md`, "A peer"): `type = "remote"`,
+`name` (no `/`), `connect`, `trust`, `key_file` (beside the manifest),
+`timeout_ms`, `max_frame`, `max_calls`, `rdma_device`; any other key is
+refused, `key` and `token` (secrets) and `child` with words of their own.
 
 ## The protocol (`protocol`)
 

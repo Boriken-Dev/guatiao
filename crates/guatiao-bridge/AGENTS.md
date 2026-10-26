@@ -132,7 +132,7 @@ paths `` (`GUATIAO_ERR_BAD_VALUE`).
 
 ```rust
 pub struct ManifestFormat { pub serves, pub id_key, pub code_extensions, pub skip_dirs }
-manifest::SUFFIX = ".guatiao.toml";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai"]
+manifest::SUFFIX = ".guatiao.toml";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai", "remote"]
 manifest::find(&format, dirs, files) -> Vec<Found>;  manifest::read(&format, path) -> Option<Found>
 Manifest: path() id() version() kinds() paths() stamp() table()
 Found::{Library(Manifest), Broken { path, stamp, why }}
@@ -145,7 +145,9 @@ one with no `type`, or a type neither in `TYPES` nor the format's own,
 is `Found::Broken`. `id_key` (required, text), `version` (optional), `kinds`, `paths`
 (default `["."]`, made absolute, not canonical). Stamp: FNV-1a of the
 manifest's bytes, `:`, the newest modification time of a code file under
-its paths (at most 10 000 files, 8 levels, `skip_dirs` skipped).
+its paths (at most 10 000 files, 8 levels, `skip_dirs` skipped); a
+format with no `code_extensions` walks nothing, its stamp the manifest's
+bytes alone. `remote` is guatiao-source-remote's: a peer, not a library.
 
 ## Errors and limits
 
