@@ -315,3 +315,104 @@ fn a_configuration_names_server_tls_with_pins_alone() {
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(greeting(&registry), "hello, server tls");
 }
+
+/// A directory of its own under the target's scratch space, emptied.
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("server_tls")
+        .join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn server_program() -> std::process::Command {
+    std::process::Command::new(env!("CARGO_BIN_EXE_guatiao-remote-server"))
+}
+
+#[test]
+fn the_server_program_requires_the_token_its_token_file_holds() {
+    let Some(derived) = common::procs::library("derived_greeter") else {
+        panic!("derived_greeter is not built: `cargo build -p derived_greeter` first");
+    };
+    let dir = scratch("token_file");
+    // As `echo` writes it: the line end is not the token's.
+    std::fs::write(dir.join("token"), "s3cret\n").unwrap();
+    let (child, lines) = common::procs::start(
+        server_program()
+            .args(["--listen", "tls://127.0.0.1:0", "--security", "server-tls"])
+            .arg("--identity")
+            .arg(dir.join("identity.pem"))
+            .arg("--token-file")
+            .arg(dir.join("token"))
+            .arg("--load")
+            .arg(&derived),
+    );
+    let _running = Running(child);
+    let first = lines
+        .recv_timeout(common::procs::DEADLINE)
+        .expect("the server says where it serves");
+    let serving = first
+        .split("serving tls://")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{first}"));
+    let (address, rest) = serving.split_once(" as ").unwrap();
+    let fingerprint: guatiao_source_remote::transport::tls::PeerId =
+        rest.split(',').next().unwrap().parse().unwrap();
+    let client = TlsConfig::without_identity().unwrap().pins([fingerprint]);
+
+    let source = RemoteSource::new(
+        connect(Over::Tcp, address, &client),
+        LinkOptions::new(Trust::ServerTls).token("s3cret"),
+    );
+    let (registry, refused) = refresh(&source);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, server tls");
+
+    let wrong = RemoteSource::new(
+        connect(Over::Tcp, address, &client),
+        LinkOptions::new(Trust::ServerTls).token("s3cret\n"),
+    );
+    let e = wrong.link().unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(e.message().contains("token"), "{}", e.message());
+}
+
+/// Kills the server however the test ends.
+struct Running(std::process::Child);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[test]
+fn the_server_program_refuses_an_empty_token_and_a_token_with_no_tls() {
+    let dir = scratch("token_refused");
+    std::fs::write(dir.join("empty"), "\r\n").unwrap();
+    std::fs::write(dir.join("token"), "t0k").unwrap();
+    std::fs::write(dir.join("key"), "k").unwrap();
+    let (ok, said) = common::procs::run(
+        server_program()
+            .args(["--listen", "tls://127.0.0.1:0", "--security", "server-tls"])
+            .arg("--identity")
+            .arg(dir.join("identity.pem"))
+            .arg("--token-file")
+            .arg(dir.join("empty")),
+    );
+    assert!(!ok);
+    assert!(said.contains("the token is empty"), "{said}");
+    let (ok, said) = common::procs::run(
+        server_program()
+            .args(["--listen", "tcp://127.0.0.1:0", "--security", "none"])
+            .args(["--range", "127.0.0.1/32"])
+            .arg("--key-file")
+            .arg(dir.join("key"))
+            .arg("--token-file")
+            .arg(dir.join("token")),
+    );
+    assert!(!ok);
+    assert!(said.contains("is for server-tls and mutual-tls"), "{said}");
+}

@@ -84,6 +84,11 @@ write now.
   older than the export they only move it. Fortran's
   `guatiao_lent_refusal(stat, slot, arg)` words either refusal for a
   kind module's remote.
+- **guatiao-remote-server: a token clients present, from a file.**
+  `--token-file PATH` makes every client present the file's text (a last
+  line end left out) inside the link, at server TLS, where it proves the
+  client in place of `--key-file`, and at mutual TLS; refused at no
+  security and for an empty token. A token never goes on the command line.
 - **guatiao-remote-server: a bound on handshakes in flight.** At most
   `--max-handshakes` connections (64 by default) are in their handshake
   at once; past it a new connection is closed unread. A source the access
