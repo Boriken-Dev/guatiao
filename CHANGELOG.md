@@ -85,6 +85,15 @@ write now.
   in `guatiao/ffi`). Each suite now also compares its layouts with the
   ones the platform's C compiler gives `guatiao.h`, and both pass on
   armv7 under qemu-user. `usize` and `isize` slots are a word wide.
+- **Julia: a document straight to plain data and back.**
+  `GuatiaoSerde.parse(Any, text; format, how)` answers what
+  `parse(text)[]` does with no `Value` built: the library hands each event
+  of its reading to Julia through `@cfunction` callbacks, which measured
+  faster than decoding wire bytes in Julia. `GuatiaoSerde.emit` of plain
+  data writes wire bytes in Julia and crosses once instead of building a
+  tree. `Guatiao.FFI.read_plain` and `julia_to_wire` are what they are
+  built on. Measured locally on a structured document: 1.2x to 1.9x;
+  slower for one large string written out.
 - **Node and Go: a document straight to the language's own data and
   back.** Node's `guatiao-serde` gains `parse(text, { format, how,
   numbers, maps })`, answering what `loads(...).toJS()` does, and

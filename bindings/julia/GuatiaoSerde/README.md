@@ -21,6 +21,8 @@ Julia over `ccall`, calling the `guatiao_serde` library, and built on the
   the format, line and column, and never quotes the document.
 - **Any guatiao value** — what `parse` returns is an ordinary
   `Guatiao.Value`, and `emit` takes any `Value`, view or plain data.
+- **Or plain Julia, with no value in between** — `parse(Any, text)`
+  answers dicts and vectors, and `emit` writes them without building one.
 
 ## Installation
 
@@ -74,6 +76,7 @@ end
 | Name | Purpose |
 | --- | --- |
 | `GuatiaoSerde.parse(text; format, how, alloc)` | a document as a `Guatiao.Value` |
+| `GuatiaoSerde.parse(Any, text; format, how)` | a document as plain Julia data, no `Value` built |
 | `GuatiaoSerde.emit(x; format, pretty, how, alloc)` | a `Value`, view or plain data as text |
 | `ParseError` | a document that does not parse: `format`, `line`, `column`, `message` |
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
