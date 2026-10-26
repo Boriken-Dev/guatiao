@@ -348,14 +348,20 @@ x86-64 host to its VM from 114 µs to 74 µs. Set `spin` to zero to spend
 the least CPU: 180 µs a call there, about 40 % less CPU.
 
 A link keeps the large buffers it reads frames into and writes replies
-from (64 KiB and up, at most 16 MiB a link besides the one its reader
-reads into, let go when the link ends), so a large call's buffers stay
-mapped from one call to the next. Freed instead, they went back to the
-operating system (glibc trims a thread's arena; on Windows the fault
-counts say every free of one did), and every page was faulted in again
-on each call. A link that made a 4 MiB call holds about 16 MiB from then
-on, idle or not; a server with many such links holds that much for each.
-Kept, a 4 MiB round trip moved 1.3 to 1.6 times as many bytes a second
+from (64 KiB and up, at most 16 MiB a link besides the one waiting for
+its reader's next frame), so a large call's buffers stay mapped from one
+call to the next. Freed instead, they went back to the operating system
+(glibc trims a thread's arena; on Windows the fault counts say every
+free of one did), and every page was faulted in again on each call. They
+are let go when the link ends, and once the side serving calls has had
+none for 30 seconds (its pool's last thread leaves): a server whose
+links made large calls and went quiet gives the memory back to its
+allocator then; a host's link, serving no calls of its peer, keeps them
+until it ends. Measured with 50 links after three 4 MiB calls each: on
+Windows the server went from 610 MB to 8 MB of private memory; in WSL
+from 810 MB to 220 MB resident, glibc keeping the rest in its arenas for
+the process's next allocations. Kept, a 4 MiB round trip moved 1.3 to
+1.6 times as many bytes a second
 over a local socket and shared memory (TCP 1.5 times in WSL, 1.1 to 1.3
 on Windows), and the server spent a third to a half less CPU on it
 (`benchmarks/README.md`).
