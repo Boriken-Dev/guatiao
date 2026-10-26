@@ -41,7 +41,7 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         on the network transports unless told; ws:// and
                         rdma:// run none alone, wss:// and tls:// TLS alone,
                         quic:// and https:// any; server-tls proves clients
-                        by --key-file
+                        by --key-file or --token-file
   --range CIDR          admit peers from this address range (repeatable): a
                         permit rule of the access control list, which denies
                         what no rule permits
@@ -49,6 +49,8 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         ([[rule]] action, source, destination, port,
                         fingerprint; default); none needs it or --range
   --key-file PATH       the pre-shared key clients prove (none, server-tls)
+  --token-file PATH     the token every client presents (server-tls,
+                        mutual-tls): the file's text, a last line end left out
   --state-dir DIR       TLS: this server's identity (DIR/identity.pem, made
                         when absent) and its trust store (DIR/peers): unless
                         --pin is given, clients it does not know wait there
@@ -86,6 +88,7 @@ struct Args {
     ranges: Vec<String>,
     acl: Option<PathBuf>,
     key_file: Option<PathBuf>,
+    token_file: Option<PathBuf>,
     state_dir: Option<PathBuf>,
     identity: Option<PathBuf>,
     hashes_file: Option<PathBuf>,
@@ -113,6 +116,7 @@ fn parse() -> Result<Args, String> {
         ranges: Vec::new(),
         acl: None,
         key_file: None,
+        token_file: None,
         state_dir: None,
         identity: None,
         hashes_file: None,
@@ -152,6 +156,7 @@ fn parse() -> Result<Args, String> {
             "--range" => a.ranges.push(need(&mut it, &flag)?),
             "--acl" => a.acl = Some(need(&mut it, &flag)?.into()),
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),
+            "--token-file" => a.token_file = Some(need(&mut it, &flag)?.into()),
             "--state-dir" => a.state_dir = Some(need(&mut it, &flag)?.into()),
             "--identity" => a.identity = Some(need(&mut it, &flag)?.into()),
             "--hashes-file" => a.hashes_file = Some(need(&mut it, &flag)?.into()),
@@ -253,11 +258,33 @@ fn registry(a: &Args) -> Result<(Registry, Described), String> {
     Ok((registry, described))
 }
 
+/// The token a file holds: its text, a byte order mark and one last line
+/// end left out.
+fn token_in(path: &std::path::Path) -> Result<String, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let token = text
+        .strip_suffix("\r\n")
+        .or_else(|| text.strip_suffix('\n'))
+        .unwrap_or(text);
+    if token.trim().is_empty() {
+        // An empty token would match a client presenting none.
+        return Err(format!(
+            "{}: the token is empty or only white space",
+            path.display()
+        ));
+    }
+    Ok(token.to_string())
+}
+
 fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
     let mut options = LinkOptions::new(trust);
     if let Some(path) = &a.key_file {
         let key = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         options = options.key(&key);
+    }
+    if let Some(path) = &a.token_file {
+        options = options.token(&token_in(path)?);
     }
     if let Some(n) = a.max_calls {
         options = options.max_calls(n);
@@ -342,8 +369,17 @@ fn run() -> Result<(), String> {
                 if scheme == "wss" { "ws" } else { "tcp" }
             ));
         }
-        (_, Security::ServerTls) if a.key_file.is_none() => {
-            return Err("server TLS proves clients by the key: pass --key-file".to_string());
+        (_, Security::ServerTls) if a.key_file.is_none() && a.token_file.is_none() => {
+            return Err(
+                "server TLS proves clients by the key or a token: pass --key-file or --token-file"
+                    .to_string(),
+            );
+        }
+        (_, Security::None) if a.token_file.is_some() => {
+            return Err(
+                "--token-file is for server-tls and mutual-tls: with no TLS a token adds nothing to the key's proof and may cross in the clear; prove clients by --key-file"
+                    .to_string(),
+            );
         }
         _ => {}
     }
@@ -897,11 +933,21 @@ fn secure_config(
     config = config.policy(policy);
     let trusting = if !mutual {
         config = config.server_tls();
-        "clients by the key (server TLS)".to_string()
+        match (&a.key_file, &a.token_file) {
+            (Some(_), Some(_)) => "clients by the key and a token (server TLS)",
+            (None, Some(_)) => "clients by a token (server TLS)",
+            _ => "clients by the key (server TLS)",
+        }
+        .to_string()
     } else if !a.pins.is_empty() {
         format!("{} pinned clients", a.pins.len())
     } else {
         "the trust store's clients".to_string()
+    };
+    let trusting = if mutual && a.token_file.is_some() {
+        format!("{trusting} presenting a token")
+    } else {
+        trusting
     };
     Ok((config, trusting, said))
 }

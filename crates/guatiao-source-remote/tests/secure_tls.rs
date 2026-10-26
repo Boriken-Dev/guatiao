@@ -944,3 +944,24 @@ fn a_peer_manifest_names_a_secure_peer() {
     assert_eq!(greeting(&registry), "hello, tls");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_token_the_server_requires_is_required_at_mutual_tls_too() {
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let address = listen(
+        &server,
+        common::server(LinkOptions::new(Trust::Secure).token("t0k")),
+    );
+    let with = RemoteSource::new(
+        Box::new(TlsConnect::new(&address, &client).unwrap()),
+        LinkOptions::new(Trust::Secure).token("t0k"),
+    );
+    let (registry, refused) = refresh(&with);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, tls");
+    let e = source(&address, &client).link().unwrap_err();
+    assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(e.message().contains("token"), "{}", e.message());
+}

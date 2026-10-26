@@ -92,7 +92,8 @@ docs and slots past the shorter description do not count) is left out.
 The catalog's `kinds` lists each description once.
 
 Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | tls://ADDR | quic://ADDR | ws://ADDR | wss://ADDR | https://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
-`--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`, `--state-dir DIR`, `--identity PATH`, `--hashes-file PATH`,
+`--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`,
+`--token-file PATH`, `--state-dir DIR`, `--identity PATH`, `--hashes-file PATH`,
 `--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`... (optional), `--load`,
 `--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
 `--max-frame`, `--max-handshakes N`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
@@ -112,8 +113,10 @@ certificates it makes, a new one every `ROTATE_EVERY`, unless
 `--hashes-file` writes them as a JSON list, written before the line.
 `--trust` is refused with what to write now. No security across a
 network needs `--range` or `--acl`; mutual TLS needs `--state-dir` or
-`--identity`; server TLS needs those and `--key-file`, and refuses
-`--pin`. The first stderr line is
+`--identity`; server TLS needs those and `--key-file` or `--token-file`,
+and refuses `--pin`. `--token-file` (the token every client presents: the
+file's text, a byte order mark and one last line end left out; empty or
+white space refused) runs at server TLS and mutual TLS only. The first stderr line is
 `guatiao-remote-server: serving SCHEME://ADDR ...` (over TLS, `as
 sha256:<hex>`, the fingerprint a client pins).
 
