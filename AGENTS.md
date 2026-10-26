@@ -123,7 +123,10 @@ The Dart suites on 32-bit ARM run the libraries built for
 `armv7-unknown-linux-gnueabihf` and Dart's `linux-arm` SDK under
 qemu-user; `test.yaml`'s `dart-armv7` job is the recipe. A build hook runs
 with a filtered environment, so `QEMU_LD_PREFIX` does not reach it: the
-ARM loader goes where an ARM program looks for it.
+ARM loader goes where an ARM program looks for it. The Python, Node, Go,
+R, Octave and Fortran suites on 32-bit ARM: `test.yaml`'s
+`bindings-armv7` job is the recipe, an Ubuntu armhf root entered with
+`chroot`.
 
 The Flutter example, after rustup's targets for the platform (Android:
 `aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`):
@@ -519,7 +522,14 @@ Four workflows:
   package and the host's test with every greeter, and has the Rust and
   Python example hosts scan the Fortran library file: gfortran 13 and 15,
   Intel ifx and LLVM flang on Ubuntu, gfortran 15 on macOS, gfortran 15
-  and ifx on Windows, a stated skip failing the job.
+  and ifx on Windows, a stated skip failing the job. Its `bindings-armv7`
+  job runs the Python, Node, Go, R, Octave and Fortran (CMake) suites on
+  32-bit ARM under qemu-user, a leg each: an Ubuntu armhf root (its base
+  image's checksum pinned) entered with `chroot`, the armv7 libraries and
+  the guatiao-source-py bridge cross-built against it with clang and lld,
+  Go's tests on the runner through an armv7 `CC`; R and Octave with every
+  greeter (the Go greeter built `c-shared` for armv7), a stated skip failing
+  the Node, Go, R and Octave legs as on their own jobs.
   `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
