@@ -18,6 +18,12 @@ auto-tests = true
 [library]
 source-dir = "src"
 
+# Writes a kind module from a kinds document: fpm run guatiao-kind -- DOC -o FILE
+[[executable]]
+name = "guatiao-kind"
+source-dir = "app"
+main = "guatiao_kind.f90"
+
 [install]
 library = true
 

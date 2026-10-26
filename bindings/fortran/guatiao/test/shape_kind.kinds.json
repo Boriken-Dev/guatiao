@@ -1,0 +1,331 @@
+{
+  "format": 1,
+  "kinds": [
+    {
+      "name": "note",
+      "floor_hash": 2725541808,
+      "object": true,
+      "doc": "Something told what is said: an object kind.",
+      "slots": [
+        {
+          "name": "told",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "text",
+              "type": "str"
+            }
+          ],
+          "doc": "`text` was said."
+        },
+        {
+          "name": "fill",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "dst",
+              "type": "bytes_mut"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "Writes into `dst`; how many bytes."
+        },
+        {
+          "name": "last",
+          "required": false,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "Appended: what was said last."
+        }
+      ]
+    },
+    {
+      "name": "shapes",
+      "floor_hash": 3134292243,
+      "object": false,
+      "doc": "Every shape a slot can take or answer.",
+      "slots": [
+        {
+          "name": "scalars",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "b",
+              "type": "bool"
+            },
+            {
+              "name": "a",
+              "type": "i8"
+            },
+            {
+              "name": "c",
+              "type": "i16"
+            },
+            {
+              "name": "d",
+              "type": "i32"
+            },
+            {
+              "name": "e",
+              "type": "i64"
+            },
+            {
+              "name": "f",
+              "type": "u8"
+            },
+            {
+              "name": "g",
+              "type": "u16"
+            },
+            {
+              "name": "h",
+              "type": "u32"
+            },
+            {
+              "name": "i",
+              "type": "u64"
+            },
+            {
+              "name": "j",
+              "type": "isize"
+            },
+            {
+              "name": "k",
+              "type": "usize"
+            },
+            {
+              "name": "l",
+              "type": "f32"
+            },
+            {
+              "name": "m",
+              "type": "f64"
+            }
+          ],
+          "answer": {
+            "type": "f64"
+          },
+          "doc": "The sum of every number, `b` as 1 or 0."
+        },
+        {
+          "name": "flag",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "on",
+              "type": "bool"
+            }
+          ],
+          "answer": {
+            "type": "bool"
+          },
+          "doc": "Not `on`."
+        },
+        {
+          "name": "split",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "a",
+              "type": "i32"
+            },
+            {
+              "name": "b",
+              "type": "i32"
+            },
+            {
+              "name": "c",
+              "type": "i32"
+            },
+            {
+              "name": "s",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "`s` and the sum of the three; a view at the fifth register."
+        },
+        {
+          "name": "sum",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "answer": {
+            "type": "u32"
+          },
+          "doc": "The sum of the bytes."
+        },
+        {
+          "name": "borrow",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "m",
+              "type": "map",
+              "pass": "borrowed"
+            },
+            {
+              "name": "v",
+              "type": "value",
+              "pass": "borrowed"
+            },
+            {
+              "name": "n",
+              "type": "value",
+              "pass": "borrowed",
+              "nullable": true
+            }
+          ],
+          "answer": {
+            "type": "map"
+          },
+          "doc": "What it was lent to read, described."
+        },
+        {
+          "name": "lend",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "m",
+              "type": "map",
+              "pass": "lent"
+            },
+            {
+              "name": "l",
+              "type": "list",
+              "pass": "lent"
+            }
+          ],
+          "answer": {
+            "type": "bool"
+          },
+          "doc": "Marks `m` and grows `l`, where they stand."
+        },
+        {
+          "name": "take",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "m",
+              "type": "map",
+              "pass": "taken"
+            },
+            {
+              "name": "l",
+              "type": "list",
+              "pass": "taken"
+            }
+          ],
+          "answer": {
+            "type": "list"
+          },
+          "doc": "The sizes of what it was handed."
+        },
+        {
+          "name": "number",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "x",
+              "type": "i64"
+            }
+          ],
+          "answer": {
+            "type": "value"
+          },
+          "doc": "Twice `x`."
+        },
+        {
+          "name": "keep",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "n",
+              "type": "object",
+              "kind": "note",
+              "pass": "taken"
+            }
+          ],
+          "doc": "Keeps `n`."
+        },
+        {
+          "name": "poke",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "n",
+              "type": "object",
+              "kind": "note",
+              "pass": "lent"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "Tells `n` it was poked."
+        },
+        {
+          "name": "make",
+          "required": true,
+          "fallible": true,
+          "args": [],
+          "answer": {
+            "type": "object",
+            "kind": "note"
+          },
+          "doc": "A note of its own."
+        },
+        {
+          "name": "echo",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "s",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "Appended: `s` twice."
+        },
+        {
+          "name": "quiet",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "s",
+              "type": "str"
+            }
+          ],
+          "doc": "Appended, and served by nobody."
+        }
+      ]
+    }
+  ]
+}

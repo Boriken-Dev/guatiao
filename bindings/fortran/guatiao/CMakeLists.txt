@@ -35,6 +35,11 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(guatiao_fortran PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
+# Writes a kind module from a kinds document.
+add_executable(guatiao-kind app/guatiao_kind.f90)
+target_link_libraries(guatiao-kind PRIVATE guatiao_fortran)
+set_target_properties(guatiao-kind PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/app-modules)
+
 option(GUATIAO_FORTRAN_TESTS "Build the binding's tests" ${PROJECT_IS_TOP_LEVEL})
 if(GUATIAO_FORTRAN_TESTS)
   enable_testing()
@@ -47,6 +52,11 @@ if(GUATIAO_FORTRAN_TESTS)
   foreach(source ${GUATIAO_FORTRAN_TESTS_SOURCES})
     get_filename_component(name ${source} NAME_WE)
     add_executable(${name} ${source})
+    if(name STREQUAL "test_shape_kinds")
+      # The kind module guatiao-kind writes from test/shape_kind.kinds.json.
+      target_sources(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test/shape_kinds.F90)
+      set_target_properties(${name} PROPERTIES Fortran_PREPROCESS ON)
+    endif()
     target_link_libraries(${name} PRIVATE guatiao_fortran_harness guatiao_fortran)
     set_target_properties(${name} PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/test-modules/${name})
     # The tests read the headers and vectors relative to this directory.
