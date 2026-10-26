@@ -1770,8 +1770,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build the modules
         run: cargo build -p myapp -p guatiao-intake --target wasm32-unknown-unknown --release
-      - name: Build the remote server the remote suites call over WebSocket
-        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls
+      - name: Build the remote server the remote suites call over WebSocket and WebTransport
+        run: cargo build -p guatiao-source-remote -p derived_greeter --features guatiao-source-remote/ws,guatiao-source-remote/tls,guatiao-source-remote/webtransport
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
