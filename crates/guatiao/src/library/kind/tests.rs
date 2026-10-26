@@ -498,6 +498,7 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
     registry
         .absorb(
             Path::new("kinds.so"),
+            "",
             Opened::Loaded(
                 LibraryView {
                     id: "kinds".to_string(),

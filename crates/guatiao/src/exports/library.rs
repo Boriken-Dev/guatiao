@@ -756,6 +756,13 @@ pub unsafe extern "C" fn guatiao_registry_free(reg: *mut HostRegistry) {
 
 /// Names providers with `template` instead of `%id`.
 ///
+/// A template is text with fields: `%id`, `%version`, `%name` (its
+/// display name), `%library` (its library's id) and `%source` (the source
+/// that served its library, as a refresh reports it; empty for a library
+/// loaded or registered by the host); `%%` is a literal `%`.
+/// `%source/%id`, here and for libraries, holds the same library from
+/// several sources, such as identical devices each reached through its own.
+///
 /// Anything already loaded is re-keyed. **A refusal changes nothing**: the
 /// keys are all rendered and checked before any is written.
 ///
@@ -781,7 +788,8 @@ pub unsafe extern "C" fn guatiao_registry_keyed_by(
 }
 
 /// Names libraries with `template` instead of `%id` — the "how many builds
-/// of one library may I hold" knob.
+/// of one library may I hold" knob. A library's fields are `%id`,
+/// `%version` and `%source`.
 ///
 /// # Safety
 ///
@@ -1811,6 +1819,7 @@ fn library_value(alloc: Alloc, one: &crate::library::Loaded) -> Result<Value, Va
         "path",
         Text::new_in(alloc, &one.path.to_string_lossy()).map(Value::from)?,
     )?;
+    map.try_set("source", Text::new_in(alloc, &one.source).map(Value::from)?)?;
     map.try_set("providers", one.providers)?;
 
     // What it offered that this host already had. Empty on an ordinary
@@ -1845,6 +1854,10 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     map.try_set(
         "from",
         Text::new_in(alloc, &one.from().to_string_lossy()).map(Value::from)?,
+    )?;
+    map.try_set(
+        "source",
+        Text::new_in(alloc, one.source()).map(Value::from)?,
     )?;
 
     let mut kinds = List::new_in(alloc);

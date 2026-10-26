@@ -456,7 +456,7 @@ impl Registry {
             {
                 report.retired.push(retired);
             }
-            let outcome = match self.absorb(&path, opened) {
+            let outcome = match self.absorb(&path, &name, opened) {
                 Ok(Loading::Loaded(one)) => Ok(Ok(one.key.to_string())),
                 Ok(Loading::Skipped(why)) => Ok(Err(why)),
                 Err(e) => Err(e.to_string()),
@@ -532,7 +532,7 @@ impl Registry {
                 report.skipped.push((source.clone(), id, why));
                 continue;
             }
-            let outcome = match self.load_file(&path) {
+            let outcome = match self.load_from(&path, &source) {
                 Ok(Loading::Loaded(one)) => Ok(Ok(one.key.to_string())),
                 Ok(Loading::Skipped(why)) => Ok(Err(why)),
                 Err(e) => Err(e.to_string()),

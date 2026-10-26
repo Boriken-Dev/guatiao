@@ -2037,9 +2037,12 @@ reg.provider("acme_net_pve@1.2.0")
 provider.key()  /  loaded.key               // what each answers to
 ```
 
-`KeyTemplate` fields: a **library** has `%id` and `%version`; a
-**provider** adds `%name` (display name) and `%library`. `%%` is a literal
-`%`, everything else is text. Naming a field the subject does not have is
+`KeyTemplate` fields: a **library** has `%id`, `%version` and `%source`
+(the source that served it, as `Refreshed` names it; empty for one the
+host loaded or registered); a **provider** adds `%name` (display name)
+and `%library`. `%source/%id` holds the same library from several
+sources, such as identical devices. `%%` is a literal `%`, everything
+else is text. Naming a field the subject does not have is
 refused where it is written, as is a `%` beginning nothing and a template
 naming **no** field (which would give everything one key). Both `keyed_by`
 methods re-key what is already loaded and refuse a template that would
@@ -2147,6 +2150,10 @@ stamp)`:
   id must be the candidate's, or the open is refused (and closed).
 
 Refusals are in `Refreshed::refused`, never a failed refresh. A served
+library knows its source: `Loaded::source`, `Provider::source()` and the
+key field `%source` (`libraries_keyed_by("%source/%id")` and
+`keyed_by("%source/%id")` hold the same library from several sources);
+`KeyFields::library(id, version).with_source(name)` renders one. A served
 library closes through `collect`/`unload` once nothing holds it, its own
 `unload` slot asked when it has one (a missing one is no refusal: the
 source's `close` is the promise), and the source is then told. Dropping
@@ -2283,9 +2290,10 @@ and a `repr(C)` struct is not.
 
 **Answers come back as values**, so there is no accessor per field and a
 language that can already read a value can already read the answer. A
-provider map is `{key, id, version, library, display_name, from, kinds,
-has_config, vtable_size}`; a library map is `{key, id, version, path,
-providers, skipped}`. Free each answer with `guatiao_value_free`.
+provider map is `{key, id, version, library, display_name, from, source,
+kinds, has_config, vtable_size}`; a library map is `{key, id, version,
+path, source, providers, skipped}` (`source` empty for a library the host
+loaded or registered itself). Free each answer with `guatiao_value_free`.
 
 **The exceptions are what is not data**: the vtable, its size, the `ctx`,
 and the borrowed config schema have their own accessors. A provider's

@@ -246,11 +246,11 @@ func (r *Registry) ProviderAvailable(key string) (bool, string, error) {
 // ---- keys and priority ---------------------------------------------------------------
 
 // KeyedBy files providers under keys made from template (%id, %name,
-// %library, %version).
+// %library, %version, %source).
 func (r *Registry) KeyedBy(template string) error { return r.keyCall("keyed_by", template) }
 
 // LibrariesKeyedBy files libraries under keys made from template (%id,
-// %version).
+// %version, %source).
 func (r *Registry) LibrariesKeyedBy(template string) error {
 	return r.keyCall("libraries_keyed_by", template)
 }

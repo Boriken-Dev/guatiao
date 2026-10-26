@@ -316,7 +316,7 @@ library declares before it is mapped), `libraries()`, `providers(kind =
 "")`, `available(kind = "")`, `why_not(kind)`, `provider(key)`,
 `best(kind)`, `provider_available(key)` (`list(available, reason)`),
 `keyed_by(template)` / `libraries_keyed_by(template)` (`%id` by
-default; `%name`, `%library`, `%version`), `set_priority(id, p)` /
+default; `%name`, `%library`, `%version`, `%source`), `set_priority(id, p)` /
 `priority(id)`, `provider_table(key, kind = NULL)` (`list(table, size,
 ctx)`, `table` NULL for none; no `kind` for a single table),
 `provider_config(key)` (a copy of the schema, a value, or NULL),

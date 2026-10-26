@@ -268,7 +268,7 @@ mapped; `answer` `{loaded, skipped, failed, unreadable}`),
 none), `available(kind, answer)`, `why_not(kind, answer)`, `best(kind,
 answer)`, `provider_available(key, ok, reason)`, `keyed_by(template)`
 and `libraries_keyed_by(template)` (`%id` by default, `%version`,
-`%name`, `%library`), `set_priority(id, p)`, `priority(id)`,
+`%name`, `%library`, `%source`), `set_priority(id, p)`, `priority(id)`,
 `provider_table(key, kind, table, size)` (`kind` `''` for a single
 table), `provider_ctx(key)`, `provider_config(key)` (a read-only handle on
 the schema, absent for none), `provider_meta(key, answer [, stat, errmsg])`

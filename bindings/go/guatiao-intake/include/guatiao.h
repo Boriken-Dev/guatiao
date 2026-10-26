@@ -1955,6 +1955,13 @@ void guatiao_registry_free(struct guatiao_registry *reg);
 /*
  Names providers with `template` instead of `%id`.
 
+ A template is text with fields: `%id`, `%version`, `%name` (its
+ display name), `%library` (its library's id) and `%source` (the source
+ that served its library, as a refresh reports it; empty for a library
+ loaded or registered by the host); `%%` is a literal `%`.
+ `%source/%id`, here and for libraries, holds the same library from
+ several sources, such as identical devices each reached through its own.
+
  Anything already loaded is re-keyed. **A refusal changes nothing**: the
  keys are all rendered and checked before any is written.
 
@@ -1967,7 +1974,8 @@ guatiao_status guatiao_registry_keyed_by(struct guatiao_registry *reg,
 
 /*
  Names libraries with `template` instead of `%id` — the "how many builds
- of one library may I hold" knob.
+ of one library may I hold" knob. A library's fields are `%id`,
+ `%version` and `%source`.
 
  # Safety
 

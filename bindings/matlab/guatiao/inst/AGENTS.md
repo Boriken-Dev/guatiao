@@ -319,7 +319,7 @@ it is mapped), `libraries()`, `providers(kind)`, `available(kind)`,
 `why_not(kind)`, `provider(key)`, `best(kind)`, `provider_available(key)`
 (struct(available, reason)), `keyed_by(template)` /
 `libraries_keyed_by(template)` (`%id` by default; `%name`, `%library`,
-`%version`), `set_priority(id, p)` / `priority(id)`, `provider_table(key,
+`%version`, `%source`), `set_priority(id, p)` / `priority(id)`, `provider_table(key,
 kind)` (struct(table, size, ctx), addresses as `uint64`, `table` `[]` for
 none; no `kind` for a single table), `provider_config(key)` (a copy of the
 schema, a `guatiao.Value`, or `[]`), `provider_meta(key)` (what the

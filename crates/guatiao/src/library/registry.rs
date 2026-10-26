@@ -265,6 +265,8 @@ pub struct Provider {
     /// library leaves nothing here pointing into its image.
     library: String,
     version: String,
+    /// The source that served its library, or empty.
+    source: String,
     /// COMPUTED here rather than borrowed, so it is owned. A [`Text`] and
     /// not a `String`, because it is a string this crate hands to C: it is
     /// already a `guatiao_string` and needs no conversion at the boundary.
@@ -345,6 +347,13 @@ impl Provider {
     /// The library it came from.
     pub fn from(&self) -> &Path {
         &self.from
+    }
+
+    /// The name of the source that served its library, as a refresh
+    /// reports it, or empty for a library the host loaded or registered
+    /// itself. What `%source` renders.
+    pub fn source(&self) -> &str {
+        &self.source
     }
 
     /// The schema for its configuration, as an ordinary value, or `None`
@@ -451,6 +460,7 @@ impl Provider {
             name: &self.view.display_name,
             library: &self.library,
             version: &self.version,
+            source: &self.source,
         }
     }
 }
@@ -468,6 +478,10 @@ pub struct Loaded {
     pub id: String,
     /// Its version string, uninterpreted. Copied out of its descriptor.
     pub version: String,
+    /// The name of the source that served it, as a refresh reports it, or
+    /// empty for a library the host loaded or registered itself. What
+    /// `%source` renders.
+    pub source: String,
     /// How many providers it registered — which is not how many it
     /// offered, when one of them was already loaded from elsewhere.
     pub providers: usize,
@@ -493,6 +507,11 @@ pub struct Loaded {
 }
 
 impl Loaded {
+    /// Everything a library [`KeyTemplate`] can name.
+    fn fields(&self) -> KeyFields<'_> {
+        KeyFields::library(&self.id, &self.version).with_source(&self.source)
+    }
+
     /// Whether the registry closes it once nothing uses it: a mapping, or
     /// a library a source served.
     pub(crate) fn closes(&self) -> bool {
@@ -861,13 +880,13 @@ impl Registry {
         let key = KeyTemplate::library(template)?;
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for (at, one) in self.loaded.iter().enumerate() {
-            let rendered = key.render(KeyFields::library(&one.id, &one.version));
+            let rendered = key.render(one.fields());
             if seen.insert(rendered.clone(), at).is_some() {
                 return Err(KeyError::Collides { key: rendered });
             }
         }
         for one in &mut self.loaded {
-            one.key = Text::new(&key.render(KeyFields::library(&one.id, &one.version)));
+            one.key = Text::new(&key.render(one.fields()));
         }
         self.library_key = key;
         Ok(())
@@ -960,6 +979,15 @@ impl Registry {
     /// provider that needs a peer offered by a library loaded later looks
     /// it up from a vtable call, not from `describe`.
     pub fn load_file(&mut self, path: &Path) -> Result<Loading<'_>, LoadError> {
+        self.load_from(path, "")
+    }
+
+    /// [`load_file`](Registry::load_file) for a file `source` found.
+    pub(crate) fn load_from(
+        &mut self,
+        path: &Path,
+        source: &str,
+    ) -> Result<Loading<'_>, LoadError> {
         self.collect();
         // By path first: the only dedup that can happen without loading.
         if let Some(already) = self.loaded_from_path(path) {
@@ -975,7 +1003,7 @@ impl Registry {
             path: path.to_path_buf(),
             reason: e.to_string(),
         })?;
-        self.absorb(path, opened)
+        self.absorb(path, source, opened)
     }
 
     /// Registers a library the host **links** rather than loads: its
@@ -1015,7 +1043,7 @@ impl Registry {
         }
         let host = self.host();
         let opened = super::raw::open_local(describe(host).map(Into::into));
-        self.absorb(&path, opened)
+        self.absorb(&path, "", opened)
     }
 
     /// [`register_local`](Registry::register_local) for a library that
@@ -1039,12 +1067,17 @@ impl Registry {
         }
         let host = self.host();
         let opened = super::raw::open_entry(entry, host);
-        self.absorb(&path, opened)
+        self.absorb(&path, "", opened)
     }
 
-    /// Records what opening `path` came to. Everything after the `dlopen`,
-    /// so it is testable without one.
-    pub(crate) fn absorb(&mut self, path: &Path, opened: Opened) -> Result<Loading<'_>, LoadError> {
+    /// Records what opening `path` came to, served by `source` (empty for
+    /// none). Everything after the `dlopen`, so it is testable without one.
+    pub(crate) fn absorb(
+        &mut self,
+        path: &Path,
+        source: &str,
+        opened: Opened,
+    ) -> Result<Loading<'_>, LoadError> {
         let (lib, mut origin) = match opened {
             Opened::NoEntrySymbol => return Ok(Loading::Skipped(Skipped::NoEntrySymbol)),
             Opened::Declined => return Ok(Loading::Skipped(Skipped::DeclinedThisHost)),
@@ -1071,7 +1104,9 @@ impl Registry {
         // library, which is the case a path comparison cannot see and a
         // filename comparison only guesses at. Whether two versions of one
         // library are the same thing is the host's template's answer.
-        let library_key = self.library_key.render(KeyFields::library(&id, &version));
+        let library_key = self
+            .library_key
+            .render(KeyFields::library(&id, &version).with_source(source));
         if let Some(already) = self.loaded.iter().find(|l| *l.key == *library_key) {
             let from = already.path.clone();
             self.pass_over(origin);
@@ -1097,6 +1132,7 @@ impl Registry {
                 name: &view.display_name,
                 library: &id,
                 version: &at,
+                source,
             });
 
             // Whoever holds that key already: registered earlier, or
@@ -1155,6 +1191,7 @@ impl Registry {
                 from: path.to_path_buf(),
                 library: id.clone(),
                 version: at,
+                source: source.to_string(),
                 key: Text::new(&key),
                 priority,
                 at: built,
@@ -1165,6 +1202,7 @@ impl Registry {
             key: Text::new(&library_key),
             id,
             version,
+            source: source.to_string(),
             providers: count,
             skipped,
             meta,
@@ -1556,16 +1594,17 @@ mod tests {
         let p = Path::new("a.so");
 
         assert_eq!(
-            r.absorb(p, Opened::NoEntrySymbol).unwrap().skipped(),
+            r.absorb(p, "", Opened::NoEntrySymbol).unwrap().skipped(),
             Some(&Skipped::NoEntrySymbol)
         );
         assert_eq!(
-            r.absorb(p, Opened::Declined).unwrap().skipped(),
+            r.absorb(p, "", Opened::Declined).unwrap().skipped(),
             Some(&Skipped::DeclinedThisHost)
         );
         assert_eq!(
             r.absorb(
                 p,
+                "",
                 Opened::Rejected(Rejected::UnsupportedAbi { declared: 7 })
             )
             .unwrap()
@@ -1575,6 +1614,7 @@ mod tests {
         assert!(matches!(
             r.absorb(
                 p,
+                "",
                 Opened::Rejected(Rejected::Malformed(
                     crate::library::raw::check::Refusal::new("the library descriptor", "is null")
                 ))
@@ -1592,6 +1632,7 @@ mod tests {
         r.libraries_keyed_by("%id@%version").unwrap();
         r.absorb(
             Path::new("one.so"),
+            "",
             library("lib", "1.0.0", vec![provider("lib_p", None)]),
         )
         .unwrap();
@@ -1599,6 +1640,7 @@ mod tests {
         let second = r
             .absorb(
                 Path::new("two.so"),
+                "",
                 library("lib", "2.0.0", vec![provider("lib_p", None)]),
             )
             .unwrap();
@@ -1616,12 +1658,14 @@ mod tests {
         apart
             .absorb(
                 Path::new("one.so"),
+                "",
                 library("lib", "1.0.0", vec![provider("lib_p", None)]),
             )
             .unwrap();
         let loaded = apart
             .absorb(
                 Path::new("two.so"),
+                "",
                 library("lib", "2.0.0", vec![provider("lib_p", None)]),
             )
             .unwrap()
@@ -1647,6 +1691,7 @@ mod tests {
         let err = r
             .absorb(
                 Path::new("one.so"),
+                "",
                 library(
                     "lib",
                     "1.0.0",
@@ -1666,6 +1711,7 @@ mod tests {
         let loaded = r
             .absorb(
                 Path::new("one.so"),
+                "",
                 library(
                     "lib",
                     "1.0.0",

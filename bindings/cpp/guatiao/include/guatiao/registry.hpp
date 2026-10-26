@@ -290,7 +290,7 @@ class registry {
   }
   std::int32_t priority(std::string_view id) const noexcept { return guatiao_registry_priority(r_, detail::str(id)); }
   /// Files providers under `key_template` (`%id`, `%version`, `%name`,
-  /// `%library`) instead of `%id`.
+  /// `%library`, `%source`) instead of `%id`.
   result<void> try_keyed_by(std::string_view key_template) {
     return detail::check(guatiao_registry_keyed_by(r_, detail::str(key_template)));
   }

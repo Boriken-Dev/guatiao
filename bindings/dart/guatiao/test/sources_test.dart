@@ -63,6 +63,45 @@ void main() {
     expect(reg.libraries(), isEmpty);
   });
 
+  test('the same library from two sources is kept apart by its source', () {
+    final root = Directory.systemTemp.createTempSync('guatiao-dart-sources');
+    addTearDown(() {
+      try {
+        root.deleteSync(recursive: true);
+      } on FileSystemException {
+        // A library still mapped on Windows cannot be deleted.
+      }
+    });
+    final reg = Registry('dart-sources', '0.1')
+      ..librariesKeyedBy('%source/%id')
+      ..keyedBy('%source/%id');
+    addTearDown(reg.close);
+    final dirs = [
+      for (final name in ['one', 'two'])
+        Directory(join([root.path, name]))..createSync(),
+    ];
+    for (final (i, dir) in dirs.indexed) {
+      File(
+        join([libraryDir(), libraryName('hello_library')]),
+      ).copySync(join([dir.path, libraryName('hello_dart_source_$i')]));
+      reg.watchDir(dir.path, rules: 'kind=greeter');
+    }
+
+    final loaded = reg.refresh()['loaded']! as List;
+    expect(
+      [for (final s in loaded) (s! as Map)['key']],
+      [for (final dir in dirs) '${dir.path}/hello_library'],
+    );
+    expect(
+      [for (final lib in reg.libraries()) lib['source']],
+      [for (final dir in dirs) dir.path],
+    );
+    expect(
+      reg.provider('${dirs[1].path}/hello_library_greeter')['source'],
+      dirs[1].path,
+    );
+  });
+
   test('a file that is no source is refused with words', () {
     final reg = Registry('dart-sources', '0.1');
     addTearDown(reg.close);

@@ -71,6 +71,24 @@ def test_a_source_file_serves_libraries_that_come_and_go(shelf):
         ]
 
 
+def test_the_same_library_from_two_sources_is_kept_apart_by_its_source(tmp_path, shelf):
+    first, _ = shelf
+    second = native.build_c_source(tmp_path / "second", "py_shelf_second")
+    assert second is not None
+    with Registry("py-sources", "0.1") as reg:
+        reg.libraries_keyed_by("%source/%id").keyed_by("%source/%id")
+        one = reg.add_source_file(first, {"ids": ["shelf_a"]})
+        two = reg.add_source_file(second, {"ids": ["shelf_a"]})
+        loaded = reg.refresh()["loaded"]
+        assert [s["key"] for s in loaded] == [f"{one}/shelf_a", f"{two}/shelf_a"]
+        assert [(p["key"], p["source"]) for p in reg.providers("counter")] == [
+            (f"{one}/shelf_a_counter", one),
+            (f"{two}/shelf_a_counter", two),
+        ]
+        assert [lib["source"] for lib in reg.libraries()] == [one, two]
+        assert reg.bind(f"{two}/shelf_a_counter", Counter).count() == 1
+
+
 def test_a_source_refuses_with_its_own_words(shelf):
     path, _ = shelf
     with Registry("py-sources", "0.1") as reg:

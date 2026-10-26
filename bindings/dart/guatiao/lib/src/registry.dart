@@ -314,7 +314,10 @@ class Registry implements Finalizable {
   // ---- keys and priority ---------------------------------------------
 
   /// Sets the template providers are filed under (`%id`, `%name`,
-  /// `%version`, `%library`), and refiles what is loaded.
+  /// `%version`, `%library`, `%source`), and refiles what is loaded.
+  /// `%source` is the source that served the library (empty for one the
+  /// host loaded itself): `%source/%id` keeps the same library from
+  /// several sources apart.
   Registry keyedBy(String template) {
     _checkOpen();
     using(
@@ -328,7 +331,8 @@ class Registry implements Finalizable {
     return this;
   }
 
-  /// Sets the template libraries are filed under (`%id`, `%version`).
+  /// Sets the template libraries are filed under (`%id`, `%version`,
+  /// `%source`).
   Registry librariesKeyedBy(String template) {
     _checkOpen();
     using(
