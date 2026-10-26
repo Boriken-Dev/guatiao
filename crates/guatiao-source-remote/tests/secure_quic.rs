@@ -1121,3 +1121,38 @@ fn a_configuration_names_quic_at_no_security() {
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(greeting(&registry), "hello, quic");
 }
+
+#[test]
+fn ending_the_links_ends_one_still_in_its_quic_handshake() {
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let server_config = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+    let client_config = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let server = secure_server();
+    let listener = QuicListen::bind("127.0.0.1:0", &server_config).unwrap();
+    let connect =
+        QuicConnect::new(&listener.local_addr().unwrap().to_string(), &client_config).unwrap();
+    // Connected, and never opens its stream: the server's handshake waits.
+    let dialing = std::thread::spawn(move || {
+        let conn = connect.connect().unwrap();
+        std::thread::sleep(Duration::from_secs(4));
+        drop(conn);
+    });
+    let Accepted::Connection(conn) = listener.accept().unwrap() else {
+        panic!("every source proceeds");
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    let serving = server.clone();
+    std::thread::spawn(move || {
+        let started = Instant::now();
+        let failed = serving.serve(conn).is_err();
+        let _ = tx.send((failed, started.elapsed()));
+    });
+    std::thread::sleep(Duration::from_millis(300));
+    server.end_links();
+    let (failed, took) = rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the handshake ended");
+    assert!(failed);
+    assert!(took < Duration::from_secs(2), "{took:?}");
+    dialing.join().unwrap();
+}

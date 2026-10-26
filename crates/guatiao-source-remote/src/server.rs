@@ -15,6 +15,7 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::sync::atomic::{AtomicU64, Ordering};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -234,6 +235,11 @@ struct ServerInner {
     links: Mutex<BTreeMap<usize, Opened>>,
     /// Every link running, kept until it ends.
     live: Mutex<BTreeMap<usize, Arc<Link>>>,
+    /// Connections in their handshake, each by its closer, under a number
+    /// of its own; and the last number given.
+    handshaking: Mutex<(BTreeMap<u64, Closer>, u64)>,
+    /// How many times `end_links` has run.
+    ends: AtomicU64,
 }
 
 /// A registry's providers, served over links.
@@ -249,6 +255,24 @@ impl core::fmt::Debug for Server {
             .field("options", &self.options)
             .field("links", &lock(&self.inner.links).len())
             .finish()
+    }
+}
+
+/// Ends a connection from another thread.
+type Closer = Arc<dyn Fn() + Send + Sync>;
+
+/// A connection's place among those in their handshake, given up when its
+/// handshake is over, however it ends.
+struct Handshaking<'a> {
+    inner: &'a ServerInner,
+    n: Option<u64>,
+}
+
+impl Drop for Handshaking<'_> {
+    fn drop(&mut self) {
+        if let Some(n) = self.n {
+            lock(&self.inner.handshaking).0.remove(&n);
+        }
     }
 }
 
@@ -516,6 +540,8 @@ impl Server {
                 ids: Mutex::new((BTreeMap::new(), 0)),
                 links: Mutex::new(BTreeMap::new()),
                 live: Mutex::new(BTreeMap::new()),
+                handshaking: Mutex::new((BTreeMap::new(), 0)),
+                ends: AtomicU64::new(0),
             }),
             options,
         }
@@ -527,8 +553,23 @@ impl Server {
     }
 
     /// Sets up a link over `conn` and serves it on its own threads. The
-    /// server keeps the link until either side ends it.
-    pub fn serve(&self, conn: Connection) -> Result<Arc<Link>, LinkError> {
+    /// server keeps the link until either side ends it, or
+    /// [`end_links`](Server::end_links) does, during its handshake too.
+    pub fn serve(&self, mut conn: Connection) -> Result<Arc<Link>, LinkError> {
+        let ends = self.inner.ends.load(Ordering::Acquire);
+        let n = conn.closer.take().map(|close| {
+            let close: Closer = Arc::from(close);
+            let mut handshaking = lock(&self.inner.handshaking);
+            handshaking.1 += 1;
+            let n = handshaking.1;
+            handshaking.0.insert(n, Arc::clone(&close));
+            conn.closer = Some(Box::new(move || close()));
+            n
+        });
+        let held = Handshaking {
+            inner: &self.inner,
+            n,
+        };
         let link = Link::server(
             conn,
             &self.options,
@@ -538,10 +579,15 @@ impl Server {
                 kinds: self.inner.kinds(),
                 name: "guatiao-source-remote server".to_string(),
             },
-        )?;
-        let link = Arc::new(link);
+        );
+        drop(held);
+        let link = Arc::new(link?);
         let key = link_key(link.inner());
         lock(&self.inner.live).insert(key, Arc::clone(&link));
+        if self.inner.ends.load(Ordering::Acquire) != ends {
+            // `end_links` ran while its handshake did, and may have missed it.
+            link.end();
+        }
         if !link.alive() {
             // It ended before it was kept: nothing will remove it now.
             lock(&self.inner.live).remove(&key);
@@ -549,11 +595,19 @@ impl Server {
         Ok(link)
     }
 
-    /// Ends every link: their calls in flight answer `GONE`.
+    /// Ends every link, and every connection still in its handshake: their
+    /// calls in flight answer `GONE`. A transport that cannot wake a read
+    /// from another thread (TCP and TLS on Windows) ends its handshake when
+    /// the handshake's read bound runs out.
     pub fn end_links(&self) {
+        self.inner.ends.fetch_add(1, Ordering::AcqRel);
         let live = core::mem::take(&mut *lock(&self.inner.live));
         for link in live.values() {
             link.end();
+        }
+        let handshaking: Vec<_> = lock(&self.inner.handshaking).0.values().cloned().collect();
+        for close in handshaking {
+            close();
         }
     }
 
