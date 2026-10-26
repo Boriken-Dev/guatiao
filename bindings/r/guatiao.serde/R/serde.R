@@ -30,6 +30,20 @@ serde_parse <- function(text, format = "json", read_data_uris = FALSE, alloc = N
   r
 }
 
+serde_data <- function(text, format = "json", read_data_uris = FALSE,
+                       numbers = c("auto", "text", "double", "integer64")) {
+  numbers <- match.arg(numbers)
+  if (numbers == "integer64" && !requireNamespace("bit64", quietly = TRUE)) {
+    stop("numbers = \"integer64\" needs the bit64 package, which is not installed: install.packages(\"bit64\")",
+      call. = FALSE)
+  }
+  how <- if (isTRUE(read_data_uris)) 256L else 0L
+  code <- match(numbers, c("auto", "text", "double", "integer64")) - 1L
+  r <- .Call(C_serde_data, .gt_serde_format(format), enc2utf8(text), how, code)
+  if (inherits(r, "guatiao_serde_refusal")) .gt_parse_error(.subset2(r, 1L), .subset2(r, 2L))
+  r
+}
+
 serde_emit <- function(x, format = "json", pretty = FALSE, bytes = c("data_uri", "base64", "array", "refuse")) {
   bytes <- match.arg(bytes)
   .Call(C_serde_emit, .gt_serde_format(format), x, .gt_bytes[[bytes]], isTRUE(pretty))

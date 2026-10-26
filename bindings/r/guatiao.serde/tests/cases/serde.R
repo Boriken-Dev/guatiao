@@ -50,3 +50,38 @@ case("plain data emits too, and bytes as asked", with_library({
   expect_equal(value_data(back$b), as.raw(1:3))
   close(back)
 }))
+
+case("serde_data reads what value_data(serde_parse()) reads", with_library({
+  docs <- list(json = '{"z":1,"a":[1,2.50,"x",null,true],"big":123456789012345678901234567890.5,"o":{}}',
+    toml = 'name = "ana"\nn = 3\n[t]\nx = [1.5, 2]\n', yaml = "a: [1, 2]\nb: {c: text}\n")
+  for (format in names(docs)) {
+    if (format != "json" && !has_export(paste0("guatiao_", format, "_emit"), "guatiao_serde")) next
+    for (numbers in c("auto", "text", "double")) {
+      v <- serde_parse(docs[[format]], format = format)
+      expect_true(identical(serde_data(docs[[format]], format = format, numbers = numbers), value_data(v, numbers = numbers)), paste(format, numbers))
+      close(v)
+    }
+  }
+  a <- tryCatch(serde_parse('{"a":\n 1,,}'), error = function(e) e)
+  b <- tryCatch(serde_data('{"a":\n 1,,}'), error = function(e) e)
+  expect_true(inherits(b, "guatiao_parse_error"))
+  expect_true(identical(c(b$line, b$column), c(a$line, a$column)))
+  expect_true(identical(b$reason, a$reason))
+  expect_error(serde_data("{}", format = "xml"), "error")
+}))
+
+case("serde_emit of R data writes what it writes for the value", with_library({
+  data <- list(s = "\u00fc\u20ac", n = number("1.10"), i = -3L, f = 0.1, b = TRUE, na = NA,
+    bytes = as.raw(1:2), v = c(1.5, 2), named = c(x = 1L, y = 2L), nested = list(list(a = list())))
+  for (format in c("json", "yaml")) {
+    if (format != "json" && !has_export(paste0("guatiao_", format, "_emit"), "guatiao_serde")) next
+    for (pretty in c(FALSE, TRUE)) {
+      v <- value(data)
+      expect_true(identical(serde_emit(data, format = format, pretty = pretty, bytes = "base64"), serde_emit(v, format = format, pretty = pretty, bytes = "base64")), paste(format, pretty))
+      close(v)
+    }
+  }
+  expect_error(serde_emit(list(1, 2), format = "toml"), "guatiao_error")
+  expect_error(serde_emit(list(a = NaN)), "guatiao_error")
+}))
+
