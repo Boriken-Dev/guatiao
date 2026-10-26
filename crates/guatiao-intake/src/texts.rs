@@ -52,10 +52,7 @@ pub fn validate_texts(
         validate_text(field, value)?;
     }
     for field in schema.fields() {
-        if field.is_required()
-            && !values.contains_key(field.key())
-            && !values.contains_key(&crate::flat::root_path(field.key()))
-        {
+        if field.is_required() && !values.contains_key(&crate::flat::root_path(field.key())) {
             return Err(bad(field.key(), "a value — it is required"));
         }
     }

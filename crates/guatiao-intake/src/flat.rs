@@ -247,36 +247,20 @@ fn indexed(path: &str, at: usize) -> String {
 /// # Every spelling the path grammar reads is read
 ///
 /// An open map's key is found however the store spelled it (`env[01]`,
-/// `env["01"]`, `env.PATH`), and a top-level field whose name holds a `.`
-/// or a bracket under its bare name (`a.b`) as well as under `[a.b]`, so a
-/// store [`flatten`] wrote in an earlier spelling reads back. Where two
-/// spellings of one key are both present, the one [`flatten`] writes now
-/// wins and the other is ignored.
+/// `env["01"]`, `env.PATH`). Where two spellings of one key are both
+/// present, the one [`flatten`] writes wins and the other is ignored. A
+/// top-level field whose name holds a `.` or a bracket is read under
+/// `[a.b]`, the one spelling of its key.
 pub fn unflatten(
     alloc: Alloc,
     field: FieldRef<'_>,
     store: &BTreeMap<String, String>,
 ) -> Option<Value> {
-    let kind = field.kind();
-    root_spellings(field.key())
-        .into_iter()
-        .filter(|root| holds(store, root))
-        .find_map(|root| rebuild(alloc, &root, kind, store, 0))
-}
-
-/// How a top-level field's own key can be spelled in a store: the way
-/// [`flatten`] writes it, then the bare name when that differs, which is
-/// how a name holding a `.` or a bracket was once written.
-///
-/// An empty name has no bare spelling: an empty root followed by `[`
-/// would read every bracketed key in the store as its own.
-fn root_spellings(name: &str) -> Vec<String> {
-    let written = root_path(name);
-    if written == name || name.is_empty() {
-        vec![written]
-    } else {
-        vec![written, name.to_string()]
+    let root = root_path(field.key());
+    if !holds(store, &root) {
+        return None;
     }
+    rebuild(alloc, &root, field.kind(), store, 0)
 }
 
 /// Whether anything is stored at or under `path`.
@@ -523,22 +507,14 @@ pub fn split(key: &str) -> Option<(&str, Cow<'_, str>)> {
 /// [`FieldRef`] over the **element's** schema with an **empty key**: such
 /// a thing has no declared name, and the path that reached it is the
 /// caller's to keep.
-///
-/// A key that does not walk but starts with the bare name of a top-level
-/// field holding a `.` or a bracket (`a.b[x]` for a field `a.b`) is read
-/// under that field, as [`unflatten`] reads it.
 pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<FieldRef<'a>> {
     if let Some(direct) = schema.find(key) {
         return Some(direct);
     }
-    let walked = path::spelled(key, false).and_then(|segments| {
+    path::spelled(key, false).and_then(|segments| {
         let mut segments = segments.into_iter();
         let (first, _) = segments.next()?;
         walk_from(root(schema, &first)?, segments)
-    });
-    walked.or_else(|| {
-        let (field, rest) = bare_root(schema, key)?;
-        walk_from(field, path::spelled(rest, true)?.into_iter())
     })
 }
 
@@ -552,22 +528,6 @@ fn walk_from<'a, 's>(
         at = into(at, &segment)?;
     }
     Some(at)
-}
-
-/// The top-level field whose bare name, holding a `.` or a bracket,
-/// starts `key` and is followed by a `.` or a `[`, and what follows it.
-///
-/// The longest such name, so `a.b.c[x]` belongs to a field `a.b.c`
-/// before a field `a.b`.
-fn bare_root<'a, 'k>(schema: SchemaRef<'a>, key: &'k str) -> Option<(FieldRef<'a>, &'k str)> {
-    schema
-        .fields()
-        .filter(|f| !f.key().is_empty() && !path::is_bare_name(f.key()))
-        .filter_map(|f| {
-            let rest = key.strip_prefix(f.key())?;
-            (rest.starts_with(SEPARATOR) || rest.starts_with('[')).then_some((f, rest))
-        })
-        .max_by_key(|(f, _)| f.key().len())
 }
 
 /// The top-level field a path's first segment names.
@@ -664,12 +624,15 @@ fn values_of<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
 /// Every refusal names the **prefix that failed**, not the whole path: a
 /// path is wrong at one step, and saying which one is the difference
 /// between a message a person can act on and one they have to bisect.
+///
+/// `key` is a store's key, spelled as [`flatten`] spells it: a top-level
+/// field holding a `.` or a bracket is `[a.b]`, and `a.b` walks.
 pub fn resolve_in<'a>(
     schema: SchemaRef<'a>,
     key: &str,
     selected: impl Fn(&str) -> Option<String>,
 ) -> Result<FieldRef<'a>, ValidationError> {
-    if let Some(direct) = schema.find(key) {
+    if let Some(direct) = schema.find(key).filter(|_| path::is_bare_name(key)) {
         return Ok(direct);
     }
     let unknown = || ValidationError::UnknownOption {
@@ -689,22 +652,7 @@ pub fn resolve_in<'a>(
             &selected,
         ))
     });
-    // A key that does not walk may be spelled under a top-level field's
-    // bare name, as `unflatten` reads it; if that does not walk either,
-    // the first answer stands.
-    let bare = || {
-        let (field, rest) = bare_root(schema, key)?;
-        let base = key.len() - rest.len();
-        let segments = path::spelled(rest, true)?
-            .into_iter()
-            .map(move |(segment, end)| (segment, base + end));
-        walk_in(field, field.key(), base, segments, key, &selected).ok()
-    };
-    match walked {
-        Some(Ok(at)) => Ok(at),
-        Some(Err(e)) => bare().ok_or(e),
-        None => bare().ok_or_else(unknown),
-    }
+    walked.unwrap_or_else(|| Err(unknown()))
 }
 
 /// A first segment as the name of the top-level field it reaches.
