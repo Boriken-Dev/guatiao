@@ -299,6 +299,58 @@ const METRICS: &[Metric] = &[
         name: "json_floats_walk",
         setup: walk::json_floats_walk,
     },
+    Metric {
+        name: "tree_json_config",
+        setup: walk::tree_json_config,
+    },
+    Metric {
+        name: "bytes_json_config",
+        setup: walk::bytes_json_config,
+    },
+    Metric {
+        name: "tree_json_keys",
+        setup: walk::tree_json_keys,
+    },
+    Metric {
+        name: "bytes_json_keys",
+        setup: walk::bytes_json_keys,
+    },
+    Metric {
+        name: "tree_events_config",
+        setup: walk::tree_events_config,
+    },
+    Metric {
+        name: "bytes_events_config",
+        setup: walk::bytes_events_config,
+    },
+    Metric {
+        name: "tree_events_keys",
+        setup: walk::tree_events_keys,
+    },
+    Metric {
+        name: "bytes_events_keys",
+        setup: walk::bytes_events_keys,
+    },
+    Metric {
+        name: "value_json_config",
+        setup: walk::value_json_config,
+    },
+    Metric {
+        name: "value_json_keys",
+        setup: walk::value_json_keys,
+    },
+    Metric {
+        name: "value_json_blob",
+        setup: walk::value_json_blob,
+    },
+    Metric {
+        name: "tree_json_blob",
+        setup: walk::tree_json_blob,
+    },
+    Metric {
+        name: "bytes_json_blob",
+        setup: walk::bytes_json_blob,
+    },
 ];
 
 /// One `load_file` into a fresh registry; making and dropping the
