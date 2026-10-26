@@ -50,7 +50,8 @@ platform's search. `useLibrary(path)` names it from code instead. Nothing
 is loaded at import time; the first call throws `LibraryNotFound`, naming
 every place it looked.
 
-Node 22 or later, on a 64-bit platform koffi ships a build for.
+Node 22 or later, on a 64-bit platform koffi ships a build for, or
+32-bit ARM Linux.
 
 ## Quick start
 
@@ -77,7 +78,7 @@ intake.check(registry.providerConfig('acme_dialer')!, meta.asMap().get(intake.pr
 - What `at` and `resolve` answer borrows from the tree it was found in:
   read-only, and refused once that tree is closed. `.clone()` copies it
   out.
-- 64-bit platforms only, and not in a browser.
+- 64-bit platforms and 32-bit ARM, as `guatiao`, and not in a browser.
 
 ## API overview
 

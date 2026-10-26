@@ -79,7 +79,7 @@ A format the loaded library was built without raises
 
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
-- 64-bit targets only, as `guatiao`.
+- 64-bit targets and 32-bit ARM, as `guatiao`.
 
 ## API overview
 
