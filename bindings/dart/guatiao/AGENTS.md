@@ -579,12 +579,14 @@ receiver.close();
 `package:guatiao/remote.dart` speaks guatiao's remote protocol over a
 WebSocket in plain Dart: no native library, no module, the same code on
 the VM, under dart2js and under dart2wasm. The server is
-`guatiao-remote-server --listen ws://ADDRESS:PORT --trust trusted --range
-CIDR --key-file PATH ...` (the Rust crate `guatiao-source-remote`, feature
-`ws`).
+`guatiao-remote-server --listen ws://ADDRESS:PORT --security none --range
+CIDR --key-file PATH ...`, or `--listen wss://... --security server-tls`
+(or mutual TLS, the default) (the Rust crate `guatiao-source-remote`,
+feature `ws`, and `tls` for `wss://`).
 
 ```dart
-final link = await RemoteLink.connect(Uri.parse('ws://192.0.2.21:7000/'), key: keyBytes);
+final link = await RemoteLink.connect(Uri.parse('ws://192.0.2.21:7000/'),
+    security: RemoteSecurity.none, key: keyBytes);
 final catalog = await link.list();                 // RemoteCatalog
 final library = catalog.libraries.first;
 await link.open(library);                          // its providers answer from now on
@@ -596,10 +598,21 @@ chat.release();
 await link.close();
 ```
 
-- `RemoteLink.connect(Uri url, {required List<int> key, Duration? timeout
-  = 30 s, Duration handshakeTimeout = 10 s, int maxFrame = 64 MiB, int
-  maxCalls = 64}) -> Future<RemoteLink>`: the trusted level (HMAC-SHA256
-  over a pre-shared key, both ways). `RemoteLink.over(RemoteChannel,
+- `RemoteLink.connect(Uri url, {RemoteSecurity security = mutualTls,
+  List<int>? key, String? token, RemoteTls? tls, Duration? timeout = 30 s,
+  Duration handshakeTimeout = 10 s, int maxFrame = 64 MiB, int maxCalls =
+  64}) -> Future<RemoteLink>`. `RemoteSecurity.none` (`ws://` alone; HELLO
+  trust 1, HMAC-SHA256 over the key both ways, `key` required),
+  `serverTls` (`wss://`; trust 3, the key proved when the server's WELCOME
+  carries a proof, else a `token`; one of them required), `mutualTls`
+  (`wss://`; trust 2, the client certificate the browser's user installed,
+  or on the VM `tls`'s identity; a `token` if the server asks). A URL
+  that disagrees, or nothing to prove with, is an `ArgumentError` before
+  anything opens. `RemoteTls({List<String> pins, String? identity})`, the
+  VM only (a page passing it is an `ArgumentError`): pins alone decide the
+  server (`sha256:<hex>` of its DER certificate; no certificate authority
+  then), `identity` is PEM text of a certificate and its PKCS#8 key.
+  `RemoteLink.over(RemoteChannel,
   {RemoteTrust trust = trusted, List<int>? key, String? token, ...})` runs
   the handshake over any message transport: `RemoteChannel` is `messages`
   (a `Stream<Uint8List>`, one frame body each), `send(Uint8List)`,
@@ -757,7 +770,8 @@ A process whose pointers are not four or eight bytes wide gets
 
 - Kinds and providers on the web: a kind table is native code's (a
   page calls a server's providers through `remote.dart`).
-- `wss://`, WebTransport and the secure level in `remote.dart`.
+- WebTransport in `remote.dart`; pinning a server or presenting a chosen
+  client certificate from a page (a browser does neither).
 - Serving Dart to a host that is not this Dart process (a bridge, as
   guatiao-source-py is for Python).
 

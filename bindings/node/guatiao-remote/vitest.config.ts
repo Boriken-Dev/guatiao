@@ -38,7 +38,13 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'node', include: ['test/**/*.test.ts'], environment: 'node' },
+        // A page's TLS is its browser's: what only a page can do runs in Chrome.
+        test: {
+          name: 'node',
+          include: ['test/**/*.test.ts'],
+          exclude: ['test/**/*.page.test.ts'],
+          environment: 'node',
+        },
       },
       {
         extends: true,
@@ -49,6 +55,8 @@ export default defineConfig({
             enabled: true,
             headless: true,
             screenshotFailures: false,
+            // The provider's browser context takes any certificate (vitest sets
+            // ignoreHTTPSErrors), so the server-TLS test's own one passes.
             provider: playwright({ launchOptions: { executablePath: chrome() } }),
             instances: [{ browser: 'chromium' }],
           },

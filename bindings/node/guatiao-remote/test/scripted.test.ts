@@ -19,6 +19,7 @@ import {
   ListCatalog,
   Ping,
   Pong,
+  Proof,
   Release,
   Reply,
   Target,
@@ -26,6 +27,7 @@ import {
 } from '../src/codec.js';
 import { Gone, GuatiaoError, NotFound, Unsupported, WrongKind } from '../src/errors.js';
 import { type RemoteChannel, type RemoteProvider, RemoteLink, RemoteTrust, Served } from '../src/link.js';
+import { CLIENT_LABEL, SERVER_LABEL, proofOf } from '../src/proof.js';
 import { kindsDocument } from './support.js';
 
 /** Both ends of a link the suite plays the server of. */
@@ -379,5 +381,57 @@ describe('against a scripted peer', () => {
     pipe.reply(new Goodbye(14, 'too many handshakes'));
     await expect(linking).rejects.toMatchObject({ name: 'Busy', status: 14, message: 'too many handshakes' });
     expect(pipe.ended).toBe(true);
+  });
+});
+
+describe('security', () => {
+  const enc = new TextEncoder();
+
+  test('a URL must agree with the security asked', async () => {
+    await expect(RemoteLink.connect('ws://127.0.0.1:9/', { key: 'k' })).rejects.toThrow(/security 'none'/);
+    await expect(RemoteLink.connect('wss://127.0.0.1:9/', { security: 'none', key: 'k' })).rejects.toThrow(
+      /wss:\/\/ runs TLS/,
+    );
+    await expect(RemoteLink.connect('wss://127.0.0.1:9/', { security: 'server-tls' })).rejects.toThrow(
+      /a key or a token/,
+    );
+    await expect(RemoteLink.connect('http://127.0.0.1:9/', { security: 'none', key: 'k' })).rejects.toThrow(
+      /not a ws:\/\/ or wss:\/\/ URL/,
+    );
+  });
+
+  test('server TLS proves the key when the WELCOME asks for it', async () => {
+    const key = enc.encode('k');
+    const pipe = new Pipe();
+    const linking = RemoteLink.over(pipe, { trust: RemoteTrust.SERVER_TLS, key, timeout: null });
+    const hello = (await pipe.next()) as Hello;
+    expect(hello.trust).toBe(3);
+    const server = new Uint8Array(16).fill(7);
+    pipe.reply(new Welcome(server, proofOf(key, SERVER_LABEL, hello.nonce, server), {}));
+    const answered = (await pipe.next()) as Proof;
+    expect(answered.proof).toEqual(proofOf(key, CLIENT_LABEL, hello.nonce, server));
+    const link = await linking;
+    expect(link.trust).toBe(RemoteTrust.SERVER_TLS);
+    link.close();
+  });
+
+  test('server TLS with a token sends no proof when none is asked', async () => {
+    const pipe = new Pipe();
+    const linking = RemoteLink.over(pipe, { trust: RemoteTrust.SERVER_TLS, token: 't0k', timeout: null });
+    const hello = (await pipe.next()) as Hello;
+    expect((hello.options as Record<string, unknown>)['token']).toBe('t0k');
+    pipe.reply(new Welcome(new Uint8Array(16), new Uint8Array(0), {}));
+    const link = await linking;
+    expect(link.alive).toBe(true);
+    link.close();
+  });
+
+  test('a server asking for a key this client lacks is refused', async () => {
+    const pipe = new Pipe();
+    const linking = RemoteLink.over(pipe, { trust: RemoteTrust.SERVER_TLS, token: 't0k' });
+    const hello = (await pipe.next()) as Hello;
+    const server = new Uint8Array(16);
+    pipe.reply(new Welcome(server, proofOf(enc.encode('k'), SERVER_LABEL, hello.nonce, server), {}));
+    await expect(linking).rejects.toThrow(/has none/);
   });
 });

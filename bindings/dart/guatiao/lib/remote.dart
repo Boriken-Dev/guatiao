@@ -11,6 +11,7 @@
 ///
 /// final link = await RemoteLink.connect(
 ///   Uri.parse('ws://127.0.0.1:7000/'),
+///   security: RemoteSecurity.none,
 ///   key: utf8.encode(key),
 /// );
 /// final catalog = await link.list();
@@ -21,9 +22,11 @@
 /// await link.close();
 /// ```
 ///
-/// The server listens with `guatiao-remote-server --listen ws://...` at
-/// the trusted level: a pre-shared key proved both ways, peers admitted by
-/// address range, no encryption. Calls are typed by the kinds' descriptions
+/// The server listens with `guatiao-remote-server --listen ws://...
+/// --security none`: a pre-shared key proved both ways, peers admitted by
+/// address range, no encryption. Over `wss://` the link runs server TLS
+/// (the key or a token proved inside TLS) or mutual TLS, the default.
+/// Calls are typed by the kinds' descriptions
 /// the catalog carries: a tree crosses as plain Dart, an object as a
 /// [RemoteObject] (the peer's) or a [Served] (this side's), which the peer
 /// may call back while a call is open.
@@ -40,7 +43,9 @@ export 'src/remote/link.dart'
         RemoteLink,
         RemoteObject,
         RemoteProvider,
+        RemoteSecurity,
         RemoteTable,
+        RemoteTls,
         RemoteTrust,
         Served;
 export 'src/remote/codec.dart' show FrameFault, MalformedFrame;

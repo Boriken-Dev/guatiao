@@ -18,10 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `dart run guatiao:kind DOCUMENT -o FILE` then writes the kind's classes.
 
 - **A server's providers from plain Dart** (`package:guatiao/remote.dart`):
-  `RemoteLink.connect(Uri.parse('ws://host:port/'), key: ...)` speaks
-  guatiao's remote protocol over a WebSocket with no native library and
-  no module, so a browser page calls the providers `guatiao-remote-server
-  --listen ws://...` serves, under dart2js and dart2wasm as on the VM.
+  `RemoteLink.connect(Uri.parse('ws://host:port/'), security:
+  RemoteSecurity.none, key: ...)` speaks guatiao's remote protocol over a
+  WebSocket with no native library and no module, so a browser page calls
+  the providers `guatiao-remote-server --listen ws://...` serves, under
+  dart2js and dart2wasm as on the VM. A link's security is one choice
+  (`RemoteSecurity.none`, `serverTls`, `mutualTls`, the default): over
+  `wss://` a page's browser does the TLS, and on the VM `RemoteTls` pins
+  the server and presents an identity.
   Calls are typed by the kinds' descriptions the catalog carries; a page
   serves objects (`Served`) the server calls back while a call is open.
   The package depends on `package:crypto` for the key proof.

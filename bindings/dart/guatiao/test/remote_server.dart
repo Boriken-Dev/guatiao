@@ -38,11 +38,13 @@ String _library(String dir) {
   return '$dir/libderived_greeter.so';
 }
 
-/// A running server: [url] to connect to, [stop] to end it.
+/// A running server: [url] to connect to, [stop] to end it, and over TLS
+/// the [fingerprint] it presents.
 final class RemoteServer {
-  RemoteServer._(this.url, this._process, this._dir);
+  RemoteServer._(this.url, this.fingerprint, this._process, this._dir);
 
   final Uri url;
+  final String? fingerprint;
   final Process _process;
   final Directory _dir;
   Future<void>? _stopping;
@@ -55,8 +57,24 @@ final class RemoteServer {
   }();
 }
 
-/// Starts the server and waits for the address it serves.
-Future<RemoteServer> startRemoteServer() async {
+/// What [startRemoteServer] listens with for server TLS: `wss://`, an
+/// identity it makes, the suite's key.
+const List<String> serverTlsArguments = [
+  '--listen',
+  'wss://127.0.0.1:0',
+  '--security',
+  'server-tls',
+  '--identity',
+  '{dir}/server.pem',
+  '--key-file',
+  '{key}',
+];
+
+/// Starts the server and waits for the address it serves: by default
+/// `ws://` with no security and the suite's key; [listen] replaces those
+/// arguments, `{key}` in one standing for the key file's path and `{dir}`
+/// for a directory of the server's own.
+Future<RemoteServer> startRemoteServer({List<String>? listen}) async {
   final repo = _repo();
   final named = Platform.environment['GUATIAO_REMOTE_SERVER'];
   final exe = Platform.isWindows ? '.exe' : '';
@@ -77,28 +95,34 @@ Future<RemoteServer> startRemoteServer() async {
   final dir = Directory.systemTemp.createTempSync('guatiao-remote-');
   final keyFile = File('${dir.path}/link.key')..writeAsStringSync(remoteKey);
   final process = await Process.start(server.path, [
-    '--listen',
-    'ws://127.0.0.1:0',
-    '--trust',
-    'trusted',
-    '--range',
-    '127.0.0.1',
-    '--key-file',
-    keyFile.path,
+    ...?listen?.map(
+      (a) => a.replaceAll('{key}', keyFile.path).replaceAll('{dir}', dir.path),
+    ),
+    if (listen == null) ...[
+      '--listen',
+      'ws://127.0.0.1:0',
+      '--security',
+      'none',
+      '--range',
+      '127.0.0.1',
+      '--key-file',
+      keyFile.path,
+    ],
     '--kinds',
     '${repo.path}/examples/greeter_kind/include/greeter_kind.kinds.json',
     '--load',
     library.path,
   ]);
   unawaited(process.stdout.drain<void>());
-  final serving = Completer<Uri>();
+  final serving = Completer<(Uri, String?)>();
   final said = <String>[];
   process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
     (line) {
       said.add(line);
-      final m = RegExp(r'serving (ws://\S+)').firstMatch(line);
+      final m = RegExp(r'serving (wss?://\S+)').firstMatch(line);
       if (m != null && !serving.isCompleted) {
-        serving.complete(Uri.parse('${m[1]}/'));
+        final as = RegExp(r' as (sha256:[0-9a-f]+)').firstMatch(line);
+        serving.complete((Uri.parse('${m[1]}/'), as?[1]));
       }
     },
   );
@@ -112,8 +136,10 @@ Future<RemoteServer> startRemoteServer() async {
     }),
   );
   try {
-    final url = await serving.future.timeout(const Duration(seconds: 30));
-    return RemoteServer._(url, process, dir);
+    final (url, fingerprint) = await serving.future.timeout(
+      const Duration(seconds: 30),
+    );
+    return RemoteServer._(url, fingerprint, process, dir);
   } catch (_) {
     process.kill();
     dir.deleteSync(recursive: true);
@@ -121,12 +147,15 @@ Future<RemoteServer> startRemoteServer() async {
   }
 }
 
-/// For a browser suite: starts the server and sends its URL; `stop` ends
-/// it and is answered `stopped`, since the isolate may be killed as soon
-/// as the suite is done with it.
-Future<void> hybridMain(StreamChannel<Object?> channel) async {
+/// For a browser suite: starts the server (at server TLS when [message]
+/// is `server-tls`) and sends its URL; `stop` ends it and is answered
+/// `stopped`, since the isolate may be killed as soon as the suite is done
+/// with it.
+Future<void> hybridMain(StreamChannel<Object?> channel, Object? message) async {
   try {
-    final server = await startRemoteServer();
+    final server = await startRemoteServer(
+      listen: message == 'server-tls' ? serverTlsArguments : null,
+    );
     channel.sink.add(server.url.toString());
     channel.stream.listen((message) async {
       if (message == 'stop') {

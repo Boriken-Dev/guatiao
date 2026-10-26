@@ -28,13 +28,50 @@ enum RemoteTrust {
   /// encryption, and no defence against anyone on that network.
   trusted(1),
 
-  /// Any network, encrypted. No transport here runs it yet.
-  secure(2);
+  /// Any network, mutual TLS: both sides proven by certificate.
+  secure(2),
+
+  /// Any network, server TLS: the server proven by its certificate, the
+  /// client by the key (when the server asks for it) or a token.
+  serverTls(3);
 
   const RemoteTrust(this.code);
 
   /// The byte a HELLO carries.
   final int code;
+}
+
+/// A link's security, the same choice on every transport and client.
+enum RemoteSecurity {
+  /// No TLS (`ws://`): the pre-shared key proved both ways, peers admitted
+  /// by the server's access control list. No encryption, and no defence
+  /// against anyone on that network.
+  none,
+
+  /// TLS that proves the server (`wss://`): this side proves itself by the
+  /// key, when the server asks for it, or a token.
+  serverTls,
+
+  /// TLS that proves both sides (`wss://`): in a page, with a client
+  /// certificate the user installed in the browser; on the Dart VM, with
+  /// the identity [RemoteTls] names.
+  mutualTls,
+}
+
+/// How the Dart VM's TLS knows the server, and what it presents: the
+/// fingerprints (`sha256:<hex>`) of the servers it trusts, and its own
+/// identity, a PEM file's text holding one certificate and its PKCS#8 key.
+/// A page has none of this: its browser trusts the web's certificate
+/// authorities and presents what the user installed.
+final class RemoteTls {
+  const RemoteTls({this.pins = const [], this.identity});
+
+  /// The servers trusted, by fingerprint; empty trusts the platform's
+  /// certificate authorities.
+  final List<String> pins;
+
+  /// This side's certificate and key, PEM, for mutual TLS.
+  final String? identity;
 }
 
 /// A message transport: one frame's body per message. A WebSocket is
@@ -237,6 +274,24 @@ final class _Parent {
 
 final Object _parentKey = Object();
 
+/// Refuses, before anything is sent, a link that has nothing to prove
+/// itself with at [trust].
+void _checkProof(RemoteTrust trust, List<int>? key, String? token) {
+  final hasKey = key != null && key.isNotEmpty;
+  if (trust == RemoteTrust.trusted && !hasKey) {
+    throw ArgumentError.value(
+      key,
+      'key',
+      'the trusted level needs a pre-shared key',
+    );
+  }
+  if (trust == RemoteTrust.serverTls && !hasKey && token == null) {
+    throw ArgumentError(
+      'at server TLS the client proves itself by a key or a token: name one',
+    );
+  }
+}
+
 /// A link to a peer speaking guatiao's remote protocol.
 final class RemoteLink {
   RemoteLink._(
@@ -282,24 +337,59 @@ final class RemoteLink {
     if (alive) _send(Release(id));
   });
 
-  /// Connects to a server's WebSocket URL (`ws://host:port/path`) at the
-  /// trusted level, proving [key]. [timeout] bounds each call (`null`
-  /// waits as long as the link lives), [handshakeTimeout] the handshake;
-  /// [maxFrame] is the largest message this side reads, [maxCalls] how many
-  /// of the peer's calls it runs at once.
+  /// Connects to a server's WebSocket URL at [security], mutual TLS
+  /// unless told: `ws://host:port/path` runs [RemoteSecurity.none] alone,
+  /// `wss://` the two TLS modes. With none, [key] is proved both ways; with
+  /// server TLS this side proves [key] when the server asks for it, or
+  /// presents [token]; with mutual TLS a [token] goes with the
+  /// certificate when the server requires one. [tls] (the Dart VM only)
+  /// names the servers pinned and this side's identity. [timeout] bounds
+  /// each call (`null` waits as long as the link lives),
+  /// [handshakeTimeout] the handshake; [maxFrame] is the largest message
+  /// this side reads, [maxCalls] how many of the peer's calls it runs at
+  /// once.
   static Future<RemoteLink> connect(
     Uri url, {
-    required List<int> key,
+    RemoteSecurity security = RemoteSecurity.mutualTls,
+    List<int>? key,
+    String? token,
+    RemoteTls? tls,
     Duration? timeout = const Duration(seconds: 30),
     Duration handshakeTimeout = const Duration(seconds: 10),
     int maxFrame = 64 << 20,
     int maxCalls = 64,
   }) async {
-    final channel = await openWebSocket(url, handshakeTimeout);
+    final encrypted = switch (url.scheme) {
+      'ws' => false,
+      'wss' => true,
+      _ => throw ArgumentError.value(
+        url,
+        'url',
+        'a WebSocket URL is ws:// or wss://',
+      ),
+    };
+    if (encrypted != (security != RemoteSecurity.none)) {
+      throw ArgumentError.value(
+        url,
+        'url',
+        encrypted
+            ? 'wss:// runs TLS: pass security: RemoteSecurity.serverTls or mutualTls'
+            : 'ws:// carries no TLS, and the link is ${security.name}: pass '
+                  'security: RemoteSecurity.none, or connect to wss://',
+      );
+    }
+    final trust = switch (security) {
+      RemoteSecurity.none => RemoteTrust.trusted,
+      RemoteSecurity.serverTls => RemoteTrust.serverTls,
+      RemoteSecurity.mutualTls => RemoteTrust.secure,
+    };
+    _checkProof(trust, key, token);
+    final channel = await openWebSocket(url, handshakeTimeout, tls);
     return over(
       channel,
-      trust: RemoteTrust.trusted,
+      trust: trust,
       key: key,
+      token: token,
       timeout: timeout,
       handshakeTimeout: handshakeTimeout,
       maxFrame: maxFrame,
@@ -307,8 +397,11 @@ final class RemoteLink {
     );
   }
 
-  /// Runs the handshake over [channel] and answers the link. The trusted
-  /// level needs [key]; a secure server may ask for a [token].
+  /// Runs the handshake over [channel] at [trust] and answers the link.
+  /// The trusted level needs [key]; server TLS needs [key] or [token] (the
+  /// key proved when the server's WELCOME asks for it), and the channel's
+  /// own TLS must have proved the server; a secure server may ask for a
+  /// [token].
   static Future<RemoteLink> over(
     RemoteChannel channel, {
     RemoteTrust trust = RemoteTrust.trusted,
@@ -319,13 +412,11 @@ final class RemoteLink {
     int maxFrame = 64 << 20,
     int maxCalls = 64,
   }) async {
-    if (trust == RemoteTrust.trusted && (key == null || key.isEmpty)) {
+    try {
+      _checkProof(trust, key, token);
+    } catch (_) {
       await channel.close();
-      throw ArgumentError.value(
-        key,
-        'key',
-        'the trusted level needs a pre-shared key',
-      );
+      rethrow;
     }
     final messages = StreamIterator(channel.messages);
     final mine = proof.nonce();
@@ -365,9 +456,20 @@ final class RemoteLink {
       if (answer is! Welcome) {
         throw MalformedFrame(FrameFault.field, 'the server sent no WELCOME');
       }
-      if (trust == RemoteTrust.trusted) {
+      // At server TLS a WELCOME with a proof asks for the key; one
+      // without asks none.
+      final asked =
+          trust == RemoteTrust.trusted ||
+          (trust == RemoteTrust.serverTls && answer.proof.isNotEmpty);
+      if (asked) {
+        if (key == null || key.isEmpty) {
+          throw BadValue(
+            Status.badValue.code,
+            'the server proves clients by a pre-shared key, and this client has none',
+          );
+        }
         if (!proof.proves(
-          key!,
+          key,
           proof.serverLabel,
           mine,
           answer.nonce,

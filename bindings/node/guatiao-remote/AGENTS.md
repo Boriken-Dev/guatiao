@@ -15,17 +15,18 @@ open `ws://` is `http://`, secure only on localhost. Nothing of the
 ## A link
 
 ```ts
-RemoteLink.connect(url: string | URL, options: LinkOptions): Promise<RemoteLink>  // ws://host:port/path, trusted level
+RemoteLink.connect(url: string | URL, options?: LinkOptions): Promise<RemoteLink>  // ws:// or wss://
 RemoteLink.over(channel: RemoteChannel, options: LinkOptions & { trust?: RemoteTrust }): Promise<RemoteLink>
 interface LinkOptions {
-  key?: Uint8Array | string;          // the trusted level's pre-shared key (a string is UTF-8); required there
-  token?: string;                     // what a secure server may ask for
+  security?: RemoteSecurity;          // 'none' | 'server-tls' | 'mutual-tls' (default); ws:// runs none alone, wss:// the others
+  key?: Uint8Array | string;          // the pre-shared key (a string is UTF-8): required with none; at server TLS proved when the server asks
+  token?: string;                     // what this side presents when the server requires a token (server TLS: key or token required)
   timeout?: number | null;            // ms a call waits; default 30 000; null: as long as the link lives
   handshakeTimeout?: number;          // ms; default 10 000 (also bounds the WebSocket's opening)
   maxFrame?: number;                  // the largest message read; default 64 MiB
   maxCalls?: number;                  // the peer's calls run at once; default 64, past it BUSY
 }
-RemoteTrust = { LOCAL: 0, TRUSTED: 1, SECURE: 2 }
+RemoteTrust = { LOCAL: 0, TRUSTED: 1, SECURE: 2, SERVER_TLS: 3 }   // the HELLO's byte: none is TRUSTED, mutual TLS SECURE
 link.list(): Promise<RemoteCatalog>   // must come first: its kinds type every call
 link.open(library): Promise<void>     // its providers answer only once opened
 link.closeLibrary(library): void
@@ -134,6 +135,12 @@ key proof (a transport whose ends are already trusted).
 
 - `list()` before any call: the catalog's kinds type the calls, and a
   kind the catalog has not described rejects `NotFound`.
-- The trusted level is not encryption: anyone on the network reads and
+- `security: 'none'` is not encryption: anyone on the network reads and
   changes the traffic, and whoever reads the page holds the key.
+- Over `wss://` the TLS is the browser's (or Node's): the server's
+  certificate must be one it trusts (a certificate authority's, for the
+  server's name), and at mutual TLS a page presents the client
+  certificate its user installed; nothing here pins or presents one.
+  A URL that disagrees with `security`, or nothing to prove with, is a
+  `TypeError` before anything opens.
 - A text WebSocket message ends the link: frames are binary.

@@ -340,7 +340,7 @@ export abstract class Frame {
         if (type === FrameType.HELLO) {
           const at = r.at;
           const trust = r.byte();
-          if (trust > 2) throw new MalformedFrame('field', `the field at ${at} is not a trust level`, at);
+          if (trust > 3) throw new MalformedFrame('field', `the field at ${at} is not a trust level`, at);
           const nonce = r.fixed(16);
           frame = new Hello(trust, nonce, r.value());
         } else {
@@ -411,7 +411,7 @@ function status32(r: FrameReader): number {
   return status;
 }
 
-/** The client's first frame: `trust` 0 local, 1 trusted, 2 secure. */
+/** The client's first frame: `trust` 0 local, 1 trusted, 2 secure (mutual TLS), 3 server TLS. */
 export class Hello extends Frame {
   readonly type = FrameType.HELLO;
   constructor(

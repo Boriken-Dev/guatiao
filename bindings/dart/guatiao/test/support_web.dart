@@ -97,8 +97,22 @@ Future<String> readRepoText(List<String> parts) async {
 
 /// guatiao-remote-server on loopback over WebSocket, started on the test
 /// machine by `remote_server.dart`: the URL it serves, and what stops it.
-Future<(Uri, Future<void> Function())> remoteServer() async {
-  final channel = spawnHybridUri('remote_server.dart', stayAlive: true);
+Future<(Uri, Future<void> Function())> remoteServer() => _hybridServer(null);
+
+/// The same at server TLS over `wss://`: its URL, no fingerprint (the
+/// browser judges the certificate; the test profile takes any), and what
+/// stops it.
+Future<(Uri, String?, Future<void> Function())> serverTlsServer() async {
+  final (url, stop) = await _hybridServer('server-tls');
+  return (url, null, stop);
+}
+
+Future<(Uri, Future<void> Function())> _hybridServer(String? message) async {
+  final channel = spawnHybridUri(
+    'remote_server.dart',
+    message: message,
+    stayAlive: true,
+  );
   final answers = StreamIterator<Object?>(channel.stream);
   await answers.moveNext();
   final said = answers.current! as String;
