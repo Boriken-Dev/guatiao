@@ -30,7 +30,18 @@ are x64 builds and need an x64 build of the library.
 A kind is the table its C header declares. Here it is a class in the kind
 author's package, inheriting `guatiao.Kind`, that describes the slots once
 (their order, what each takes and answers, the floor hash the header
-defines) and has a method per slot:
+defines) and has a method per slot. A kind with a description (the
+`<crate>.kinds.json` a kind crate commits beside its header, or one
+another language wrote) is written, not declared:
+
+```matlab
+guatiao.write_kinds('../include/greeter_kind.kinds.json', '+greeterkind')
+```
+
+writes a class per kind into the package folder, the description's docs
+as its help; `'Check', true` writes nothing and raises `guatiao:Stale`
+when a class is not what it would write. The greeter kinds below are its
+output:
 
 ```matlab
 classdef Greeter < guatiao.Kind
@@ -200,4 +211,8 @@ library's.
   registers the M library, optionally adds the guatiao-source-py bridge, and
   calls every slot of the kind; its README has the commands.
 - `examples/matlab_provider/mlgreeter/` is the library above.
-- `examples/greeter_kind/matlab/+greeterkind/` declares the greeter kinds.
+- `examples/greeter_kind/matlab/+greeterkind/` holds the greeter kinds,
+  written from their description.
+- `examples/tally_kind/matlab/+tallykind/` holds the tally kinds, which
+  exist only as a description, written from it; the suite serves them
+  from M and calls every slot.

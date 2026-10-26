@@ -46,6 +46,13 @@ write now.
   imports the object kinds a separate document describes instead of
   refusing them. Node's `kindsOf` loads an object kind that names itself
   through its slots, or one naming it back, which it refused before.
+- **MATLAB and Octave write a kind's classes from its description.**
+  `guatiao.write_kinds(document, '+pkg')` writes a `guatiao.Kind` class
+  per kind of a kinds document into a package folder, the description's
+  docs as their help (`'Check', true` raises `guatiao:Stale` when one is
+  not current). The greeter kinds' classes are now its output, and the
+  tally kinds, which exist only as a document, are written into
+  `examples/tally_kind/matlab`.
 - **Dart: a kind born in Dart is written as its description.**
   `package:guatiao/describe.dart` holds the marks a kind is declared with
   as abstract interface classes (`U32`, `Lent<MapRef>`, `Taken<Listener>`,

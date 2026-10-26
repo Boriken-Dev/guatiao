@@ -19,11 +19,11 @@ binding's own page has the detail.
 | Go | an interface marked `//guatiao:kind`, its glue written by `guatiao-kind`; a kind of its own is such interfaces with `//guatiao:` directives, which `guatiao-kind -document` writes the description of | any value in `guatiao.Single` or `guatiao.Configured` | the interfaces and the description (or the header) | `var _ Greeter = (*Hello)(nil)`; the generator, a signature that is not the description's | an interface of its own (`Shouter`) |
 | Julia | `@kind Greeter floor_hash = N begin ... end`, or `Guatiao.kinds_of()` over the description | `struct Hello <: Greeter`, its methods, and `@provider` | the `@kind` block, written from the header, or the description | at run time, when the library is made | a slot not marked `@required` |
 | R | `kind("greeter", floor_hash = N, greet = method(...))`, or `kinds_of()` over the description | a class containing the kind, `setMethod` per slot, and `provider()` | the `method()` list, written from the header, or the description | at run time | `required = FALSE` |
-| MATLAB, Octave | `classdef Greeter < guatiao.Kind` with a `guatiao.Kind.describe(...)` constant | `classdef Hello < greeterkind.Greeter` with a `Provider` constant | the `guatiao.slot` list, written from the header | at run time, when the library is made | `'Required'` not true |
+| MATLAB, Octave | `classdef Greeter < guatiao.Kind` with a `guatiao.Kind.describe(...)` constant, written by `guatiao.write_kinds` from the description | `classdef Hello < greeterkind.Greeter` with a `Provider` constant | the description, or a `guatiao.slot` list | at run time, when the library is made | `'Required'` not true |
 | Fortran | an abstract type with a deferred procedure per required slot | a type extending it, offered with `lib%single` | the kind module, written from the header | the compiler: a missing deferred procedure, a wrong interface | an overridable procedure, named where the provider is served |
 
 **The description is the one source after the header.** TypeScript,
-JavaScript, Dart, Python and Go read it, so a kind that exists is never
+JavaScript, Dart, Python, Go and MATLAB read it, so a kind that exists is never
 declared in them by hand, and a slot added to the trait reaches them by
 regenerating one file; Julia and R declare it from the description at run
 time. A kind that exists nowhere else is declared once, in TypeScript as
@@ -34,8 +34,8 @@ they read a trait's. A library built with `#[derive(Provider)]` carries
 the description of what it serves, so a host can bind its kinds with no
 file at all. C++ checks each slot's signature against the header's when
 it compiles, and its declarations against the description in its tests;
-MATLAB and Fortran compare the floor hash they carry with the header's in
-their own tests.
+Fortran compares the floor hash it carries with the header's in its own
+tests.
 
 **Where a provider's identity comes from**: Rust's crate name and
 version; C++'s `library(id, version)`; TypeScript's and JavaScript's nearest `package.json`; Dart's
