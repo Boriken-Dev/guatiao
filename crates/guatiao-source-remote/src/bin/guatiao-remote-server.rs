@@ -22,6 +22,7 @@ guatiao-remote-server (--stdio | --listen tcp://ADDRESS:PORT) [options]
 
   --stdio               serve one link on stdin and stdout (a host's child)
   --listen URL          serve every link to URL (tcp:// is the trusted level,
+                        ws://ADDRESS:PORT the same over WebSocket, for a browser;
                         local://name the local one: a socket path or a pipe name;
                         rdma://ADDRESS:PORT is RDMA, experimental, Linux only)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
@@ -202,6 +203,8 @@ fn run() -> Result<(), String> {
     match scheme {
         #[cfg(feature = "tcp")]
         "tcp" => serve_tcp(&server, address, &a.ranges),
+        #[cfg(feature = "ws")]
+        "ws" => serve_ws(&server, address, &a.ranges),
         #[cfg(feature = "rdma")]
         "rdma" => serve_rdma(&server, address, &a.ranges, a.rdma_device.as_deref()),
         #[cfg(feature = "local")]
@@ -263,6 +266,23 @@ fn serve_tcp(server: &Server, address: &str, ranges: &[String]) -> Result<(), St
     let listener = TcpListen::bind(address, &ranges).map_err(|e| e.to_string())?;
     eprintln!(
         "guatiao-remote-server: serving tcp://{} to {}",
+        listener.local_addr().map_err(|e| e.to_string())?,
+        ranges
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    serve_accepted(server, || listener.accept())
+}
+
+#[cfg(feature = "ws")]
+fn serve_ws(server: &Server, address: &str, ranges: &[String]) -> Result<(), String> {
+    use guatiao_source_remote::transport::ws::WsListen;
+    let ranges = ranges_of(server, "ws", ranges)?;
+    let listener = WsListen::bind(address, &ranges).map_err(|e| e.to_string())?;
+    eprintln!(
+        "guatiao-remote-server: serving ws://{} to {}",
         listener.local_addr().map_err(|e| e.to_string())?,
         ranges
             .iter()

@@ -23,6 +23,8 @@ pub mod shm;
 pub mod stream;
 #[cfg(feature = "tcp")]
 pub mod tcp;
+#[cfg(feature = "ws")]
+pub mod ws;
 
 use core::time::Duration;
 use std::io;

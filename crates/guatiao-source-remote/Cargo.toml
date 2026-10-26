@@ -48,6 +48,10 @@ shm = ["local", "dep:memmap2"]
 # elsewhere than Linux the transport answers `Unsupported`.
 rdma = ["tcp", "dep:libloading", "dep:libc"]
 
+# WebSocket over TCP, at the trusted level as `tcp`: what a browser can
+# open. Each frame's body is one binary message.
+ws = ["tcp", "dep:tungstenite"]
+
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 # The kind tables it serves and calls through: libffi's closures and calls.
@@ -62,6 +66,8 @@ sha2 = { version = "0.10", optional = true }
 getrandom = { version = "0.3", optional = true }
 # The shared rings' file, mapped.
 memmap2 = { version = "0.9", optional = true }
+# WebSocket framing and its HTTP upgrade; no TLS.
+tungstenite = { version = "0.30", optional = true, default-features = false, features = ["handshake"] }
 
 # Named pipes on Windows: overlapped I/O, so one thread reads while
 # another writes, with no `unsafe` here.

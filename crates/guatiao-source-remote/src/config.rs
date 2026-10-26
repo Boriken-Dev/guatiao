@@ -7,7 +7,7 @@
 //!
 //! | key | holds |
 //! | --- | --- |
-//! | `connect` | `tcp://host:port`, `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
+//! | `connect` | `tcp://host:port`, `ws://host:port/path` (WebSocket, as a browser connects), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
 //! | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `trust` | `local`, `trusted` or `secure`; `local` for a child |
@@ -155,6 +155,16 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
             }
             Ok((
                 Box::new(crate::transport::tcp::TcpConnect::new(rest)),
+                options_of(map, trust)?,
+            ))
+        }
+        #[cfg(feature = "ws")]
+        "ws" => {
+            if trust != Trust::Trusted {
+                return Err(refused("`ws://` runs the trusted level"));
+            }
+            Ok((
+                Box::new(crate::transport::ws::WsConnect::new(connect)),
                 options_of(map, trust)?,
             ))
         }

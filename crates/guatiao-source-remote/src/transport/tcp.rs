@@ -242,8 +242,8 @@ impl TcpListen {
 
     /// The next stream from inside the ranges, or the address of a peer
     /// from outside them, closed unread: what a transport set up over TCP
-    /// (RDMA) accepts through.
-    #[cfg_attr(not(feature = "rdma"), allow(dead_code))]
+    /// (RDMA, WebSocket) accepts through.
+    #[cfg_attr(not(any(feature = "rdma", feature = "ws")), allow(dead_code))]
     pub(crate) fn accept_stream(&self) -> io::Result<Result<(TcpStream, SocketAddr), SocketAddr>> {
         let (stream, peer) = self.listener.accept()?;
         if !self.ranges.iter().any(|r| r.contains(peer.ip())) {
