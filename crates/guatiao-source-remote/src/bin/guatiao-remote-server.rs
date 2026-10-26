@@ -150,9 +150,6 @@ fn parse() -> Result<Args, String> {
                 a.security =
                     Some(security_of(&need(&mut it, &flag)?).map_err(|e| e.message().to_string())?);
             }
-            "--trust" => {
-                return Err("--trust is now --security: `trusted` is `none`, `secure` is `mutual-tls` (the default on a network), and `local` is the default on --stdio, local:// and shm://".to_string());
-            }
             "--range" => a.ranges.push(need(&mut it, &flag)?),
             "--acl" => a.acl = Some(need(&mut it, &flag)?.into()),
             "--key-file" => a.key_file = Some(need(&mut it, &flag)?.into()),

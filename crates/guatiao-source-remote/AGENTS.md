@@ -113,7 +113,7 @@ certificates it makes, a new one every `ROTATE_EVERY`, unless
 `guatiao-remote-server: certificate hashes sha256:<hex> sha256:<hex>`
 (the one presented, the next), said again at every change, and
 `--hashes-file` writes them as a JSON list, written before the line.
-`--trust` is refused with what to write now. No security across a
+No security across a
 network needs `--range` or `--acl`; mutual TLS needs `--state-dir` or
 `--identity`; server TLS needs those and `--key-file` or `--token-file`,
 and refuses `--pin`. `--token-file` (the token every client presents: the
@@ -402,8 +402,8 @@ A scheme this build lacks is `GUATIAO_ERR_UNSUPPORTED`, naming it, as is
 a TLS security in a build without `tls`. At server TLS a client names
 `pins`, a store or `roots`, and needs no identity.
 `ws://`, `rdma://`, `local://`, `shm://` and a child run `none` alone,
-`wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix,
-as is the former `trust` key. `tcp://`, `quic://` and `https://` run any.
+`wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix.
+`tcp://`, `quic://` and `https://` run any.
 `config::{security_of, Security::default_for, Security::trust, acl_of,
 policy_of, roots_of, tls_config_of}` read those values.
 

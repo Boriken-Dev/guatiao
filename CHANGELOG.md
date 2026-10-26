@@ -1426,6 +1426,12 @@ write now.
 - **R: `guatiao.serde` and `guatiao.intake` need the `guatiao` package
   of their own version**: a `guatiao_r_api` table of another size is
   refused when the package loads, naming both sizes.
+- **guatiao-source-remote: `trust` and `--trust` are unknown names.** A
+  peer manifest naming `trust` is refused as any key it does not have,
+  `guatiao-remote-server --trust` as any option it does not take, and a
+  source's configuration ignores it as any key it does not read. A server
+  takes a provider's kind only when it describes every slot of the kind
+  it already knows, no fewer.
 - **guatiao-source-remote's clients name the host they dial** in the TLS
   handshake on `tls://`, `wss://` and `quic://`, as WebTransport
   already did, rather than `coqui-peer.invalid`: the name a certificate
