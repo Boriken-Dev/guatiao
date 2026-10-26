@@ -305,7 +305,8 @@ closed unread. A transport's own set-up (TLS, QUIC, the WebSocket
 upgrade, shared memory's rings, RDMA's queue pairs) runs there too, never
 on the listener's thread, and within the same handshake time limit (10 s
 unless told): a client that connects and stays silent, on any transport,
-gives up its place then. A source the access control list denies, or whose
+gives up its place then, or as soon as the server ends its links
+(`Server::end_links`). A source the access control list denies, or whose
 handshake fails, is reported at most once a minute per address, the next
 report saying how many were held back; past 1024 addresses in one minute,
 a new one goes unreported. A listener whose accepts keep failing (out of
