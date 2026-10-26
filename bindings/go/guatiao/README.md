@@ -90,7 +90,7 @@ A file `GUATIAO_LIBRARY` names serves every module whose functions it
 exports (an application's own library carrying several surfaces), and
 the others find theirs beside it. Each has its own `UseLibrary`.
 
-Go 1.26 or later, on a 64-bit platform.
+Go 1.26 or later, on a 64-bit platform or 32-bit ARM Linux.
 
 ## Quick start
 
@@ -235,7 +235,8 @@ later.String() // "2026-02-28"
   runtime inside it cannot be unloaded, so its `unload` refuses.
 - A `[]byte` a mutable bytes slot receives is the caller's memory, valid
   for the call, as `io.Reader`'s `Read` receives one.
-- 64-bit platforms only, and cgo is required.
+- 64-bit platforms and 32-bit ARM Linux, not 32-bit x86 (where the guatiao
+  library does not build), and cgo is required.
 
 ## API overview
 

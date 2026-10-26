@@ -235,7 +235,8 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
   procedures that a slot reaches `recursive` (the binding's all are).
 - fpm versions are three numbers: a pre-release `0.0.0-alpha.N` is
   `0.0.0` in `fpm.toml`, and the tag names the build.
-- 64-bit platforms only.
+- 64-bit platforms, and 32-bit ARM Linux with gfortran; not 32-bit x86,
+  where the guatiao library does not build.
 
 ## API overview
 

@@ -8,7 +8,8 @@ repository path.
 The `+guatiao` package of `classdef` and functions, in the subset both
 MATLAB (R2024a or later) and GNU Octave (8.4 or later) run, over one C MEX
 gateway, `guatiao_mex`, which the package calls and nothing else should.
-64-bit platforms. It carries no guatiao library: one is opened at run time.
+64-bit platforms (Octave also on 32-bit ARM). It carries no guatiao
+library: one is opened at run time.
 
 ## Building the gateway
 

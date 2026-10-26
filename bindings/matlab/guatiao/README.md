@@ -92,8 +92,9 @@ the platform's library search is tried by file name.
 | `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them; found through `GUATIAO_SERDE_LIBRARY` first, or named with `guatiao.serde.use_library` |
 | `guatiao_intake` | the `guatiao.intake` functions; found through `GUATIAO_INTAKE_LIBRARY` first, or named with `guatiao.intake.use_library` |
 
-MATLAB R2024a or later, or GNU Octave 8.4 or later, on a 64-bit platform,
-with a library built for the same architecture as the process.
+MATLAB R2024a or later, or GNU Octave 8.4 or later, on a 64-bit platform
+(Octave also on 32-bit ARM Linux), with a library built for the same
+architecture as the process.
 
 ## Quick start
 
@@ -225,8 +226,9 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 - An M library is registered in a host in the same session; there is no
   library file a foreign host's scan loads, since that would need MATLAB
   or Octave embedded in it.
-- 64-bit platforms only. On Windows ARM64, Octave and MATLAB are x64
-  builds and need an x64 build of the library.
+- 64-bit platforms, and Octave on 32-bit ARM Linux; not 32-bit x86, where
+  the guatiao library does not build. On Windows ARM64, Octave and MATLAB
+  are x64 builds and need an x64 build of the library.
 
 ## API overview
 

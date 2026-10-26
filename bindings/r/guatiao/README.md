@@ -76,7 +76,8 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 or call `use_library(path)` before the first call. Without either, the
 platform's library search is tried by file name.
 
-R 4.2 or later, on a 64-bit platform, and a library built for the same
+R 4.2 or later, on a 64-bit platform or 32-bit ARM Linux, and a library
+built for the same
 architecture as the R process. `bit64` is optional: installed, it lets
 `int64 = "integer64"` and `value_data(numbers = "integer64")` answer its
 `integer64`.
@@ -194,8 +195,9 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
 - An R library is registered in a host in the same session; there is no
   library file a foreign host's scan loads, since that would need R
   embedded in it.
-- 64-bit platforms only. CRAN's R for Windows is x64; on Windows ARM64
-  it needs an x64 build of the library.
+- 64-bit platforms and 32-bit ARM Linux; not 32-bit x86, where the guatiao
+  library does not build. CRAN's R for Windows is x64; on Windows ARM64 it
+  needs an x64 build of the library.
 
 ## API overview
 

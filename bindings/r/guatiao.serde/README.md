@@ -43,7 +43,8 @@ platform's search. `guatiao::use_library(path, library = "guatiao_serde")` names
 it from code instead. Nothing is loaded until the first call, which
 signals `guatiao_library_not_found` naming every place it looked.
 
-R 4.2 or later, on a 64-bit platform, and a library built for the R
+R 4.2 or later, on a 64-bit platform or 32-bit ARM Linux, and a library
+built for the R
 process's architecture.
 
 ## Quick start
@@ -64,7 +65,7 @@ c(e$format, e$line, e$column)
 ## Known limits
 
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
-- 64-bit platforms only.
+- 64-bit platforms and 32-bit ARM Linux, as `guatiao`.
 
 ## API overview
 

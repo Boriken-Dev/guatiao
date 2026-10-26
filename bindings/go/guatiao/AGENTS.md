@@ -6,7 +6,7 @@ Self-contained — this file ships in the module, so it names no
 repository path.
 
 Module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`, Go 1.26 or later,
-64-bit platforms, cgo (a C compiler at build time: GCC or clang; on
+64-bit platforms and 32-bit ARM Linux, cgo (a C compiler at build time: GCC or clang; on
 Windows a MinGW-style one, such as llvm-mingw or MinGW-w64 GCC). No
 dependencies outside the standard library, and no native library of its
 own: guatiao is loaded at run time.

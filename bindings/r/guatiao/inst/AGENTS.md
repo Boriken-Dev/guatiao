@@ -5,8 +5,8 @@ https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships in the package, so it names no
 repository path.
 
-Package `guatiao`, R 4.2 or later, 64-bit platforms. A source package:
-its C glue is compiled when it installs (Rtools on Windows) and needs
+Package `guatiao`, R 4.2 or later, 64-bit platforms and 32-bit ARM. A
+source package: its C glue is compiled when it installs (Rtools on Windows) and needs
 libffi (`libffi-dev` / `libffi-devel` on Linux, the SDK's on macOS,
 Rtools' own on Windows). Imports only `methods` and `utils`; suggests
 `bit64`, used only when installed and asked for. It carries no guatiao

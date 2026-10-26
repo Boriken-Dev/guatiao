@@ -65,6 +65,18 @@ write now.
   `Mechanism` honours it; `Libffi` does. The
   Lua, Rhai, JavaScript and WebAssembly sources do not declare instances
   yet.
+- **Go, R, Octave and Fortran run on 32-bit ARM too.** Each suite passes
+  on armv7 under qemu-user (Go's examples and R and Octave with every
+  greeter, Octave at its 8.4 floor). What that took: Go's `civil` package
+  compiles where an `int` is 32 bits; R and Octave write a served table's
+  slots after its 8-byte header, a pointer each, where they wrote them a
+  word apart from its start and overwrote the floor hash on 32-bit, and
+  size a kind's table in words; the Fortran loader no longer takes a
+  32-bit gfortran for Windows (only a 4-byte `long` beside an 8-byte
+  pointer is Windows); the Octave gateway is built with `-fexceptions`,
+  without which a MEX error aborts Octave where C gets no unwind tables.
+  Julia's mirrors are stated in words as well, run on 64-bit only: no
+  supported Julia is built for 32-bit ARM.
 - **Python and Node run on 32-bit ARM.** Both bindings state every
   struct size and offset in words, as the header does, where they pinned
   64-bit numbers: a 32-bit ARM CPython imports `guatiao` and Node lays its
