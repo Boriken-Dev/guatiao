@@ -720,6 +720,25 @@ WSL less so (8-20 %, and its runs moved the most).
   frame queued in one go and the reader opens what one read brought, so
   fewer system calls carry the same calls. Not explained further.
 
+QUIC, the secure level over UDP (`remote-quic-windows.jsonl`,
+`remote-quic-wsl.jsonl`): `quic://ADDRESS:PORT --identity PATH` on both
+ends, beside `tls://`; five runs each, alternating, each started with the
+machine under 50 % busy (Windows) or 20 % (WSL), medians.
+
+| link, loopback | p50 µs | p99 µs | calls/s, 32 threads | MB/s, 4 MiB | CPU µs/call, client / server |
+| --- | --- | --- | --- | --- | --- |
+| Windows ARM64, TLS | 32.0 | 85.6 | 108 965 | 617 | 37.5 / 36.7 |
+| Windows ARM64, QUIC | 70.3 | 261.8 | 137 089 | 384 | 120.3 / 120.3 |
+| WSL (aarch64), TLS | 60.1 | 188.6 | 59 149 | 1 223 | 67.9 / 67.4 |
+| WSL (aarch64), QUIC | 217.3 | 2 321.5 | 33 764 | 226 | 129.9 / 132.0 |
+
+- QUIC's small call costs two (Windows) to four (WSL) times TLS's, and
+  three (Windows) or two (WSL) times its CPU; with 32 threads Windows'
+  QUIC passes TLS.
+- WSL's QUIC moved a 4 MiB round trip at 40-374 MB/s from run to run and
+  its p99 reached 4 ms. Not explained; UDP socket buffers are a guess,
+  unmeasured.
+
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
 set-up. One x86-64 Linux VM with one rxe device, both ends on it, beside
