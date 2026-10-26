@@ -31,6 +31,13 @@ write now.
   `Mechanism` honours it; `Libffi` does. The
   Lua, Rhai, JavaScript and WebAssembly sources do not declare instances
   yet.
+- **Python and Node run on 32-bit ARM.** Both bindings state every
+  struct size and offset in words, as the header does, where they pinned
+  64-bit numbers: a 32-bit ARM CPython imports `guatiao` and Node lays its
+  structs out for the platform it runs on (`WORD`, `VIEW` and `setSize`
+  in `guatiao/ffi`). Each suite now also compares its layouts with the
+  ones the platform's C compiler gives `guatiao.h`, and both pass on
+  armv7 under qemu-user. `usize` and `isize` slots are a word wide.
 - **Node and Go: a document straight to the language's own data and
   back.** Node's `guatiao-serde` gains `parse(text, { format, how,
   numbers, maps })`, answering what `loads(...).toJS()` does, and

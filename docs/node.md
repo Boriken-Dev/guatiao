@@ -230,7 +230,8 @@ export type Counter = Implementation<typeof Counter>;
   is refused. `fallible` marks a slot that can refuse, with a
   `guatiao_provider_error *err` last.
 - An integer says its width (`t.i8` to `t.i64`, `t.u8` to `t.u64`,
-  `t.usize`, `t.isize`), as C does; the 64-bit ones cross as `bigint`.
+  `t.usize`, `t.isize`), as C does; the 64-bit ones and the word-wide
+  `usize` and `isize` cross as `bigint`.
 - `t.lent(...)` is a tree or object lent for the call and changed where it
   stands; `t.taken(...)` one handed over; an `answer` of `t.map`, `t.list`
   or `t.value` a tree answered, and an object kind an object answered.

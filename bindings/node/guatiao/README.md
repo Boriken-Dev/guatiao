@@ -74,8 +74,9 @@ platform's library search is tried by file name. A library that exports
 only part of the ABI is fine: calling a function it lacks throws
 `MissingSymbol` naming it.
 
-Node 22 or later, on a 64-bit platform koffi ships a build for (Linux,
-macOS, Windows, FreeBSD, OpenBSD, Android; x64 and arm64).
+Node 22 or later, on a platform koffi ships a build for (Linux, macOS,
+Windows, FreeBSD, OpenBSD, Android; x64 and arm64), and on 32-bit ARM
+Linux.
 
 ## Quick start
 
@@ -221,7 +222,8 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 - On Linux and macOS, CPython served through the guatiao-source-py bridge inside
   a Node process does not free what a call from Node drops: a Python object such
   a call releases is never deallocated.
-- 64-bit platforms only, and not in a browser.
+- 64-bit platforms and 32-bit ARM, not 32-bit x86 (where the guatiao
+  library does not build), and not in a browser.
 
 ## API overview
 

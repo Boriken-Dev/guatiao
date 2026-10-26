@@ -77,7 +77,7 @@ with registry.provider_meta("acme_dialer") as meta:   # a provider's form
 - What `at` and `resolve` answer borrows from the tree it was found in:
   read-only, and refused once that tree is closed. `.clone()` copies it
   out.
-- 64-bit targets only, as `guatiao`.
+- 64-bit targets and 32-bit ARM, as `guatiao`.
 
 ## API overview
 

@@ -228,5 +228,5 @@ are the bridge's.
   the program: libraries share `sys.modules`, so two that need different
   versions of one package need separate processes, and a compiled
   extension module stays loaded when its library closes.
-- **Run on a 32-bit interpreter or in a browser.** The package needs a
-  64-bit CPython that can load a native library.
+- **Run in a browser, or on 32-bit x86.** The package needs a CPython
+  that can load a native library, 64-bit or 32-bit ARM.

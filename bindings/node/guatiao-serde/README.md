@@ -49,7 +49,8 @@ platform's search. `useLibrary(path)` names it from code instead. Nothing
 is loaded at import time; the first call throws `LibraryNotFound`, naming
 every place it looked.
 
-Node 22 or later, on a 64-bit platform koffi ships a build for.
+Node 22 or later, on a 64-bit platform koffi ships a build for, or
+32-bit ARM Linux.
 
 ## Quick start
 
@@ -78,7 +79,7 @@ naming its feature. A TOML document must be a map.
 
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
-- 64-bit platforms only, and not in a browser.
+- 64-bit platforms and 32-bit ARM, as `guatiao`, and not in a browser.
 
 ## API overview
 
