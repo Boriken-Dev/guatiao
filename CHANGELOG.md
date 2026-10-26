@@ -14,10 +14,39 @@ write now.
 
 ### Added
 
+- **guatiao's remote links: one security choice, the same on every
+  transport and client.** `security` is `none` (an access control list
+  and a pre-shared key proved both ways, no encryption), `server-tls`
+  (TLS proves the server by its certificate; the client proves itself by
+  the key or a token inside it, with no certificate: what a browser page
+  can do) or `mutual-tls` (both sides by certificate), in a source file's
+  configuration, a peer manifest, `guatiao-remote-server --security` and
+  the page clients' `security` option; it replaces `trust`, which is now
+  refused with what to write instead (`trusted` is `none`, `secure` is
+  `mutual-tls`). The default is `none` on a child, `local://` and
+  `shm://` and `mutual-tls` on every network transport, so a network link
+  without TLS is one somebody named; a source's `security` is every
+  manifest's default. Every network transport runs every security that
+  applies: `tcp://` (`tls://` names TLS), `quic://` (at `none` its TLS
+  checks no certificate and the key decides), `ws://` / `wss://` (new:
+  WebSocket over TLS, `WsConnect::tls`, `WsListen::bind_tls`), and
+  `rdma://` with `none`. The handshake gains trust 3, server TLS, in
+  `docs/remote.md` and the shared vectors (C, Dart and TypeScript peers
+  pass them); no frame changes shape, and an older peer refuses trust 3
+  as a malformed HELLO. In Rust: `config::Security`, `Trust::ServerTls`,
+  `TlsConfig::server_tls()` / `without_identity()`,
+  `QuicConnect::trusted`, `QuicListen::bind_trusted`,
+  `FrameRead::encrypted()`. An identity file may carry its certificate's
+  chain (a CA-issued certificate a browser is to trust). The Dart client
+  (`RemoteSecurity`, and on the VM `RemoteTls` to pin the server and
+  present an identity) and the TypeScript one (`security`) default to
+  mutual TLS; a page over `ws://` names `none`. coqui-peer-tls is pinned
+  at the commit that serves TLS without client authentication.
+
 - **`guatiao-remote`, guatiao's remote protocol in TypeScript** (npm,
   new package). A browser page, or Node 22 and later, calls the providers
   a `guatiao-remote-server` serves over a WebSocket, as the Dart client
-  does: `RemoteLink.connect(url, { key })`, `list()`, `open(library)`,
+  does: `RemoteLink.connect(url, { security, key })`, `list()`, `open(library)`,
   `table.call(slot, args)`, objects of the server's as `RemoteObject`,
   the page's own as `Served` (called back while a call is open; a call
   made from a handler names it with `{ during: call }`). Calls are typed

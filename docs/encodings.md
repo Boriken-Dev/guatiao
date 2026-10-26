@@ -621,19 +621,19 @@ over [guatiao's remote protocol](remote.md).
 type = "remote"
 name = "lab-printer"             # the peer's name
 connect = "tcp://192.0.2.5:7000" # where it listens, and by which transport
-trust = "trusted"                # the link's trust level
-key_file = "lab-printer.key"     # the trusted level's key, relative to this file
+security = "none"                # no TLS: the key proved both ways
+key_file = "lab-printer.key"     # the pre-shared key, relative to this file
 ```
 
 | key | holds |
 | --- | --- |
 | `name` | required text, not empty and holding no `/`: the peer's name. Its libraries and providers are served as `<name>/<id>` |
 | `connect` | required text: `tcp://host:port`, `ws://host:port/path`, `tls://host:port`, `local://name`, `shm://name` or `rdma://host:port` |
-| `trust` | text: `local` (for `local://` and `shm://`), `trusted` (for `tcp://`, `ws://` and `rdma://`) or `secure` (for `tls://`, in a build with the `tls` feature; refused as unsupported without it); required unless the source's configuration names it |
-| `key_file` | text, relative to the manifest's directory: a file holding the trusted level's pre-shared key |
-| `pins` | list of text: the fingerprints (`sha256:<hex>`) of the peer's certificate the secure level trusts |
-| `policy` | table: the secure level's TLS policy, coqui-peer-tls's text form version 1 ([the keys](remote.md#the-secure-level)) |
-| `identity_file`, `state_dir` | text, relative to the manifest's directory: the identity this host presents to the peer at the secure level, a PEM file or a directory holding `identity.pem` |
+| `security` | text: `none`, `server-tls` or `mutual-tls` ([which a scheme runs](remote.md#security)); when absent, the source's configuration's, else `none` for `local://` and `shm://` and `mutual-tls` for a network transport; `trust`, its former name, is refused with what to write now |
+| `key_file` | text, relative to the manifest's directory: a file holding the pre-shared key (`none`, and server TLS when the server asks for it) |
+| `pins` | list of text: the fingerprints (`sha256:<hex>`) of the peer's certificate TLS trusts |
+| `policy` | table: the TLS policy, coqui-peer-tls's text form version 1 ([the keys](remote.md#mutual-tls)) |
+| `identity_file`, `state_dir` | text, relative to the manifest's directory: the identity this host presents to the peer over TLS, a PEM file or a directory holding `identity.pem` |
 | `timeout_ms`, `max_frame`, `max_calls` | whole numbers: a call's wait (`0` for as long as the link lives) and the link's bounds |
 | `rdma_device` | text: the RDMA device `rdma://` goes through |
 
