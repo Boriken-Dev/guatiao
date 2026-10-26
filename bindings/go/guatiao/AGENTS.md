@@ -279,8 +279,11 @@ kind's name is its marker's, a slot's its method's in snake_case
 slot's falling back to its interface's; the document lists the kinds in
 the order the package declares them (files by name). Types from another
 package are refused, object kinds of another package included, as are
-two kinds of one name, two slots of one name, and an appended slot's
-method declared in a second interface. A refusal writes nothing.
+two kinds of one name, two slots of one name, an appended slot's
+method declared in a second interface, a slot named `destroy` or a method
+named as one of the remote's own (`Begin`, `Has`, `Kind`, `Table`,
+`Closed`), and `mut` bytes on a provider kind (object kinds only). A
+refusal writes nothing.
 
 | C | a method takes / returns |
 | --- | --- |

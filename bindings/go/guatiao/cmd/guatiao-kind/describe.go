@@ -187,6 +187,17 @@ func (p *pkgInfo) describeKind(k *kindDecl) (outKind, error) {
 				return fmt.Errorf("%s: two slots of %s are %s", p.at(m.pos), k.kind, s.Name)
 			}
 		}
+		switch m.name {
+		case "Destroy":
+			return fmt.Errorf("%s: destroy is the slot an object kind's table starts with (its Close), and no other", p.at(m.pos))
+		case "Begin", "Has", "Kind", "Table", "Closed":
+			return fmt.Errorf("%s: a remote has %s of its own, so no slot's method may be called it", p.at(m.pos), m.name)
+		}
+		for _, a := range s.Args {
+			if a.Type == "bytes_mut" && !object {
+				return fmt.Errorf("%s: %s(%s): bytes written in place cross on an object kind only", p.at(m.pos), m.name, a.Name)
+			}
+		}
 		d.Slots = append(d.Slots, s)
 		return nil
 	}

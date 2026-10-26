@@ -169,6 +169,11 @@ func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 		"an argument with no name":   {"Heard(what string) error", "Heard(string) error", "every argument has a name"},
 		"an underscore in a method":  {"Fill(config", "Fill_it(config", "no slot's name in CamelCase"},
 		"an empty mark":              {"//guatiao:lent config ear", "//guatiao:lent", "names what it marks"},
+		"a destroy slot":             {"\tHeard(what string) error\n", "\tHeard(what string) error\n\tDestroy() error\n", "destroy is the slot"},
+		"a remote's own method":      {"Fill(config", "Has(config", "a remote has Has of its own"},
+		"bytes_mut on a provider": {"//guatiao:taken items\n\tRead(v guatiao.Ref, items []string, ear Ear)",
+			"//guatiao:taken items\n\t//guatiao:mut buf\n\tRead(v guatiao.Ref, items []string, ear Ear, buf []byte)",
+			"on an object kind only"},
 	}
 	for name, c := range cases {
 		src := strings.Replace(bornKinds, c.from, c.to, 1)
