@@ -26,9 +26,12 @@ const MIRRORS = Dict(
     "guatiao_wire_event" => GWireEvent,
 )
 
+# A pointer and a size_t are a word wide; a 64-bit integer is 8-aligned on
+# every platform the library builds for.
+const W = sizeof(Ptr{Cvoid})
 const SCALARS = Dict("uint8_t" => 1, "int8_t" => 1, "bool" => 1, "uint16_t" => 2, "int16_t" => 2,
-    "uint32_t" => 4, "int32_t" => 4, "uint64_t" => 8, "int64_t" => 8, "size_t" => 8, "intptr_t" => 8,
-    "uintptr_t" => 8, "float" => 4, "double" => 8, "guatiao_status" => 4, "guatiao_tag" => 4)
+    "uint32_t" => 4, "int32_t" => 4, "uint64_t" => 8, "int64_t" => 8, "size_t" => W, "intptr_t" => W,
+    "uintptr_t" => W, "float" => 4, "double" => 8, "guatiao_status" => 4, "guatiao_tag" => 4)
 
 uncomment(text) = replace(text, r"/\*.*?\*/"s => "")
 
@@ -59,7 +62,7 @@ end
 "(size, alignment) of a C type spelled in a header."
 function c_layout(ctype::AbstractString, defs)
     t = strip(replace(ctype, r"\b(const|struct|union)\b" => ""))
-    (occursin('*', t) || t == "guatiao_map_ptr") && return (8, 8)
+    (occursin('*', t) || t == "guatiao_map_ptr") && return (W, W)
     t == "guatiao_number" && (t = "guatiao_string")
     haskey(SCALARS, t) && return (SCALARS[t], SCALARS[t])
     haskey(defs, t) || error("unknown C type $ctype")

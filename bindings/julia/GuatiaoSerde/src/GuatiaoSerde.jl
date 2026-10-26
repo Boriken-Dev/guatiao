@@ -46,7 +46,11 @@ struct GParseError
     column::UInt32
     message::GValue
 end
-sizeof(GParseError) == 56 || error("guatiao_parse_error is $(sizeof(GParseError)) bytes, the header's is 56")
+# Three uint32_t, then a value at its own alignment: 16 + the value on a
+# 64-bit platform, 12 + it on a 32-bit one.
+let n = (Guatiao.WORD == 8 ? 16 : 12) + sizeof(GValue)
+    sizeof(GParseError) == n || error("guatiao_parse_error is $(sizeof(GParseError)) bytes, the header's is $n")
+end
 
 const PV = Ptr{GValue}
 const PA = Ptr{GAlloc}
@@ -104,7 +108,7 @@ function parse(text::AbstractString; format::Symbol = :json, how::Integer = 0, a
     err = Ref(GParseError(0, 0, 0, ZERO_VALUE))
     status = GC.@preserve s err f(gstr(s), UInt32(how), alloc, root, err)
     message = GC.@preserve err begin
-        p = Ptr{GValue}(Base.unsafe_convert(Ptr{GParseError}, err) + 16)
+        p = Ptr{GValue}(Base.unsafe_convert(Ptr{GParseError}, err) + fieldoffset(GParseError, 4))
         m = load_tag(p) == TAG_STRING ? text_of(unsafe_load(payload_ptr(GString, p))) : ""
         guatiao_value_free(p)
         m
