@@ -181,6 +181,7 @@ impl Pool {
     }
 
     fn work(self: Arc<Self>, me: u64, tx: Sender<Job>, rx: Receiver<Job>) {
+        let _unwinding = Unwinding { pool: &self, me };
         let mut job = rx.recv().ok();
         loop {
             if let Some(j) = job.take() {
@@ -219,6 +220,23 @@ impl Pool {
                     return;
                 }
             }
+        }
+    }
+}
+
+/// Gives a pool thread's place back when a job unwinds it, so a panic
+/// does not shrink the pool for the link's life.
+struct Unwinding<'a> {
+    pool: &'a Pool,
+    me: u64,
+}
+
+impl Drop for Unwinding<'_> {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            let mut state = lock(&self.pool.state);
+            state.idle.retain(|(id, _)| *id != self.me);
+            state.threads -= 1;
         }
     }
 }
@@ -366,6 +384,39 @@ mod tests {
             Ok(2),
             "the job was lost with the thread that was ending"
         );
+    }
+
+    #[test]
+    fn a_job_that_panics_gives_its_threads_place_back() {
+        let pool = Arc::new(Pool::new(2, "pool-test", Duration::ZERO));
+        pool.run(Box::new(|| panic!("a job that panics")))
+            .expect("a thread takes it");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while lock(&pool.state).threads > 0 {
+            assert!(
+                Instant::now() < deadline,
+                "the panicked thread still counts against the pool"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        // Every place is free again: `max` jobs run at once.
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        let go_rx = Arc::new(Mutex::new(go_rx));
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        for _ in 0..2 {
+            let (go, done) = (Arc::clone(&go_rx), done_tx.clone());
+            pool.run(Box::new(move || {
+                lock(&go).recv().unwrap();
+                done.send(()).unwrap();
+            }))
+            .expect("a place is free");
+        }
+        for _ in 0..2 {
+            go_tx.send(()).unwrap();
+        }
+        for _ in 0..2 {
+            done_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
     }
 
     #[test]
