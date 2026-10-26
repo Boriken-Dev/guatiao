@@ -15,7 +15,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, TryLockError};
 
 use tungstenite::protocol::{Role, WebSocketConfig};
 use tungstenite::{Message, WebSocket};
@@ -30,6 +30,11 @@ use super::{Connect, Connection, FrameRead, FrameWrite};
 struct Socket {
     stream: Arc<TcpStream>,
     writing: Arc<Mutex<()>>,
+    /// The reader's: a write that finds the writer busy answers
+    /// `WouldBlock` having written nothing, and tungstenite sends the
+    /// reply on a later read, so the reader never waits behind a writer
+    /// that waits for the peer to read.
+    yields: bool,
 }
 
 impl Read for Socket {
@@ -40,7 +45,16 @@ impl Read for Socket {
 
 impl Write for Socket {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let _whole = self.writing.lock().unwrap_or_else(PoisonError::into_inner);
+        let taken = if self.yields {
+            self.writing.try_lock()
+        } else {
+            self.writing.lock().map_err(TryLockError::from)
+        };
+        let _whole = match taken {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(TryLockError::WouldBlock) => return Err(io::ErrorKind::WouldBlock.into()),
+        };
         (&*self.stream).write_all(buf)?;
         Ok(buf.len())
     }
@@ -94,7 +108,9 @@ impl WsReader {
                     ),
                 },
             )?;
-            self.reading = Reading::Open(Box::new(ws));
+            let mut ws = Box::new(ws);
+            ws.get_mut().yields = true;
+            self.reading = Reading::Open(ws);
             self.open.store(true, Ordering::Release);
         }
         Ok(match &mut self.reading {
@@ -133,8 +149,8 @@ impl FrameRead for WsReader {
                     self.reading = Reading::Ended;
                     return Ok(false);
                 }
-                // A peer that drops the connection between messages has
-                // ended the link as a stream's end of file does.
+                // A dropped connection ends the link as a stream's end of
+                // file does; tungstenite does not say where it fell.
                 Err(
                     tungstenite::Error::ConnectionClosed
                     | tungstenite::Error::AlreadyClosed
@@ -226,6 +242,7 @@ fn shared(stream: TcpStream) -> io::Result<Socket> {
     Ok(Socket {
         stream: Arc::new(stream),
         writing: Arc::new(Mutex::new(())),
+        yields: false,
     })
 }
 
@@ -337,10 +354,12 @@ impl Connect for WsConnect {
         socket.stream.set_write_timeout(None)?;
         // The handshake's object reads on: it holds what arrived past the
         // upgrade.
+        let mut ws = Box::new(ws);
+        ws.get_mut().yields = true;
         Ok(connection(
             socket,
             format!("ws {addr}"),
-            Reading::Open(Box::new(ws)),
+            Reading::Open(ws),
             Role::Client,
         ))
     }
@@ -493,6 +512,38 @@ mod tests {
         raw.write_all(&masked(0x1, true, b"text")).unwrap();
         let ended = serving.join().unwrap().unwrap_err();
         assert_eq!(ended.kind(), io::ErrorKind::InvalidData, "{ended}");
+    }
+
+    #[test]
+    fn a_reader_answering_a_ping_never_waits_for_a_busy_writer() {
+        let l = listener();
+        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let (stream, _) = l.tcp.accept_stream().unwrap().unwrap();
+        let socket = shared(stream).unwrap();
+        let writing = Arc::clone(&socket.writing);
+        let mut conn = connection(socket, "test".into(), Reading::Upgrade, Role::Server);
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut frame = Vec::new();
+            while let Ok(true) = conn.reader.read_frame(&mut frame, 1 << 10) {
+                if tx.send(frame.clone()).is_err() {
+                    break;
+                }
+            }
+        });
+        upgrade(&mut raw);
+        {
+            // A writer inside a write the peer is not taking in.
+            let _busy = writing.lock().unwrap();
+            raw.write_all(&masked(0x9, true, b"p")).unwrap();
+            raw.write_all(&masked(0x2, true, b"a")).unwrap();
+            let got = rx.recv_timeout(Duration::from_secs(5));
+            assert_eq!(got.as_deref(), Ok(&b"a"[..]), "the reader read on");
+        }
+        raw.write_all(&masked(0x2, true, b"b")).unwrap();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), b"b");
+        assert_eq!(bytes(&mut raw, 3), [0x8a, 1, b'p'], "the pong, once free");
     }
 
     #[test]
