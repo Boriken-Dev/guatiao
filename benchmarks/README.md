@@ -1031,10 +1031,24 @@ machine under 50 % busy (Windows) or 20 % (WSL), medians.
   the link's, and waking a sleeping thread in WSL costs tens of
   microseconds (driving a socket through tokio from a blocking thread
   added 52.7 µs a round trip there, 3.6 µs on Windows).
-- The kernel takes UDP segmentation offload (quinn's `UDP_SEGMENT` probe
-  succeeds) but no send carried a segment count: every datagram is a
-  system call of its own, which bounds a 4 MiB transfer. Why quinn sends
-  no batches is not measured.
+- quinn does send in segmentation-offload batches: a 4 MiB transfer's
+  sends carry a `UDP_SEGMENT` control message of 1 452 bytes over 14 520
+  (ten datagrams a system call; `strace` prints the option as
+  `cmsg_type=0x67`, which a search for its name misses, as an earlier
+  reading of these traces did), and the socket asks for receive offload
+  (`UDP_GRO`): in a run 23 502 of the client's 25 323 receives took one
+  message, about 5 150 of them several datagrams coalesced. So a
+  datagram is not a system call of its own.
+- Fewer runtime threads trade throughput for latency, and do not reach
+  the hand-offs (local, provisional; `remote-quic-workers-*.jsonl`, five
+  runs on Windows, four in WSL, builds alternating, medians): one worker
+  instead of two on both ends took WSL's small call from 249 to 226 µs,
+  4.1 voluntary switches a call instead of 5.4, 4 MiB from 537 to 756
+  MB/s; on Windows p50 66 to 59 µs and CPU a call 116 to 98 µs, but
+  32 threads 139 to 114 k calls/s. One worker on the client alone changed
+  nothing on Windows. Every call still crosses from a caller to quinn's
+  driver and from the driver to the link's reader on each end; those are
+  the wake-ups a TLS call does not pay. Not changed.
 
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
