@@ -16,7 +16,7 @@ binding's own page has the detail.
 | JavaScript | the same module, `guatiao-kind`'s `.js`, or `kindsOf()` over the description; a kind of its own is a class extending `Kind`, which `describeKinds()` writes the description of | the same class, without the types | the description, or `static slots` | with `// @ts-check` and `@implements`, what TypeScript checks; at run time, a missing required method is a `TypeError` naming it | an optional method |
 | Dart | an abstract interface class, written by `dart run guatiao:kind` from the description | `class Hello extends Provider implements Greeter, GreeterShout`, offered in a `Library` | the description | the analyzer: a missing or mistyped method, appended ones included; at run time, an `ArgumentError` naming a missing one | an interface of its own (`GreeterShout`) |
 | Python | `class Greeter(KindProtocol, Protocol, kind=..., floor_hash=...)`, written by `python -m guatiao.kinds` from the description or loaded by `kinds_of()`; a kind of its own is such a class with no `floor_hash`, which `describe_kinds()` writes the description of | `class Hello(Provider, Greeter)` | the description, or the class's annotations | mypy and pyright on the methods; at class creation, a missing required one | a method not marked `@required` |
-| Go | an interface marked `//guatiao:kind`, its glue written by `guatiao-kind` | any value in `guatiao.Single` or `guatiao.Configured` | the interfaces and the description (or the header) | `var _ Greeter = (*Hello)(nil)`; the generator, a signature that is not the description's | an interface of its own (`Shouter`) |
+| Go | an interface marked `//guatiao:kind`, its glue written by `guatiao-kind`; a kind of its own is such interfaces with `//guatiao:` directives, which `guatiao-kind -document` writes the description of | any value in `guatiao.Single` or `guatiao.Configured` | the interfaces and the description (or the header) | `var _ Greeter = (*Hello)(nil)`; the generator, a signature that is not the description's | an interface of its own (`Shouter`) |
 | Julia | `@kind Greeter floor_hash = N begin ... end`, or `Guatiao.kinds_of()` over the description | `struct Hello <: Greeter`, its methods, and `@provider` | the `@kind` block, written from the header, or the description | at run time, when the library is made | a slot not marked `@required` |
 | R | `kind("greeter", floor_hash = N, greet = method(...))`, or `kinds_of()` over the description | a class containing the kind, `setMethod` per slot, and `provider()` | the `method()` list, written from the header, or the description | at run time | `required = FALSE` |
 | MATLAB, Octave | `classdef Greeter < guatiao.Kind` with a `guatiao.Kind.describe(...)` constant | `classdef Hello < greeterkind.Greeter` with a `Provider` constant | the `guatiao.slot` list, written from the header | at run time, when the library is made | `'Required'` not true |
@@ -27,8 +27,8 @@ JavaScript, Dart, Python and Go read it, so a kind that exists is never
 declared in them by hand, and a slot added to the trait reaches them by
 regenerating one file; Julia and R declare it from the description at run
 time. A kind that exists nowhere else is declared once, in TypeScript as
-interfaces, in JavaScript as a class or in Python as a `KindProtocol`
-class, and written out as the same description, which the rest read as
+interfaces, in JavaScript as a class, in Python as a `KindProtocol`
+class or in Go as interfaces, and written out as the same description, which the rest read as
 they read a trait's. A library built with `#[derive(Provider)]` carries
 the description of what it serves, so a host can bind its kinds with no
 file at all. C++ checks each slot's signature against the header's when
