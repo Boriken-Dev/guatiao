@@ -252,3 +252,4 @@ lower_value.data.frame <- function(x) {
 # kept for the session; for tests proving every path frees.
 .gt_counting <- function() .Call(C_alloc_counting)
 .gt_live <- function(a) .Call(C_alloc_live, a)
+.gt_alloc_refuse <- function(a, on) invisible(.Call(C_alloc_refuse, a, on))

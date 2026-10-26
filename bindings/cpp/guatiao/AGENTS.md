@@ -308,7 +308,9 @@ moved in (`std::move`); when the call never happens (no slot) it is freed
 here. An answer arrives in the remote's allocator (the registry's), moved
 there if built elsewhere; a lent tree is settled once the call returns,
 answered or refused, into the allocator it recorded when it was lent,
-whatever the callee grew it with or wrote over it. Passing an argument
+whatever the callee grew it with or wrote over it. A refused settle is
+the call's `error` (`status::alloc`) when the slot itself answered, what
+it answered dropped; the slot's own refusal comes first. Passing an argument
 the slot does not
 take is a compile error.
 

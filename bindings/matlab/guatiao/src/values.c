@@ -467,6 +467,15 @@ int cmd_alloc_live(gt_call *c) {
   return 1;
 }
 
+/* alloc_refuse(id, on): whether every allocation is refused from now on */
+int cmd_alloc_refuse(gt_call *c) {
+  gt_counting *k = NULL;
+  int on = 0;
+  if (!gt_arg_handle(c, 0, GT_H_COUNTING, "allocator", (void **)&k) || !gt_arg_bool(c, 1, "on", &on)) return 0;
+  k->refusing = on;
+  return 1;
+}
+
 /* node_alloc_is(id, path, alloc) -> whether the node records that allocator */
 int cmd_node_alloc_is(gt_call *c) {
   guatiao_value *v = NULL;

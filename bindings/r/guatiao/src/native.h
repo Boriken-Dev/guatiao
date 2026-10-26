@@ -235,6 +235,7 @@ typedef struct gt_counting {
   guatiao_alloc alloc;
   int64_t live;
   int64_t total;
+  int refusing; /* set, every allocation is refused: a caller's failure paths */
 } gt_counting;
 gt_counting *gt_counting_new(void);
 int64_t gt_counting_live(const gt_counting *c);

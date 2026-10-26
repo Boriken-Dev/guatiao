@@ -520,6 +520,32 @@ static const guatiao_alloc *recorded_alloc(const guatiao_value *node, const guat
   return fallback;
 }
 
+/* What a slot answered and nobody will read, freed: a refused settle
+ * makes the call fail after the slot answered. */
+static void drop_answer(const gt_slot *sl, out_store *out) {
+  guatiao_value v;
+  switch (sl->ret) {
+  case S_STRING:
+    set_absent(&v);
+    v.tag = GUATIAO_STRING;
+    v.payload.text = out->s;
+    gt_free(&v);
+    break;
+  case S_VALUE:
+  case S_MAP:
+  case S_LIST:
+    v = out->v;
+    if (sl->ret == S_MAP) v.tag = GUATIAO_MAP;
+    if (sl->ret == S_LIST) v.tag = GUATIAO_LIST;
+    gt_free(&v);
+    break;
+  case R_OBJECT:
+    if (out->o.table) gt_destroy_object(out->o.table, out->o.size, out->o.ctx);
+    break;
+  default: break;
+  }
+}
+
 static int remote_answer(gt_call *c, const gt_slot *sl, out_store *outs) {
   out_store out = *outs;
   mxArray *x = NULL;
@@ -784,10 +810,16 @@ int cmd_remote_call(gt_call *c) {
   ffi_arg rc = 0;
   ffi_call(&sl->cif, FFI_FN(fn), &rc, values);
   guatiao_status st = (guatiao_status)rc;
-  /* What the callee grew a lent tree with may be in its library's allocator. */
+  /* What the callee grew a lent tree with may be in its library's
+   * allocator: moved into the one each recorded when it was lent. The
+   * first refusal is the error of a call that answered. */
+  guatiao_status settled = GUATIAO_OK;
   if (gt_core.guatiao_value_make_local)
     for (int j = 0; j < sl->nargs; j++)
-      if (lent[j]) gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
+      if (lent[j]) {
+        guatiao_status moved = gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
+        if (moved != GUATIAO_OK && settled == GUATIAO_OK) settled = moved;
+      }
   for (int j = 0; j < sl->nargs; j++) {
     int s = sl->args[j];
     if (s < S_TAKEN_VALUE && built[j]) gt_free(&tmp[j]); /* what was handed over is the callee's */
@@ -798,6 +830,11 @@ int cmd_remote_call(gt_call *c) {
     return 0;
   }
   gt_err_free(&err);
+  if (settled) {
+    drop_answer(sl, &out);
+    return gt_fail(c, settled, "moving what slot %d of %s put into a lent tree into that tree's allocator",
+                   sl->index_m, sl->kind->name);
+  }
   if (!remote_answer(c, sl, &out)) return 0;
   if (has_buffers) {
     mxArray *bufs = mxCreateCellMatrix(1, (mwSize)sl->nargs);

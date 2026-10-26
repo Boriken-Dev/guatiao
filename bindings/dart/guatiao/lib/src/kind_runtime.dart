@@ -441,12 +441,11 @@ Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
 /// [node], a tree lent for a call, moved where it stands into [home],
 /// the allocator it recorded when it was lent, so what the callee grew it
 /// with, or wrote over it, outlives the callee's library. A refusal leaves
-/// it whole, where it was.
-void _settle(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) {
-  if (_makesLocal) {
-    native.core().bindings.guatiao_value_make_local(node, home);
-  }
-}
+/// it whole, where it was, and is the status answered.
+int _settle(Pointer<guatiao_value> node, Pointer<guatiao_alloc> home) =>
+    _makesLocal
+    ? native.core().bindings.guatiao_value_make_local(node, home)
+    : Status.ok.code;
 
 /// A new `calloc`ed root holding a copy of the struct at [arm]: a whole
 /// node when [tag] is null, else a map or list.
@@ -658,6 +657,46 @@ final class CallScope extends SlotCall {
   final List<void Function()> _given = <void Function()>[];
   bool _called = false;
 
+  /// Trees lent for the call, each with the allocator it recorded when it
+  /// was lent: settled once the call returns.
+  final List<(Pointer<guatiao_value>, Pointer<guatiao_alloc>)> _lentTrees =
+      <(Pointer<guatiao_value>, Pointer<guatiao_alloc>)>[];
+
+  /// The answer's out slot and what it holds once the call returns: a
+  /// [Tag] for a tree (null for a value), `'text'` or `'object'`.
+  Pointer<NativeType>? _out;
+  Object? _outShape;
+
+  /// Settles every lent tree; the first refusal's status, else OK.
+  int _settleLent() {
+    var status = Status.ok.code;
+    for (final (node, home) in _lentTrees) {
+      final moved = _settle(node, home);
+      if (moved != Status.ok.code && status == Status.ok.code) status = moved;
+    }
+    _lentTrees.clear();
+    return status;
+  }
+
+  /// Frees what the slot answered, which nobody will read.
+  void _dropAnswer() {
+    final out = _out;
+    if (out == null) return;
+    switch (_outShape) {
+      case 'text':
+        final node = calloc<guatiao_value>();
+        node.ref.tag = Tag.string.code;
+        _copy(_armOf(node), out, sizeOf<guatiao_string>());
+        _free(node);
+      case 'object':
+        final o = out.cast<guatiao_object>().ref;
+        _destroy(o.table, o.size, o.ctx);
+      case final Tag? tag:
+        _free(_nodeOver(out, tag));
+    }
+    _out = null;
+  }
+
   guatiao_str str(String text) => strOf(arena, text).ref;
 
   guatiao_bytes bytes(List<int> data) {
@@ -731,8 +770,7 @@ final class CallScope extends SlotCall {
     // What the callee grew it with may be in its library's allocator:
     // moved into the one the tree records now, which a callee writing a
     // fresh tree over it would change.
-    final home = _recorded(node);
-    after(() => _settle(node, home));
+    _lentTrees.add((node, _recorded(node)));
     return node;
   }
 
@@ -795,34 +833,59 @@ final class CallScope extends SlotCall {
   Pointer<guatiao_map> mapOut() {
     final out = arena<guatiao_map>();
     out.ref.alloc = _binding;
+    _out = out;
+    _outShape = Tag.map;
     return out;
   }
 
   Pointer<guatiao_list> listOut() {
     final out = arena<guatiao_list>();
     out.ref.alloc = _binding;
+    _out = out;
+    _outShape = Tag.list;
     return out;
   }
 
   Pointer<guatiao_value> valueOut() {
     final out = arena<guatiao_value>();
     _armOf(out).cast<guatiao_map>().ref.alloc = _binding;
+    _out = out;
+    _outShape = null;
     return out;
   }
 
-  Pointer<guatiao_string> textOut() => arena<guatiao_string>();
+  Pointer<guatiao_string> textOut() {
+    final out = arena<guatiao_string>();
+    _out = out;
+    _outShape = 'text';
+    return out;
+  }
 
-  Pointer<guatiao_object> objectOut() => arena<guatiao_object>();
+  Pointer<guatiao_object> objectOut() {
+    final out = arena<guatiao_object>();
+    _out = out;
+    _outShape = 'object';
+    return out;
+  }
 
   Pointer<guatiao_provider_error> errorOut() => arena<guatiao_provider_error>();
 
-  /// The call happened: what was handed over is the callee's. Throws the
-  /// refusal [status] names, with the provider's words from [err], or, for
-  /// a [slot] that cannot fail, saying so.
+  /// The call happened: what was handed over is the callee's, and every
+  /// lent tree is settled. Throws the refusal [status] names, with the
+  /// provider's words from [err], or, for a [slot] that cannot fail,
+  /// saying so; else a refused settle, the answer freed unread.
   void check(int status, Pointer<guatiao_provider_error>? err, String slot) {
     _called = true;
     _given.clear();
-    if (status == Status.ok.code) return;
+    final settled = _settleLent();
+    if (status == Status.ok.code) {
+      if (settled == Status.ok.code) return;
+      _dropAnswer();
+      throw statusException(
+        settled,
+        "moving what $slot put into a lent tree into that tree's allocator",
+      );
+    }
     if (err != null) checkProviderStatus(native.core().bindings, status, err);
     throw statusException(
       status,
@@ -865,6 +928,7 @@ final class CallScope extends SlotCall {
       }
       _given.clear();
     }
+    _settleLent();
     _end();
   }
 }

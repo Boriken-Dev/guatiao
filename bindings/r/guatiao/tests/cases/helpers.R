@@ -44,6 +44,7 @@ with_repo <- function(code) {
 
 counting <- function() gt$.gt_counting()
 live <- function(a) gt$.gt_live(a)
+refuse <- function(a, on) gt$.gt_alloc_refuse(a, on)
 
 vectors <- function() read_json(readLines(repo_file("crates", "guatiao", "tests", "vectors", "time.json"),
   encoding = "UTF-8", warn = FALSE))

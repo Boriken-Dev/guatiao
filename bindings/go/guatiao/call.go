@@ -25,6 +25,62 @@ type Call struct {
 	given  []func()
 	called bool
 	err    unsafe.Pointer
+	// Trees lent for the call, each with the allocator it recorded when
+	// it was lent: settled once the call returns.
+	lent []lentTree
+	// The answer's out slot, and what it holds once the call returns.
+	out      unsafe.Pointer
+	outShape outShape
+	outClass TreeClass
+}
+
+type lentTree struct{ node, home unsafe.Pointer }
+
+type outShape int
+
+const (
+	outNone outShape = iota
+	outTree
+	outValue
+	outText
+	outObject
+)
+
+// settle moves every lent tree into the allocator it recorded when it
+// was lent, so what the callee grew it with, or wrote over it, outlives
+// the callee's library: the first refusal's status, else OK, a refused
+// tree left whole where it stands.
+func (c *Call) settle() uint32 {
+	st := uint32(native.OK)
+	for _, t := range c.lent {
+		if moved := native.ValueMakeLocal(t.node, t.home); moved != native.OK && st == native.OK {
+			st = moved
+		}
+	}
+	c.lent = nil
+	return st
+}
+
+// dropAnswer frees what the slot answered, which nobody will read.
+func (c *Call) dropAnswer() {
+	switch c.outShape {
+	case outTree, outValue:
+		node := native.Calloc(native.SizeValue)
+		if c.outShape == outValue {
+			native.Copy(node, c.out, native.SizeValue)
+		} else {
+			native.SetTag(node, c.outClass.tag())
+			native.Copy(native.Payload(node), c.out, native.SizeMap)
+		}
+		native.ValueFree(node)
+		native.Free(node)
+	case outText:
+		native.FreeString(c.out)
+	case outObject:
+		table, size, ctx := native.ObjectAt(c.out)
+		rawObject{table: table, size: size, ctx: ctx}.destroy(nil)
+	}
+	c.outShape = outNone
 }
 
 // Begin starts a call to slot i: ErrUnsupported for a slot the table
@@ -128,8 +184,8 @@ func (c *Call) Lend(x any, class TreeClass) (unsafe.Pointer, error) {
 	if home == nil {
 		home = alloc
 	}
-	c.keep(r.o) // End runs the hooks newest first: the owner outlives the settle
-	c.after = append(c.after, func() { native.ValueMakeLocal(node, home) })
+	c.keep(r.o) // the owner outlives the settle, which Status or End runs
+	c.lent = append(c.lent, lentTree{node, home})
 	return arm(node, class)
 }
 
@@ -228,21 +284,29 @@ func (c *Call) Out(class TreeClass) unsafe.Pointer {
 	if class == ValueClass {
 		out := c.block(native.SizeValue)
 		native.SetOwnedAlloc(native.Payload(out), alloc)
+		c.out, c.outShape = out, outValue
 		return out
 	}
 	out := c.block(native.SizeMap)
 	native.SetOwnedAlloc(out, alloc)
+	c.out, c.outShape, c.outClass = out, outTree, class
 	return out
 }
 
 // OutText is a guatiao_string out slot.
-func (c *Call) OutText() unsafe.Pointer { return c.block(native.SizeString) }
+func (c *Call) OutText() unsafe.Pointer {
+	c.out, c.outShape = c.block(native.SizeString), outText
+	return c.out
+}
 
 // OutScalar is an out slot for a scalar answer.
 func (c *Call) OutScalar() unsafe.Pointer { return c.block(8) }
 
 // OutObject is a guatiao_object out slot.
-func (c *Call) OutObject() unsafe.Pointer { return c.block(native.SizeObject) }
+func (c *Call) OutObject() unsafe.Pointer {
+	c.out, c.outShape = c.block(native.SizeObject), outObject
+	return c.out
+}
 
 // Err is the slot's guatiao_provider_error.
 func (c *Call) Err() unsafe.Pointer {
@@ -252,11 +316,18 @@ func (c *Call) Err() unsafe.Pointer {
 
 // Status is the call's status as an error: the provider's words for a
 // slot that can refuse, the status alone for one that cannot. The call
-// has happened: what was handed over is the callee's.
+// has happened: what was handed over is the callee's, and every lent
+// tree is settled; a refused settle is the error of a call that
+// answered, its answer freed unread.
 func (c *Call) Status(st uint32) error {
 	c.called = true
+	settled := c.settle()
 	if st == native.OK {
-		return nil
+		if settled == native.OK {
+			return nil
+		}
+		c.dropAnswer()
+		return &Error{Status: Status(settled), Message: "moving what " + c.slot.Name + " put into a lent tree into that tree's allocator"}
 	}
 	if c.err != nil {
 		return &Error{Status: Status(st), Message: native.TakeProviderError(c.err)}
@@ -311,6 +382,7 @@ func (c *Call) AnswerObject(out unsafe.Pointer, k AnyKind) (Remote, error) {
 // End finishes the call: what runs after it, the hand-overs it never
 // made undone, every block freed.
 func (c *Call) End() {
+	c.settle()
 	for i := len(c.after) - 1; i >= 0; i-- {
 		c.after[i]()
 	}

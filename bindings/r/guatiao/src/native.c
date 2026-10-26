@@ -180,10 +180,10 @@ void *gt_malloc(size_t n) { return n ? malloc(n) : NULL; }
 
 static void *gt_counting_alloc(void *ctx, size_t size, size_t align) {
   (void)align;
-  if (size == 0) return NULL;
+  gt_counting *c = (gt_counting *)ctx;
+  if (size == 0 || c->refusing) return NULL;
   void *p = malloc(size);
   if (p) {
-    gt_counting *c = (gt_counting *)ctx;
 #ifdef _WIN32
     InterlockedIncrement64((volatile LONG64 *)&c->live);
     InterlockedIncrement64((volatile LONG64 *)&c->total);

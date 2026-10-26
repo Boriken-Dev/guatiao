@@ -458,43 +458,43 @@ template <>
 struct send<std::string_view> {
   std::string_view v;
   guatiao_str arg() const noexcept { return str(v); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<bytes_view> {
   bytes_view v;
   guatiao_bytes arg() const noexcept { return v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<bytes_mut> {
   bytes_mut v;
   guatiao_bytes_mut arg() const noexcept { return v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <class T>
 struct send<T, std::enable_if_t<is_scalar_v<T>>> {
   T v;
   T arg() const noexcept { return v; }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<view> {
   view v;
   const guatiao_value* arg() const noexcept { return v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<map_view> {
   map_view v;
   const guatiao_map* arg() const noexcept { return v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<list_view> {
   list_view v;
   const guatiao_list* arg() const noexcept { return v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 /// A tree handed over: held until the call, then the callee's whatever it
 /// answers; freed here when the call never happens.
@@ -506,7 +506,7 @@ struct send<value> {
     node = v.release();
     return &node;
   }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<map> {
@@ -516,7 +516,7 @@ struct send<map> {
     c = v.release();
     return &c;
   }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <>
 struct send<list> {
@@ -526,11 +526,12 @@ struct send<list> {
     c = v.release();
     return &c;
   }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 /// A tree lent for the call: anything the callee built into it elsewhere,
 /// or wrote over it, is moved once the call returns into the allocator the
-/// tree recorded when it was lent.
+/// tree recorded when it was lent; `after` answers a refusal, which leaves
+/// the tree whole where it stands.
 template <>
 struct send<node> {
   node v;
@@ -539,9 +540,9 @@ struct send<node> {
     if (v.raw()) lent_in = recorded(*v.raw());
     return v.raw();
   }
-  void after(const guatiao_alloc* home) noexcept {
-    if (!v.raw()) return;
-    (void)settle(*v.raw(), lent_in ? lent_in : home);
+  guatiao_status after(const guatiao_alloc* home) noexcept {
+    if (!v.raw()) return GUATIAO_OK;
+    return settle(*v.raw(), lent_in ? lent_in : home);
   }
 };
 template <>
@@ -553,7 +554,7 @@ struct send<map_ref> {
     if (n) lent_in = recorded(*n);
     return n && n->tag == GUATIAO_MAP ? &n->payload.map : nullptr;
   }
-  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node(), lent_in}.after(home); }
+  guatiao_status after(const guatiao_alloc* home) noexcept { return send<node>{v.as_node(), lent_in}.after(home); }
 };
 template <>
 struct send<list_ref> {
@@ -564,19 +565,19 @@ struct send<list_ref> {
     if (n) lent_in = recorded(*n);
     return n && n->tag == GUATIAO_LIST ? &n->payload.list : nullptr;
   }
-  void after(const guatiao_alloc* home) noexcept { send<node>{v.as_node(), lent_in}.after(home); }
+  guatiao_status after(const guatiao_alloc* home) noexcept { return send<node>{v.as_node(), lent_in}.after(home); }
 };
 template <class K>
 struct send<object<K>> {
   object<K> v;
   guatiao_object arg() noexcept { return v.release(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 template <class K>
 struct send<lent<K>> {
   lent<K> v;
   const guatiao_object* arg() const noexcept { return &v.raw(); }
-  void after(const guatiao_alloc*) noexcept {}
+  guatiao_status after(const guatiao_alloc*) noexcept { return GUATIAO_OK; }
 };
 
 // ---- calling a slot: the answer back -------------------------------------------
@@ -700,14 +701,25 @@ result<R> call_with(const Self& self, sig_tag<R(P...)>, Args&&... args) {
   guatiao_provider_error err{};
   guatiao_status s = std::apply(
       [&](auto&... x) { return invoke_c<shape<Slot>::refuses>(fn, self.ctx(), out, err, x.arg()...); }, sends);
-  std::apply([&](auto&... x) { (x.after(home), ...); }, sends);
+  // Answered or refused; the slot's own refusal wins over a lent tree's
+  // settle, which is otherwise the call's error.
+  guatiao_status settled = GUATIAO_OK;
+  std::apply(
+      [&](auto&... x) {
+        [[maybe_unused]] auto first = [&](guatiao_status st) {
+          if (settled == GUATIAO_OK) settled = st;
+        };
+        (first(x.after(home)), ...);
+      },
+      sends);
   words_guard words{err};
-  if (s != GUATIAO_OK) {
+  if (s != GUATIAO_OK || settled != GUATIAO_OK) {
     struct drop_guard {
       receive<R>& o;
       ~drop_guard() { o.drop(); }
     } dropped{out};
-    return error_of(s, std::string(text(err.message)));
+    if (s != GUATIAO_OK) return error_of(s, std::string(text(err.message)));
+    return error_of(settled, std::string("moving what ") + Slot::name + " put into a lent tree into that tree's allocator");
   }
   return out.take(home);
 }

@@ -39,6 +39,9 @@ class Scope:
         # Trees and objects given up for a call that may not happen: freed
         # by `close()` unless `called()` says the callee took them.
         self._given: "list[Callable[[], Any]]" = []
+        # Trees lent for the call, each with the allocator it recorded
+        # when it was lent: settled once the call returns.
+        self._lent: "list[tuple[_abi.Value, Any]]" = []
 
     def keep(self, obj: Any) -> Any:
         self._keep.append(obj)
@@ -53,6 +56,23 @@ class Scope:
     def called(self) -> None:
         self._given.clear()
 
+    def lend(self, node: "_abi.Value", home: Any) -> None:
+        self._lent.append((node, home))
+
+    def settle(self) -> int:
+        """Moves every tree lent for the call into the allocator it
+        recorded when it was lent, so what the callee grew it with, or
+        wrote over it, outlives the callee's library. The first refusal's
+        status, else OK; a refused tree is left whole, where it stands."""
+        status = int(_abi.Status.OK)
+        lent, self._lent = self._lent, []
+        if lent and _makes_local():
+            for node, home in lent:
+                moved = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(home))
+                if moved != _abi.Status.OK and status == _abi.Status.OK:
+                    status = int(moved)
+        return status
+
     def _check_open(self) -> None:
         if not self.open:
             raise ValueError("this view was lent for one call, which has returned")
@@ -62,6 +82,7 @@ class Scope:
             return
         self.open = False
         failure = None
+        self.settle()
         for fn in reversed(self._after):
             try:
                 fn()
@@ -170,15 +191,6 @@ def _make_local(node: "_abi.Value") -> None:
         raise_for_status(status, "moving the answer into this binding's allocator")
 
 
-def _settle(node: "_abi.Value", home: Any) -> None:
-    """Moves a tree lent for a call where it stands into `home`, the
-    allocator it recorded when it was lent, so what the callee grew it
-    with, or wrote over it, outlives the callee's library. A refusal
-    leaves it whole, where it was."""
-    if _makes_local():
-        _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(home))
-
-
 def _recorded_alloc(node: "_abi.Value") -> Any:
     """The allocator a container node records, else this binding's."""
     arm = {
@@ -228,6 +240,9 @@ class Shape:
 
     def answer(self, out: Any, scope: Scope) -> Any:
         raise TypeError(f"{self!r} is not an answer")
+
+    def drop(self, out: Any) -> None:
+        """Frees what a call answered into `out`, which nobody will read."""
 
     # -- the callee's side ----------------------------------------------
 
@@ -353,6 +368,9 @@ class _Text(Shape):
         finally:
             _free_node(node)
 
+    def drop(self, out: Any) -> None:
+        _free_node(_abi.Value(tag=int(_abi.Tag.STRING), payload=_abi.Payload(text=out)))
+
     def write(self, out_ptr: Any, result: Any) -> None:
         if not isinstance(result, str):
             raise TypeError(f"a TEXT answer is a str, not {type(result).__name__}")
@@ -423,8 +441,7 @@ class _Tree(Shape):
             # What the callee grew it with may be in its library's
             # allocator: moved into the one the tree records now, which a
             # callee writing a fresh tree over it would change.
-            home = _recorded_alloc(node)
-            scope.after(lambda: _settle(node, home))
+            scope.lend(node, _recorded_alloc(node))
             return ctypes.byref(self._arm(node))
         # Handed over: given up now, and freed by `close()` if the call
         # never happens.
@@ -447,6 +464,9 @@ class _Tree(Shape):
         node = out if self.tag is None else self._node_over(out)
         _make_local(node)
         return Value(_raw=node, alloc=binding_alloc())
+
+    def drop(self, out: Any) -> None:
+        _free_node(out if self.tag is None else self._node_over(out))
 
     # -- the callee ---------------------------------------------------------
 
@@ -531,6 +551,11 @@ class _ObjectShape(Shape):
         from ._spec import Object
 
         return Object(self.kind, out)
+
+    def drop(self, out: Any) -> None:
+        from ._spec import destroy_raw
+
+        destroy_raw(out)
 
     def receive(self, c_value: Any, scope: Scope) -> Any:
         from ._spec import Object, Remote

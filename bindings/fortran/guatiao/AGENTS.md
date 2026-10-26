@@ -326,7 +326,8 @@ tree answer is built in the registry's allocator (the carrier the remote
 passes names it) and moved there when the callee built it elsewhere; a
 tree lent to a slot is moved, once the call returns, into the allocator
 it recorded when it was lent, whatever the callee grew it with or wrote
-over it. The kind module's remote does both (Writing a kind module). A
+over it, and a refused move is the call's error when the slot answered.
+The kind module's remote does both (Writing a kind module). A
 remote holding an object another side handed over destroys it once, when
 its last copy goes or on `close()`.
 
@@ -488,7 +489,7 @@ its answer with the remote-side helpers:
 | --- | --- |
 | `guatiao_string_in(text)` | a `guatiao_str` argument, a view of `text` for the call |
 | `guatiao_lend_tree(v, tag, ptr, stat, home)` | a lent tree: `ptr` the arm to pass, `home` the allocator it records now |
-| `guatiao_settle_lent(v, tag, home)` | right after the call, answered or refused: the lent tree moved into `home` |
+| `guatiao_settle_lent(v, tag, home, stat)` | right after the call, answered or refused: the lent tree moved into `home`; a non-zero `stat` (optional) is the error to report when the slot itself answered, after freeing what it answered (a tree's carrier, an object) unread |
 | `guatiao_hand_over(v, tag, node, stat)` | a tree handed over: moved out of `v` (or copied), `node`'s arm passed |
 | `guatiao_object_arg(impl, remote, kind, obj, stat)` | an object handed to the other side: a remote this side owns given, any other object served |
 | `guatiao_map_out(answer, out, alloc)` | a tree answer's carrier: an empty map naming `alloc` (the remote's `self%r%alloc`) |

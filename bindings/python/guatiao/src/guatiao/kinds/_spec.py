@@ -259,10 +259,17 @@ class Remote:
                 extra.append(ctypes.byref(err))
             status = fn(self.ctx, *c_args, *extra)
             scope.called()
+            # Answered or refused; the slot's own refusal wins over the
+            # settle's, which is otherwise the call's error.
+            settled = scope.settle()
             if status != _abi.Status.OK:
                 if err is not None:
                     check(status, err)
                 raise_for_status(status, f"`{method.name}` failed, which its kind says it cannot")
+            if settled != _abi.Status.OK:
+                if method.returns is not None:
+                    method.returns.drop(out)
+                raise_for_status(settled, f"moving what `{method.name}` put into a lent tree into that tree's allocator")
             return method.returns.answer(out, scope) if method.returns is not None else None
         finally:
             scope.close()

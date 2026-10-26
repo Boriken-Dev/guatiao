@@ -16,7 +16,31 @@ module host_helpers
   private
 
   public :: check, check_text, skip, finish, setup, env, library_dir, library_file, build_c, ear, ear_state, &
-            new_ear, upper_of, require_all, echo
+            new_ear, upper_of, require_all, echo, refusing, refusing_new, refusing_allocator
+
+  !> An allocator that counts the blocks it has out and refuses every
+  !> allocation while `refuse` is set: the guatiao_alloc first.
+  type, bind(c) :: refusing
+    integer(c_int32_t) :: struct_size = 0
+    type(c_ptr) :: ctx = c_null_ptr
+    type(c_funptr) :: alloc = c_null_funptr
+    type(c_funptr) :: free = c_null_funptr
+    type(c_funptr) :: release = c_null_funptr
+    integer(c_int64_t) :: live = 0
+    logical(c_bool) :: refuse = .false.
+  end type
+
+  interface
+    function c_malloc(size) bind(c, name="malloc") result(p)
+      import :: c_size_t, c_ptr
+      integer(c_size_t), value :: size
+      type(c_ptr) :: p
+    end function
+    subroutine c_free(p) bind(c, name="free")
+      import :: c_ptr
+      type(c_ptr), value :: p
+    end subroutine
+  end interface
 
   integer :: passed = 0, failed = 0, skipped = 0
 
@@ -78,6 +102,44 @@ contains
   subroutine setup()
     if (len(env('GUATIAO_LIBRARY')) == 0) call guatiao_use_library('../../target/debug')
   end subroutine
+
+  function refusing_alloc(ctx, size, align) bind(c) result(p)
+    type(c_ptr), value :: ctx
+    integer(c_size_t), value :: size, align
+    type(c_ptr) :: p
+    type(refusing), pointer :: r
+    p = c_null_ptr
+    call c_f_pointer(ctx, r)
+    if (r%refuse .or. size == 0 .or. align > 16) return
+    p = c_malloc(size)
+    if (c_associated(p)) r%live = r%live + 1
+  end function
+
+  subroutine refusing_release(ctx, p, size, align) bind(c)
+    type(c_ptr), value :: ctx, p
+    integer(c_size_t), value :: size, align
+    type(refusing), pointer :: r
+    if (.not. c_associated(p)) return
+    call c_free(p)
+    call c_f_pointer(ctx, r)
+    r%live = r%live - 1
+  end subroutine
+
+  !> A new refusing allocator, not refusing yet; kept for the process.
+  function refusing_new() result(r)
+    type(refusing), pointer :: r
+    allocate(r)
+    r%struct_size = 40
+    r%ctx = c_loc(r)
+    r%alloc = c_funloc(refusing_alloc)
+    r%free = c_funloc(refusing_release)
+  end function
+
+  function refusing_allocator(r) result(a)
+    type(refusing), pointer, intent(in) :: r
+    type(guatiao_allocator) :: a
+    a%ptr = c_loc(r)
+  end function
 
   !> The directory holding the workspace's libraries: GUATIAO_LIBRARY, or
   !> the directory of the file it names (an application's own library

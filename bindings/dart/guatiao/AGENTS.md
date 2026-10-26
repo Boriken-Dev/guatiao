@@ -368,7 +368,7 @@ What each side sees, per description type:
 | `value` borrowed (`nullable`) | `Ref` (`Ref?`), read-only, valid for the call | a `Ref` or plain data (`null`) |
 | `map` borrowed | `MapRef`, read-only, valid for the call | a `Ref` or a `Map` |
 | `value`/`map`/`list` taken | a `Value` it owns and closes | a `Value` (moved: left absent), a `Ref` (copied) or plain data |
-| `value`/`map`/`list` lent | `Ref`/`MapRef`/`ListRef`, writable, valid for the call | a `Ref` onto a tree this side owns, changed where it stands |
+| `value`/`map`/`list` lent | `Ref`/`MapRef`/`ListRef`, writable, valid for the call | a `Ref` onto a tree this side owns, changed where it stands; what the callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent, and a refused move is the call's error (the slot's own refusal first) |
 | `value`/`map`/`list` (answer) | an `Object?`: a `Value`, a `Ref` or plain data, built where the caller asked | a `Value` to close |
 | `object` taken (`K`) | a `KRemote` it owns: `close()` destroys it | a Dart object implementing `K`, or a `KRemote` handle (given up) |
 | `object` lent (`K`) | a `KRemote`, valid for the call | a Dart object implementing `K`, or a `KRemote` |

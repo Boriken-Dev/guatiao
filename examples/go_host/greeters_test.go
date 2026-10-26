@@ -24,6 +24,7 @@ import (
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	gogreeter "github.com/Boriken-Dev/guatiao/examples/go_provider/go_greeter"
 	greeterkind "github.com/Boriken-Dev/guatiao/examples/greeter_kind/go"
+	"github.com/Boriken-Dev/guatiao/examples/internal/refusing"
 	"github.com/Boriken-Dev/guatiao/examples/internal/rustcaller"
 	"github.com/Boriken-Dev/guatiao/examples/internal/threads"
 	"github.com/Boriken-Dev/guatiao/examples/internal/valuegreeter"
@@ -362,6 +363,40 @@ func TestWhatASlotGrewALentMapWithOutlivesTheUnload(t *testing.T) {
 	var got map[string]any
 	if err := config.Decode(&got); err != nil || !reflect.DeepEqual(got, map[string]any{"name": "ivy", "checked_by": "C"}) {
 		t.Fatalf("%v %v", got, err)
+	}
+}
+
+func TestARefusedMoveOfALentTreeIsTheCallsError(t *testing.T) {
+	// This greeter's `check` rebuilds the lent map in its own allocator;
+	// moving it back into the map's, which refuses, fails the call and
+	// leaves the map whole where it stands.
+	own, g := ownGreeter(t, "GREETER_IGNORES_CARRIER")
+	alloc := refusing.New()
+	defer alloc.Close()
+	config, err := guatiao.NewValue(map[string]any{"name": "ivy"}, guatiao.InAllocator(alloc.Ptr()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := config.Map()
+	alloc.Refuse(true)
+	_, err = g.Check(m)
+	alloc.Refuse(false)
+	var got map[string]any
+	read := config.Decode(&got)
+	// Closed while the library that may still own part of it is loaded;
+	// then it is unloaded, so its directory can go.
+	config.Close()
+	if err := own.UnloadUnchecked("c_greeter_library"); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(err, guatiao.ErrAllocFailed) || !strings.Contains(err.Error(), "lent tree") {
+		t.Fatalf("want the refused settle as the call's error, got %v", err)
+	}
+	if read != nil || !reflect.DeepEqual(got, map[string]any{"name": "ivy", "checked_by": "C"}) {
+		t.Fatalf("%v %v", got, read)
+	}
+	if live := alloc.Live(); live != 0 {
+		t.Fatalf("%d blocks still out", live)
 	}
 }
 

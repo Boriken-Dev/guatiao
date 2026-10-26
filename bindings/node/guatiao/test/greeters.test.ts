@@ -10,13 +10,13 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { BadValue, Internal, Registry, Unsupported, Value } from '../src/index.js';
+import { AllocFailed, BadValue, Internal, Registry, Unsupported, Value } from '../src/index.js';
 import * as n from '../src/native.js';
 import { liveObjects, type Remote } from '../src/kinds.js';
 import { libraryOf } from '../src/provide.js';
 import { adopt } from '../src/value.js';
 import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
-import { REPO } from './helpers.js';
+import { Counting, REPO } from './helpers.js';
 import { PYTHON_FREES_HERE, bridge, bridgeConfig, cLibraries, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
 
@@ -181,6 +181,36 @@ describe('a tree built in the library\'s allocator outlives the unload', () => {
     expect(own.bind('c_greeter', Greeter).check(config)).toBe(true);
     own.unload('c_greeter_library', { unchecked: true });
     expect(config.toJS()).toEqual({ name: 'ivy', checked_by: 'C' });
+  });
+
+  it("refused when moving a lent map home fails, as the call's error", (ctx) => {
+    // `check` rebuilds the lent map in the C file's own allocator; moving
+    // it back into the map's, which refuses, fails the call and leaves the
+    // map whole where it stands.
+    const dir = cLibraries()?.carelessGreeterDir;
+    if (dir === undefined) return ctx.skip('no C compiler: the greeter written in C is not built');
+    using counting = new Counting();
+    using own = new Registry('node-refused', '0.1');
+    own.scanDir(dir, { rules: 'kind=greeter' });
+    const greeter = own.bind('c_greeter', Greeter);
+    {
+      using config = new Value({ name: 'ivy' }, { alloc: counting.alloc });
+      counting.refusing = true;
+      try {
+        let refused: unknown;
+        try {
+          greeter.check(config);
+        } catch (e) {
+          refused = e;
+        }
+        expect(refused).toBeInstanceOf(AllocFailed);
+        expect((refused as Error).message).toMatch(/lent tree/);
+      } finally {
+        counting.refusing = false;
+      }
+      expect(config.toJS()).toEqual({ name: 'ivy', checked_by: 'C' });
+    }
+    expect(counting.live).toBe(0);
   });
 });
 
