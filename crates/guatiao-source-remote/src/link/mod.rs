@@ -24,6 +24,7 @@
 
 #![forbid(unsafe_code)]
 
+mod buffers;
 mod gate;
 mod handshake;
 mod pool;
@@ -939,11 +940,12 @@ impl Link {
 }
 
 fn read_loop(inner: Arc<Inner>, mut reader: Box<dyn FrameRead>) {
+    let mut buf = Vec::new();
     let why = loop {
-        let mut buf = Vec::new();
         match reader.read_frame(&mut buf, inner.read_max) {
             Ok(true) => {
-                if let Err(why) = inner.route(buf) {
+                let frame = inner.gate.buffers().hand_over(&mut buf);
+                if let Err(why) = inner.route(frame) {
                     break why;
                 }
             }
@@ -1039,6 +1041,7 @@ impl Inner {
         }
         self.permits.wake_all();
         self.gate.close();
+        self.gate.buffers().close();
         if let Some(close) = &self.closer {
             close();
         }
@@ -1511,7 +1514,8 @@ impl Inner {
         lock(&self.state)
             .running
             .insert(call, Arc::clone(&cancelled));
-        let mut out = Vec::with_capacity(128);
+        let mut out = self.gate.buffers().take();
+        out.reserve(128);
         let mut tail = None;
         let served = {
             let _running = Running::enter(self.key(), call);
@@ -1534,6 +1538,7 @@ impl Inner {
                 }
             }
         }
+        self.gate.buffers().give(frame);
     }
 
     fn callee(self: &Arc<Self>, target: Target) -> Result<Callee, ProviderError> {
@@ -1916,7 +1921,7 @@ impl Inner {
             let words = protocol::refusal_words(body).unwrap_or("the peer refused");
             return Err(ProviderError::new(Status::from(status), words));
         }
-        decode_answer(desc, body, args, Alloc::rust(), &mut |kind, r| match r {
+        let answer = decode_answer(desc, body, args, Alloc::rust(), &mut |kind, r| match r {
             ObjectRef::Senders(remote) => {
                 let kind = self
                     .kind(kind)
@@ -1929,7 +1934,10 @@ impl Inner {
                 .take_export(own)
                 .map_err(|e| ProtocolError::Value(e.message().to_string())),
         })
-        .map_err(bad)
+        .map_err(bad);
+        // The answer holds copies of what it read: the reply's buffer is free.
+        self.gate.buffers().give(reply);
+        answer
     }
 }
 
