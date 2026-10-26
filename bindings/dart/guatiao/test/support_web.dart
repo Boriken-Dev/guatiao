@@ -95,6 +95,24 @@ Future<String> readRepoText(List<String> parts) async {
   return answers.current! as String;
 }
 
+/// guatiao-remote-server on loopback over WebSocket, started on the test
+/// machine by `remote_server.dart`: the URL it serves, and what stops it.
+Future<(Uri, Future<void> Function())> remoteServer() async {
+  final channel = spawnHybridUri('remote_server.dart', stayAlive: true);
+  final answers = StreamIterator<Object?>(channel.stream);
+  await answers.moveNext();
+  final said = answers.current! as String;
+  if (said.startsWith('error: ')) throw StateError(said.substring(7));
+  return (
+    Uri.parse(said),
+    () async {
+      channel.sink.add('stop');
+      await answers.moveNext();
+      await channel.sink.close();
+    },
+  );
+}
+
 /// The directory of the native libraries: there are none on the web.
 String libraryDir() =>
     throw UnsupportedError('a page loads a module, not a directory');
