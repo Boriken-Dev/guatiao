@@ -14,6 +14,17 @@ write now.
 
 ### Added
 
+- **A key can name the source a library came from.** `%source`, in a
+  library's and a provider's key template, renders the name of the
+  source that served it (the name it was added under, a source file's
+  path, a watched directory), empty for a library the host loaded or
+  registered itself. `libraries_keyed_by("%source/%id")` and
+  `keyed_by("%source/%id")` hold the same library from several sources
+  in one registry, such as identical devices each reached through a
+  source of its own; `examples/remote_pool` now keeps its three devices
+  in one registry that way. `Loaded::source` and `Provider::source()`
+  answer it in Rust, and the C library and provider maps carry
+  `"source"`, so every binding sees it.
 - **guatiao-source-remote: RDMA, experimental and Linux only** (feature `rdma`,
   off by default). `rdma://host:port` sets a link up over a trusted TCP
   connection, admitted by address range as TCP's is, then carries every

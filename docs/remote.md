@@ -51,10 +51,15 @@ guatiao_registry_add_source_file(reg, guatiao_cstr("libguatiao_source_remote.so"
 guatiao_registry_refresh(reg, &alloc, &answer);
 ```
 
-`examples/remote_pool` fans one call out to several devices at once and
-gathers the answers. It keeps a registry per device: identical devices
-serve the same library, and a registry files one build of a library under
-its id, so a second device's would be skipped.
+Identical devices serve the same library, and a registry files one build
+of a library under its id, so a second device's would be skipped. A host
+holding several keeps them apart by the source each came through: added
+as sources of their own names, its libraries and providers are filed
+under `%source/%id` (`libraries_keyed_by` and `keyed_by` in Rust,
+`guatiao_registry_libraries_keyed_by` and `guatiao_registry_keyed_by` in
+C, the same names in every binding), and each answers `device-0/...`,
+`device-1/...`. `examples/remote_pool` fans one call out to three
+devices held that way and gathers the answers.
 
 A call that gets no answer within its timeout is cancelled and answers
 `GUATIAO_ERR_GONE`, as does every call open when the link is lost; the
