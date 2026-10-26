@@ -538,7 +538,14 @@ end
   `String` kept under `GC.@preserve`), `binding_alloc()` (the core
   library's default allocator). `check(status, message = "")` throws the
   status's `GuatiaoError`; `guatiao_value_free(p)` frees what a node owns.
-  The mirrors: `GValue`, `GAlloc`, `GStr`, `GString`, `GBytes`.
+  The mirrors: `GValue`, `GAlloc`, `GStr`, `GString`, `GBytes`, `GVisitor`.
+- A whole document with no tree: `read_plain(call) -> (data, status)`
+  calls `call(visitor::Ptr{Cvoid})`, which hands that `guatiao_visitor` to
+  a C walk (a `*_visit` export) and answers its status, and answers the
+  plain data the walk's events make, as `plain` reads a tree (an
+  exception inside them is rethrown after the walk);
+  `julia_to_wire(x) -> Vector{UInt8}` writes what `Value(x)` builds as wire
+  bytes, in Julia, with the same data taken and the same errors.
 
 **A tree crosses libraries as its root node**: built by one library, it
 is read and freed by any other, since a value records its own allocator.

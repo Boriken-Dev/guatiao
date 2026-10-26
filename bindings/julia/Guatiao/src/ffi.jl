@@ -34,14 +34,19 @@ package; nothing here is exported, so name it `FFI.adopt` and so on.
   (the core library's default allocator); `check(status, message)` throws
   the status's `GuatiaoError`; `guatiao_value_free(p)` frees what a node
   owns.
-- The C mirrors: `GValue`, `GAlloc`, `GStr`, `GString`, `GBytes`.
+- A whole document with no tree: `read_plain(call)` hands `call` a
+  `guatiao_visitor` (a `Ptr{Cvoid}`) for a C walk and answers the plain
+  data its events make, as `plain` reads a tree, with the walk's status;
+  `julia_to_wire(x)` writes what `Value(x)` builds as wire bytes, in Julia.
+- The C mirrors: `GValue`, `GAlloc`, `GStr`, `GString`, `GBytes`, `GVisitor`.
 """
 module FFI
 
 using ..Guatiao: Guatiao, @cdef, use_library, GValue, GAlloc, GStr, GString, GBytes, Node, Value, ValueRef, View, Key,
     ZERO_VALUE, TAG_ABSENT, TAG_NULL, TAG_BOOL, TAG_NUMBER, TAG_STRING, TAG_BYTES, TAG_LIST, TAG_MAP,
     load_tag, payload_ptr, text_of, gstr, binding_alloc, new_root, free_root, adopt, require_node, node_ptr,
-    owner_of, plain, map_keys, map_find, check, guatiao_value_free, SURFACES, LOAD_LOCK
+    owner_of, plain, map_keys, map_find, check, guatiao_value_free, SURFACES, LOAD_LOCK, GVisitor, read_plain,
+    julia_to_wire
 
 """
     surface!(basename; variable = "", probe = "")

@@ -31,14 +31,22 @@ using GuatiaoSerde
 
 v = GuatiaoSerde.parse("""{"port": 5900}""")          # format = :json
 text = GuatiaoSerde.emit(v; format = :yaml)
+data = GuatiaoSerde.parse(Any, text; format = :yaml)  # Dict("port" => 5900)
 ```
 
 - `parse(text; format = :json, how = 0, alloc = Guatiao.FFI.binding_alloc())
   -> Guatiao.Value`: `format` is `:json`, `:toml` or `:yaml`; numbers keep
   their exact text. `close` the Value.
+- `parse(Any, text; format = :json, how = 0)`: plain Julia data, what
+  `parse(text)[]` answers (`nothing`, `Bool`, numbers, `String`,
+  `Vector{UInt8}`, `Vector{Any}`, `Dict{String,Any}`, `Guatiao.absent`),
+  with no `Value` built: the library hands each event of its reading to
+  Julia. Errors as `parse`.
 - `emit(x; format = :json, pretty = false, how = 0, alloc) -> String`: `x`
   is a `Value`, a view or plain data, built by any guatiao library. A TOML
-  document must be a map (`WrongKind`).
+  document must be a map (`WrongKind`). Plain data is written as wire
+  bytes in Julia and crosses once, with no `Value` built (`alloc` then
+  goes unused).
 - `how`: `GuatiaoSerde.BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`,
   `BYTES_REFUSE`, or'd with `READ_DATA_URIS` and `PRETTY`.
 - TOML and YAML need a `guatiao_serde` built with them (`MissingSymbol`

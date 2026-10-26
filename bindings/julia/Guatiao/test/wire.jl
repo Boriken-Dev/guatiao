@@ -169,3 +169,40 @@ end
     end
     @test sizeof(GWireEvent) == cld(16 + 3 * sizeof(GValue) + sizeof(Ptr{Cvoid}), 8) * 8
 end
+
+# Plain data with no tree: the events of a walk read as plain data, and
+# plain data written as wire bytes in Julia, against what a tree does.
+
+Guatiao.@cdef "guatiao" "" :plain guatiao_wire_visit(b::Guatiao.GBytes, v::Ptr{Cvoid})::UInt32
+
+function visited(bytes::Vector{UInt8})
+    data, status = Guatiao.FFI.read_plain() do v
+        GC.@preserve bytes guatiao_wire_visit(Guatiao.gbytes(bytes), v)
+    end
+    Guatiao.check(status)
+    return data
+end
+
+"Equal, with a NaN-free `===` for the absent marker and numbers' types."
+same(a, b) = typeof(a) == typeof(b) && isequal(a, b)
+
+@testset "a walk's events read as plain data, as the tree reads" begin
+    for v in WIRE.values
+        bytes = hex2bytes(v.hex)
+        tree = from_wire(bytes)
+        @test same(visited(bytes), tree[])
+        close(tree)
+    end
+    @test_throws GuatiaoError visited(UInt8[0x06, 0x01])
+end
+
+@testset "plain data written in Julia is the tree's wire bytes" begin
+    for v in WIRE.values
+        tree = from_wire(hex2bytes(v.hex))
+        data = tree[]
+        close(tree)
+        built = Value(data)
+        @test Guatiao.FFI.julia_to_wire(data) == to_wire(built)
+        close(built)
+    end
+end
