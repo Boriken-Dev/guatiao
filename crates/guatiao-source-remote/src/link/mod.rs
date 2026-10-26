@@ -57,7 +57,7 @@ use crate::protocol::{
     self, Decoded, Frame, HANDSHAKE_MAX_FRAME, ProtocolError, Target, Trust, decode_answer,
     decode_args, encode_answer, encode_args,
 };
-use crate::transport::{Connection, FrameRead, FrameWrite};
+use crate::transport::{Connection, Datagrams, FrameRead, FrameWrite};
 use gate::{Gate, Unsent};
 use handshake::Offer;
 use pool::{Permits, Pool};
@@ -400,6 +400,8 @@ pub(crate) struct Inner {
     peer: String,
     /// The identity the transport proved, `sha256:<hex>`.
     peer_id: Option<String>,
+    /// Datagrams beside the frames, when the transport has them.
+    datagrams: Option<Arc<dyn Datagrams>>,
     trust: Trust,
 }
 
@@ -722,6 +724,7 @@ impl Link {
         setup: Setup,
     ) -> Link {
         let peer_id = reader.peer_id();
+        let datagrams = reader.datagrams();
         let inner = Arc::new(Inner {
             gate: Gate::new(writer),
             closer,
@@ -747,6 +750,7 @@ impl Link {
             next_call: AtomicU64::new(1),
             peer,
             peer_id,
+            datagrams,
             trust: options.trust,
         });
         let reading = Arc::clone(&inner);
@@ -778,6 +782,12 @@ impl Link {
     /// TLS certificate's fingerprint); `None` below the secure level.
     pub fn peer_id(&self) -> Option<&str> {
         self.inner.peer_id.as_deref()
+    }
+
+    /// Datagrams beside the link's calls, when its transport has them
+    /// (`quic://`): each delivered whole or not at all, in any order.
+    pub fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
+        self.inner.datagrams.clone()
     }
 
     /// The trust level it runs at.

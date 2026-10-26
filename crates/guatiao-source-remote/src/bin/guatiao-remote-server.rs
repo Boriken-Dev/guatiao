@@ -31,7 +31,8 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --listen URL          serve every link to URL: tcp://ADDRESS:PORT is the
                         trusted level, ws://ADDRESS:PORT the same over
                         WebSocket (a browser), tls://ADDRESS:PORT the secure
-                        level, local://name the local one (a socket path or a
+                        level, quic://ADDRESS:PORT the same over QUIC (UDP),
+                        local://name the local one (a socket path or a
                         pipe name), rdma://ADDRESS:PORT RDMA (experimental,
                         Linux only)
   --trust LEVEL         local | trusted | secure (default: local on --stdio)
@@ -325,6 +326,8 @@ fn run() -> Result<(), String> {
         "ws" => serve_ws(&front, address, &a),
         #[cfg(feature = "tls")]
         "tls" => serve_tls(&front, address, &a),
+        #[cfg(feature = "quic")]
+        "quic" => serve_quic(&front, address, &a),
         #[cfg(feature = "rdma")]
         "rdma" => serve_rdma(&front, address, &a),
         #[cfg(feature = "local")]
@@ -652,11 +655,26 @@ fn serve_ws(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
     serve_accepted(front, || listener.accept())
 }
 
+/// The secure level's configuration the options name: identity, pins,
+/// policy and access control list, and the list in words.
 #[cfg(feature = "tls")]
-fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
-    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig, TlsListen};
-    if front.server.options().trust() != Trust::Secure {
-        return Err("tls:// serves the secure level: pass --trust secure".to_string());
+fn secure_config(
+    server: &Server,
+    scheme: &str,
+    a: &Args,
+) -> Result<
+    (
+        guatiao_source_remote::transport::tls::TlsConfig,
+        String,
+        String,
+    ),
+    String,
+> {
+    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig};
+    if server.options().trust() != Trust::Secure {
+        return Err(format!(
+            "{scheme}:// serves the secure level: pass --trust secure"
+        ));
     }
     let mut config = match (&a.state_dir, &a.identity) {
         (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
@@ -670,7 +688,9 @@ fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result
             return Err("name --state-dir or --identity, not both".to_string());
         }
         (None, None) => {
-            return Err("tls:// needs an identity: --state-dir DIR or --identity PATH".to_string());
+            return Err(format!(
+                "{scheme}:// needs an identity: --state-dir DIR or --identity PATH"
+            ));
         }
     };
     let pins = a
@@ -705,10 +725,20 @@ fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result
     } else {
         "the trust store's clients".to_string()
     };
-    let listener = TlsListen::bind(address, &config).map_err(|e| e.to_string())?;
+    Ok((config, trusting, said))
+}
+
+/// The line a secure server starts with, then each setting of its policy
+/// looser than strict.
+#[cfg(feature = "tls")]
+fn say_serving(
+    url: &str,
+    config: &guatiao_source_remote::transport::tls::TlsConfig,
+    trusting: &str,
+    said: &str,
+) {
     eprintln!(
-        "guatiao-remote-server: serving tls://{} as {}, trusting {trusting}, admitting {said}",
-        listener.local_addr().map_err(|e| e.to_string())?,
+        "guatiao-remote-server: serving {url} as {}, trusting {trusting}, admitting {said}",
         config.fingerprint(),
     );
     for w in config.weakened() {
@@ -717,6 +747,25 @@ fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result
             w.setting, w.value, w.strict
         );
     }
+}
+
+#[cfg(feature = "tls")]
+fn serve_tls(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
+    use guatiao_source_remote::transport::tls::TlsListen;
+    let (config, trusting, said) = secure_config(&front.server, "tls", a)?;
+    let listener = TlsListen::bind(address, &config).map_err(|e| e.to_string())?;
+    let at = listener.local_addr().map_err(|e| e.to_string())?;
+    say_serving(&format!("tls://{at}"), &config, &trusting, &said);
+    serve_accepted(front, || listener.accept())
+}
+
+#[cfg(feature = "quic")]
+fn serve_quic(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
+    use guatiao_source_remote::transport::quic::QuicListen;
+    let (config, trusting, said) = secure_config(&front.server, "quic", a)?;
+    let listener = QuicListen::bind(address, &config).map_err(|e| e.to_string())?;
+    let at = listener.local_addr().map_err(|e| e.to_string())?;
+    say_serving(&format!("quic://{at}"), &config, &trusting, &said);
     serve_accepted(front, || listener.accept())
 }
 

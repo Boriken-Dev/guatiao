@@ -45,7 +45,7 @@ use super::{Connect, Connection, FrameRead};
 
 /// The application protocol both ends name and require, so a link never
 /// completes with a TLS endpoint of something else.
-const ALPN: &[u8] = b"guatiao-remote";
+pub(crate) const ALPN: &[u8] = b"guatiao-remote";
 
 /// The identity file [`TlsConfig::open`] keeps in its directory.
 pub const IDENTITY_FILE: &str = "identity.pem";
@@ -85,7 +85,7 @@ fn tls_error(e: &PeerError) -> Option<&rustls::Error> {
 
 /// Why this side refused the certificate of `whose` ("the client",
 /// "the server at ..."), in words naming what to change.
-fn refused(refusal: Refusal, whose: &str) -> String {
+pub(crate) fn refused(refusal: Refusal, whose: &str) -> String {
     match refusal {
         Refusal::NotPinned => {
             format!("{whose} is not pinned: its certificate's fingerprint matches none of the pins")
@@ -107,7 +107,7 @@ fn refused(refusal: Refusal, whose: &str) -> String {
 /// canonical text, the form a verified peer is decided by. A peer is known
 /// by its certificate's SHA-256 fingerprint, so a rule naming another
 /// digest could never match: refused rather than left to fail open.
-fn canonical_acl(mut acl: Acl) -> io::Result<Acl> {
+pub(crate) fn canonical_acl(mut acl: Acl) -> io::Result<Acl> {
     for rule in &mut acl.rules {
         if let Some(text) = &rule.fingerprint {
             let id: PeerId = text.parse().map_err(|_| {
@@ -125,6 +125,74 @@ fn canonical_acl(mut acl: Acl) -> io::Result<Acl> {
         }
     }
     Ok(acl)
+}
+
+/// A client's link refused by the server's certificate check, heard as the
+/// alert `certificate_unknown` before anything else: `me` is the client's
+/// fingerprint.
+pub(crate) fn untrusted_client(me: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!(
+            "the server does not trust this client, {me}: it refused its certificate (certificate_unknown), which is not pinned there or not yet accepted by its trust store; a server with a trust store keeps an unknown client waiting until an operator accepts it"
+        ),
+    )
+}
+
+/// A client's link the server ended before answering anything.
+pub(crate) fn ended_before_answering(e: &io::Error, me: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!(
+            "the server ended the link before answering ({e}): most likely it does not trust this client, {me}, or its access control list refuses it; a server with a trust store keeps an unknown client waiting until an operator accepts it"
+        ),
+    )
+}
+
+/// The client's refusal of the server at `addr`, in words naming what to
+/// change.
+pub(crate) fn untrusted_server(refusal: Refusal, addr: SocketAddr) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!(
+            "the server at {addr} is not one this client trusts: {}",
+            refused(refusal, "it")
+        ),
+    )
+}
+
+/// The server's refusal of a client, in words naming what to change; `why`
+/// when the handshake failed for another reason.
+pub(crate) fn untrusted_by_server(
+    refusal: Option<Refusal>,
+    why: impl core::fmt::Display,
+) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        match refusal {
+            Some(Refusal::NotAccepted) => format!(
+                "{}; once it has proved its key it waits there, within the store's caps, until an operator accepts it",
+                refused(Refusal::NotAccepted, "the client")
+            ),
+            Some(r) => refused(r, "the client"),
+            None => format!("the client's TLS handshake failed: {why}"),
+        },
+    )
+}
+
+/// The access control list's refusal of `peer` from `source` once the
+/// handshake named it, by rule `rule` (an index) or the list's default.
+pub(crate) fn denied_by_acl(peer: &PeerId, source: SocketAddr, rule: Option<usize>) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        match rule {
+            Some(i) => format!(
+                "the access control list denies {peer} at {source} (rule {})",
+                (i + 1) * 10
+            ),
+            None => format!("the access control list denies {peer} at {source} (its default)"),
+        },
+    )
 }
 
 /// The socket under a handshake, every read and write bounded by what is
@@ -268,13 +336,18 @@ impl TlsConfig {
         self.store.as_ref()
     }
 
+    /// The policy both ends are held to.
+    pub(crate) fn tls_policy(&self) -> &Policy {
+        &self.policy
+    }
+
     /// Every setting of the policy looser than strict, its access control
     /// list's default included; empty under the strict policy.
     pub fn weakened(&self) -> Vec<Weakening> {
         self.policy.weakened()
     }
 
-    fn trust(&self) -> io::Result<Trust> {
+    pub(crate) fn trust(&self) -> io::Result<Trust> {
         if !self.pins.is_empty() {
             return Ok(Trust::Pinned(Pins::fixed(self.pins.iter().copied())));
         }
@@ -286,7 +359,7 @@ impl TlsConfig {
         }
     }
 
-    fn client(&self) -> io::Result<Arc<ClientConfig>> {
+    pub(crate) fn client(&self) -> io::Result<Arc<ClientConfig>> {
         if self.policy.acl.is_some() {
             return Err(invalid(
                 "the policy's `acl` admits peers to a listener; a client has none",
@@ -302,7 +375,7 @@ impl TlsConfig {
         Ok(Arc::new(built.config))
     }
 
-    fn server(&self) -> io::Result<Arc<ServerConfig>> {
+    pub(crate) fn server(&self) -> io::Result<Arc<ServerConfig>> {
         let built = coqui_peer_tls::server_config_with(
             &self.identity,
             &self.trust()?,
@@ -376,19 +449,9 @@ impl Core {
         match &self.client {
             // What the server's verifier sends when it refuses a certificate.
             Some(me) if early && alert == Some(AlertDescription::CertificateUnknown) => {
-                io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!(
-                        "the server does not trust this client, {me}: it refused its certificate (certificate_unknown), which is not pinned there or not yet accepted by its trust store; a server with a trust store keeps an unknown client waiting until an operator accepts it"
-                    ),
-                )
+                untrusted_client(me)
             }
-            Some(me) if ended && early => io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "the server ended the link before answering ({e}): most likely it does not trust this client, {me}, or its access control list refuses it; a server with a trust store keeps an unknown client waiting until an operator accepts it"
-                ),
-            ),
+            Some(me) if ended && early => ended_before_answering(&e, me),
             _ => e,
         }
     }
@@ -508,17 +571,7 @@ impl Pending {
         core.socket.set_write_timeout(None)?;
         let established = established.map_err(|e| match e {
             DriveError::Io(e) => e,
-            DriveError::Handshake(e) => io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                match e.refusal() {
-                    Some(Refusal::NotAccepted) => format!(
-                        "{}; once it has proved its key it waits there, within the store's caps, until an operator accepts it",
-                        refused(Refusal::NotAccepted, "the client")
-                    ),
-                    Some(r) => refused(r, "the client"),
-                    None => format!("the client's TLS handshake failed: {}", words(&e)),
-                },
-            ),
+            DriveError::Handshake(e) => untrusted_by_server(e.refusal(), words(&e)),
             other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
         })?;
         let peer = established.peer;
@@ -530,20 +583,7 @@ impl Pending {
             let decided = acl.decide_peer(self.source, self.local, &peer.canonical());
             if decided.outcome != Outcome::Permit {
                 core.close();
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    match decided.rule_index {
-                        Some(i) => format!(
-                            "the access control list denies {peer} at {} (rule {})",
-                            self.source,
-                            (i + 1) * 10
-                        ),
-                        None => format!(
-                            "the access control list denies {peer} at {} (its default)",
-                            self.source
-                        ),
-                    },
-                ));
+                return Err(denied_by_acl(&peer, self.source, decided.rule_index));
             }
         }
         core.open(established.session, &peer);
@@ -736,13 +776,7 @@ impl TlsConnect {
     /// A client handshake's failure in words a person can act on.
     fn refusal(&self, e: &PeerError, addr: SocketAddr) -> io::Error {
         if let Some(refusal) = e.refusal() {
-            return io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "the server at {addr} is not one this client trusts: {}",
-                    refused(refusal, "it")
-                ),
-            );
+            return untrusted_server(refusal, addr);
         }
         let (kind, why) = match tls_error(e) {
             // Its dates, its encoding or its signature.
