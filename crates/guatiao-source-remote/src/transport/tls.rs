@@ -675,10 +675,11 @@ impl Core {
         }
     }
 
-    /// Ends the socket both ways, with nothing more said.
+    /// Ends the socket both ways, a read blocked on it included, with
+    /// nothing more said.
     fn shut(&self) {
         self.closed.store(true, Ordering::Release);
-        let _ = self.socket.shutdown(Shutdown::Both);
+        super::tcp::shut(&self.socket);
     }
 
     /// Seals `parts` and sends the records, one socket write per batch the

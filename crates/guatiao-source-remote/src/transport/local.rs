@@ -204,9 +204,10 @@ mod imp {
 
     /// A pipe's reads and their bound. A pipe takes no read timeout, so
     /// while a bound is set (a link's handshake) a thread watches each read
-    /// and cancels one that outlives it; with none, a read waits for data
-    /// or the peer's end, and nothing here ends it: ending the link sends
-    /// GOODBYE, and the peer closing its end is what ends that read.
+    /// and cancels one that outlives it or the connection's close; with
+    /// none, a read waits for data or the peer's end, and nothing here ends
+    /// one in progress: ending the link sends GOODBYE, and the peer closing
+    /// its end is what ends that read.
     struct Watch {
         pipe: Arc<Stream>,
         state: Mutex<Watched>,
@@ -220,6 +221,9 @@ mod imp {
         reading: Option<Instant>,
         /// Whether that read was cancelled at its deadline.
         expired: bool,
+        /// Whether the connection was closed: no read starts, and a
+        /// bounded one in progress is cancelled.
+        closed: bool,
         /// Whether a thread watches.
         watching: bool,
     }
@@ -235,13 +239,25 @@ mod imp {
             }
         }
 
-        /// Cancels each bounded read past its deadline, until no bound is
-        /// set and no read is in progress.
+        /// Ends the connection's reads: none starts after this, and a
+        /// bounded one in progress is cancelled by the watching thread.
+        fn close(&self) {
+            let mut state = self.state();
+            state.closed = true;
+            if state.reading.is_some() {
+                self.cancel();
+            }
+            self.changed.notify_all();
+        }
+
+        /// Cancels each bounded read past its deadline or the close, until
+        /// no bound is set (or the connection is closed) and no read is in
+        /// progress.
         fn run(&self) {
             let mut state = self.state();
             loop {
                 let Some(deadline) = state.reading else {
-                    if state.bound.is_none() {
+                    if state.bound.is_none() || state.closed {
                         state.watching = false;
                         return;
                     }
@@ -252,8 +268,8 @@ mod imp {
                     continue;
                 };
                 let now = Instant::now();
-                let wait = if now >= deadline {
-                    state.expired = true;
+                let wait = if state.closed || now >= deadline {
+                    state.expired = !state.closed;
                     // Under the lock: the read cancelled is the one still
                     // registered, never I/O begun after it returned.
                     self.cancel();
@@ -277,6 +293,9 @@ mod imp {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let bounded = {
                 let mut state = self.0.state();
+                if state.closed {
+                    return Err(closed());
+                }
                 // A bound past what a clock holds is none.
                 match state.bound.and_then(|b| Instant::now().checked_add(b)) {
                     None => false,
@@ -300,12 +319,13 @@ mod imp {
             if !bounded {
                 return read;
             }
-            let expired = {
+            let (expired, closed_now) = {
                 let mut state = self.0.state();
                 state.reading = None;
-                state.expired
+                (state.expired, state.closed)
             };
             match read {
+                Err(_) if closed_now => Err(closed()),
                 Err(_) if expired => Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "nothing arrived on the pipe within the read's bound",
@@ -313,6 +333,13 @@ mod imp {
                 read => read,
             }
         }
+    }
+
+    fn closed() -> io::Error {
+        io::Error::new(
+            io::ErrorKind::ConnectionAborted,
+            "this side closed the connection",
+        )
     }
 
     impl Drop for Reading {
@@ -348,6 +375,7 @@ mod imp {
             state: Mutex::new(Watched::default()),
             changed: Condvar::new(),
         });
+        let closing = Arc::clone(&watch);
         Connection {
             reader: Box::new(StreamReader::with_timeout(
                 Reading(watch),
@@ -359,7 +387,7 @@ mod imp {
             )),
             writer: Box::new(StreamWriter::new(Shared(stream))),
             peer,
-            closer: None,
+            closer: Some(Box::new(move || closing.close())),
         }
     }
 

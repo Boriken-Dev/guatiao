@@ -248,6 +248,20 @@ fn large_and_small_bytes_from_many_threads_arrive_whole() {
 }
 
 #[test]
+fn ending_the_links_ends_one_still_in_its_handshake() {
+    use guatiao_source_remote::transport::Connect;
+    let server = common::server(LinkOptions::new(Trust::Local));
+    let name = endpoint("ending");
+    let listener = LocalListen::bind(&name).expect("listens");
+    let accepting = std::thread::spawn(move || listener.accept().expect("accepts"));
+    // Connected, and never says HELLO.
+    let _silent = LocalConnect::new(&name).connect().expect("connects");
+    let conn = accepting.join().unwrap();
+    let took = common::ended_in_handshake(&server, conn);
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
 fn a_client_that_says_nothing_is_dropped_at_the_handshake_bound() {
     use guatiao_source_remote::transport::Connect;
     let server =

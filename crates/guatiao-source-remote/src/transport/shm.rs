@@ -133,7 +133,11 @@ impl Ring {
 struct Bell {
     read: BellRead,
     write: Arc<Mutex<Box<dyn Write + Send>>>,
+    /// The local connection's closer: what ends a wait on the bell.
+    close: Option<Closer>,
 }
+
+type Closer = Arc<dyn Fn() + Send + Sync>;
 
 /// Reads one direction's ring as a byte stream.
 struct RingReader {
@@ -182,12 +186,21 @@ impl Read for RingReader {
             let mut byte = [0u8; 1];
             if head != tail {
                 if self.ring.counter(SLEEPING).swap(0, Ordering::SeqCst) == 0 {
-                    // The writer cleared the flag: its byte is on the way.
-                    self.wait_bell(&mut byte)?;
+                    // The writer cleared the flag: its byte is on the way,
+                    // and the bytes are here even if the bell ends instead.
+                    let _ = self.wait_bell(&mut byte);
                 }
                 break head;
             }
-            self.wait_bell(&mut byte)?;
+            if let Err(e) = self.wait_bell(&mut byte) {
+                // What the peer published before its bell ended (a GOODBYE
+                // as the link closed) is read before the end.
+                let head = self.ring.counter(HEAD).load(Ordering::Acquire);
+                if head == tail {
+                    return Err(e);
+                }
+                break head;
+            }
         };
         let n = (self.ring.held(head, tail)? as usize).min(buf.len());
         self.ring.copy_out(tail, &mut buf[..n]);
@@ -391,14 +404,20 @@ fn connection(region: &Arc<Region>, client: bool, bell: Bell, peer: String) -> C
             }),
         ),
         peer,
-        // A writer waiting for room stops waiting.
-        closer: Some(Box::new(move || gone.store(true, Ordering::Release))),
+        // A writer waiting for room stops waiting, a reader waiting on the
+        // bell too.
+        closer: Some(Box::new(move || {
+            gone.store(true, Ordering::Release);
+            if let Some(close) = &bell.close {
+                close();
+            }
+        })),
     }
 }
 
-/// Splits a local connection into the bell's two ends.
-fn bell_of(conn: Connection) -> (Box<dyn FrameRead>, Box<dyn FrameWrite>) {
-    (conn.reader, conn.writer)
+/// Splits a local connection into the bell's two ends and its closer.
+fn bell_of(conn: Connection) -> (Box<dyn FrameRead>, Box<dyn FrameWrite>, Option<Closer>) {
+    (conn.reader, conn.writer, conn.closer.map(Closer::from))
 }
 
 /// The bell over a local connection's frames: one frame of one byte per
@@ -434,8 +453,9 @@ impl Write for BellWrite {
     }
 }
 
-fn bell(read: Box<dyn FrameRead>, write: Box<dyn FrameWrite>) -> Bell {
+fn bell(read: Box<dyn FrameRead>, write: Box<dyn FrameWrite>, close: Option<Closer>) -> Bell {
     Bell {
+        close,
         read: BellRead(read, Vec::new()),
         write: Arc::new(Mutex::new(Box::new(BellWrite(write)))),
     }
@@ -478,7 +498,7 @@ impl Connect for ShmConnect {
             next_file()
         ));
         let region = map(&path, true)?;
-        let (mut read, mut write) = bell_of(local);
+        let (mut read, mut write, close) = bell_of(local);
         // The path once, as a frame; the server answers one byte when it
         // has mapped it.
         let path_text = path.display().to_string();
@@ -500,7 +520,7 @@ impl Connect for ShmConnect {
         Ok(connection(
             &region,
             true,
-            bell(read, write),
+            bell(read, write, close),
             format!("shm {}", self.name),
         ))
     }
@@ -528,13 +548,15 @@ impl ShmListen {
     /// thread serving it, the client's path read within the bound the link
     /// set for its reads (10 s when none is set): accepting reads nothing.
     pub fn accept(&self) -> io::Result<Connection> {
-        let mut local = self.local.accept()?;
+        let local = self.local.accept()?;
         let peer = local.peer.clone();
-        let abort = local.closer.take();
+        let (mut read, mut write, close) = bell_of(local);
+        // Before the set-up the abort ends the wait for the path, after it
+        // the connection's closer the wait on the bell.
+        let abort = close.clone().map(|c| Box::new(move || c()) as Box<_>);
         let setup = {
             let peer = peer.clone();
             move |bound: Option<Duration>| {
-                let (mut read, mut write) = bell_of(local);
                 read.set_timeout(Some(bound.unwrap_or(Duration::from_secs(10))))?;
                 let mut frame = Vec::new();
                 if !read.read_frame(&mut frame, 4096)? {
@@ -546,7 +568,7 @@ impl ShmListen {
                 })?;
                 let region = map(Path::new(path), false)?;
                 write.write_frame(&[1, 0, 0, 0, 1])?;
-                Ok(connection(&region, false, bell(read, write), peer))
+                Ok(connection(&region, false, bell(read, write, close), peer))
             }
         };
         Ok(deferred(peer, Box::new(setup), abort))
@@ -674,6 +696,47 @@ mod tests {
         let mut out = vec![0u8; 9];
         ring.copy_out(start, &mut out);
         assert_eq!(out, b"headtail-");
+    }
+
+    /// A bell whose first wait sees the peer publish its last bytes and end
+    /// the bell: a GOODBYE written just before the link was closed.
+    struct LastWords {
+        ring: Ring,
+        words: Option<&'static [u8]>,
+    }
+
+    impl FrameRead for LastWords {
+        fn read_frame(&mut self, _: &mut Vec<u8>, _: usize) -> io::Result<bool> {
+            if let Some(words) = self.words.take() {
+                let head = self.ring.counter(HEAD).load(Ordering::Relaxed);
+                self.ring.copy_in(head, words);
+                self.ring
+                    .counter(HEAD)
+                    .store(head + words.len() as u64, Ordering::Release);
+            }
+            Ok(false)
+        }
+    }
+
+    #[test]
+    fn bytes_published_before_the_bell_ended_are_read_before_the_end() {
+        let ring = heap_ring();
+        let mut reader = RingReader {
+            ring: ring.clone(),
+            bell: BellRead(
+                Box::new(LastWords {
+                    ring,
+                    words: Some(b"goodbye"),
+                }),
+                Vec::new(),
+            ),
+            gone: Arc::new(AtomicBool::new(false)),
+            bound: Cell::new(None),
+        };
+        let mut buf = [0u8; 16];
+        let n = reader.read(&mut buf).expect("the bytes before the end");
+        assert_eq!(&buf[..n], b"goodbye");
+        assert!(reader.read(&mut buf).is_err(), "then the end");
     }
 
     #[test]

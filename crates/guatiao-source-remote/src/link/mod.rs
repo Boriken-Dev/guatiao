@@ -997,9 +997,9 @@ impl Inner {
     }
 
     /// Ends the link from this side: GOODBYE first, written now or by the
-    /// thread writing, since on a transport whose halves share one handle (a
-    /// named pipe, a shared-memory link's bell) only the peer closing its end
-    /// ends a read blocked here.
+    /// thread writing, since on a transport nothing here can wake (a named
+    /// pipe, and a shared-memory link's bell on Windows) only the peer
+    /// closing its end ends a read blocked here.
     pub(crate) fn close_from_here(self: &Arc<Self>) {
         let why = "this side closed the link";
         if lock(&self.state).alive {

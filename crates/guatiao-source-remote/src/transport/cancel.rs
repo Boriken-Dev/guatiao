@@ -7,15 +7,22 @@
 //! on it there, and a pipe offers nothing at all; `CancelIoEx` ends both.
 //! An operation started after the cancel is not ended by it.
 
-use std::os::windows::io::{AsRawHandle, BorrowedHandle};
+use std::os::windows::io::{AsRawHandle, AsRawSocket, BorrowedHandle, BorrowedSocket};
 
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::IO::CancelIoEx;
 
 /// Ends the I/O in flight on `handle`, whichever thread started it; each
 /// fails with `ERROR_OPERATION_ABORTED`. None in flight is no error.
+#[cfg_attr(not(feature = "local"), allow(dead_code))]
 pub(crate) fn cancel_io(handle: BorrowedHandle<'_>) {
     cancel(handle.as_raw_handle() as HANDLE);
+}
+
+/// [`cancel_io`] for a socket: a blocked `recv` fails with `WSAEINTR`.
+#[cfg_attr(not(feature = "tcp"), allow(dead_code))]
+pub(crate) fn cancel_socket_io(socket: BorrowedSocket<'_>) {
+    cancel(socket.as_raw_socket() as HANDLE);
 }
 
 fn cancel(handle: HANDLE) {

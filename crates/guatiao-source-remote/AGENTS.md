@@ -79,7 +79,7 @@ Server::new(registry: Registry, described: Described, options: LinkOptions) -> S
 server.serve(conn: Connection) -> Result<Arc<Link>, LinkError>   // handshake here, then threads; kept until it ends
 server.refresh() -> Refreshed        // a library that loads again gets a new stamp
 server.registry() -> MutexGuard<Registry>
-server.end_links(); server.links(); server.links_holding(); server.objects_out()   // end_links: every connection in its handshake too (on Windows a TCP or TLS one at its read bound)
+server.end_links(); server.links(); server.links_holding(); server.objects_out()   // end_links: every connection in its handshake too, at once
 ```
 
 Serves every provider of a kind described either by `described` or by a
@@ -316,10 +316,12 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   socket left by a listener that is gone and refuses anything else at the
   path. **A named pipe** has Windows' default access. It takes no read
   timeout, so while a read bound is set (the handshake) a thread watches
-  each read and cancels one that outlives it; past the handshake nothing
-  ends a read blocked on it: ending a link sends GOODBYE, and the peer
+  each read and cancels one that outlives it or the connection's
+  `closer`; past the handshake nothing ends a read blocked on it (the
+  closer stops later reads): ending a link sends GOODBYE, and the peer
   closing its end ends that read. **Shared memory** gives the bound to
-  the local connection it waits on for the peer's bytes.
+  the local connection it waits on for the peer's bytes, and its closer
+  is that connection's too.
 - **WebSocket** (`ws`): a frame's body is one binary message, with no
   length in front. `WsListen` admits peers by its access control list as `TcpListen` does;
   `accept` reads nothing, and a connection answers the HTTP upgrade on
@@ -366,7 +368,11 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`GUATIAO_RDMA_DEVICE` names one); without one every test fails.
 - **Windows:** one TCP socket is shared by `Arc` between reader, writer
   and closer, never `try_clone`d: a duplicated handle's `shutdown` and
-  read timeout do not reliably reach a read blocked on another.
+  read timeout do not reliably reach a read blocked on another. A
+  socket's `shutdown` does not wake a `recv` already blocked there, so a
+  closer (TCP, TLS, WebSocket) shuts the socket down and then cancels its
+  I/O in flight (`CancelIoEx`); a read started between the two ends at
+  once on the shut socket.
 
 ## Configuration of the source file (`config::client_of`)
 

@@ -46,6 +46,16 @@ impl Write for Shared {
     }
 }
 
+/// Ends `stream` both ways, a read blocked on it included. Windows does
+/// not wake a `recv` already blocked when the socket is shut down, so
+/// there the I/O in flight is cancelled too: after the shutdown, so a read
+/// started between the two ends at once on the shut socket.
+pub(crate) fn shut(stream: &TcpStream) {
+    let _ = stream.shutdown(Shutdown::Both);
+    #[cfg(windows)]
+    super::cancel::cancel_socket_io(std::os::windows::io::AsSocket::as_socket(stream));
+}
+
 fn connection(stream: TcpStream, peer: String) -> io::Result<Connection> {
     stream.set_nodelay(true)?;
     let stream = Arc::new(stream);
@@ -57,15 +67,11 @@ fn connection(stream: TcpStream, peer: String) -> io::Result<Connection> {
             |s: &Shared, t| s.0.set_read_timeout(t),
         )),
         writer: Box::new(
-            StreamWriter::with_shutdown(Shared(stream), move || {
-                let _ = shutting.shutdown(Shutdown::Both);
-            })
-            .bounded_by(|s: &mut Shared, t| s.0.set_write_timeout(t)),
+            StreamWriter::with_shutdown(Shared(stream), move || shut(&shutting))
+                .bounded_by(|s: &mut Shared, t| s.0.set_write_timeout(t)),
         ),
         peer,
-        closer: Some(Box::new(move || {
-            let _ = closing.shutdown(Shutdown::Both);
-        })),
+        closer: Some(Box::new(move || shut(&closing))),
     })
 }
 

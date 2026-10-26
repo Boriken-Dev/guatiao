@@ -240,6 +240,10 @@ struct ServerInner {
     handshaking: Mutex<(BTreeMap<u64, Closer>, u64)>,
     /// How many times `end_links` has run.
     ends: AtomicU64,
+    /// Runs in `serve` between reading `ends` and keeping the closer: where
+    /// a test puts an `end_links`.
+    #[cfg(test)]
+    between: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 /// A registry's providers, served over links.
@@ -542,6 +546,8 @@ impl Server {
                 live: Mutex::new(BTreeMap::new()),
                 handshaking: Mutex::new((BTreeMap::new(), 0)),
                 ends: AtomicU64::new(0),
+                #[cfg(test)]
+                between: Mutex::new(None),
             }),
             options,
         }
@@ -557,12 +563,24 @@ impl Server {
     /// [`end_links`](Server::end_links) does, during its handshake too.
     pub fn serve(&self, mut conn: Connection) -> Result<Arc<Link>, LinkError> {
         let ends = self.inner.ends.load(Ordering::Acquire);
+        #[cfg(test)]
+        if let Some(between) = &*lock(&self.inner.between) {
+            between();
+        }
         let n = conn.closer.take().map(|close| {
             let close: Closer = Arc::from(close);
-            let mut handshaking = lock(&self.inner.handshaking);
-            handshaking.1 += 1;
-            let n = handshaking.1;
-            handshaking.0.insert(n, Arc::clone(&close));
+            let n = {
+                let mut handshaking = lock(&self.inner.handshaking);
+                handshaking.1 += 1;
+                let n = handshaking.1;
+                handshaking.0.insert(n, Arc::clone(&close));
+                n
+            };
+            // An `end_links` that counted itself before the closer was kept
+            // may have looked for it before too.
+            if self.inner.ends.load(Ordering::Acquire) != ends {
+                close();
+            }
             conn.closer = Some(Box::new(move || close()));
             n
         });
@@ -596,10 +614,8 @@ impl Server {
     }
 
     /// Ends every link, and every connection still in its handshake: their
-    /// calls in flight answer `GONE`. A transport that cannot wake a read
-    /// from another thread (on Windows: TCP, TLS, a named pipe, shared
-    /// memory) ends its handshake when
-    /// the handshake's read bound runs out.
+    /// calls in flight answer `GONE`, and a handshake waiting on a silent
+    /// client ends at once, on every transport.
     pub fn end_links(&self) {
         self.inner.ends.fetch_add(1, Ordering::AcqRel);
         let live = core::mem::take(&mut *lock(&self.inner.live));
@@ -729,5 +745,37 @@ mod tests {
         let mut other = document();
         other["kinds"][0]["slots"][0]["args"][0]["type"] = "bytes".into();
         assert!(!known.learn(&read(&other)), "called otherwise than given");
+    }
+
+    #[cfg(feature = "tcp")]
+    #[test]
+    fn links_ended_before_a_handshake_keeps_its_closer_still_end_it() {
+        use crate::acl::{Acl, Action, Rule};
+        use crate::protocol::Trust;
+        use crate::transport::tcp::{Accepted, TcpListen};
+        use core::time::Duration;
+        use std::time::Instant;
+
+        let options = LinkOptions::new(Trust::Trusted)
+            .key(b"a key")
+            .handshake_timeout(Duration::from_secs(5));
+        let server = Server::new(Registry::new("server", "1.0"), Described::new(), options);
+        let ending = server.clone();
+        *lock(&server.inner.between) = Some(Box::new(move || ending.end_links()));
+        let mut acl = Acl::default();
+        acl.push(Rule::new(Action::Permit, "127.0.0.1".parse().unwrap()));
+        let listener = TcpListen::bind("127.0.0.1:0", acl).unwrap();
+        // Connected, and never says HELLO.
+        let _silent = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let Accepted::Connection(conn) = listener.accept().unwrap() else {
+            panic!("a permitted source");
+        };
+        let started = Instant::now();
+        assert!(server.serve(conn).is_err());
+        let took = started.elapsed();
+        assert!(
+            took < Duration::from_secs(2),
+            "waited out the handshake: {took:?}"
+        );
     }
 }
