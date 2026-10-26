@@ -460,6 +460,40 @@ mod front {
         }
     }
 
+    /// The first pause after a failed accept; each failure in a row doubles
+    /// it, up to [`MOST_PAUSE`].
+    const FIRST_PAUSE: Duration = Duration::from_millis(5);
+
+    /// The longest pause between failed accepts.
+    const MOST_PAUSE: Duration = Duration::from_secs(1);
+
+    /// Accepts failing in a row (out of descriptors, say): reported once per
+    /// interval, each followed by a pause that grows while they keep failing.
+    struct Failing {
+        throttle: Throttle,
+        pause: Duration,
+    }
+
+    impl Failing {
+        fn new(every: Duration) -> Failing {
+            Failing {
+                throttle: Throttle::new(every),
+                pause: Duration::ZERO,
+            }
+        }
+
+        /// Whether to report this failure (with how many went unreported
+        /// since), and how long to pause before accepting again.
+        fn failed(&mut self, now: Instant) -> (Option<u64>, Duration) {
+            self.pause = (self.pause * 2).clamp(FIRST_PAUSE, MOST_PAUSE);
+            (self.throttle.pass("accept", now), self.pause)
+        }
+
+        fn succeeded(&mut self) {
+            self.pause = Duration::ZERO;
+        }
+    }
+
     /// What every listener hands its connections to: a thread each for the
     /// handshake, at most `max` at once, and refusals reported sparingly.
     pub(super) struct Front {
@@ -468,8 +502,11 @@ mod front {
         running: AtomicUsize,
         /// Refused sources, by address.
         said: Mutex<Throttle>,
-        /// Connections past `max`: apart, so many sources cannot silence it.
+        /// Connections past `max`, and threads that would not start: apart,
+        /// so many sources cannot silence them.
         crowded: Mutex<Throttle>,
+        /// The listener's own failures.
+        failing: Mutex<Failing>,
     }
 
     /// A handshake's place, given back when its thread is done.
@@ -513,7 +550,30 @@ mod front {
                 running: AtomicUsize::new(0),
                 said: Mutex::new(Throttle::new(REPORT_EVERY)),
                 crowded: Mutex::new(Throttle::new(REPORT_EVERY)),
+                failing: Mutex::new(Failing::new(REPORT_EVERY)),
             })
+        }
+
+        /// After an accept failed: reports it sparingly, then pauses, longer
+        /// while accepts keep failing.
+        pub(super) fn accept_failed(&self, e: &std::io::Error) {
+            let (report, pause) = self
+                .failing
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .failed(Instant::now());
+            if let Some(quiet) = report {
+                eprintln!("guatiao-remote-server: accept: {e}{}", since(quiet));
+            }
+            std::thread::sleep(pause);
+        }
+
+        /// After an accept succeeded: the next failure pauses briefly again.
+        pub(super) fn accepted(&self) {
+            self.failing
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .succeeded();
         }
 
         /// Prints `words(quiet)` unless `key` was reported within the interval.
@@ -557,7 +617,9 @@ mod front {
                 }
             });
             if let Err(e) = started {
-                eprintln!("guatiao-remote-server: no thread for a connection: {e}");
+                self.say(&self.crowded, "threads", |quiet| {
+                    format!("no thread for a connection: {e}{}", since(quiet))
+                });
             }
         }
 
@@ -606,6 +668,31 @@ mod front {
             assert_eq!(t.seen.len(), REMEMBERED);
             assert_eq!(t.pass("late", start + Duration::from_secs(60)), Some(0));
             assert_eq!(t.seen.len(), 1, "the expired sources were let go");
+        }
+
+        #[test]
+        fn accepts_failing_in_a_row_are_reported_once_and_pause_longer_each_time() {
+            let mut f = Failing::new(Duration::from_secs(60));
+            let start = Instant::now();
+            let (report, pause) = f.failed(start);
+            assert_eq!((report, pause), (Some(0), FIRST_PAUSE));
+            let mut reports = 0;
+            let mut last = pause;
+            for i in 1..1000 {
+                let (report, pause) = f.failed(start + Duration::from_millis(i));
+                reports += usize::from(report.is_some());
+                assert!(pause >= last && pause <= MOST_PAUSE, "{pause:?}");
+                last = pause;
+            }
+            assert_eq!(reports, 0, "reported once within the interval");
+            assert_eq!(last, MOST_PAUSE);
+            assert_eq!(
+                f.failed(start + Duration::from_secs(60)).0,
+                Some(999),
+                "the next report counts what was held back"
+            );
+            f.succeeded();
+            assert_eq!(f.failed(start + Duration::from_secs(61)).1, FIRST_PAUSE);
         }
 
         #[test]
@@ -679,10 +766,15 @@ fn serve_accepted(
     use guatiao_source_remote::transport::tcp::Accepted;
     loop {
         match accept() {
-            Ok(Accepted::Connection(conn)) => front.take(conn),
-            Ok(Accepted::Refused(peer)) => front.denied(peer),
-            Ok(_) => {}
-            Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
+            Ok(accepted) => {
+                front.accepted();
+                match accepted {
+                    Accepted::Connection(conn) => front.take(conn),
+                    Accepted::Refused(peer) => front.denied(peer),
+                    _ => {}
+                }
+            }
+            Err(e) => front.accept_failed(&e),
         }
     }
 }
@@ -894,8 +986,11 @@ fn serve_local(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String
     eprintln!("guatiao-remote-server: serving local://{name}");
     loop {
         match listener.accept() {
-            Ok(conn) => front.take(conn),
-            Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
+            Ok(conn) => {
+                front.accepted();
+                front.take(conn);
+            }
+            Err(e) => front.accept_failed(&e),
         }
     }
 }
@@ -910,8 +1005,11 @@ fn serve_shm(front: &alloc::sync::Arc<Front>, name: &str) -> Result<(), String> 
     eprintln!("guatiao-remote-server: serving shm://{name}");
     loop {
         match listener.accept() {
-            Ok(conn) => front.take(conn),
-            Err(e) => eprintln!("guatiao-remote-server: accept: {e}"),
+            Ok(conn) => {
+                front.accepted();
+                front.take(conn);
+            }
+            Err(e) => front.accept_failed(&e),
         }
     }
 }
