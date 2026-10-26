@@ -411,6 +411,27 @@ pub trait MapWalker {
     fn skip_value(&mut self) -> Result<(), MapError> {
         self.value::<read::Ignored>().map(|_| ())
     }
+    /// `Some` from a walker of this crate that refuses a repeated key
+    /// itself, so a builder may append each key without looking for it.
+    #[doc(hidden)]
+    fn keys_checked(&self) -> Option<KeysChecked> {
+        None
+    }
+}
+
+/// What [`MapWalker::keys_checked`] answers: its field is private, so
+/// only this crate makes one, and a walker elsewhere can only forward a
+/// walker's own answer.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct KeysChecked(());
+
+impl KeysChecked {
+    /// For a walker that refuses every repeated key of its map before
+    /// handing it on.
+    pub(crate) const fn new() -> KeysChecked {
+        KeysChecked(())
+    }
 }
 
 /// A borrowed list walker walks the same list: a builder may hand one on
@@ -441,5 +462,9 @@ impl<M: MapWalker + ?Sized> MapWalker for &mut M {
 
     fn skip_value(&mut self) -> Result<(), MapError> {
         (**self).skip_value()
+    }
+
+    fn keys_checked(&self) -> Option<KeysChecked> {
+        (**self).keys_checked()
     }
 }
