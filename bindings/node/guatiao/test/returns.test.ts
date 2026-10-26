@@ -179,6 +179,25 @@ describe('a caller handing trees over', () => {
   });
 });
 
+describe('a provider refusing one tree handed over', () => {
+  it('still takes, and frees, every other tree handed over in that call', () => {
+    using counting = new Counting();
+    reg.registerLibrary(library('node_pair_refused', '0.1.0', { providers: [Sizes] }));
+    const found = reg.providerTable('node_pair_refused_sizes', 'pair');
+    const both = n.koffi().decode(n.ptrAt(found.table, 8), n.koffi().proto('uint32_t', ['void *', 'void *', 'void *', 'void *'])) as (
+      ...a: unknown[]
+    ) => number;
+    const handed = new Value({ b: 2 }, { alloc: counting.alloc });
+    const node = handed.moveOut();
+    handed.close();
+    const out = n.alloc(8);
+    expect(both(found.ctx, null, node + BigInt(VALUE.payload), out)).toBe(Status.ERR_NULL);
+    expect(counting.live).toBe(0);
+    n.release(node);
+    n.release(out);
+  });
+});
+
 describe('a call from a thread Node did not start', () => {
   it('runs on Node thread when the event loop turns, the caller waiting', async (ctx_) => {
     const built = cLibraries();

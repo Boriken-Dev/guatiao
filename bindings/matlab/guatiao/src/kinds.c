@@ -958,51 +958,112 @@ typedef struct served_job {
   guatiao_value lent_tmp[GT_MAX_ARGS];
   guatiao_value view_tmp[GT_MAX_ARGS]; /* a borrowed map or list, as a node */
   uint64_t lent_ids[GT_MAX_ARGS];      /* owners and remotes lent for the call */
+  uint64_t handed_ids[GT_MAX_ARGS];    /* owners and remotes of what was handed over */
   gt_pending answer;
   uint64_t answer_id;
 } served_job;
+
+/* What was handed over and filed for the dispatcher, let go when the call
+ * is refused before the dispatcher took it: trees freed, objects destroyed. */
+static void release_handed(served_job *j) {
+  for (int k = 0; k < j->slot->nargs; k++) {
+    uint64_t id = j->handed_ids[k];
+    if (!id) continue;
+    j->handed_ids[k] = 0;
+    if (j->slot->args[k] == S_TAKEN_OBJECT) {
+      gt_remote *r = (gt_remote *)gt_handle_take(id, GT_H_REMOTE);
+      if (r && r->live && r->owned) gt_destroy_object(r->table, r->size, r->ctx);
+      free(r);
+    } else {
+      gt_owner *o = (gt_owner *)gt_handle_take(id, GT_H_OWNER);
+      if (o) gt_owner_drop(o);
+    }
+  }
+}
+
+/* What the handed-over argument k holds, as a node: absent for none. */
+static guatiao_value handed_tree(const gt_slot *sl, void **args, int k) {
+  int s = sl->args[k];
+  void *p = *(void **)args[1 + k];
+  guatiao_value v;
+  set_absent(&v);
+  if (!p) return v;
+  if (tree_tag(s) < 0) {
+    v = *(guatiao_value *)p;
+  } else if (tree_tag(s) == GUATIAO_MAP) {
+    v.tag = GUATIAO_MAP;
+    v.payload.map = *(guatiao_map *)p;
+  } else {
+    v.tag = GUATIAO_LIST;
+    v.payload.list = *(guatiao_list *)p;
+  }
+  return v;
+}
 
 /* The arguments as the dispatcher reads them: text, bytes, numbers, and
  * the ids of owners and remotes the dispatcher wraps. */
 static int served_args(served_job *j, mxArray **out, char *msg, size_t msglen) {
   gt_slot *sl = j->slot;
   mxArray *args = mxCreateCellMatrix(1, (mwSize)sl->nargs);
-  /* Handed-over trees first, so nothing below leaves one without an owner. */
+  /* Every handed-over argument first, trees and objects, and every one of
+   * them past a refusal too: the call owns all of it, and nothing below
+   * can leave one without an owner. */
+  guatiao_status refused = GUATIAO_OK;
   for (int k = 0; k < sl->nargs; k++) {
     int s = sl->args[k];
-    if (s < S_TAKEN_VALUE || s > S_TAKEN_LIST) continue;
-    void *p = *(void **)j->args[1 + k];
-    guatiao_value v;
-    set_absent(&v);
-    if (p) {
-      if (tree_tag(s) < 0) {
-        v = *(guatiao_value *)p;
-      } else if (tree_tag(s) == GUATIAO_MAP) {
-        v.tag = GUATIAO_MAP;
-        v.payload.map = *(guatiao_map *)p;
-      } else {
-        v.tag = GUATIAO_LIST;
-        v.payload.list = *(guatiao_list *)p;
+    if (s == S_TAKEN_OBJECT) {
+      guatiao_object o = *(guatiao_object *)j->args[1 + k];
+      uint64_t id = refused ? 0 : remote_add(sl->arg_kind[k], o.table, o.size, o.ctx, 1);
+      if (!id) {
+        gt_destroy_object(o.table, o.size, o.ctx);
+        if (!refused) {
+          refused = GUATIAO_ERR_ALLOC;
+          snprintf(msg, msglen, "out of memory");
+        }
+        continue;
       }
+      j->handed_ids[k] = id;
+      mxSetCell(args, (mwIndex)k, mxCreateDoubleScalar((double)id));
+      continue;
+    }
+    if (s < S_TAKEN_VALUE || s > S_TAKEN_LIST) continue;
+    if (!*(void **)j->args[1 + k]) {
+      if (!refused) {
+        refused = GUATIAO_ERR_NULL;
+        snprintf(msg, msglen, "the handed-over %s is null",
+                 tree_tag(s) == GUATIAO_MAP ? "map" : tree_tag(s) == GUATIAO_LIST ? "list" : "value");
+      }
+      continue;
+    }
+    guatiao_value v = handed_tree(sl, j->args, k);
+    if (refused) {
+      gt_free(&v);
+      continue;
     }
     /* The method owns it and may keep it: moved out of the caller's
      * allocators, which may go with the caller's library. */
     guatiao_status moved = into_binding(&v);
     if (moved != GUATIAO_OK) {
       gt_free(&v);
-      j->status = moved;
+      refused = moved;
       snprintf(msg, msglen, "a handed-over tree could not be moved into this binding's allocator");
-      mxDestroyArray(args);
-      return 0;
+      continue;
     }
     uint64_t id = gt_owner_new(&v, &gt_binding_alloc);
     if (!id) {
       gt_free(&v);
+      refused = GUATIAO_ERR_ALLOC;
       snprintf(msg, msglen, "out of memory");
-      mxDestroyArray(args);
-      return 0;
+      continue;
     }
+    j->handed_ids[k] = id;
     mxSetCell(args, (mwIndex)k, mxCreateDoubleScalar((double)id));
+  }
+  if (refused) {
+    j->status = refused;
+    release_handed(j);
+    mxDestroyArray(args);
+    return 0;
   }
   for (int k = 0; k < sl->nargs; k++) {
     int s = sl->args[k];
@@ -1013,7 +1074,9 @@ static int served_args(served_job *j, mxArray **out, char *msg, size_t msglen) {
       if (s == S_STRING) {
         x = gt_utf8_mx(t);
         if (!x) {
+          j->status = GUATIAO_ERR_BAD_VALUE;
           snprintf(msg, msglen, "argument %d is not UTF-8", k + 1);
+          release_handed(j);
           mxDestroyArray(args);
           return 0;
         }
@@ -1049,23 +1112,24 @@ static int served_args(served_job *j, mxArray **out, char *msg, size_t msglen) {
       uint64_t id = gt_owner_borrow(node, &gt_binding_alloc, !lent);
       if (!id) {
         snprintf(msg, msglen, "out of memory");
+        release_handed(j);
         mxDestroyArray(args);
         return 0;
       }
       j->lent_ids[k] = id;
       x = mxCreateDoubleScalar((double)id);
-    } else if (s >= S_TAKEN_VALUE && s <= S_TAKEN_LIST) {
+    } else if ((s >= S_TAKEN_VALUE && s <= S_TAKEN_LIST) || s == S_TAKEN_OBJECT) {
       continue;
-    } else if (s == S_TAKEN_OBJECT || s == S_LENT_OBJECT) {
-      guatiao_object o = s == S_TAKEN_OBJECT ? *(guatiao_object *)a : **(guatiao_object **)a;
-      uint64_t id = remote_add(sl->arg_kind[k], o.table, o.size, o.ctx, s == S_TAKEN_OBJECT);
+    } else if (s == S_LENT_OBJECT) {
+      guatiao_object o = **(guatiao_object **)a;
+      uint64_t id = remote_add(sl->arg_kind[k], o.table, o.size, o.ctx, 0);
       if (!id) {
-        if (s == S_TAKEN_OBJECT) gt_destroy_object(o.table, o.size, o.ctx);
         snprintf(msg, msglen, "out of memory");
+        release_handed(j);
         mxDestroyArray(args);
         return 0;
       }
-      if (s == S_LENT_OBJECT) j->lent_ids[k] = id;
+      j->lent_ids[k] = id;
       x = mxCreateDoubleScalar((double)id);
     }
     mxSetCell(args, (mwIndex)k, x);

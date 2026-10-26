@@ -179,6 +179,20 @@ static void free_err(value_free_fn free_value, guatiao_provider_error *err) {
   free_value(&m);
 }
 
+/* A listener of this file's: counts how many were destroyed. */
+static int listeners_destroyed = 0;
+static void fx_listener_destroy(void *ctx) {
+  (void)ctx;
+  listeners_destroyed++;
+}
+static guatiao_status fx_listener_heard(void *ctx, guatiao_str what) {
+  (void)ctx;
+  (void)what;
+  return GUATIAO_OK;
+}
+static const listener_vtable FX_LISTENER = {
+    {(uint32_t)sizeof(listener_vtable), listener_vtable_FLOOR_HASH}, fx_listener_destroy, fx_listener_heard};
+
 /* Each command answers into plhs[0]; a refusal sets `failure`, raised at
  * the gateway's top below. */
 static int dispatch(const char *cmd, int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
@@ -343,6 +357,47 @@ static int dispatch(const char *cmd, int nlhs, mxArray *plhs[], int nrhs, const 
     guatiao_status st = p->create(p->ctx, (const guatiao_value *)addr(prhs[4]), NULL, &err);
     free_err(free_value, &err);
     plhs[0] = mxCreateDoubleScalar((double)st);
+    return 1;
+  }
+  if (!strcmp(cmd, "both")) {
+    /* both(table, ctx, a, b) -> the status of a pair's both(a, b), both
+     * handed over: the map at each node, left absent, or null for 0 */
+    if (nrhs < 5 || !addr(prhs[1])) return 0;
+    typedef guatiao_status (*both_fn)(void *ctx, guatiao_map *a, guatiao_map *b, int64_t *out);
+    both_fn both;
+    memcpy(&both, (const char *)addr(prhs[1]) + sizeof(guatiao_kind_header), sizeof both);
+    guatiao_map m[2];
+    guatiao_map *given[2] = {NULL, NULL};
+    for (int i = 0; i < 2; i++) {
+      guatiao_value *v = (guatiao_value *)addr(prhs[3 + i]);
+      if (!v) continue;
+      m[i] = v->payload.map;
+      memset(v, 0, sizeof *v);
+      given[i] = &m[i];
+    }
+    int64_t out = 0;
+    plhs[0] = mxCreateDoubleScalar((double)both(addr(prhs[2]), given[0], given[1], &out));
+    return 1;
+  }
+  if (!strcmp(cmd, "put_refused")) {
+    /* put_refused(table, ctx) -> the status of a pocket's put(label, item):
+     * a label that is not UTF-8, then a listener of this file's handed over */
+    if (nrhs < 3 || !addr(prhs[1])) return 0;
+    typedef guatiao_status (*put_fn)(void *ctx, guatiao_str label, guatiao_object item, guatiao_provider_error *err);
+    put_fn put;
+    memcpy(&put, (const char *)addr(prhs[1]) + sizeof(guatiao_kind_header), sizeof put);
+    guatiao_object item = {&FX_LISTENER, sizeof FX_LISTENER, &listeners_destroyed};
+    guatiao_provider_error err;
+    memset(&err, 0, sizeof err);
+    guatiao_str label = {(const uint8_t *)"\xff", 1};
+    guatiao_status st = put(addr(prhs[2]), label, item, &err);
+    if (err.message.cap) err.message.alloc->free(err.message.alloc->ctx, (void *)err.message.ptr, err.message.cap, 1);
+    plhs[0] = mxCreateDoubleScalar((double)st);
+    return 1;
+  }
+  if (!strcmp(cmd, "listeners_destroyed")) {
+    /* listeners_destroyed() -> how many of this file's listeners were destroyed */
+    plhs[0] = mxCreateDoubleScalar((double)listeners_destroyed);
     return 1;
   }
   if (!strcmp(cmd, "entry_answers")) {

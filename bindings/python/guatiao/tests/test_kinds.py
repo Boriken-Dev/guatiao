@@ -32,7 +32,7 @@ sys.path.insert(0, str(native.GREETER_KIND_PY))
 
 from greeter_kind import Conversation, Counter, Greeter, Listener, Wide  # noqa: E402
 
-from guatiao import ABSENT, BadValue, Internal, List, Unsupported, Value, kinds  # noqa: E402
+from guatiao import ABSENT, BadValue, Internal, List, Unsupported, Value, _abi, kinds  # noqa: E402
 from guatiao.kinds import FloorMismatch, Kind, KindProtocol, Lent, Method, kind_of  # noqa: E402
 from guatiao.kinds.shapes import (  # noqa: E402
     BOOL,
@@ -451,6 +451,38 @@ def test_an_answer_that_does_not_fit_fails_the_call_that_asked():
             wide.echo_i64(2**63 - 1)
         with pytest.raises(Internal, match="OverflowError"):
             wide.echo_u64(0)
+    finally:
+        _serve.release(raw.ctx)
+
+
+PAIR = Kind(
+    "pair",
+    floor_hash=7,
+    methods=[Method("both", [taken(MAP), taken(MAP)], I64, required=True, fallible=True)],
+)
+
+
+class Sizes:
+    def both(self, a, b):
+        return len(a) + len(b)
+
+
+def test_a_call_refused_at_one_handed_over_tree_still_takes_the_others():
+    from counting import Counting
+
+    from guatiao.kinds._shapes import _free_node, _owned_tree
+
+    counting = Counting()
+    raw = _serve.serve(PAIR, Sizes())
+    try:
+        both = PAIR.struct.from_address(raw.table).both
+        node = _owned_tree({"b": 2}, int(_abi.Tag.MAP), counting.alloc)
+        out = ctypes.c_int64(0)
+        err = _abi.ProviderError()
+        status = both(raw.ctx, None, ctypes.byref(node.payload.map), ctypes.byref(out), ctypes.byref(err))
+        assert status == int(_abi.Status.ERR_NULL)
+        assert counting.live == 0, "the map handed over after the null one is the callee's, and freed"
+        _free_node(_abi.Value(tag=int(_abi.Tag.STRING), payload=_abi.Payload(text=err.message)))
     finally:
         _serve.release(raw.ctx)
 

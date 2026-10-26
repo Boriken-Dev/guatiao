@@ -17,15 +17,21 @@ import (
 // handed over first), Target, Ran, the method, the answer. What it lends
 // the method is valid until the call returns. Nothing else needs to use
 // it.
+//
+// A refusal met while receiving a handed-over argument is answered by
+// Target, not by Taken, Decode or TakenObject (which answer a zero value),
+// so the glue goes on to receive every later handed-over argument, and the
+// call owns, and frees, all of them.
 type Served struct {
-	kind   *kindDesc
-	slot   *SlotSpec
-	ctx    uintptr
-	open   bool
-	ran    bool
-	taken  []func()
-	after  []func()
-	blocks []unsafe.Pointer
+	kind    *kindDesc
+	slot    *SlotSpec
+	ctx     uintptr
+	open    bool
+	ran     bool
+	refused error
+	taken   []func()
+	after   []func()
+	blocks  []unsafe.Pointer
 }
 
 // Serve runs one call into slot i of the kind: body receives the
@@ -39,6 +45,9 @@ func (k *Kind[R]) Serve(ctx uintptr, errp unsafe.Pointer, i int, body func(s *Se
 func serve(d *kindDesc, ctx uintptr, errp unsafe.Pointer, i int, body func(s *Served) error) (status uint32) {
 	s := &Served{kind: d, slot: &d.spec.Slots[i], ctx: ctx, open: true}
 	err := s.run(body)
+	if err == nil {
+		err = s.refused
+	}
 	if !s.ran {
 		for _, f := range s.taken {
 			f()
@@ -85,8 +94,23 @@ func (s *Served) block(n uintptr) unsafe.Pointer {
 	return p
 }
 
-// Target is the Go value the call's ctx names.
-func (s *Served) Target() (any, error) { return held(s.ctx) }
+// Target is the Go value the call's ctx names; first, the refusal met
+// while receiving a handed-over argument, if there was one.
+func (s *Served) Target() (any, error) {
+	if s.refused != nil {
+		return nil, s.refused
+	}
+	return held(s.ctx)
+}
+
+// refuse keeps the first refusal met while receiving what was handed over,
+// for Target.
+func (s *Served) refuse(err error) error {
+	if s.refused == nil {
+		s.refused = err
+	}
+	return nil
+}
 
 // Ran marks the method about to run: from now on it owns what was handed
 // over.
@@ -178,7 +202,11 @@ func (s *Served) Lent(p unsafe.Pointer, class TreeClass) (Ref, error) {
 // moved into this binding's allocator, out of the caller's, which may go
 // with the caller's library; closed for it if the method never runs.
 func (s *Served) Taken(p unsafe.Pointer, class TreeClass) (*Value, error) {
-	return s.receiveTaken(p, class, true)
+	v, err := s.receiveTaken(p, class, true)
+	if err != nil {
+		return nil, s.refuse(err)
+	}
+	return v, nil
 }
 
 // receiveTaken is Taken, the tree left in the caller's allocators unless home.
@@ -214,10 +242,13 @@ func (s *Served) Decode(p unsafe.Pointer, class TreeClass, taken bool, dst any) 
 	if taken {
 		v, err := s.receiveTaken(p, class, false)
 		if err != nil {
-			return err
+			return s.refuse(err)
 		}
 		defer v.Close()
-		return v.Decode(dst)
+		if err := v.Decode(dst); err != nil {
+			return s.refuse(err)
+		}
+		return nil
 	}
 	r, err := s.Borrowed(p, class)
 	if err != nil {
@@ -232,7 +263,7 @@ func (s *Served) TakenObject(table unsafe.Pointer, size, ctx uintptr, k AnyKind)
 	r, err := newRemote(k.desc(), table, size, ctx, true, nil)
 	if err != nil {
 		rawObject{table: table, size: size, ctx: ctx}.destroy(k.desc())
-		return Remote{}, err
+		return Remote{}, s.refuse(err)
 	}
 	s.taken = append(s.taken, func() { r.Close() })
 	return r, nil
