@@ -10,6 +10,8 @@ use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::Instant;
 
+use super::waiting::Waiting;
+
 /// A job for a pool thread.
 pub(crate) type Job = Box<dyn FnOnce() + Send>;
 
@@ -48,7 +50,8 @@ pub(crate) struct Pool {
     state: Mutex<PoolState>,
     max: usize,
     name: String,
-    spin: Duration,
+    /// How long an idle thread polls for its next job.
+    waiting: Waiting,
 }
 
 struct PoolState {
@@ -68,7 +71,7 @@ impl Pool {
             }),
             max: max.max(1),
             name: name.to_string(),
-            spin,
+            waiting: Waiting::new(spin),
         }
     }
 
@@ -118,12 +121,20 @@ impl Pool {
                 j();
             }
             lock(&self.state).idle.push((me, tx.clone()));
-            if let Some(j) = spin_recv(&rx, self.spin) {
+            let idle = Instant::now();
+            let (spin, polling) = self.waiting.poll();
+            let polled = spin_recv(&rx, spin);
+            drop(polling);
+            if let Some(j) = polled {
+                self.waiting.saw(idle.elapsed());
                 job = Some(j);
                 continue;
             }
             match rx.recv_timeout(IDLE) {
-                Ok(j) => job = Some(j),
+                Ok(j) => {
+                    self.waiting.saw(idle.elapsed());
+                    job = Some(j);
+                }
                 Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
                     let mut state = lock(&self.state);
                     state.idle.retain(|(id, _)| *id != me);
