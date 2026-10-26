@@ -37,8 +37,9 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         fingerprint; default); trusted needs it or --range
   --key-file PATH       the trusted level's pre-shared key
   --state-dir DIR       secure: this server's identity (DIR/identity.pem, made
-                        when absent) and its trust store (DIR/peers): clients
-                        it does not know wait there until accepted
+                        when absent) and its trust store (DIR/peers): unless
+                        --pin is given, clients it does not know wait there
+                        until accepted
   --identity PATH       secure: the identity file instead (made when absent)
   --pin FINGERPRINT     secure: trust this client (repeatable); with any, the
                         trust store no longer decides
@@ -236,6 +237,9 @@ fn pairing(a: &Args) -> Result<(), String> {
     {
         use guatiao_source_remote::transport::tls::{PeerId, TrustStore};
         let dir = a.state_dir.as_deref().unwrap_or(std::path::Path::new("."));
+        if !dir.join("peers").is_dir() {
+            return Err(format!("{}: no trust store there", dir.display()));
+        }
         let store = TrustStore::open(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         if a.waiting {
             for entry in store.waiting().map_err(|e| e.to_string())? {
@@ -419,9 +423,12 @@ fn serve_tls(server: &Server, address: &str, a: &Args) -> Result<(), String> {
     }
     let mut config = match (&a.state_dir, &a.identity) {
         (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
-        (None, Some(path)) => TlsConfig::new(
-            Identity::open_or_create(path).map_err(|e| format!("{}: {e}", path.display()))?,
-        ),
+        (None, Some(path)) => TlsConfig::new(Identity::open_or_create(path).map_err(|e| {
+            let under = core::error::Error::source(&e)
+                .map(|u| format!(": {u}"))
+                .unwrap_or_default();
+            format!("{}: {e}{under}", path.display())
+        })?),
         (Some(_), Some(_)) => {
             return Err("name --state-dir or --identity, not both".to_string());
         }
