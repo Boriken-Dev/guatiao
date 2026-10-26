@@ -906,7 +906,10 @@ its WELCOME carries the proof, which asks the client for its own; a
 WELCOME with an empty proof asks for none, and a client whose server
 requires a token sent it in the HELLO. A server at server TLS holds a
 key, a token or both, and a client asked for a key it does not hold
-ends the link. At the other levels the proof is empty.
+ends the link. At the other levels the proof is empty. A server reached
+over a network compares a client's token with its own by their SHA-256
+digests, every byte, so how long a refusal takes says nothing of either
+token's length.
 
 ### The catalog
 
