@@ -464,10 +464,33 @@ VM, MTU 9000):
   polling at all saves about 40 % of the CPU for about 55 % more latency. On the
   same machine every answer arrives inside 50 µs, so the default stands
   for local links.
-- **TCP from 32 threads on Linux reaches 17 000-20 000 calls a second**,
+- **TCP from 32 threads on Linux reached 17 000-20 000 calls a second**,
   on loopback and to the VM alike, where the Unix socket and shared
-  memory reach 100 000-180 000 through the same link. Why is not yet
-  measured.
+  memory reached 100 000-180 000 through the same link: every frame was
+  one write under the link's writer, and every hand-off of the writer a
+  wake-up. Threads now share writes (below).
+
+Threads calling at once share the link's writes
+(`remote-windows-shared-writes.jsonl`, `remote-linux-vm-shared-writes.jsonl`):
+before, each frame was one write under the link's writer, about 20-25 µs
+of write over loopback TCP in the Linux VM plus the wake-up of the next thread
+waiting for the writer; now a frame is queued and the thread that finds
+the writer free writes every queued frame in one vectored write. The
+Windows workstation and a Linux (aarch64) VM on it, the two builds alternating, five runs
+each, a run started only once the machine was quiet (under 50 % busy on
+Windows, whose own services take 30 % or more; under 20 % in the VM);
+medians. Other work on the machine still moved single runs by 2x: read
+the ratios, not the figures. A single call over the VM's Unix socket takes
+about 120 µs here against about 50 µs over its TCP, before and after alike.
+
+| run | p50 µs, before / after | calls/s, 32 threads, before | after | change |
+| --- | --- | --- | --- | --- |
+| Windows, TCP loopback | 29.4 / 29.7 | 50 695 | 83 304 | 1.64x |
+| Windows, named pipe | 17.8 / 18.1 | 129 736 | 142 215 | 1.10x |
+| Windows, shared memory | 2.0 / 1.3 | 271 756 | 364 262 | 1.34x |
+| Linux VM, TCP loopback | 51.5 / 54.6 | 20 696 | 41 435 | 2.00x |
+| Linux VM, Unix socket | 122.2 / 131.9 | 32 834 | 46 462 | 1.42x |
+| Linux VM, shared memory | 2.2 / 2.5 | 53 231 | 65 079 | 1.22x |
 
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP
