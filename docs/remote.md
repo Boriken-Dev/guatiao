@@ -136,14 +136,19 @@ local numbers, provisional. `benchmarks/remote` measures each transport,
 with calls a second, throughput, bytes and CPU per call
 (`benchmarks/README.md`).
 
-A thread waiting for an answer polls for 50 µs before it sleeps
-(`LinkOptions::spin`), which keeps a busy link from paying a wake-up on
-every hand-off; an idle link's first call pays one. Across a network the
-answer often takes longer than that, and the thread polls *and* pays the
-wake-up. Set `spin` just past the round trip to drop the wake-up: from
-the host to its VM, 200 µs brought a call from 114 µs to 74 µs for the
-same CPU per call. Set it to zero to spend the least CPU: 180 µs a call,
-about 40 % less CPU.
+A thread waiting for an answer, or an idle thread of the link's pool
+waiting for a call, polls before it sleeps, which keeps a busy link from
+paying a wake-up on every hand-off; an idle link's first call pays one.
+It polls for half again as long as the typical wait it has seen on that
+link (an answer's round trip, the gap between the peer's calls), at
+least 50 µs and at most `LinkOptions::spin` (200 µs by default), and not
+at all when the typical wait is longer than that, or while as many
+threads poll as there are cores. A fixed 50 µs poll, as before, made a
+thread across a network poll *and* pay the wake-up: from a Windows host
+to a Linux VM on it, polling past the round trip brought a call from 160
+µs to 96 µs for the same CPU per call, as 200 µs had brought one from an
+x86-64 host to its VM from 114 µs to 74 µs. Set `spin` to zero to spend
+the least CPU: 180 µs a call there, about 40 % less CPU.
 
 ### RDMA (experimental, Linux)
 

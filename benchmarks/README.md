@@ -480,8 +480,9 @@ Windows workstation and a Linux (aarch64) VM on it, the two builds alternating, 
 each, a run started only once the machine was quiet (under 50 % busy on
 Windows, whose own services take 30 % or more; under 20 % in the VM);
 medians. Other work on the machine still moved single runs by 2x: read
-the ratios, not the figures. A single call over the VM's Unix socket takes
-about 120 µs here against about 50 µs over its TCP, before and after alike.
+the ratios, not the figures. A single call over the VM's Unix socket took
+about 120 µs here against about 50 µs over its TCP, before and after alike:
+its answers came after the 50 µs poll (below).
 
 | run | p50 µs, before / after | calls/s, 32 threads, before | after | change |
 | --- | --- | --- | --- | --- |
@@ -491,6 +492,33 @@ about 120 µs here against about 50 µs over its TCP, before and after alike.
 | Linux VM, TCP loopback | 51.5 / 54.6 | 20 696 | 41 435 | 2.00x |
 | Linux VM, Unix socket | 122.2 / 131.9 | 32 834 | 46 462 | 1.42x |
 | Linux VM, shared memory | 2.2 / 2.5 | 53 231 | 65 079 | 1.22x |
+
+A waiting thread polls just past the link's typical wait
+(`remote-windows-to-linux-vm-polling.jsonl`, `remote-windows-polling.jsonl`,
+`remote-linux-vm-polling.jsonl`): 1.5x the typical answer round trip (for
+a caller) or gap between calls (for an idle pool thread), at least 50 µs,
+at most `spin` (now 200 µs by default), and not at all past it; against
+the fixed 50 µs poll before. The Windows client to a server in the Linux
+VM is a path whose round trip (~100 µs) is longer than the old poll, as
+host to VM was above; the same protocol as the table before, five runs,
+medians; CPU is the client's.
+
+| run | p50 µs, fixed / adaptive | calls/s, 32 threads, fixed / adaptive | CPU µs/call, fixed / adaptive |
+| --- | --- | --- | --- |
+| Windows to the Linux VM, TCP | 159.8 / 95.9 | 57 397 / 62 409 | 89.1 / 89.1 |
+| Windows, TCP loopback | 29.2 / 30.2 | 77 728 / 85 859 | 35.2 / 38.3 |
+| Windows, named pipe | 17.9 / 18.1 | 136 844 / 151 388 | 23.4 / 21.9 |
+| Windows, shared memory | 1.3 / 1.4 | 291 083 / 380 957 | 4.7 / 4.7 |
+| Linux VM, TCP loopback | 55.8 / 56.7 | 35 065 / 53 628 | 73.4 / 70.4 |
+| Linux VM, Unix socket | 130.8 / 59.5 | 41 749 / 39 735 | 117.3 / 105.6 |
+| Linux VM, shared memory | 1.8 / 2.3 | 53 264 / 67 143 | 7.5 / 8.2 |
+
+On the same machine every answer still comes inside the 50 µs floor, so
+local links poll as before; the Linux VM's Unix socket, whose answers
+took longer than 50 µs, halves its latency. Polling less than the floor
+was tried and lost: on shared memory a thread polling just past a 2 µs
+round trip missed often enough to pay wake-ups, and the Linux VM's p99
+went from 8 to 120-180 µs at four times the CPU.
 
 RDMA, on Soft-RoCE only (`remote-vm-rdma.jsonl`): built with
 `--features rdma`, `rdma://ADDRESS:PORT` is the address of the link's TCP

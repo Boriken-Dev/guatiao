@@ -1024,6 +1024,16 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: a link polls just past its own round trip.** A
+  waiting thread polled a fixed 50 µs, so across a network an answer
+  slower than that paid for the poll and a wake-up both. Now a thread
+  polls for 1.5x the typical wait it has seen on its link, at least the
+  old 50 µs and at most `LinkOptions::spin`, which becomes the most a
+  thread polls (default 200 µs, was a fixed 50 µs), not at all when the
+  typical wait is longer, and not while as many threads poll as there are
+  cores: a call from a Windows host to a Linux VM on it went from 160 µs
+  to 96 µs for the same CPU, locally. *Migration:* a `spin` set to tune a
+  link is now its ceiling; set it to zero, as before, to never poll.
 - **guatiao-source-remote: `trust = "secure"` is
   `GUATIAO_ERR_UNSUPPORTED`**, from a configuration or a peer manifest,
   where it was `GUATIAO_ERR_BAD_VALUE` naming transports this build does
