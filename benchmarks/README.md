@@ -96,6 +96,7 @@ sample, which is what `--merge` pools.
 | `tree_events_*`, `bytes_events_*` | the configuration and the two hundred keys walked into a sink that keeps nothing, from the tree and from the wire bytes: what the walk costs alone |
 | `keys_wire_walk` | the two hundred keys' tree to wire bytes through the `Encoder` (`wire::to_bytes_of(&tree)`; `guatiao_wire_encode_walker` and `guatiao_json_to_wire` write through it too), which checks each key for a repeat |
 | `wire_keys_tree`, `wire_keys_walk` | those bytes back into a tree: `wire::decode` (what `guatiao_wire_decode` runs), against `wire::decode_as::<Value>` |
+| `json_keys_tree`, `sink_keys_tree` | the two hundred keys built into a tree by a builder that replaces a repeated key in place: from their JSON text (`json::from_str`, a `TreeSink` the parser gives no count), and from their tree walked into a `TreeSink` (given the count) |
 
 ## Results
 
