@@ -58,8 +58,9 @@ use tokio::runtime::{Handle, Runtime};
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
 use super::tls::{
-    ALPN, TlsConfig, canonical_acl, denied_by_acl, ended_before_answering, host_of, server_name,
-    untrusted_by_server, untrusted_client, untrusted_server,
+    ALPN, Admitting, Denied, TlsConfig, Verifying, canonical_acl, denied_by_acl,
+    ended_before_answering, host_of, server_name, untrusted_by_server, untrusted_client,
+    untrusted_server,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
 
@@ -250,6 +251,27 @@ pub(super) type Kept = Arc<OnceLock<Refusal>>;
 fn keep(kept: &Kept, e: &rustls::Error) {
     if let Some(r) = Refusal::from_rustls(e) {
         let _ = kept.set(r);
+    }
+}
+
+/// `inner`, refusing first what `acl` denies from `source` at `local`;
+/// `inner` itself with no list.
+pub(super) fn admitting(
+    inner: &Arc<dyn ClientCertVerifier>,
+    acl: Option<&Arc<Acl>>,
+    source: SocketAddr,
+    local: SocketAddr,
+    denied: &Denied,
+) -> Arc<dyn ClientCertVerifier> {
+    match acl {
+        Some(acl) => Arc::new(Admitting {
+            inner: Arc::clone(inner),
+            acl: Arc::clone(acl),
+            source,
+            local,
+            denied: Arc::clone(denied),
+        }),
+        None => Arc::clone(inner),
     }
 }
 
@@ -599,32 +621,29 @@ struct Pending {
 impl Pending {
     /// This connection's own server configuration: the listener's, with
     /// a client verifier scoped to `source`.
-    fn config(&self, refusal: &Kept) -> io::Result<Arc<quinn::ServerConfig>> {
+    fn config(&self, refusal: &Kept, denied: &Denied) -> io::Result<Arc<quinn::ServerConfig>> {
         let base = &self.listener.tls;
         // At server TLS no client certificate is asked, so no verifier
         // records a waiting client: the listener's own configuration does.
         let tls = match &self.listener.verifier {
             Some(inner) => {
                 let verifier = Arc::new(Sourced {
-                    inner: Arc::clone(inner),
+                    inner: admitting(
+                        inner,
+                        self.listener.admits.as_ref(),
+                        self.source,
+                        self.local,
+                        denied,
+                    ),
                     source: self.source,
                     refusal: Arc::clone(refusal),
                 });
-                let mut tls =
-                    ServerConfig::builder_with_provider(Arc::clone(base.crypto_provider()))
-                        .with_protocol_versions(&[&rustls::version::TLS13])
-                        .map_err(invalid)?
-                        .with_client_cert_verifier(verifier)
-                        .with_single_cert(
-                            vec![self.listener.certificate.clone()],
-                            self.listener.key.clone_key(),
-                        )
-                        .map_err(invalid)?;
-                tls.alpn_protocols.clone_from(&base.alpn_protocols);
-                tls.session_storage = Arc::clone(&base.session_storage);
-                tls.send_tls13_tickets = base.send_tls13_tickets;
-                tls.ticketer = Arc::clone(&base.ticketer);
-                Arc::new(tls)
+                Verifying::config(
+                    base,
+                    verifier,
+                    &self.listener.certificate,
+                    &self.listener.key,
+                )?
             }
             None => Arc::clone(base),
         };
@@ -644,7 +663,8 @@ impl Pending {
         }
         let until = bound.map(|b| Instant::now() + b);
         let refusal = Kept::default();
-        let config = self.config(&refusal)?;
+        let denied = Denied::default();
+        let config = self.config(&refusal, &denied)?;
         let source = self.source;
         // quinn spawns the connection's driver on the runtime it is called
         // inside.
@@ -656,12 +676,17 @@ impl Pending {
         let handshake = shared.ending.or_ended(connecting);
         let conn = wait_at_most(shared.handle(), left(until)?, handshake)?
             .ok_or_else(ended_in_handshake)?
-            .map_err(|e| match (refusal.get().copied(), alert(&e)) {
-                (None, None) => io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    format!("the client's QUIC handshake did not finish: {e}"),
-                ),
-                (refused, _) => untrusted_by_server(refused, &e),
+            .map_err(|e| {
+                if let Some((peer, rule)) = denied.get() {
+                    return denied_by_acl(peer, source, *rule);
+                }
+                match (refusal.get().copied(), alert(&e)) {
+                    (None, None) => io::Error::new(
+                        io::ErrorKind::ConnectionAborted,
+                        format!("the client's QUIC handshake did not finish: {e}"),
+                    ),
+                    (refused, _) => untrusted_by_server(refused, &e),
+                }
             })?;
         let refuse = |e: io::Error| {
             conn.close(VarInt::from_u32(REFUSED), b"refused");
@@ -1265,6 +1290,9 @@ struct Listener {
     certificate: CertificateDer<'static>,
     key: PrivateKeyDer<'static>,
     acl: Option<Arc<Acl>>,
+    /// The list a client's certificate is checked against before the trust
+    /// store sees it ([`TlsConfig::admits_first`]).
+    admits: Option<Arc<Acl>>,
     /// Whether clients' certificates are checked: false at no security.
     proves: bool,
 }
@@ -1362,6 +1390,7 @@ impl QuicListen {
                 verifier,
                 certificate: CertificateDer::from(identity.certificate_der().to_vec()),
                 key,
+                admits: config.admits_first(acl.as_ref()),
                 acl,
                 proves: config.proves_peers(),
             }),

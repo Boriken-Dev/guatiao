@@ -403,6 +403,37 @@ fn a_list_permitting_one_fingerprint_admits_it_alone() {
     assert_eq!(registry.offers::<dyn Greeter>().count(), 0, "{refused:?}");
 }
 
+/// A store keeps waiting only a stranger its access control list could
+/// admit: one whose fingerprint no rule permits from its address is
+/// refused as it presents its certificate, so no operator is offered it.
+#[test]
+fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
+    let dir = scratch("never_admitted");
+    let (admitted, never) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    // Every source is deferred to the fingerprint rule.
+    let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
+    only.fingerprint = Some(admitted.fingerprint().canonical());
+    let mut policy = Policy::strict();
+    policy.acl = Some(acl(vec![only]));
+    let server = TlsConfig::open(&dir).unwrap().policy(policy);
+    let address = listen(&server, secure_server());
+
+    let no = TlsConfig::new(never).pins([server.fingerprint()]);
+    let (_, refused) = refresh(&source(&address, &no));
+    assert_eq!(refused.len(), 1, "{refused:?}");
+    // The stranger the list names waits for an operator to accept it.
+    let yes = TlsConfig::new(admitted.clone()).pins([server.fingerprint()]);
+    let (_, refused) = refresh(&source(&address, &yes));
+    assert_eq!(refused.len(), 1, "{refused:?}");
+    let store = TrustStore::open(&dir).unwrap();
+    common::eventually("the stranger the list names waits", || {
+        !store.waiting().unwrap().is_empty()
+    });
+    let waiting: Vec<PeerId> = store.waiting().unwrap().into_iter().map(|w| w.id).collect();
+    assert_eq!(waiting, [admitted.fingerprint()]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_client_has_no_access_control_list() {
     let id = Identity::generate().unwrap();

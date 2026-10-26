@@ -227,6 +227,51 @@ fn a_fingerprint_the_list_denies_is_refused_after_the_handshake() {
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{}", e.message());
 }
 
+/// A store keeps waiting only a stranger its access control list could
+/// admit: one whose fingerprint no rule permits from its address is
+/// refused as it presents its certificate, so no operator is offered it.
+#[test]
+fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::{Policy, TrustStore};
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("webtransport")
+        .join("never_admitted");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (admitted, never) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    // Every source is deferred to the fingerprint rule.
+    let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
+    only.fingerprint = Some(admitted.fingerprint().canonical());
+    let mut acl = Acl::default();
+    acl.push(only);
+    let mut policy = Policy::strict();
+    policy.acl = Some(acl);
+    let server = TlsConfig::open(&dir).unwrap().policy(policy);
+    let at = spawn(
+        WtListen::bind("127.0.0.1:0", &server).unwrap(),
+        common::server(LinkOptions::new(Trust::Secure)),
+    );
+    let link = |id: Identity| {
+        let client = TlsConfig::new(id).pins([server.fingerprint()]);
+        RemoteSource::new(
+            Box::new(WtConnect::new(&url(&at), &client).unwrap()),
+            LinkOptions::new(Trust::Secure),
+        )
+        .link()
+    };
+    assert!(link(never).is_err());
+    // The stranger the list names waits for an operator to accept it.
+    assert!(link(admitted.clone()).is_err());
+    let store = TrustStore::open(&dir).unwrap();
+    common::eventually("the stranger the list names waits", || {
+        !store.waiting().unwrap().is_empty()
+    });
+    let waiting: Vec<PeerId> = store.waiting().unwrap().into_iter().map(|w| w.id).collect();
+    assert_eq!(waiting, [admitted.fingerprint()]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn at_server_tls_the_server_knows_no_client_and_the_client_knows_the_server() {
     let id = Identity::generate().unwrap();
