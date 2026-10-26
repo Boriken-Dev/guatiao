@@ -50,11 +50,14 @@ def test_a_tree_in_serdes_own_allocator_is_freed_by_the_core():
 def test_parse_error_layout():
     import ctypes
 
-    assert ctypes.sizeof(serde._CParseError) == 56
+    # Three uint32_t, then a value at its own alignment: a word, or 4.
+    word = ctypes.sizeof(ctypes.c_void_p)
+    message = 16 if word == 8 else 12
+    assert ctypes.sizeof(serde._CParseError) == message + 8 + 4 * word
     assert serde._CParseError.format.offset == 0
     assert serde._CParseError.line.offset == 4
     assert serde._CParseError.column.offset == 8
-    assert serde._CParseError.message.offset == 16
+    assert serde._CParseError.message.offset == message
 
 
 def test_a_parse_error_pickles():

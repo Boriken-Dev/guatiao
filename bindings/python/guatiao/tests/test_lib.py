@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def test_default_alloc_is_filled_once_and_cached():
     a1 = lib.alloc
     a2 = lib.alloc
     assert a1 is a2
-    assert a1.struct_size == 40
+    assert a1.struct_size == 5 * ctypes.sizeof(ctypes.c_void_p)
     assert bool(a1.alloc)
     assert bool(a1.free)
 
