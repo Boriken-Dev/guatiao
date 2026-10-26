@@ -114,3 +114,48 @@ fn a_socket_is_its_owners_alone_and_nothing_else_is_replaced() {
     assert!(LocalListen::bind(&file).is_err());
     std::fs::remove_file(&file).unwrap();
 }
+
+fn greeting(map: &guatiao::Map) -> usize {
+    use guatiao::value::convert::TryAsRef;
+    map.get("greeting")
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .map_or(0, str::len)
+}
+
+#[test]
+fn large_and_small_calls_from_many_threads_arrive_whole() {
+    let (_server, name) = serve("large");
+    let (_source, registry) = host(&name);
+    let greeter = registry
+        .offers::<dyn Greeter>()
+        .next()
+        .unwrap()
+        .shared()
+        .unwrap();
+    // Megabyte frames written while other threads' small frames queue
+    // behind them, and the other way round.
+    let threads: Vec<_> = (0..8)
+        .map(|t| {
+            let g = greeter.clone();
+            std::thread::spawn(move || {
+                for i in 0..20 {
+                    let name = if (t + i) % 4 == 0 {
+                        "y".repeat((1 << 20) + t * 1000 + i)
+                    } else {
+                        format!("t{t}i{i}")
+                    };
+                    let answer = g.greet(&name).unwrap();
+                    assert_eq!(greeting(&answer), name.len() + "hello, ".len());
+                }
+            })
+        })
+        .collect();
+    for t in threads {
+        t.join().unwrap();
+    }
+    // A large lent map, written back after the answer.
+    let mut config = guatiao::Map::new();
+    config.set("name", "z".repeat(1 << 20).as_str());
+    assert!(greeter.check(&mut config).unwrap());
+    assert_eq!(greeting(&config), (1 << 20) + "hello, ".len());
+}
