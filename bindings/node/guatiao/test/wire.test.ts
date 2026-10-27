@@ -237,6 +237,17 @@ describe('wire bytes read and written in JavaScript', () => {
   });
 });
 
+describe('a leading U+FEFF', () => {
+  // A byte order mark at the start of a string is text, not a mark.
+  const odd = { '\ufeffkey': '\ufeffvalue', long: `\ufeff${'x'.repeat(40)}` };
+
+  it('is kept by toJS', () => {
+    using value = new Value(odd);
+    expect(value.toJS()).toStrictEqual(odd);
+    expect(value.asMap().keys()).toStrictEqual(Object.keys(odd));
+  });
+});
+
 describe('channels', () => {
   it('writes the documented frames', () => {
     for (const f of VECTORS.frames) {

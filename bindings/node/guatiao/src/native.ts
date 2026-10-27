@@ -145,9 +145,9 @@ export function release(ptr: bigint): void {
   koffi().free(ptr);
 }
 
-const UTF8 = new TextDecoder('utf-8', { fatal: true });
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
-/** UTF-8 text at `ptr`; `TypeError` for bytes that are not UTF-8. */
+/** UTF-8 text at `ptr`, a leading U+FEFF kept; `TypeError` for bytes that are not UTF-8. */
 export function textAt(ptr: bigint, len: number): string {
   if (len === 0 || ptr === 0n) return '';
   return UTF8.decode(new Uint8Array(koffi().view(ptr, len)));
