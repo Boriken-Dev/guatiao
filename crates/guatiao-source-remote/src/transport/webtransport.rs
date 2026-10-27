@@ -226,7 +226,10 @@ struct Presented {
 
 impl Presented {
     fn of(config: &TlsConfig, identity: Identity) -> io::Result<Presented> {
-        let tls = config.presenting(identity.clone()).server_naming(H3)?;
+        let tls = config
+            .listing_nobody()
+            .presenting(identity.clone())
+            .server_naming(H3)?;
         let pem = identity.to_pem().map_err(|e| invalid(words(&e)))?;
         let key = PrivateKeyDer::from_pem_slice(pem.as_bytes()).map_err(invalid)?;
         Ok(Presented {

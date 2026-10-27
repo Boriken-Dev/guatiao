@@ -91,13 +91,12 @@ hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 # The handshake's nonces.
 getrandom = { version = "0.3", optional = true }
-# Admission by ordered permit/deny rules, before anything is read. Git
-# dependencies, here and below: crates.io refuses this crate while they are.
-coqui-net-acl = { git = "https://github.com/Boriken-Dev/coqui-net-acl", rev = "ef48f2564ab3193d5204f52b8607f25bea1050c5", optional = true, features = ["serde"] }
+# Admission by ordered permit/deny rules, before anything is read.
+coqui-net-acl = { version = "=0.0.0-alpha.0", optional = true, features = ["serde"] }
 # Peer ids, the trust store and the sans-IO handshake driver.
-coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "03a7fefac9bbf806d94250f00f282d6f231dc612", optional = true }
+coqui-peer = { version = "=0.0.0-alpha.0", optional = true }
 # Mutual TLS: identities, pinned and stored trust, the TLS policy.
-coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "5727db2e007af24672a3526ff44e19664924dd85", optional = true, features = ["generate", "serde", "acl"] }
+coqui-peer-tls = { version = "=0.0.0-alpha.0", optional = true, features = ["generate", "serde", "acl"] }
 # The TLS state the link's threads share; coqui-peer-tls's version.
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
 # QUIC (the `quic` feature): quinn with rustls on ring, and the runtime
@@ -137,8 +136,8 @@ greeter_kind = { path = "../../examples/greeter_kind" }
 serde_json = "1"
 # The secure level's tests: a client that presents a certificate it holds
 # no key for, written against rustls itself.
-coqui-peer = { git = "https://github.com/Boriken-Dev/coqui-peer", rev = "03a7fefac9bbf806d94250f00f282d6f231dc612" }
-coqui-peer-tls = { git = "https://github.com/Boriken-Dev/coqui-peer-tls", rev = "5727db2e007af24672a3526ff44e19664924dd85", features = ["generate"] }
+coqui-peer = "=0.0.0-alpha.0"
+coqui-peer-tls = { version = "=0.0.0-alpha.0", features = ["generate"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 # The QUIC tests' own clients (an impostor, a server agreeing no protocol).
 quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
