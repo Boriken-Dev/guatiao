@@ -12,8 +12,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
-import 'package:clock/clock.dart';
-
 import '../status.dart';
 import 'args.dart';
 import 'codec.dart';
@@ -294,6 +292,21 @@ final class _Pending {
   Timer? timer;
 }
 
+/// A call's one timeout, armed when the call starts and covering both its
+/// wait for a place and its answer: what passing it does is set by the
+/// stage the call has reached.
+final class _Bound {
+  _Bound(Duration within) {
+    timer = Timer(within, () => onPass?.call());
+  }
+
+  late final Timer timer;
+  void Function()? onPass;
+
+  /// Whether the call queued for its place under the peer's `max_calls`.
+  bool waited = false;
+}
+
 /// The inbound call a call is made during: its parent.
 final class _Parent {
   const _Parent(this.link, this.call);
@@ -359,9 +372,8 @@ final class RemoteLink {
   int _runningTop = 0;
   int _inFlight = 0;
 
-  /// Calls waiting for a place under the peer's `max_calls`, each with
-  /// the timer that gives it up.
-  final _permits = Queue<(Completer<void>, Timer?)>();
+  /// Calls waiting for a place under the peer's `max_calls`.
+  final _permits = Queue<Completer<void>>();
   final _exports = <int, _Export>{};
   final _kinds = <String, RemoteKind>{};
 
@@ -625,8 +637,7 @@ final class RemoteLink {
     }
     _pending.clear();
     _exports.clear();
-    for (final (waiting, timer) in _permits) {
-      timer?.cancel();
+    for (final waiting in _permits) {
       waiting.completeError(Gone(Status.gone.code, why));
     }
     _permits.clear();
@@ -735,50 +746,47 @@ final class RemoteLink {
         : 0;
   }
 
-  /// A place under the peer's `max_calls`, waiting at most [within]
+  /// A place under the peer's `max_calls`, waiting until [bound] passes
   /// (`null`: as long as the link lives), else [Busy].
-  Future<void> _permit(Duration? within) {
+  Future<void> _permit(_Bound? bound) {
     if (_inFlight < _theirCalls) {
       _inFlight++;
       return Future.value();
     }
     final waiting = Completer<void>();
-    late final (Completer<void>, Timer?) entry;
-    final timer = within == null
-        ? null
-        : Timer(within, () {
-            if (_permits.remove(entry)) {
-              waiting.completeError(
-                Busy(
-                  Status.busy.code,
-                  "the peer's limit of calls in flight was not freed in time",
-                ),
-              );
-            }
-          });
-    entry = (waiting, timer);
-    _permits.add(entry);
+    _permits.add(waiting);
+    if (bound == null) return waiting.future;
+    bound.waited = true;
+    bound.onPass = () {
+      if (_permits.remove(waiting)) {
+        waiting.completeError(
+          Busy(
+            Status.busy.code,
+            "the peer's limit of calls in flight was not freed in time",
+          ),
+        );
+      }
+    };
     return waiting.future;
   }
 
   void _unpermit() {
     if (_permits.isNotEmpty) {
-      final (waiting, timer) = _permits.removeFirst();
-      timer?.cancel();
-      waiting.complete();
+      _permits.removeFirst().complete();
     } else {
       _inFlight--;
     }
   }
 
   /// Sends the frame [build] makes for a new call id and answers its
-  /// REPLY, refusing a failed one with its status. [unsent] runs when the
-  /// frame never left.
+  /// REPLY within [bound] (`null`: within the link's timeout from now),
+  /// refusing a failed one with its status. [unsent] runs when the frame
+  /// never left.
   Future<Reply> _request(
     Frame Function(int id) build,
     RemoteSlot? slot, {
     void Function()? unsent,
-    Duration? within,
+    _Bound? bound,
   }) async {
     final Uint8List body;
     final int id;
@@ -798,21 +806,28 @@ final class RemoteLink {
     }
     final pending = _Pending(slot);
     _pending[id] = pending;
-    final timeout = within ?? _timeout;
-    if (timeout != null) {
-      pending.timer = Timer(timeout, () {
-        if (_pending.remove(id) == null) return;
-        if (slot != null) {
-          if (_cancelled.length >= _maxCancelled) {
-            _cancelled.remove(_cancelled.keys.first);
-          }
-          _cancelled[id] = slot;
+    void expire() {
+      if (_pending.remove(id) == null) return;
+      if (slot != null) {
+        if (_cancelled.length >= _maxCancelled) {
+          _cancelled.remove(_cancelled.keys.first);
         }
-        _send(Cancel(id));
-        pending.completer.completeError(
-          Gone(Status.gone.code, 'no answer within the call\'s timeout'),
-        );
-      });
+        _cancelled[id] = slot;
+      }
+      _send(Cancel(id));
+      pending.completer.completeError(
+        Gone(Status.gone.code, 'no answer within the call\'s timeout'),
+      );
+    }
+
+    if (bound != null) {
+      pending.timer = bound.timer;
+      // A call that queued for its place ends after the other timers due at
+      // the same instant: the calls queued behind it whose bound passes then
+      // give up Busy rather than being handed the place it frees.
+      bound.onPass = bound.waited ? () => Timer.run(expire) : expire;
+    } else if (_timeout case final timeout?) {
+      pending.timer = Timer(timeout, expire);
     }
     try {
       _channel.send(body);
@@ -872,16 +887,24 @@ final class RemoteLink {
       );
     }
     final parent = _parent();
-    // One bound for the whole call: waiting for a place, then the answer,
-    // timed by the zone's clock as its timers are.
-    final started = clock.stopwatch()..start();
-    if (parent == 0) await _permit(_timeout);
-    final timeout = _timeout;
-    final left = timeout == null
-        ? null
-        : timeout - started.elapsed < Duration.zero
-        ? Duration.zero
-        : timeout - started.elapsed;
+    // One bound for the whole call: waiting for a place, then the answer.
+    final bound = _timeout == null ? null : _Bound(_timeout);
+    try {
+      if (parent == 0) await _permit(bound);
+      return await _sendCall(target, slot, args, parent, bound);
+    } finally {
+      bound?.timer.cancel();
+    }
+  }
+
+  /// [_call] once it holds its place: sends it and answers its reply.
+  Future<Object?> _sendCall(
+    Target target,
+    RemoteSlot slot,
+    List<Object?> args,
+    int parent,
+    _Bound? bound,
+  ) async {
     final lent = <int>[];
     final handed = <int>[];
     final givenBack = <RemoteObject>[];
@@ -903,7 +926,7 @@ final class RemoteLink {
             sent = false;
             handed.forEach(_exports.remove);
           },
-          within: left,
+          bound: bound,
         );
       } finally {
         // Handed back to its owner, who keeps it: nothing to release.

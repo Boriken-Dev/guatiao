@@ -25,9 +25,6 @@ dependencies:
   # The build hook (package:guatiao/hook.dart): cargo builds the library
   # for the target a Flutter or Dart build names.
   code_assets: ^1.0.0
-  # The time a remote call's bound counts (package:guatiao/remote.dart),
-  # read from a clock a test can move.
-  clock: ^1.1.0
   # The remote protocol's key proof, HMAC-SHA256 (package:guatiao/remote.dart);
   # already in the build through package:hooks.
   crypto: ^3.0.0
