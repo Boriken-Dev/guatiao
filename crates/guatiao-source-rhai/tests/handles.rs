@@ -3,8 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! A script calling the slots of objects a host hands it: lent and handed
-//! over, with text and number answers, and a slot that fails raising a
-//! refusal the script can catch or let through.
+//! over, with text and number answers, a slot that fails raising a
+//! refusal the script can catch or let through, and a call refused before
+//! it runs leaving the script's objects as they were.
 
 extern crate alloc;
 
@@ -25,6 +26,10 @@ pub trait Echo: Send {
     fn say(&mut self, what: &str) -> Result<String, ProviderError>;
     /// How many times it was asked.
     fn tick(&mut self) -> i64;
+    /// Ticks `other`, lent for the call, `times` times.
+    fn pair(&mut self, other: &mut dyn Echo, times: u8) -> Result<i64, ProviderError>;
+    /// Takes `other` over, and answers `times`.
+    fn adopt(&mut self, other: Object<dyn Echo>, times: u8) -> Result<i64, ProviderError>;
 }
 
 /// What the script serves: it is handed an `Echo` to call.
@@ -34,6 +39,13 @@ pub trait Relay: Send + Sync {
     fn relay(&self, target: &mut dyn Echo, what: &str) -> Result<String, ProviderError>;
     /// Calls the echo it is handed over, which it then drops.
     fn relay_taken(&self, target: Object<dyn Echo>) -> Result<String, ProviderError>;
+    /// Passes `other` to slots of `target` in calls refused before they
+    /// run, then calls `other`: what was refused and what `other` said.
+    fn refused(
+        &self,
+        target: &mut dyn Echo,
+        other: Object<dyn Echo>,
+    ) -> Result<String, ProviderError>;
 }
 
 struct Parrot(Arc<Mutex<Vec<String>>>, i64);
@@ -52,6 +64,17 @@ impl Echo for Parrot {
     fn tick(&mut self) -> i64 {
         self.1 += 1;
         self.1
+    }
+    fn pair(&mut self, other: &mut dyn Echo, times: u8) -> Result<i64, ProviderError> {
+        let mut last = 0;
+        for _ in 0..times {
+            last = other.tick();
+        }
+        Ok(last)
+    }
+    fn adopt(&mut self, other: Object<dyn Echo>, times: u8) -> Result<i64, ProviderError> {
+        drop(other);
+        Ok(i64::from(times))
     }
 }
 
@@ -93,6 +116,13 @@ let relay = #{
         let first = target.say("one");
         // The handle is handed on to nobody: it goes with the call.
         first + " #" + target.tick()
+    },
+    refused: |target, other| {
+        let said = [];
+        // Each refused at its second argument, after `other` was read.
+        try { target.pair(other, "twice"); said.push("ran"); } catch (e) { said.push(e.status); }
+        try { target.adopt(other, "twice"); said.push("ran"); } catch (e) { said.push(e.status); }
+        `${said[0]} ${said[1]} ${other.say("still here")} #${other.tick()}`
     },
 };
 #{ providers: #{ relay: relay } }
@@ -179,6 +209,37 @@ fn a_script_calls_the_slots_of_the_objects_it_is_handed() {
         *seen.lock().unwrap(),
         ["one", "<destroyed>"],
         "an object handed to a script is destroyed when the script lets go"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_call_refused_before_it_runs_leaves_the_scripts_objects_alive() {
+    let dir = std::env::temp_dir().join(format!(
+        "guatiao-rhai-handles-refused-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let registry = registry(&dir);
+    let relay: Arc<dyn Relay> = registry
+        .offer::<dyn Relay>("rhai_relay_relay")
+        .expect("served")
+        .expect("as the trait")
+        .shared()
+        .expect("an instance");
+
+    let mut target = Parrot(Arc::new(Mutex::new(Vec::new())), 0);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let other = Parrot(Arc::clone(&seen), 0).into_object();
+    let said = relay
+        .refused(&mut target, other)
+        .unwrap_or_else(|e| panic!("{}", e.message()));
+    assert_eq!(said, "bad_value bad_value echo still here #1");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["still here", "<destroyed>"],
+        "the refused calls left the object to the script, which let it go after"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

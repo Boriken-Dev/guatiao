@@ -24,7 +24,9 @@
 //!   what each refusal crosses as;
 //! - [`Convert`]: an engine's values both ways, and the shared vectors;
 //! - [`Held`] and [`PreparedArg`]: a library's code calling a host's object,
-//!   its handle and its arguments, the engine reading only its own values.
+//!   its handle and its arguments, the engine reading only its own values;
+//!   [`PreparedArgs`] gives an object back to its [`ObjectHome`] whatever
+//!   ends the call.
 //!
 //! A language crate holds only its engine and its value conversion, and
 //! exports the source with `guatiao::source!`:
@@ -51,7 +53,7 @@ pub mod manifest;
 mod source;
 mod thread;
 
-pub use calling::{Held, PreparedArg, Reading};
+pub use calling::{Held, ObjectHome, PreparedArg, PreparedArgs, Reading};
 pub use config::{Budget, Config, Limits, text_list};
 pub use convert::{Convert, conformance};
 pub use engine::{Call, CallArg, Engine, Opened, Provided, Reply, Target, ThreadModel};

@@ -648,7 +648,9 @@ write now.
   checks one against the shared wire vectors. The other way, a script
   calling a host's object or provider: `Held` is what its handle calls,
   `PreparedArg` its arguments (`scalar`, `tree`, `with_args`), each engine
-  reading only its own values into them, so every engine refuses alike.
+  reading only its own values into them, so every engine refuses alike;
+  `PreparedArgs` holds them for the call and gives each object taken out
+  of a handle back to the engine's `ObjectHome` unless the callee took it.
   `manifest::content_stamp` is the stamp of a file's bytes.
 - **`guatiao-libffi`: libffi as the mechanism for tables built at run
   time.** A new crate, published with the others, depending on `guatiao`
@@ -1645,6 +1647,13 @@ write now.
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
 ### Fixed
+
+- **Lua and Rhai: a call that fails leaves the script's objects alive.**
+  A script passing a host's object to a slot, handed over or lent, lost
+  it when a later argument of that call was refused, or (Lua) when a lent
+  table could not be written back after it: the object was destroyed and
+  its handle answered `gone` from then on. It goes back to the handle, as
+  JavaScript's already did; all three engines share the rule.
 
 - **Node: text keeps a leading U+FEFF.** Every string the Node binding
   read from a value (`toJS()`, `stringOr`, a map's keys, the registry's

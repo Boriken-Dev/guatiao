@@ -16,7 +16,7 @@ use guatiao::library::kind::{
     Answer, AnswerType, Arg, ArgType, Caller, KindDescription, Pass, RawObject, SlotDescription,
 };
 use guatiao::{Status, Value};
-use guatiao_bridge::{Held, Kinds, Reading};
+use guatiao_bridge::{Held, Kinds, ObjectHome, PreparedArgs, Reading};
 use guatiao_libffi::Libffi;
 use rquickjs::function::Rest;
 use rquickjs::{Ctx, Function, Object, Symbol, Type, TypedArray, Value as Js};
@@ -313,8 +313,8 @@ fn call_slot<'js>(
     let slot = &kind.slots()[index];
     let mut prepared =
         prepare(ctx, &core, shared, slot, args).map_err(|e| throw(ctx, &core, &e))?;
-    let answer = Prepared::with_args(&mut prepared.0, |args| state.borrow().call(index, args));
-    settle(ctx, &core, &mut prepared).map_err(|e| throw_conversion(ctx, &core, shared, e))?;
+    let answer = Prepared::with_args(&mut prepared, |args| state.borrow().call(index, args));
+    settle(ctx, &core, prepared).map_err(|e| throw_conversion(ctx, &core, shared, e))?;
     match answer {
         Ok(answer) => {
             answer_to_js(ctx, &core, shared, slot, answer).map_err(|e| throw(ctx, &core, &e))
@@ -323,39 +323,29 @@ fn call_slot<'js>(
     }
 }
 
-/// The arguments of a call. However the call ends, an object of the
-/// script's own that was taken out of its handle for it goes back in: a
-/// refused later argument, or a failed write-back, must not destroy what
-/// was only lent.
-struct Args<'js>(Vec<Prepared<'js>>);
+/// The handle an object argument was taken out of.
+struct Home(Rc<RefCell<Handle>>);
 
-impl Drop for Args<'_> {
-    fn drop(&mut self) {
-        for p in self.0.drain(..) {
-            if let Prepared::Object(Some(object), handle)
-            | Prepared::LentOwned(Some(object), handle) = p
-            {
-                give_back(&handle, object);
+impl ObjectHome for Home {
+    fn give_back(self, object: RawObject) {
+        if let Ok(mut state) = self.0.try_borrow_mut() {
+            if state.closed {
+                // Closed while it was out: not for the script to have again.
+                state.shared.bury(object);
+            } else {
+                state.held.put_back(object);
             }
-        }
-    }
-}
-
-/// Puts `object` back in the handle it was taken from.
-fn give_back(handle: &Rc<RefCell<Handle>>, object: RawObject) {
-    if let Ok(mut state) = handle.try_borrow_mut() {
-        if state.closed {
-            // Closed while it was out: not for the script to have again.
-            state.shared.bury(object);
-        } else {
-            state.held = Held::Object(Some(object));
         }
     }
 }
 
 /// One argument, held while the call runs: a lent tree or buffer goes
 /// back into the script's object it came from, an object into its handle.
-type Prepared<'js> = guatiao_bridge::PreparedArg<Js<'js>, Js<'js>, Rc<RefCell<Handle>>>;
+type Prepared<'js> = guatiao_bridge::PreparedArg<Js<'js>, Js<'js>, Home>;
+
+/// A call's arguments: whatever ends the call, an object taken out of a
+/// handle and not handed over goes back in.
+type Args<'js> = PreparedArgs<Js<'js>, Js<'js>, Home>;
 
 /// A script's value as a scalar argument reads it.
 fn reading<'js>(core: &Core<'js>, v: &Js<'js>) -> Result<Reading, ProviderError> {
@@ -408,7 +398,7 @@ fn object_arg<'js>(
         .try_borrow_mut()
         .map_err(|_| ProviderError::new(Status::GUATIAO_ERR_BUSY, "the object is in use"))?;
     let Handle { held, caller, .. } = &mut *state;
-    held.argument(caller, kind, pass, Rc::clone(&handle), what)
+    held.argument(caller, kind, pass, Home(Rc::clone(&handle)), what)
         .map_err(bad_value)
 }
 
@@ -421,13 +411,13 @@ fn prepare<'js>(
     args: Vec<Js<'js>>,
 ) -> Result<Args<'js>, ProviderError> {
     let mut args = args.into_iter();
-    let mut out = Args(Vec::with_capacity(slot.args().len()));
+    let mut out = Args::with_capacity(slot.args().len());
     for described in slot.args() {
         let v = args
             .next()
             .unwrap_or_else(|| Js::new_undefined(ctx.clone()));
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
-        out.0.push(match described.ty() {
+        out.push(match described.ty() {
             ArgType::Scalar(s) => {
                 Prepared::scalar(reading(core, &v)?, v.type_name(), *s, &what).map_err(bad_value)?
             }
@@ -496,17 +486,19 @@ fn prepare<'js>(
 }
 
 /// After the call: each lent tree written back over the object it came
-/// from, each buffer into its `Uint8Array`, each object lent from a handle
-/// put back in it.
-fn settle<'js>(ctx: &Ctx<'js>, core: &Core<'js>, args: &mut Args<'js>) -> Result<(), Conversion> {
-    // Popped one at a time, so that what a failure leaves is still in `args`.
-    while let Some(p) = args.0.pop() {
+/// from, each buffer into its `Uint8Array`; each object lent from a handle
+/// goes back in as `args` drops, whether or not a write-back failed.
+fn settle<'js>(ctx: &Ctx<'js>, core: &Core<'js>, mut args: Args<'js>) -> Result<(), Conversion> {
+    for p in args.iter_mut() {
         match p {
-            Prepared::LentValue(v, Some(home)) => values::refill(core, ctx, &home, &v)?,
-            Prepared::LentMap(m, Some(home)) => values::refill(core, ctx, &home, &Value::from(m))?,
-            Prepared::LentList(l, Some(home)) => values::refill(core, ctx, &home, &Value::from(l))?,
-            Prepared::Buffer(bytes, Some(home)) => values::overwrite(ctx, &home, &bytes)?,
-            Prepared::LentOwned(Some(object), handle) => give_back(&handle, object),
+            Prepared::LentValue(v, Some(home)) => values::refill(core, ctx, home, v)?,
+            Prepared::LentMap(m, Some(home)) => {
+                values::refill(core, ctx, home, &Value::from(core::mem::take(m)))?;
+            }
+            Prepared::LentList(l, Some(home)) => {
+                values::refill(core, ctx, home, &Value::from(core::mem::take(l)))?;
+            }
+            Prepared::Buffer(bytes, Some(home)) => values::overwrite(ctx, home, bytes)?,
             _ => {}
         }
     }

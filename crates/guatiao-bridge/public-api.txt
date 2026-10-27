@@ -329,6 +329,19 @@ impl core::fmt::Debug for guatiao_bridge::manifest::ManifestFormat
 pub fn guatiao_bridge::manifest::ManifestFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao_bridge::manifest::ManifestFormat
 impl core::marker::StructuralPartialEq for guatiao_bridge::manifest::ManifestFormat
+pub struct guatiao_bridge::PreparedArgs<T, B, O: guatiao_bridge::ObjectHome>(_)
+impl<T, B, O: guatiao_bridge::ObjectHome> guatiao_bridge::PreparedArgs<T, B, O>
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::push(&mut self, guatiao_bridge::PreparedArg<T, B, O>)
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::with_capacity(usize) -> Self
+impl<T, B, O: guatiao_bridge::ObjectHome> core::ops::deref::Deref for guatiao_bridge::PreparedArgs<T, B, O>
+pub type guatiao_bridge::PreparedArgs<T, B, O>::Target = [guatiao_bridge::PreparedArg<T, B, O>]
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::deref(&self) -> &Self::Target
+impl<T, B, O: guatiao_bridge::ObjectHome> core::ops::deref::DerefMut for guatiao_bridge::PreparedArgs<T, B, O>
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::deref_mut(&mut self) -> &mut Self::Target
+impl<T, B, O: guatiao_bridge::ObjectHome> core::ops::drop::Drop for guatiao_bridge::PreparedArgs<T, B, O>
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::drop(&mut self)
+impl<T: core::fmt::Debug, B: core::fmt::Debug, O: core::fmt::Debug + guatiao_bridge::ObjectHome> core::fmt::Debug for guatiao_bridge::PreparedArgs<T, B, O>
+pub fn guatiao_bridge::PreparedArgs<T, B, O>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao_bridge::Provided
 impl guatiao_bridge::Provided
 pub fn guatiao_bridge::Provided::asks_available(&self) -> bool
@@ -368,4 +381,6 @@ pub fn guatiao_bridge::Engine::release(&self, &Self::Library, u64)
 pub fn guatiao_bridge::Engine::stack_size(&guatiao_bridge::Config) -> core::option::Option<usize> where Self: core::marker::Sized
 pub fn guatiao_bridge::Engine::start(&guatiao_bridge::Config) -> core::result::Result<Self, guatiao_bridge::BridgeError> where Self: core::marker::Sized
 pub fn guatiao_bridge::Engine::version_of(&self, &guatiao_bridge::manifest::Manifest) -> core::result::Result<alloc::string::String, guatiao_bridge::BridgeError>
+pub trait guatiao_bridge::ObjectHome
+pub fn guatiao_bridge::ObjectHome::give_back(self, guatiao::library::kind::runtime::RawObject)
 pub fn guatiao_bridge::text_list(&guatiao::value::types::map::Map, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, guatiao_bridge::BridgeError>

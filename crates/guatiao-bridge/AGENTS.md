@@ -191,17 +191,28 @@ pub enum PreparedArg<T = (), B = (), O = ()> { Bool, Int, Uint, Float, Str, Byte
 PreparedArg::scalar(Reading, shown, Scalar, what) -> Result<Self, String>
 PreparedArg::tree(value, Tree, Pass, home: Option<T>, what) -> Result<Self, String>
 PreparedArg::with_args(&mut [Self], |args: Vec<Arg>| ..) -> R
+pub trait ObjectHome { fn give_back(self, object: RawObject); }
+pub struct PreparedArgs<T, B, O: ObjectHome>   // Deref/DerefMut to [PreparedArg<T, B, O>]
+PreparedArgs::with_capacity(n) -> Self;  args.push(arg)
 pub enum Reading { Bool(bool), Int(i64), Float(f64), Exact(String), Other }
 ```
 
 - `T` is where a lent tree is written back after the call, `B` where a
-  buffer is, `O` the handle a taken object came out of (an engine puts a
-  lent one back with `put_back`, and gives back what a refused call never
-  took). `()` for what an engine has none of.
+  buffer is, `O` the handle a taken object came out of, `()` for what an
+  engine has none of.
+- **`PreparedArgs`** holds a call's arguments: build them into it, call
+  through `with_args` (it derefs to the slice), write lent trees and
+  buffers back from it, and drop it. On drop, every object taken out of a
+  handle that the callee did not take over goes back to its `O` through
+  `ObjectHome::give_back` (which the engine implements, usually with
+  `Held::put_back`): one lent for the call, and one handed over to a call
+  refused before it ran, at a later argument or anywhere else. So a refused
+  call or a failed write-back leaves the script's handle as it was. An `O`
+  that cannot take it back drops it, and so destroys it.
 - **`with_args`** runs the call with the arguments as core takes them:
   what is handed over is taken out of the slice, the rest stays for the
-  engine to settle. A lent object passed on is lent for as long as its
-  own lend lasts.
+  engine to write back and `PreparedArgs` to give back. A lent object
+  passed on is lent for as long as its own lend lasts.
 - **Refusals** are text (`what` names the argument: `` `greet`'s argument
   `name` ``); the engine raises them as its own (`GUATIAO_ERR_BAD_VALUE`
   for every engine here). A whole number reads from an integer, a float

@@ -162,6 +162,63 @@ pub enum PreparedArg<T = (), B = (), O = ()> {
     LentPassed(LentHandle),
 }
 
+/// The handle an object was taken out of for a call, as the engine holds
+/// it: where [`PreparedArgs`] gives the object back.
+pub trait ObjectHome {
+    /// Puts `object` back in this handle. One the handle cannot take is
+    /// dropped, and so destroyed.
+    fn give_back(self, object: RawObject);
+}
+
+/// A call's arguments, held while it runs. However the call ends (an
+/// argument refused before it runs, a write-back failing after, an answer)
+/// each object taken out of a script's handle that the callee did not take
+/// over goes back to its [`ObjectHome`] when this is dropped: an object
+/// only lent, or never handed over, is not destroyed.
+///
+/// Derefs to the arguments, for [`PreparedArg::with_args`] and the
+/// engine's write-backs.
+#[derive(Debug)]
+pub struct PreparedArgs<T, B, O: ObjectHome>(Vec<PreparedArg<T, B, O>>);
+
+impl<T, B, O: ObjectHome> PreparedArgs<T, B, O> {
+    /// Room for `n` arguments.
+    pub fn with_capacity(n: usize) -> Self {
+        PreparedArgs(Vec::with_capacity(n))
+    }
+
+    /// Adds the next argument.
+    pub fn push(&mut self, arg: PreparedArg<T, B, O>) {
+        self.0.push(arg);
+    }
+}
+
+impl<T, B, O: ObjectHome> core::ops::Deref for PreparedArgs<T, B, O> {
+    type Target = [PreparedArg<T, B, O>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T, B, O: ObjectHome> core::ops::DerefMut for PreparedArgs<T, B, O> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T, B, O: ObjectHome> Drop for PreparedArgs<T, B, O> {
+    fn drop(&mut self) {
+        for arg in self.0.drain(..) {
+            if let PreparedArg::Object(Some(object), home)
+            | PreparedArg::LentOwned(Some(object), home) = arg
+            {
+                home.give_back(object);
+            }
+        }
+    }
+}
+
 /// A script's value as a scalar argument reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reading {
@@ -249,7 +306,7 @@ impl<T, B, O> PreparedArg<T, B, O> {
 
     /// Runs `f` with the arguments `prepared` holds, as core takes them. What
     /// was handed over is taken out of `prepared`; the rest stays, for the
-    /// engine to settle after the call.
+    /// engine to write back and [`PreparedArgs`] to give back after the call.
     pub fn with_args<R>(prepared: &mut [Self], f: impl FnOnce(Vec<Arg<'_>>) -> R) -> R {
         // A lent object passed on is lent for as long as its own lend lasts:
         // nest one `lend` per such argument.
@@ -467,5 +524,86 @@ mod tests {
         });
         assert_eq!(shapes, ["bool", "int", "str", "null", "taken", "null"]);
         assert!(matches!(prepared[4], PreparedArg::TakenValue(None)));
+    }
+
+    /// The object kinds' destroys, by `ctx`.
+    #[derive(Default)]
+    struct Destroys(std::sync::Mutex<Vec<usize>>);
+
+    impl guatiao::library::kind::Serve for Destroys {
+        fn call(
+            &self,
+            _ctx: usize,
+            _kind: &guatiao::library::kind::KindDescription,
+            _slot: usize,
+            _args: Vec<Arg<'_>>,
+        ) -> Result<Answer, ProviderError> {
+            Ok(Answer::Nothing)
+        }
+        fn destroy(&self, ctx: usize) {
+            self.0.lock().unwrap().push(ctx);
+        }
+    }
+
+    /// A handle a test holds: what was given back to it.
+    #[derive(Debug, Clone, Default)]
+    struct Slot(alloc::rc::Rc<core::cell::RefCell<Option<RawObject>>>);
+
+    impl ObjectHome for Slot {
+        fn give_back(self, object: RawObject) {
+            *self.0.borrow_mut() = Some(object);
+        }
+    }
+
+    fn listeners() -> (
+        alloc::sync::Arc<Destroys>,
+        guatiao::library::kind::ServedTable,
+    ) {
+        let mut kinds = crate::Kinds::new();
+        kinds
+            .add_json(&greeter_kind::ListenerVtable::description())
+            .expect("JSON");
+        let kind = alloc::sync::Arc::clone(kinds.get("listener").expect("added"));
+        let destroys = alloc::sync::Arc::new(Destroys::default());
+        let table = guatiao::library::kind::ServedTable::new(
+            kind,
+            |_| true,
+            destroys.clone(),
+            &guatiao_libffi::Libffi,
+        )
+        .expect("built");
+        (destroys, table)
+    }
+
+    #[test]
+    fn arguments_refused_before_the_call_give_their_objects_back() {
+        let (destroys, table) = listeners();
+        let (taken, lent) = (Slot::default(), Slot::default());
+        let mut prepared = PreparedArgs::<(), (), Slot>::with_capacity(3);
+        prepared.push(PreparedArg::Object(table.object(1), taken.clone()));
+        prepared.push(PreparedArg::LentOwned(table.object(2), lent.clone()));
+        prepared.push(PreparedArg::Int(3));
+        drop(prepared);
+        assert!(destroys.0.lock().unwrap().is_empty(), "nothing destroyed");
+        assert!(taken.0.borrow().is_some() && lent.0.borrow().is_some());
+        drop((taken, lent));
+        assert_eq!(*destroys.0.lock().unwrap(), [1, 2]);
+    }
+
+    #[test]
+    fn after_the_call_only_what_was_lent_goes_back() {
+        let (destroys, table) = listeners();
+        let (taken, lent) = (Slot::default(), Slot::default());
+        let mut prepared = PreparedArgs::<(), (), Slot>::with_capacity(2);
+        prepared.push(PreparedArg::Object(table.object(1), taken.clone()));
+        prepared.push(PreparedArg::LentOwned(table.object(2), lent.clone()));
+        // The callee owns what it was handed: here it lets it go as it
+        // returns.
+        PreparedArg::with_args(&mut prepared, |args| assert_eq!(args.len(), 2));
+        assert_eq!(*destroys.0.lock().unwrap(), [1]);
+        drop(prepared);
+        assert!(taken.0.borrow().is_none(), "handed over, not given back");
+        assert!(lent.0.borrow().is_some(), "lent, and given back");
+        assert_eq!(*destroys.0.lock().unwrap(), [1]);
     }
 }

@@ -123,7 +123,9 @@ or its name); `reg:retire(key)`; `reg:collect()` → the keys closed;
 `h:slot(args...)` calls the slot: arguments as above (an object argument
 is a handle, or a Lua table of the kind's methods, served while the Lua
 thread is in a call; a `bytes_mut` one a `guatiao.buffer` or a size). A
-slot that can fail answers `nil, guatiao.error` for a refusal, and `true`
+handle passed on, handed over or lent, is back in the script's hands
+when the call fails, at a later argument or writing a lent table back
+after it ran, and after it if it was only lent. A slot that can fail answers `nil, guatiao.error` for a refusal, and `true`
 for success when it answers nothing; one that cannot fail raises.
 Calling a slot the provider left out answers `unsupported`.
 
