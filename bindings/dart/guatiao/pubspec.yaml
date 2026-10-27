@@ -25,6 +25,9 @@ dependencies:
   # The build hook (package:guatiao/hook.dart): cargo builds the library
   # for the target a Flutter or Dart build names.
   code_assets: ^1.0.0
+  # The time a remote call's bound counts (package:guatiao/remote.dart),
+  # read from a clock a test can move.
+  clock: ^1.1.0
   # The remote protocol's key proof, HMAC-SHA256 (package:guatiao/remote.dart);
   # already in the build through package:hooks.
   crypto: ^3.0.0
@@ -32,6 +35,9 @@ dependencies:
   hooks: '>=1.0.0 <3.0.0'
 
 dev_dependencies:
+  # The remote suite moves time itself where the order of timeouts is
+  # what a test checks.
+  fake_async: ^1.3.0
   ffigen: ^21.0.0
   lints: ^6.0.0
   # The browser suites talk to the test machine through it; under dart2wasm

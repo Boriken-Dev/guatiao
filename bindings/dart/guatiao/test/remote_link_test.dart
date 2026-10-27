@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:guatiao/guatiao.dart'
     show BadValue, Busy, Gone, NotFound, Unsupported, WrongKind;
 import 'package:guatiao/remote.dart';
@@ -137,25 +138,30 @@ const List<Object?> _ownKinds = [
   },
 ];
 
+/// The example greeter kinds, as their description.
+Future<Map<String, Object?>> _greeterKinds() async =>
+    jsonDecode(
+          await readRepoText([
+            'examples',
+            'greeter_kind',
+            'include',
+            'greeter_kind.kinds.json',
+          ]),
+        )
+        as Map<String, Object?>;
+
 /// A link at the local level over a [_Pipe], its catalog listed: one
 /// provider whose greeter table fills only `greet`, `start` and
 /// `greet_into`, and whose `maker` table fills every slot. [welcome] is what
-/// the peer offers, [maxCalls] how many of its calls this side runs.
+/// the peer offers, [maxCalls] how many of its calls this side runs;
+/// [kinds] the greeter kinds when read already.
 Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
   Duration? timeout,
   Map<String, Object?> welcome = const {},
   int maxCalls = 64,
+  Map<String, Object?>? kinds,
 }) async {
-  final kinds =
-      jsonDecode(
-            await readRepoText([
-              'examples',
-              'greeter_kind',
-              'include',
-              'greeter_kind.kinds.json',
-            ]),
-          )
-          as Map<String, Object?>;
+  kinds ??= await _greeterKinds();
   final pipe = _Pipe();
   final linking = RemoteLink.over(
     pipe,
@@ -198,6 +204,37 @@ Future<(RemoteLink, _Pipe, RemoteProvider)> _scripted({
   };
   pipe.reply(Reply(ask.call, 0, (FrameWriter()..value(catalog)).done()));
   return (link, pipe, (await listing).providers.single);
+}
+
+/// What a future came to, recorded as it settles so an error is never
+/// left unhandled while the test moves time.
+final class _Outcome<T> {
+  _Outcome(Future<T> future) {
+    future.then(
+      (v) {
+        value = v;
+        done = true;
+      },
+      onError: (Object e) {
+        error = e;
+        done = true;
+      },
+    );
+  }
+
+  bool done = false;
+  T? value;
+  Object? error;
+}
+
+/// [future]'s value once every microtask under [time] has run; its error
+/// thrown, and a failure when it is still waiting.
+T _settled<T>(FakeAsync time, Future<T> future) {
+  final outcome = _Outcome(future);
+  time.flushMicrotasks();
+  if (!outcome.done) fail('still waiting with no time passing');
+  if (outcome.error case final e?) throw e;
+  return outcome.value as T;
 }
 
 /// Hands the peer [echo] through `maker.make`; the id the peer holds it by.
@@ -831,40 +868,48 @@ void main() {
     test(
       "a call waiting for a place under the peer's max_calls gives up Busy at its timeout",
       () async {
-        final (link, pipe, provider) = await _scripted(
-          timeout: const Duration(milliseconds: 300),
-          welcome: {'max_calls': 1},
-        );
-        final table = provider.table('greeter')!;
-        final greet = table.kind.slot('greet');
-        final first = expectLater(
-          table.call('greet', ['a']),
-          throwsA(isA<Gone>()),
-        );
-        final a = await pipe.next() as Call;
-        // Both wait for the one place the first holds.
-        final second = table.call('greet', ['b']);
-        final third = expectLater(
-          table.call('greet', ['c']),
-          throwsA(isA<Busy>()),
-        );
-        // The first times out and its place goes to the second; the third
-        // has waited its whole timeout by then.
-        expect((await pipe.next() as Cancel).call, a.call);
-        await first;
-        final b = await pipe.next() as Call;
-        expect(decodeArgs(greet, b.args), ['b']);
-        await third;
-        pipe.reply(Reply(b.call, 0, encodeAnswer(greet, {'g': 1}, [null])));
-        expect(await second, {'g': 1});
-        final pinged = expectLater(link.ping(), throwsA(isA<Gone>()));
-        expect(
-          await pipe.next(),
-          isA<Ping>(),
-          reason: 'the third was never sent',
-        );
-        await link.close();
-        await pinged;
+        final kinds = await _greeterKinds();
+        // Time moves only when the test says, and every timer of one
+        // instant runs in the order it was set: which call gives up first
+        // is the clock's to say, not the machine's load.
+        fakeAsync((time) {
+          final (link, pipe, provider) = _settled(
+            time,
+            _scripted(
+              timeout: const Duration(milliseconds: 300),
+              welcome: {'max_calls': 1},
+              kinds: kinds,
+            ),
+          );
+          final table = provider.table('greeter')!;
+          final greet = table.kind.slot('greet');
+          final first = _Outcome(table.call('greet', ['a']));
+          final a = _settled(time, pipe.next()) as Call;
+          // Both wait for the one place the first holds.
+          final second = _Outcome(table.call('greet', ['b']));
+          final third = _Outcome(table.call('greet', ['c']));
+          time.elapse(const Duration(milliseconds: 300));
+          // The first times out and its place goes to the second, with none
+          // of its time left; the third has waited its whole timeout by then.
+          expect((_settled(time, pipe.next()) as Cancel).call, a.call);
+          expect(first.error, isA<Gone>());
+          final b = _settled(time, pipe.next()) as Call;
+          expect(decodeArgs(greet, b.args), ['b']);
+          expect(third.error, isA<Busy>());
+          expect(
+            (_settled(time, pipe.next()) as Cancel).call,
+            b.call,
+            reason: 'the wait counts against the call',
+          );
+          expect(second.error, isA<Gone>());
+          final ping = _Outcome(link.ping());
+          final asked = _settled(time, pipe.next());
+          expect(asked, isA<Ping>(), reason: 'the third was never sent');
+          pipe.reply(Pong((asked as Ping).n));
+          time.flushMicrotasks();
+          expect([ping.done, ping.error], [true, null]);
+          _settled(time, link.close());
+        });
       },
     );
 

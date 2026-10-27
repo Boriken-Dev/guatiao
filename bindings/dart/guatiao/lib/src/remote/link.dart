@@ -12,6 +12,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
+
 import '../status.dart';
 import 'args.dart';
 import 'codec.dart';
@@ -870,8 +872,9 @@ final class RemoteLink {
       );
     }
     final parent = _parent();
-    // One bound for the whole call: waiting for a place, then the answer.
-    final started = Stopwatch()..start();
+    // One bound for the whole call: waiting for a place, then the answer,
+    // timed by the zone's clock as its timers are.
+    final started = clock.stopwatch()..start();
     if (parent == 0) await _permit(_timeout);
     final timeout = _timeout;
     final left = timeout == null
