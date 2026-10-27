@@ -847,7 +847,7 @@ fn secure_config(
     ),
     String,
 > {
-    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig, identity_at};
+    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig};
     let mutual = match server.options().trust() {
         Trust::Secure => true,
         Trust::ServerTls => false,
@@ -862,7 +862,7 @@ fn secure_config(
     }
     let mut config = match (&a.state_dir, &a.identity) {
         (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
-        (None, Some(path)) => TlsConfig::new(identity_at(path).map_err(|e| {
+        (None, Some(path)) => TlsConfig::new(Identity::open_or_create(path).map_err(|e| {
             let under = core::error::Error::source(&e)
                 .map(|u| format!(": {u}"))
                 .unwrap_or_default();
@@ -994,7 +994,7 @@ fn serve_quic_trusted(
 /// and says (and writes to `--hashes-file`) the hashes a page pins.
 #[cfg(feature = "webtransport")]
 fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<(), String> {
-    use guatiao_source_remote::transport::tls::identity_at;
+    use guatiao_source_remote::transport::tls::Identity;
     use guatiao_source_remote::transport::webtransport::{ROTATE_EVERY, WtListen};
     let trusted = front.server.options().trust() == Trust::Trusted;
     let listener = if trusted {
@@ -1025,7 +1025,8 @@ fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
         // With TLS the configuration already presents the one named.
         (Some(_), _) | (None, Some(_)) if !trusted => listener,
         (Some(path), _) => {
-            let identity = identity_at(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let identity =
+                Identity::open_or_create(path).map_err(|e| format!("{}: {e}", path.display()))?;
             listener.presenting(identity).map_err(|e| e.to_string())?
         }
         _ => listener.rotating(ROTATE_EVERY).map_err(|e| e.to_string())?,

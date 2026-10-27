@@ -263,8 +263,7 @@ fn a_client_the_store_does_not_know_waits_with_its_address_until_accepted() {
 /// that is not its own.
 fn impostor(victim: &Identity) -> Arc<rustls::ClientConfig> {
     use rustls::client::ResolvesClientCert;
-    use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls::pki_types::CertificateDer;
     use rustls::sign::CertifiedKey;
 
     #[derive(Debug)]
@@ -277,8 +276,7 @@ fn impostor(victim: &Identity) -> Arc<rustls::ClientConfig> {
             true
         }
     }
-    let other = Identity::generate().unwrap().to_pem().unwrap();
-    let key = PrivateKeyDer::from_pem_slice(other.as_bytes()).unwrap();
+    let key = Identity::generate().unwrap().private_key_der();
     let signing = rustls::crypto::ring::sign::any_supported_type(&key).unwrap();
     let certificate = CertificateDer::from(victim.certificate_der().to_vec());
     let verifier = coqui_peer_tls::Trust::AnyWithKeyProof
@@ -531,12 +529,9 @@ fn certified(
     rustls::pki_types::CertificateDer<'static>,
     rustls::pki_types::PrivateKeyDer<'static>,
 ) {
-    use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    let pem = id.to_pem().unwrap();
     (
-        CertificateDer::from(id.certificate_der().to_vec()),
-        PrivateKeyDer::from_pem_slice(pem.as_bytes()).unwrap(),
+        rustls::pki_types::CertificateDer::from(id.certificate_der().to_vec()),
+        id.private_key_der(),
     )
 }
 
@@ -695,7 +690,66 @@ fn a_server_says_why_it_refuses_a_client() {
     raw_client(chain_client(&known), &address);
     let why = serving.join().unwrap();
     assert!(why.contains("presented a certificate chain"), "{why}");
+
+    // A list refusing it by its fingerprint, from any address.
+    let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
+    deny.fingerprint = Some(stranger.fingerprint().canonical());
+    let mut policy = Policy::strict();
+    policy.acl = Some(Acl {
+        rules: vec![deny],
+        default: Action::Permit,
+    });
+    let server = TlsConfig::new(Identity::generate().unwrap())
+        .pins([stranger.fingerprint()])
+        .policy(policy);
+    let (address, serving) = serve_once(&server);
+    let client = TlsConfig::new(stranger).pins([server.fingerprint()]);
+    let _ = refresh(&source(&address, &client));
+    let why = serving.join().unwrap();
+    assert!(
+        why.contains("the access control list denies the client (rule 10)"),
+        "{why}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A QUIC server of coqui-peer-tls's own whose list refuses this client's
+/// address at its hello answers `access_denied`: the client says the
+/// server's list refuses its address.
+#[test]
+fn a_client_refused_by_address_at_its_hello_says_so() {
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let mut policy = Policy::strict();
+    policy.acl = Some(acl(vec![Rule::new(
+        Action::Permit,
+        "10.0.0.0/8".parse().unwrap(),
+    )]));
+    let trust =
+        coqui_peer_tls::Trust::Pinned(coqui_peer_tls::Pins::fixed([client_id.fingerprint()]));
+    let at: SocketAddr = "127.0.0.1:1".parse().unwrap();
+    let config = coqui_peer_tls::server_config_for(
+        &server_id,
+        &trust,
+        &[b"guatiao-remote"],
+        &policy,
+        at,
+        at,
+    )
+    .unwrap()
+    .config;
+    let address = raw_server(config);
+    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let e = QuicConnect::new(&address, &client)
+        .unwrap()
+        .connect()
+        .unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
+    assert!(e.to_string().contains("access_denied"), "{e}");
+    assert!(
+        e.to_string()
+            .contains("its access control list does not admit this client's address"),
+        "{e}"
+    );
 }
 
 /// A refused client is told so in words naming its fingerprint, whether

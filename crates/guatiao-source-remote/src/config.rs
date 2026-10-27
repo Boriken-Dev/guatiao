@@ -262,7 +262,8 @@ pub(crate) fn weakened_in(map: &Map) -> Vec<crate::transport::tls::Weakening> {
     }
 }
 
-/// The authorities `roots` names: `platform`, or a CA bundle's path.
+/// The authorities `roots` names: `platform`, or a CA bundle's path,
+/// read when a client's configuration is built over it.
 #[cfg(feature = "tls")]
 pub fn roots_of(text: &str) -> Result<crate::transport::tls::Roots, ProviderError> {
     use crate::transport::tls::Roots;
@@ -275,14 +276,7 @@ pub fn roots_of(text: &str) -> Result<crate::transport::tls::Roots, ProviderErro
             "`roots = \"platform\"` is not in this build (guatiao-source-remote's `platform-roots` feature): name a CA bundle file instead",
         ));
     }
-    let bundle =
-        std::fs::read_to_string(text).map_err(|e| refused(format!("`roots` {text}: {e}")))?;
-    if !bundle.contains("-----BEGIN CERTIFICATE-----") {
-        return Err(refused(format!(
-            "`roots` {text} holds no certificate: name a PEM bundle of the authorities' certificates, or `platform`"
-        )));
-    }
-    Ok(Roots::bundle_pem(bundle))
+    Ok(Roots::bundle_file(text))
 }
 
 /// What a client's TLS runs as, from a configuration's `state_dir` or
@@ -303,7 +297,7 @@ pub fn tls_config_of(
             TlsConfig::open(Path::new(dir)).map_err(|e| refused(format!("`state_dir`: {e}")))?
         }
         (None, Some(file)) => TlsConfig::new(
-            crate::transport::tls::identity_at(Path::new(file)).map_err(|e| {
+            crate::transport::tls::Identity::open_or_create(Path::new(file)).map_err(|e| {
                 refused(format!(
                     "`identity_file` {file}: {}",
                     crate::transport::tls::words(&e)

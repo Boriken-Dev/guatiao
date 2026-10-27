@@ -200,7 +200,7 @@ fn no_security_links_by_the_key_alone_and_the_list_decides_by_address() {
 }
 
 #[test]
-fn a_fingerprint_the_list_denies_is_refused_after_the_handshake() {
+fn a_fingerprint_the_list_denies_is_refused_in_the_handshake() {
     use guatiao_source_remote::acl::{Acl, Action, Rule};
     use guatiao_source_remote::transport::tls::Policy;
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());

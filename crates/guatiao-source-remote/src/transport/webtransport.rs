@@ -34,28 +34,25 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Instant, SystemTime};
 
-use coqui_net_acl::{Acl, Outcome};
-use coqui_peer_tls::{Identity, PeerId};
+use coqui_net_acl::Acl;
+use coqui_peer_tls::{Identity, PeerId, Trust};
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Incoming, VarInt};
 use rustls::ServerConfig;
 use rustls::client::danger::ServerCertVerifier;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::danger::ClientCertVerifier;
 use wtransport::endpoint::endpoint_side::Client;
 use wtransport::endpoint::{IncomingSessionFuture, SessionRequest};
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 use super::quic::{
-    ABRUPT, CLEAN, CLOSE_WAIT, DROP_WAIT, Kept, REFUSED, Rt, Sourced, Watched, admitting,
-    fingerprint, left, transport_config, wait, wait_at_most,
+    ABRUPT, CLEAN, CLOSE_WAIT, DROP_WAIT, Kept, REFUSED, Rt, Watched, admits, checked, fingerprint,
+    for_connection, left, transport_config, wait, wait_at_most,
 };
 use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT};
 use super::tls::{
-    Denied, TlsConfig, Verifying, canonical_acl, denied_by_acl, ended_before_answering, host_of,
-    server_name, untrusted_by_server, untrusted_server, words,
+    TlsConfig, ended_before_answering, host_of, server_name, unbuilt, untrusted_by_server,
+    untrusted_server, words,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
 
@@ -215,29 +212,21 @@ impl Drop for Shared {
     }
 }
 
-/// A certificate a listener presents, and the TLS configuration it is
-/// presented in.
+/// A certificate a listener presents, and the TLS configuration that
+/// presents it to a connection that asks no certificate or checks none.
 struct Presented {
     identity: Identity,
     tls: Arc<ServerConfig>,
-    certificate: CertificateDer<'static>,
-    key: PrivateKeyDer<'static>,
 }
 
 impl Presented {
     fn of(config: &TlsConfig, identity: Identity) -> io::Result<Presented> {
+        // Without the list, as `quic://`'s listener (see `for_connection`).
         let tls = config
             .listing_nobody()
             .presenting(identity.clone())
             .server_naming(H3)?;
-        let pem = identity.to_pem().map_err(|e| invalid(words(&e)))?;
-        let key = PrivateKeyDer::from_pem_slice(pem.as_bytes()).map_err(invalid)?;
-        Ok(Presented {
-            certificate: CertificateDer::from(identity.certificate_der().to_vec()),
-            identity,
-            tls,
-            key,
-        })
+        Ok(Presented { identity, tls })
     }
 
     /// A certificate made now, valid for two periods of `every`, a margin
@@ -275,11 +264,11 @@ impl Certs {
 
 /// What every connection a listener accepts is built from.
 struct Listener {
+    /// Its identity, whom it trusts and the policy, its list included.
     config: TlsConfig,
-    verifier: Option<Arc<dyn ClientCertVerifier>>,
-    acl: Option<Arc<Acl>>,
-    /// Whether clients' certificates are checked: false at no security.
-    proves: bool,
+    /// At mutual TLS checking certificates: whom each connection's own
+    /// configuration verifies its client by.
+    trust: Option<Trust>,
     certs: Mutex<Certs>,
 }
 
@@ -323,33 +312,27 @@ impl Listener {
     }
 
     /// The server configuration for one connection: the certificate
-    /// presented now, and at mutual TLS a client verifier scoped to the
-    /// connection's address.
+    /// presented now, and at mutual TLS a client verifier made for the
+    /// connection's addresses.
     fn config(
         &self,
         source: SocketAddr,
         local: SocketAddr,
         refusal: &Kept,
-        denied: &Denied,
     ) -> io::Result<Arc<quinn::ServerConfig>> {
         let presented = self.current()?;
-        let base = &presented.tls;
-        let tls = match &self.verifier {
-            Some(inner) => {
-                let verifier = Arc::new(Sourced {
-                    inner: admitting(
-                        inner,
-                        self.config.admits_first(self.acl.as_ref()).as_ref(),
-                        source,
-                        local,
-                        denied,
-                    ),
-                    source,
-                    refusal: Arc::clone(refusal),
-                });
-                Verifying::config(base, verifier, &presented.certificate, &presented.key)?
-            }
-            None => Arc::clone(base),
+        let tls = match &self.trust {
+            Some(trust) => for_connection(
+                &self.config,
+                &presented.identity,
+                &presented.tls,
+                trust,
+                H3,
+                source,
+                local,
+                refusal,
+            )?,
+            None => Arc::clone(&presented.tls),
         };
         let crypto = QuicServerConfig::try_from(tls).map_err(invalid)?;
         let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
@@ -371,10 +354,7 @@ impl Pending {
     fn run(self, shared: &Shared, bound: Option<Duration>) -> io::Result<wtransport::RecvStream> {
         let until = bound.map(|b| Instant::now() + b);
         let refusal = Kept::default();
-        let denied = Denied::default();
-        let config = self
-            .listener
-            .config(self.source, self.local, &refusal, &denied)?;
+        let config = self.listener.config(self.source, self.local, &refusal)?;
         let handle = shared.rt.handle();
         // quinn spawns the connection's driver on the runtime it is called
         // inside.
@@ -386,9 +366,6 @@ impl Pending {
         let session = IncomingSessionFuture::with_quic_connecting(connecting);
         let request: SessionRequest =
             wait_at_most(handle, left(until)?, session)?.map_err(|e| {
-                if let Some((peer, rule)) = denied.get() {
-                    return denied_by_acl(peer, self.source, *rule);
-                }
                 match refusal.get().copied() {
                     Some(refused) => untrusted_by_server(Some(refused), &e),
                     None => io::Error::new(
@@ -404,20 +381,13 @@ impl Pending {
             conn.close(wtransport::VarInt::from_u32(REFUSED), b"refused");
             e
         };
-        // At server TLS the client presents no certificate.
-        let peer = match self.listener.verifier {
-            Some(_) => Some(fingerprint(conn.quic_connection()).map_err(refuse)?),
-            None => None,
+        // At server TLS the client presents no certificate, and at no
+        // security the one it presents proves nothing.
+        let peer = if self.listener.trust.is_some() {
+            Some(fingerprint(conn.quic_connection()).map_err(refuse)?)
+        } else {
+            None
         };
-        if let (Some(acl), Some(peer)) = (
-            self.listener.acl.as_ref().filter(|_| self.listener.proves),
-            &peer,
-        ) {
-            let decided = acl.decide_peer(self.source, self.local, &peer.canonical());
-            if decided.outcome != Outcome::Permit {
-                return Err(refuse(denied_by_acl(peer, self.source, decided.rule_index)));
-            }
-        }
         let (send, recv) = wait_at_most(handle, left(until)?, conn.accept_bi())?
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         shared.open(conn, send, peer.as_ref());
@@ -690,7 +660,7 @@ impl WtConnect {
         let verifier = config
             .server_trust()?
             .server_cert_verifier_with(config.tls_policy())
-            .map_err(|e| invalid(words(&e)))?;
+            .map_err(|e| unbuilt(&e))?;
         let watched = Arc::new(Watched {
             inner: verifier,
             refusal: Mutex::new(None),
@@ -744,14 +714,14 @@ impl WtConnect {
                     ),
                 )
             }
-            // A server refusing a client after the TLS handshake (its access
-            // control list, by fingerprint) closes the connection as the
-            // session opens.
+            // A server refusing a client after the TLS handshake (no
+            // certificate it can read) closes the connection as the session
+            // opens.
             ConnectingError::ConnectionError(ConnectionError::ApplicationClosed(close)) => {
                 io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     format!(
-                        "the server at {addr} ended the WebTransport session as it opened ({close}): most likely its access control list refuses this client, {}",
+                        "the server at {addr} ended the WebTransport session as it opened ({close}): it refused this client, {}",
                         self.me
                     ),
                 )
@@ -829,9 +799,9 @@ impl Connect for WtConnect {
 /// or no security as its configuration says. It admits peers by the
 /// policy's access control list, every source when there is none: by
 /// address as it accepts, refusing a peer it denies before any handshake;
-/// at mutual TLS by fingerprint once the handshake, which runs on the
-/// serving thread's first read, has proved one. Every session is taken,
-/// whatever its path.
+/// at mutual TLS by fingerprint as the client presents its certificate, in
+/// the handshake, which runs on the serving thread's first read. Every
+/// session is taken, whatever its path.
 pub struct WtListen {
     endpoint: quinn::Endpoint,
     listener: Arc<Listener>,
@@ -842,7 +812,7 @@ impl core::fmt::Debug for WtListen {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("WtListen")
             .field("addr", &self.endpoint.local_addr().ok())
-            .field("acl", &self.listener.acl.is_some())
+            .field("acl", &self.listener.config.tls_policy().acl.is_some())
             .finish()
     }
 }
@@ -873,17 +843,9 @@ impl WtListen {
 
     /// A UDP socket the caller bound itself, as `config` says.
     pub fn from_socket(socket: UdpSocket, config: &TlsConfig) -> io::Result<WtListen> {
-        let acl = match config.tls_policy().acl.clone() {
-            Some(acl) => Some(Arc::new(canonical_acl(acl)?)),
-            None => None,
-        };
-        let verifier: Option<Arc<dyn ClientCertVerifier>> = if config.is_mutual() {
-            Some(
-                config
-                    .client_trust()?
-                    .client_cert_verifier_with(config.tls_policy())
-                    .map_err(|e| invalid(words(&e)))?,
-            )
+        checked(config, H3)?;
+        let trust = if config.is_mutual() && config.proves_peers() {
+            Some(config.client_trust()?)
         } else {
             None
         };
@@ -906,9 +868,7 @@ impl WtListen {
             endpoint,
             listener: Arc::new(Listener {
                 config: config.clone(),
-                verifier,
-                acl,
-                proves: config.proves_peers(),
+                trust,
                 certs: Mutex::new(Certs::new(Arc::new(presented), None)),
             }),
             rt,
@@ -980,24 +940,15 @@ impl WtListen {
             None if !bound.ip().is_unspecified() => Some(bound),
             None => None,
         };
-        if let Some(acl) = &self.listener.acl {
-            let denied = match local {
-                Some(local) => acl.decide(source, local).outcome == Outcome::Deny,
-                None => {
-                    acl.rules.iter().any(|r| r.destination.is_some())
-                        || acl.decide(source, bound).outcome == Outcome::Deny
-                }
-            };
-            if denied {
-                incoming.refuse();
-                return Ok(Accepted::Refused(source));
-            }
+        if !admits(&self.listener.config, source, local, bound) {
+            incoming.refuse();
+            return Ok(Accepted::Refused(source));
         }
         let shared = Shared {
             conn: OnceLock::new(),
             send: Mutex::new(None),
             peer: OnceLock::new(),
-            proves: self.listener.proves && self.listener.verifier.is_some(),
+            proves: self.listener.trust.is_some(),
             client: None,
             heard: AtomicBool::new(false),
             ends: Ends::Server(self.endpoint.clone()),

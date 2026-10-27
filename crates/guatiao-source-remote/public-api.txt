@@ -598,7 +598,6 @@ pub fn guatiao_source_remote::transport::tls::TlsListen::local_addr(&self) -> co
 impl core::fmt::Debug for guatiao_source_remote::transport::tls::TlsListen
 pub fn guatiao_source_remote::transport::tls::TlsListen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const guatiao_source_remote::transport::tls::IDENTITY_FILE: &str
-pub fn guatiao_source_remote::transport::tls::identity_at(&std::path::Path) -> core::result::Result<coqui_peer_tls::identity::Identity, coqui_peer_tls::error::PeerError>
 pub mod guatiao_source_remote::transport::webtransport
 pub struct guatiao_source_remote::transport::webtransport::WtConnect
 impl guatiao_source_remote::transport::webtransport::WtConnect
