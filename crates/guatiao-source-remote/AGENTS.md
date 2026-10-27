@@ -8,9 +8,8 @@ protocol over every transport. `#![deny(unsafe_code)]`; `unsafe` only in
 listed by `tests/unsafe_stays_in_exports.rs`. Depends on `guatiao`
 (`load`), `guatiao-libffi` (the kind tables' mechanism: libffi built from
 C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`,
-`toml`). The network features depend on git crates pinned by commit
-(coqui-net-acl, coqui-peer, coqui-peer-tls), which crates.io refuses
-until they are published there.
+`toml`). The network features depend on coqui-net-acl, coqui-peer and
+coqui-peer-tls, each at `=0.0.0-alpha.0`.
 
 | feature | adds |
 | --- | --- |
