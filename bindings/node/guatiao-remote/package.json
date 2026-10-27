@@ -13,12 +13,12 @@
   "bugs": "https://github.com/Boriken-Dev/guatiao/issues",
   "keywords": ["rpc", "websocket", "browser", "plugins", "values"],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/guatiao-remote/src/index.js",
+  "types": "./dist/guatiao-remote/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/guatiao-remote/src/index.d.ts",
+      "import": "./dist/guatiao-remote/src/index.js"
     }
   },
   "sideEffects": false,

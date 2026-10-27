@@ -18,8 +18,8 @@
  * @module
  */
 
+import { TapeError, TapeWriter, jsToWire, wireToJS } from '../../guatiao/src/tape.js';
 import { BadValue } from './errors.js';
-import { Bytes, fromWire, toWire } from './wire.js';
 
 /** Why bytes are not a frame, named as the shared vectors name it. */
 export type FrameFault =
@@ -100,7 +100,7 @@ const strict = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** A body being written. */
 export class FrameWriter {
-  private readonly out = new Bytes();
+  private readonly out = new TapeWriter();
 
   byte(b: number): this {
     this.out.byte(b);
@@ -115,7 +115,7 @@ export class FrameWriter {
   /** An unsigned integer from 0 to 2^64 - 1. */
   uint(n: Int): this {
     if (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0) {
-      this.out.count(n);
+      this.out.leb(n);
       return this;
     }
     const big = bigOf(n);
@@ -152,13 +152,20 @@ export class FrameWriter {
     return this.bytes(utf8.encode(s));
   }
 
-  /** A value in the wire encoding, behind its length. */
+  /** A value in the wire encoding, behind its length; `BadValue` past 128 deep. */
   value(v: unknown): this {
-    return this.bytes(toWire(v));
+    let wire: Uint8Array;
+    try {
+      wire = jsToWire(v);
+    } catch (e) {
+      if (e instanceof TapeError) throw new BadValue(e.message);
+      throw e;
+    }
+    return this.bytes(wire);
   }
 
   done(): Uint8Array {
-    return this.out.done();
+    return this.out.done().slice();
   }
 }
 
@@ -273,9 +280,9 @@ export class FrameReader {
     const start = this.at;
     const raw = this.bytes();
     try {
-      return fromWire(raw);
+      return wireToJS(raw, { strict: true });
     } catch (e) {
-      if (e instanceof BadValue) throw new MalformedFrame('wire', `the value at ${start}: ${e.message}`, start);
+      if (e instanceof TapeError) throw new MalformedFrame('wire', `the value at ${start}: ${e.message}`, start);
       throw e;
     }
   }

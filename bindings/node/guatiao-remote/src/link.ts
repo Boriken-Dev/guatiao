@@ -35,11 +35,11 @@ import {
   Welcome,
 } from './codec.js';
 import { RemoteKind, type RemoteSlot } from './described.js';
+import { define, isPlainObject } from '../../guatiao/src/tape.js';
 import { BadValue, Busy, Gone, GuatiaoError, NotFound, Status, Unsupported, WrongKind, errorFor } from './errors.js';
 import * as proof from './proof.js';
 import { openWebSocket } from './socket.js';
 import { openWebTransport } from './webtransport.js';
-import { define, isPlainObject } from './wire.js';
 
 /** How far a link trusts its peer: the level both sides must name. */
 export const RemoteTrust = {

@@ -16,6 +16,7 @@ import { MAX_DEPTH, jsToWire, wireToJS } from 'guatiao/ffi';
 import * as wire from 'guatiao/wire';
 
 import { SIZE, WIRE_EVENT } from '../src/abi.js';
+import * as tape from '../src/tape.js';
 import { HEADER, REPO, readText } from './helpers.js';
 
 type Tree = [string, ...unknown[]];
@@ -237,9 +238,40 @@ describe('wire bytes read and written in JavaScript', () => {
   });
 });
 
+describe('the tape, which guatiao-remote reads peer bytes with', () => {
+  it.each(VECTORS.values.map((v) => [v.name, v] as const))('%s reads the same strictly', (_name, v) => {
+    const data = fromHex(v.hex);
+    using value = Value.fromWire(data);
+    expect(tape.wireToJS(data, { strict: true })).toStrictEqual(value.toJS());
+  });
+
+  it.each(VECTORS.malformed.map((v) => [v.name, v] as const))('%s is refused strictly, naming the byte', (_name, v) => {
+    let refused: unknown;
+    try {
+      tape.wireToJS(fromHex(v.hex), { strict: true });
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused).toBeInstanceOf(tape.TapeError);
+    expect((refused as Error).message).toMatch(new RegExp(` at ${v.at}$`));
+  });
+
+  it('imports nothing, so a page can load it', () => {
+    const source = readText(path.join(REPO, 'bindings', 'node', 'guatiao', 'src', 'tape.ts'));
+    expect(source).not.toMatch(/^\s*(import|export .* from)\b/m);
+    expect(source).not.toMatch(/\bprocess\.|\bBuffer\b|require\(/);
+  });
+});
+
 describe('a leading U+FEFF', () => {
   // A byte order mark at the start of a string is text, not a mark.
   const odd = { '\ufeffkey': '\ufeffvalue', long: `\ufeff${'x'.repeat(40)}` };
+
+  it('is kept by wireToJS', () => {
+    using value = new Value(odd);
+    expect(wireToJS(value.toWire())).toStrictEqual(odd);
+    expect(wireToJS(jsToWire(odd))).toStrictEqual(odd);
+  });
 
   it('is kept by toJS', () => {
     using value = new Value(odd);
