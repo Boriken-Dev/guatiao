@@ -80,6 +80,15 @@ fn bad(e: ProtocolError) -> ProviderError {
     ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &e.to_string())
 }
 
+/// A panic's message, as `panic!` gives it.
+fn panic_words(payload: &(dyn core::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("no message")
+}
+
 /// How a link is set up. The key and the token never reach a log or a
 /// `Debug`.
 #[derive(Clone)]
@@ -1586,12 +1595,7 @@ impl Inner {
             if running.is_some_and(|c| c.load(Ordering::Acquire)) {
                 return;
             }
-            let what = payload
-                .downcast_ref::<&str>()
-                .copied()
-                .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-                .unwrap_or("no message");
-            let why = format!("the call panicked on the peer: {what}");
+            let why = format!("the call panicked on the peer: {}", panic_words(&*payload));
             self.refuse(call, Status::GUATIAO_ERR_INTERNAL, &why);
         }
     }

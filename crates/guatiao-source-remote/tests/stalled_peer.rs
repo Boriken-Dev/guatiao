@@ -4,7 +4,8 @@
 
 //! A peer that takes nothing in holds up no call past its deadline: a call
 //! waiting for the link's writer gives up when its time is up, and a call
-//! that timed out does not wait to send its CANCEL.
+//! that timed out does not wait to send its CANCEL. A writer that panics
+//! ends the link, so no call waits on it either.
 
 extern crate alloc;
 
@@ -14,7 +15,7 @@ use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::io;
-use std::sync::mpsc;
+use std::sync::{Mutex, mpsc};
 use std::time::Instant;
 
 use guatiao::Status;
@@ -234,4 +235,90 @@ fn a_link_ended_while_a_write_is_under_way_still_says_goodbye() {
         "the host heard no GOODBYE: {}",
         link.why()
     );
+}
+
+/// A connection's writing end, shared: dropping one handle on it closes
+/// nothing, as a socket stays open while its reader holds a clone.
+type Shared = Arc<Mutex<Box<dyn FrameWrite>>>;
+
+/// A writer whose next write panics once `armed` is set, once.
+struct PanicWrite(Shared, Arc<AtomicBool>);
+
+impl FrameWrite for PanicWrite {
+    fn write_frame(&mut self, frame: &[u8]) -> io::Result<()> {
+        if self.1.swap(false, Ordering::AcqRel) {
+            panic!("the transport broke mid-write");
+        }
+        self.0.lock().unwrap().write_frame(frame)
+    }
+
+    fn shutdown(&mut self) {
+        self.0.lock().unwrap().shutdown();
+    }
+}
+
+struct Panicky {
+    server: Server,
+    armed: Arc<AtomicBool>,
+    /// Every writing end handed out, kept open past its writer.
+    kept: Mutex<Vec<Shared>>,
+}
+
+impl Connect for Panicky {
+    fn connect(&self) -> io::Result<Connection> {
+        let (host, device) = memory::pair();
+        let server = self.server.clone();
+        std::thread::spawn(move || {
+            let _ = server.serve(device);
+        });
+        let shared: Shared = Arc::new(Mutex::new(host.writer));
+        self.kept.lock().unwrap().push(Arc::clone(&shared));
+        Ok(Connection {
+            writer: Box::new(PanicWrite(shared, Arc::clone(&self.armed))),
+            ..host
+        })
+    }
+
+    fn describe(&self) -> String {
+        "memory, a writer that panics".to_string()
+    }
+}
+
+#[test]
+fn a_write_that_panics_ends_the_link_and_no_call_waits_out_its_timeout() {
+    let armed = Arc::new(AtomicBool::new(false));
+    let source = RemoteSource::new(
+        Box::new(Panicky {
+            server: common::server(LinkOptions::new(Trust::Local)),
+            armed: Arc::clone(&armed),
+            kept: Mutex::default(),
+        }),
+        LinkOptions::new(Trust::Local).timeout(Some(Duration::from_secs(5))),
+    );
+    let link = source.link().expect("the link is set up");
+    link.ping().expect("the server answers");
+
+    armed.store(true, Ordering::Release);
+    // Each on a thread of its own: a panic out of the link ends only that
+    // thread.
+    let bound = Duration::from_secs(10);
+    let panicked = ping(&link).recv_timeout(bound);
+    let next = ping(&link).recv_timeout(bound);
+
+    let (outcome, took) = next.expect("the next call returns");
+    let e = outcome.expect_err("the next call is refused");
+    assert_eq!(e.status, Status::GUATIAO_ERR_GONE, "{}", e.message());
+    assert!(
+        took < Duration::from_secs(2),
+        "the next call waited {took:?} for a writer that never came back"
+    );
+    assert!(!link.alive(), "the link still claims to run");
+    assert!(
+        link.why().contains("the transport broke mid-write"),
+        "the link's end does not name the panic: {}",
+        link.why()
+    );
+    let (outcome, _) = panicked.expect("the call whose write panicked returns");
+    let e = outcome.expect_err("the call whose write panicked is refused");
+    assert_eq!(e.status, Status::GUATIAO_ERR_GONE, "{}", e.message());
 }
