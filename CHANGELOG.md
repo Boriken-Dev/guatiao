@@ -636,7 +636,11 @@ write now.
   objects both ways. `Limits` (operations, memory, time, depth) come from
   the configuration and `BridgeError` maps every refusal to a status.
   `Convert` is an engine's values both ways, and `conformance::round_trip`
-  checks one against the shared wire vectors.
+  checks one against the shared wire vectors. The other way, a script
+  calling a host's object or provider: `Held` is what its handle calls,
+  `PreparedArg` its arguments (`scalar`, `tree`, `with_args`), each engine
+  reading only its own values into them, so every engine refuses alike.
+  `manifest::content_stamp` is the stamp of a file's bytes.
 - **`guatiao-libffi`: libffi as the mechanism for tables built at run
   time.** A new crate, published with the others, depending on `guatiao`
   alone: `Libffi` prepares a slot's signature as a libffi call interface,
@@ -1467,7 +1471,8 @@ write now.
   serves.** A provider's own descriptions (`Provider::kind_descriptions()`,
   carried by derived and bridged providers) describe its kinds, so
   `guatiao-remote-server` serves such libraries with no `--kinds` file.
-  `--kinds` and `Described` still describe the kinds they name; a
+  `--kinds` and the `Kinds` `Server::new` takes (guatiao-bridge's,
+  re-exported) still describe the kinds they name; a
   provider whose own description calls a kind otherwise than the one
   served (documentation and slots past the shorter aside) is left out.
 - **guatiao-source-remote: described peers are listed at once, and a

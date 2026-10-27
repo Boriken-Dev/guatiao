@@ -2,8 +2,9 @@
 
 What every guatiao bridge to a language runtime shares: the engine trait
 and its thread, manifests and stamps, the glue to guatiao's `Source`,
-kinds served from their descriptions, limits and error mapping, and value
-conversion checked against shared vectors. `#![forbid(unsafe_code)]`.
+kinds served from their descriptions, a library's code calling a host's
+objects, limits and error mapping, and value conversion checked against
+shared vectors. `#![forbid(unsafe_code)]`.
 Depends on `guatiao` and `guatiao-serde` (`json`, `toml`). No features.
 
 Providers an engine declares are served through tables built from their
@@ -146,7 +147,8 @@ one such a library is refused, `Unavailable`), `config()`, `kinds()`,
 | anything else | the engine's (`config.map()`) |
 
 A key holding anything but a list of text is `` `dirs` is not a list of
-paths `` (`GUATIAO_ERR_BAD_VALUE`).
+text `` (`GUATIAO_ERR_BAD_VALUE`). `text_list(&map, key)` is that reader:
+the list under `key`, empty when absent, `BridgeError::Config` otherwise.
 
 ## Manifests (`manifest`)
 
@@ -154,6 +156,7 @@ paths `` (`GUATIAO_ERR_BAD_VALUE`).
 pub struct ManifestFormat { pub serves, pub id_key, pub code_extensions, pub skip_dirs }
 manifest::SUFFIX = ".guatiao.toml";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai", "remote"]
 manifest::find(&format, dirs, files) -> Vec<Found>;  manifest::read(&format, path) -> Option<Found>
+manifest::content_stamp(&bytes) -> String   // FNV-1a 64-bit, 16 hex digits
 Manifest: path() id() version() kinds() paths() stamp() table()
 Found::{Library(Manifest), Broken { path, stamp, why }}
 ```
@@ -163,11 +166,53 @@ names the source that serves it, `serves`: a manifest of another type
 in `TYPES` is passed over without a word (`read` answers `None`), and
 one with no `type`, or a type neither in `TYPES` nor the format's own,
 is `Found::Broken`. `id_key` (required, text), `version` (optional), `kinds`, `paths`
-(default `["."]`, made absolute, not canonical). Stamp: FNV-1a of the
-manifest's bytes, `:`, the newest modification time of a code file under
+(default `["."]`, made absolute, not canonical). Stamp: `content_stamp`
+of the manifest's bytes, `:`, the newest modification time of a code file under
 its paths (at most 10 000 files, 8 levels, `skip_dirs` skipped); a
 format with no `code_extensions` walks nothing, its stamp the manifest's
 bytes alone. `remote` is guatiao-source-remote's: a peer, not a library.
+
+## A library's code calling a host's object
+
+What an engine needs when a script calls a slot of an object (or a
+provider) the host gave it. The engine reads its own values; the rest is
+here, so every engine refuses alike.
+
+```rust
+pub enum Held { Provider(DescribedRemote), Object(Option<RawObject>), Lent(LentHandle) }
+held.call(&caller, slot, args) -> Result<Answer, ProviderError>
+held.hand_back(&caller, kind) -> Result<RawObject, ProviderError>   // a script answering it
+held.argument::<T, B, O>(&caller, kind, pass, home: O, what) -> Result<PreparedArg<T, B, O>, String>
+held.put_back(object)                                               // after a lend
+pub enum PreparedArg<T = (), B = (), O = ()> { Bool, Int, Uint, Float, Str, Bytes,
+    Buffer(Vec<u8>, Option<B>), Value(Option<Value>), Map, List, TakenValue, TakenMap,
+    TakenList, LentValue(Value, Option<T>), LentMap(..), LentList(..),
+    Object(Option<RawObject>, O), LentOwned(Option<RawObject>, O), LentPassed(LentHandle) }
+PreparedArg::scalar(Reading, shown, Scalar, what) -> Result<Self, String>
+PreparedArg::tree(value, Tree, Pass, home: Option<T>, what) -> Result<Self, String>
+PreparedArg::with_args(&mut [Self], |args: Vec<Arg>| ..) -> R
+pub enum Reading { Bool(bool), Int(i64), Float(f64), Exact(String), Other }
+```
+
+- `T` is where a lent tree is written back after the call, `B` where a
+  buffer is, `O` the handle a taken object came out of (an engine puts a
+  lent one back with `put_back`, and gives back what a refused call never
+  took). `()` for what an engine has none of.
+- **`with_args`** runs the call with the arguments as core takes them:
+  what is handed over is taken out of the slice, the rest stays for the
+  engine to settle. A lent object passed on is lent for as long as its
+  own lend lasts.
+- **Refusals** are text (`what` names the argument: `` `greet`'s argument
+  `name` ``); the engine raises them as its own (`GUATIAO_ERR_BAD_VALUE`
+  for every engine here). A whole number reads from an integer, a float
+  that is one and below 2^64 in size, or exact text; past the slot's
+  type it is `` {what}: {n} does not fit ``; a fraction is
+  `` {what}: 1.5 is not a whole number ``. A map or list argument must be
+  one (`` {what} is a map ``).
+- `Held::call` on an object handed on or closed is `GUATIAO_ERR_GONE`;
+  `hand_back` refuses a lent object or a provider
+  (`GUATIAO_ERR_WRONG_KIND`), and an object of another kind:
+  `` an object of `k` is answered, not of `h` ``.
 
 ## Errors and limits
 
