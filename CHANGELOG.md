@@ -1617,6 +1617,14 @@ write now.
 
 ### Fixed
 
+- **guatiao-source-remote: a transport write that panics ends the link.**
+  The thread writing held the link's writer while it wrote, and a panic
+  there lost it: every later frame was queued and never written, the
+  link still claimed to run, and every call waited out its timeout. A
+  panic in a write now fails it as a transport error does: the link ends
+  with words naming the panic, and every call waiting answers
+  `GUATIAO_ERR_GONE` at once. Nothing more is written to a writer once a
+  write on it has failed.
 - **guatiao-source-remote: an empty token no longer admits a client that
   presents none.** A server given `LinkOptions::token("")` read a
   client's missing token as empty and let it in, at server TLS proving

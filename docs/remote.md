@@ -1024,4 +1024,5 @@ ends the link. A call beyond the receiver's
 `max_calls`, or one the receiver cannot start a thread for, is refused
 `GUATIAO_ERR_BUSY`; a body over `max_frame` ends the link. A call whose
 serving fails without an answer of its own (a Rust panic on the receiver)
-is answered `GUATIAO_ERR_INTERNAL`.
+is answered `GUATIAO_ERR_INTERNAL`; a write that panics in the transport
+ends the link as a failed write does.
