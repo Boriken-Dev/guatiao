@@ -8,15 +8,20 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::cell::RefCell;
 use std::sync::Mutex;
 use std::time::Instant;
 
 use guatiao::library::ProviderError;
-use guatiao::library::kind::{Answer, AnswerType, ArgType, Caller as KindCaller, Pass, Scalar};
+use guatiao::library::kind::{
+    Answer, AnswerType, ArgType, Caller as KindCaller, Pass, RawObject, Scalar,
+};
 use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::value::wire;
 use guatiao::{Buffer, Status, Value};
-use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Limits};
+use guatiao_bridge::{
+    BridgeError, Held, Kinds, Limit, Limits, ObjectHome, PreparedArg, PreparedArgs,
+};
 use guatiao_libffi::Libffi;
 use wasmtime::{
     Caller, Engine, Instance, Linker, Memory, Module, ResourceLimiter, Store, StoreContextMut,
@@ -119,7 +124,9 @@ pub(crate) struct State {
     result: Vec<u8>,
     pub(crate) writable: Vec<Writable>,
     pub(crate) written: Vec<(usize, Value)>,
-    pub(crate) handles: BTreeMap<u64, HostObject>,
+    /// The host's objects the guest holds, by handle. Shared only while a
+    /// call into one of them is prepared: its arguments' [`Home`]s.
+    pub(crate) handles: RefCell<BTreeMap<u64, HostObject>>,
     next_handle: u64,
     pub(crate) wasi: WasiState,
     shared: Arc<Shared>,
@@ -146,7 +153,7 @@ impl State {
             result: Vec::new(),
             writable: Vec::new(),
             written: Vec::new(),
-            handles: BTreeMap::new(),
+            handles: RefCell::new(BTreeMap::new()),
             next_handle: 0,
             wasi: WasiState::new(),
             shared,
@@ -162,6 +169,7 @@ impl State {
     pub(crate) fn hold(&mut self, held: Held, caller: Arc<KindCaller>) -> u64 {
         self.next_handle += 1;
         self.handles
+            .get_mut()
             .insert(self.next_handle, HostObject { held, caller });
         self.next_handle
     }
@@ -358,8 +366,32 @@ fn write_back(
     Ok(0)
 }
 
+/// The handle a guest handed an object over from, while the call it was
+/// handed to is prepared: a call that never takes it puts it back there.
+struct Home<'a> {
+    handles: &'a RefCell<BTreeMap<u64, HostObject>>,
+    handle: u64,
+    caller: Arc<KindCaller>,
+}
+
+impl ObjectHome for Home<'_> {
+    fn give_back(self, object: RawObject) {
+        // No borrow is held while a call's arguments are let go; were one
+        // held, the object would be dropped, as a home that cannot take it.
+        if let Ok(mut handles) = self.handles.try_borrow_mut() {
+            handles.insert(
+                self.handle,
+                HostObject {
+                    held: Held::Object(Some(object)),
+                    caller: self.caller,
+                },
+            );
+        }
+    }
+}
+
 /// One argument of a host object's slot, from the value a guest sent.
-type Prepared = guatiao_bridge::PreparedArg;
+type Prepared<'a> = PreparedArg<(), (), Home<'a>>;
 
 fn unsupported(why: String) -> ProviderError {
     ProviderError::new(Status::GUATIAO_ERR_UNSUPPORTED, &why)
@@ -369,13 +401,15 @@ fn bad(why: String) -> ProviderError {
     ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why)
 }
 
-fn prepare(
-    state: &mut State,
+/// One argument; an object handed over is taken out of `handles`, with
+/// the [`Home`] it goes back to.
+fn prepare<'a>(
+    handles: &'a RefCell<BTreeMap<u64, HostObject>>,
     ty: &ArgType,
     value: Value,
     what: &str,
-) -> Result<Prepared, ProviderError> {
-    let scalar = |ok: Option<Prepared>| ok.ok_or_else(|| bad(format!("{what} does not fit")));
+) -> Result<Prepared<'a>, ProviderError> {
+    let scalar = |ok: Option<Prepared<'a>>| ok.ok_or_else(|| bad(format!("{what} does not fit")));
     Ok(match ty {
         ArgType::Scalar(Scalar::Bool) => scalar(bool::from_value(&value).ok().map(Prepared::Bool))?,
         ArgType::Scalar(Scalar::F32 | Scalar::F64) => {
@@ -418,7 +452,8 @@ fn prepare(
         } => {
             let handle = u64::from_value(&value)
                 .map_err(|_| bad(format!("{what} is an object's handle")))?;
-            let same = state.handles.get(&handle).is_some_and(|h| {
+            let mut map = handles.borrow_mut();
+            let same = map.get(&handle).is_some_and(|h| {
                 matches!(h.held, Held::Object(Some(_))) && h.caller.kind().name() == kind
             });
             if !same {
@@ -426,8 +461,18 @@ fn prepare(
                     "{what} is a `{kind}` the guest owns, which handle {handle} is not"
                 )));
             }
-            match state.handles.remove(&handle).map(|h| h.held) {
-                Some(Held::Object(Some(object))) => Prepared::Object(Some(object), ()),
+            match map.remove(&handle) {
+                Some(HostObject {
+                    held: Held::Object(Some(object)),
+                    caller,
+                }) => Prepared::Object(
+                    Some(object),
+                    Home {
+                        handles,
+                        handle,
+                        caller,
+                    },
+                ),
                 _ => unreachable!("checked just above"),
             }
         }
@@ -476,7 +521,7 @@ fn call_object(
     handle: u64,
     request: Result<Value, Undecoded>,
 ) -> Result<Vec<u8>, ProviderError> {
-    let Some(mut object) = state.handles.remove(&handle) else {
+    let Some(mut object) = state.handles.get_mut().remove(&handle) else {
         return Err(ProviderError::new(
             Status::GUATIAO_ERR_GONE,
             &format!("no object has handle {handle}"),
@@ -505,15 +550,18 @@ fn call_object(
                 args.len()
             )));
         }
-        let mut prepared = Vec::with_capacity(args.len());
+        // However the call ends, what it did not take goes back to its
+        // handle when `prepared` drops.
+        let mut prepared = PreparedArgs::with_capacity(args.len());
         for (value, arg) in args.into_iter().zip(described.args()) {
             let what = format!("`{method}`'s argument `{}`", arg.name());
-            prepared.push(prepare(state, arg.ty(), value, &what)?);
+            prepared.push(prepare(&state.handles, arg.ty(), value, &what)?);
         }
-        let answer = Prepared::with_args(&mut prepared, |args| held.call(caller, slot, args))?;
-        answered(state, described.answer(), answer)
+        let answer = Prepared::with_args(&mut prepared, |args| held.call(caller, slot, args));
+        drop(prepared);
+        answered(state, described.answer(), answer?)
     })();
-    state.handles.insert(handle, object);
+    state.handles.get_mut().insert(handle, object);
     outcome
 }
 
@@ -593,7 +641,7 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         module,
         import::DROP,
         |mut caller: Caller<'_, State>, handle: i64| {
-            let gone = caller.data_mut().handles.remove(&(handle as u64));
+            let gone = caller.data_mut().handles.get_mut().remove(&(handle as u64));
             drop(gone);
         },
     )?;

@@ -7,7 +7,8 @@
 //! overflowed, an answer outside the guest's memory, a status guatiao does
 //! not define, and modules that are not guatiao libraries. Each is
 //! contained: the call or the library is refused in words, and the host
-//! carries on.
+//! carries on. And a guest whose calls into a host object are refused
+//! before they run, keeping the objects it passed.
 
 mod common;
 
@@ -16,6 +17,7 @@ extern crate alloc;
 use std::path::Path;
 
 use common::*;
+use guatiao::library::{Object, ProviderError};
 use guatiao::value::wire;
 use guatiao::{List, Map, Status, Value};
 use guatiao_bridge::BridgeSource;
@@ -378,6 +380,173 @@ fn a_module_that_is_not_a_guatiao_library_is_refused_before_it_runs() {
         let why = reason(id);
         assert!(why.contains(words), "{id}: {why}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A host object a guest calls, handed to it by the host.
+#[guatiao::kind(object)]
+pub trait Echo: Send {
+    /// Answers the text back.
+    fn say(&mut self, what: &str) -> Result<String, ProviderError>;
+    /// Takes `other` over, and answers `times`.
+    fn adopt(&mut self, other: Object<dyn Echo>, times: u8) -> Result<i64, ProviderError>;
+    /// Takes both over.
+    fn both(&mut self, a: Object<dyn Echo>, b: Object<dyn Echo>) -> Result<i64, ProviderError>;
+}
+
+/// What the guest serves: it is lent one echo and handed another.
+#[guatiao::kind]
+pub trait Relay: Send + Sync {
+    /// Passes `other` to slots of `target` in calls refused before they
+    /// run, then calls `other`: what it said.
+    fn refused(
+        &self,
+        target: &mut dyn Echo,
+        other: Object<dyn Echo>,
+    ) -> Result<String, ProviderError>;
+}
+
+/// An echo recording what it was told, and when it is destroyed.
+struct Parrot(alloc::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl Echo for Parrot {
+    fn say(&mut self, what: &str) -> Result<String, ProviderError> {
+        self.0.lock().unwrap().push(what.to_string());
+        Ok(format!("echo {what}"))
+    }
+    fn adopt(&mut self, other: Object<dyn Echo>, times: u8) -> Result<i64, ProviderError> {
+        drop(other);
+        Ok(i64::from(times))
+    }
+    fn both(&mut self, a: Object<dyn Echo>, b: Object<dyn Echo>) -> Result<i64, ProviderError> {
+        drop((a, b));
+        Ok(2)
+    }
+}
+
+impl Drop for Parrot {
+    fn drop(&mut self) {
+        self.0.lock().unwrap().push("<destroyed>".to_string());
+    }
+}
+
+/// A guest serving `relay`: `target` arrives as handle 1 and `other` as
+/// handle 2. It calls `target.adopt(other, "twice")` and
+/// `target.both(other, other)`, each to be refused as a bad value (another
+/// status comes back as status 100 more), then `other.say("still here")`,
+/// lets `other` go, and answers what `say` answered, or its refusal.
+fn relaying_guest() -> String {
+    let mut serves = Map::new();
+    serves.set("relay", texts(&["refused"]));
+    let mut provider = Map::new();
+    provider.set("id", "relay");
+    provider.set("serves", serves);
+    let mut providers = List::new();
+    providers.push(provider);
+    let mut declared = Map::new();
+    declared.set("providers", providers);
+    let declared = wire::to_bytes(&Value::from(declared)).expect("encoded");
+    let request = |method: &str, args: &[Value]| {
+        let mut list = List::new();
+        list.push(method);
+        for arg in args {
+            list.push(arg.clone());
+        }
+        wire::to_bytes(&Value::from(list)).expect("encoded")
+    };
+    let other = Value::from(2u64);
+    let adopt = request("adopt", &[other.clone(), Value::from("twice")]);
+    let both = request("both", &[other.clone(), other]);
+    let say = request("say", &[Value::from("still here")]);
+    let bad = u32::from(Status::GUATIAO_ERR_BAD_VALUE);
+    format!(
+        r#"(module
+  (import "guatiao" "answer" (func $answer (param i32 i32)))
+  (import "guatiao" "object_call" (func $object_call (param i64 i32 i32) (result i32)))
+  (import "guatiao" "result" (func $result (param i32 i32) (result i32)))
+  (import "guatiao" "drop" (func $drop (param i64)))
+  (memory (export "memory") 1)
+  (data (i32.const 1024) "{declared}")
+  (data (i32.const 2048) "{adopt}")
+  (data (i32.const 2560) "{both}")
+  (data (i32.const 3072) "{say}")
+  (func (export "guatiao_guest_abi") (result i32) (i32.const 1))
+  (func (export "guatiao_guest_alloc") (param i32) (result i32) (i32.const 8192))
+  (func (export "guatiao_guest_declare") (result i32)
+    (call $answer (i32.const 1024) (i32.const {declared_len}))
+    (i32.const 0))
+  (func $said (param $status i32) (result i32)
+    (call $answer (i32.const 4096) (call $result (i32.const 4096) (i32.const 1024)))
+    (local.get $status))
+  (func $refused (param $status i32) (result i32)
+    (if (result i32) (i32.eq (local.get $status) (i32.const {bad}))
+      (then (i32.const 0))
+      (else (call $said (i32.add (i32.const 100) (local.get $status))))))
+  (func (export "guatiao_guest_call") (param i32 i64 i32 i32) (result i32)
+    (local $s i32)
+    (local.set $s (call $refused (call $object_call (i64.const 1) (i32.const 2048) (i32.const {adopt_len}))))
+    (if (local.get $s) (then (return (local.get $s))))
+    (local.set $s (call $refused (call $object_call (i64.const 1) (i32.const 2560) (i32.const {both_len}))))
+    (if (local.get $s) (then (return (local.get $s))))
+    (local.set $s (call $said (call $object_call (i64.const 2) (i32.const 3072) (i32.const {say_len}))))
+    (call $drop (i64.const 2))
+    (local.get $s))
+)"#,
+        declared = escaped(&declared),
+        declared_len = declared.len(),
+        adopt = escaped(&adopt),
+        adopt_len = adopt.len(),
+        both = escaped(&both),
+        both_len = both.len(),
+        say = escaped(&say),
+        say_len = say.len(),
+    )
+}
+
+#[test]
+fn a_call_refused_before_it_runs_leaves_the_guests_objects_alive() {
+    let dir = scratch("refused");
+    let kinds = dir.join("relay.kinds.json");
+    std::fs::write(
+        &kinds,
+        format!(
+            "{{\"kinds\":[{},{}]}}",
+            EchoVtable::description(),
+            RelayVtable::description()
+        ),
+    )
+    .expect("written");
+    let bytes = wat::parse_str(relaying_guest()).expect("the guest parses");
+    std::fs::write(dir.join("relaying.wasm"), bytes).expect("written");
+    std::fs::write(
+        dir.join("relaying.guatiao.toml"),
+        format!("type = \"wasm\"\nmodule = \"relaying\"\nkinds = [\"relay\"]\n{VERSION}"),
+    )
+    .expect("written");
+    let mut config = config(&[&dir], None);
+    config.set("kinds", texts(&[&kinds.display().to_string()]));
+    let mut registry = serving(&config);
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let relay: alloc::sync::Arc<dyn Relay> = registry
+        .offer::<dyn Relay>("relaying_relay")
+        .expect("served")
+        .expect("as the trait")
+        .shared()
+        .expect("an instance");
+
+    let mut target = Parrot(Default::default());
+    let seen = alloc::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let other = Parrot(alloc::sync::Arc::clone(&seen)).into_object();
+    let said = relay
+        .refused(&mut target, other)
+        .map_err(|e| (e.status, e.message().to_string()));
+    assert_eq!(said.as_deref(), Ok("echo still here"));
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["still here", "<destroyed>"],
+        "the refused calls left the object to the guest, which let it go after"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
