@@ -83,8 +83,9 @@ class instance, a cycle) is a `TypeError`. Also `Value.from(x)`,
 exponent and for a safe integer, a `bigint` for a larger integer;
 `'bigint'` a `bigint` for every integer; `'text'` the exact text. `maps:
 'object'` (default) gives plain objects (a key named `__proto__` is data)
-and `'map'` gives `Map`s. Absent reads as `undefined`, bytes as a
-`Uint8Array` copy. `toJS<T>()` is an unchecked cast. `ref.boolOr`,
+and `'map'` gives `Map`s. Text keeps a leading U+FEFF. Absent reads as
+`undefined`, bytes as a `Uint8Array` copy. `toJS<T>()` is an unchecked
+cast. `ref.boolOr`,
 `intOr(fallback: bigint)` (a signed 64-bit integer; a fraction, an
 exponent, another kind or out of range falls back, never truncates),
 `numberOr`, `stringOr` read one field. Also `ref.tag` (a `Tag`),

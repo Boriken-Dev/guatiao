@@ -91,7 +91,9 @@ callee.call(slot: string, args: readonly unknown[] = [], options?: { during?: In
   `number` when a safe integer or fractional, else a `bigint`), strings,
   `Uint8Array`, arrays, plain objects (a `Map` with string keys is taken
   too). Keys are defined, so `__proto__` is data. Nesting past 128 is
-  refused.
+  refused (`BadValue`); a string holding a lone surrogate, data that
+  refers to itself or anything else is a `TypeError`, a number that is not
+  finite a `RangeError`, as the `guatiao` package refuses them.
 - What the peer sends is checked as the wire encoding states it: lengths
   in their shortest form and within what remains, a number's text in the
   JSON number grammar (`1e999` reads as `Infinity`; a fraction keeps its
