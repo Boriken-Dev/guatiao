@@ -41,7 +41,7 @@ configuration map:
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `security` | `none`, `server-tls` or `mutual-tls` ([Security](#security)): `mutual-tls` on a network unless named; a child, `local://` and `shm://` run `none` alone |
 | `key`, `key_file` | the pre-shared key: text, or a file's bytes; proved both ways with `none`, and at server TLS when the server asks for it |
-| `token` | what a client presents when its server requires a token; one empty or only white space is refused |
+| `token`, `token_file` | what a client presents when its server requires a token: text, or a file's text (a byte order mark and one last line end left out, as `guatiao-remote-server --token-file` reads it); one or the other, and one empty or only white space is refused |
 | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 | `identity_file` | TLS: the identity file instead of `state_dir` (made when absent) |
 | `pins` | TLS: a list of the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
@@ -102,8 +102,10 @@ the others are served, and an unreachable peer's libraries stay listed,
 answering `GUATIAO_ERR_GONE`, until it is back. Peers are listed at once
 (up to 16 connecting together), so a peer slow to refuse a connection
 costs a refresh one wait, not one per peer.
-A manifest names its key by file, never inline, since it lies in a
-search path; a TLS peer's manifest names its `pins`, `roots` and
+A manifest names its key and its token by file (`key_file`,
+`token_file`), never inline, since it lies in a search path; an edited
+key or token file is a new peer, as an edited manifest is. A TLS peer's
+manifest names its `pins`, `roots` and
 `policy`, and
 the identity this host presents to it by `identity_file` or `state_dir`,
 paths beside the manifest. The source's own `security` (like its other
@@ -476,7 +478,8 @@ every client. Nothing listens on a network unless told where.
   by a `token` the server requires. No client certificate, so a browser
   page and a host with no identity of its own can use it. The HELLO
   names trust `server-tls`. A client needs the server's `pins` (or a
-  trust store, or `roots`) and a `key` or `token`, and no identity; a server needs
+  trust store, or `roots`) and a `key` or `token` (or `key_file`,
+  `token_file`), and no identity; a server needs
   its identity and a key or token (`--key-file`, `--token-file`), and
   lists "client_auth = none" among the settings weaker than strict. A
   server's token is required at mutual TLS as well; with no TLS the
