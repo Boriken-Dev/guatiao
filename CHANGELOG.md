@@ -1648,12 +1648,14 @@ write now.
 
 ### Fixed
 
-- **Lua and Rhai: a call that fails leaves the script's objects alive.**
-  A script passing a host's object to a slot, handed over or lent, lost
-  it when a later argument of that call was refused, or (Lua) when a lent
-  table could not be written back after it: the object was destroyed and
-  its handle answered `gone` from then on. It goes back to the handle, as
-  JavaScript's already did; all three engines share the rule.
+- **Lua, Rhai and WebAssembly: a call that fails leaves the script's
+  objects alive.** A script passing a host's object to a slot, handed over
+  or lent, lost it when a later argument of that call was refused, or
+  (Lua) when a lent table could not be written back after it: the object
+  was destroyed and its handle answered `gone` from then on. A
+  WebAssembly guest lost an object it handed over the same way, and when
+  it passed one handle twice. It goes back to the handle, as JavaScript's
+  already did; all four engines share the rule.
 
 - **Node: text keeps a leading U+FEFF.** Every string the Node binding
   read from a value (`toJS()`, `stringOr`, a map's keys, the registry's

@@ -87,6 +87,8 @@ value its wire encoding (`guatiao::value::wire`) in the module's memory.
 - **A host object** a guest calls: its slot's arguments as scalars, text,
   bytes, borrowed or taken trees, or a taken object (a handle the guest
   owns); a lent tree, a buffer or a lent object is `GUATIAO_ERR_UNSUPPORTED`.
+  A handle passed to a call refused before it runs (a later argument that
+  does not fit, the same handle passed twice) is still the guest's.
   An object it answers becomes a handle the guest owns.
 
 ## WASI (`wasi_snapshot_preview1`), granting nothing
