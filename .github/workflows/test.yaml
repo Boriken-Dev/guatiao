@@ -716,7 +716,9 @@ jobs:
           for p in ("guatiao", "guatiao-serde", "guatiao-intake", "guatiao-remote"):
               files = {f["path"] for f in json.load(open(f"{p}/pack.json"))[0]["files"]}
               print(p, sorted(files))
-              for need in ("AGENTS.md", "README.md", "LICENSE", "package.json", "dist/index.js", "dist/index.d.ts"):
+              # The entry the manifest names: guatiao-remote's sits under dist/guatiao-remote/src/.
+              entry = json.load(open(f"{p}/package.json"))["exports"]["."]
+              for need in ("AGENTS.md", "README.md", "LICENSE", "package.json", entry["import"][2:], entry["types"][2:]):
                   assert need in files, f"{p}: {need} does not ship"
               stray = [f for f in files if not (f.startswith("dist/") or f in ("AGENTS.md", "README.md", "LICENSE", "package.json"))]
               assert not stray, f"{p} ships what it should not: {stray}"
