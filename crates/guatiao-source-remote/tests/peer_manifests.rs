@@ -7,8 +7,8 @@
 //! own words, a peer that cannot be reached reported once and the others
 //! served, one that goes away keeping its libraries until it is back, a
 //! manifest edited or removed followed by the next refresh, peers slow to
-//! refuse listed at once, and a replaced peer serving on while its
-//! successor cannot be reached.
+//! refuse listed at once, a replaced peer serving on while its successor
+//! cannot be reached, and an empty token file refused.
 
 #![cfg(feature = "tcp")]
 
@@ -257,6 +257,11 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     );
     write(
         &dir,
+        "inline_token.guatiao.toml",
+        &peer("inline_token", device(), "token = \"right here\"\n"),
+    );
+    write(
+        &dir,
         "secure.guatiao.toml",
         "type = \"remote\"\nname = \"far\"\nconnect = \"tcp://192.0.2.1:7000\"\n",
     );
@@ -278,6 +283,11 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["good/shapes"], "{refreshed:?}");
     assert!(why(&refreshed, "inline.guatiao.toml").contains("`key` is a secret"));
+    let token = why(&refreshed, "inline_token.guatiao.toml");
+    assert!(
+        token.contains("`token` is a secret") && token.contains("`token_file`"),
+        "{token}"
+    );
     // The secure level runs over `tls://` alone, in a build that has it.
     let secure = why(&refreshed, "secure.guatiao.toml");
     if cfg!(feature = "tls") {
@@ -297,7 +307,7 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     );
     assert!(why(&refreshed, "slash.guatiao.toml").contains("`name` holds a `/`"));
     assert!(why(&refreshed, "nameless.guatiao.toml").contains("`name` is missing"));
-    assert_eq!(refreshed.refused.len(), 6, "{refreshed:?}");
+    assert_eq!(refreshed.refused.len(), 7, "{refreshed:?}");
     assert!(registry.refresh().is_empty(), "each reported once");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -351,6 +361,65 @@ fn an_empty_token_is_refused_for_one_peer_and_for_every_peer_described() {
             refused.message()
         );
     }
+}
+
+#[test]
+fn an_empty_token_file_is_refused_and_so_is_a_token_beside_one() {
+    let dir = scratch("token_file");
+    write(&dir, "empty.token", "\u{feff}\r\n");
+    write(
+        &dir,
+        "lab.guatiao.toml",
+        &peer("lab", device(), "token_file = \"empty.token\"\n"),
+    );
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("peers", source(&dir)).unwrap();
+    let refreshed = registry.refresh();
+    assert!(refreshed.loaded.is_empty(), "{refreshed:?}");
+    let lab = why(&refreshed, "lab.guatiao.toml");
+    assert!(
+        lab.contains("`token_file`") && lab.contains("the token is empty"),
+        "{lab}"
+    );
+
+    let empty = dir.join("empty.token").display().to_string();
+    let mut one = Map::new();
+    one.set("connect", "tcp://127.0.0.1:7000");
+    one.set("security", "none");
+    one.set("key", KEY);
+    one.set("token_file", empty.as_str());
+    let mut every = Map::new();
+    let mut dirs = List::new();
+    dirs.push(dir.display().to_string().as_str());
+    every.set("dirs", dirs);
+    every.set("key", KEY);
+    every.set("token_file", empty.as_str());
+    for config in [one.clone(), every] {
+        let refused = RemoteSource::from_config(&config).unwrap_err();
+        assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert!(
+            refused.message().contains("the token is empty"),
+            "{}",
+            refused.message()
+        );
+    }
+
+    write(&dir, "lab.token", "t0k");
+    one.set(
+        "token_file",
+        dir.join("lab.token").display().to_string().as_str(),
+    );
+    one.set("token", "t0k");
+    let refused = RemoteSource::from_config(&one).unwrap_err();
+    assert_eq!(refused.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(
+        refused
+            .message()
+            .contains("`token` or `token_file`, not both"),
+        "{}",
+        refused.message()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
