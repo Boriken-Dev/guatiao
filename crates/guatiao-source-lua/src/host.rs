@@ -12,10 +12,11 @@ use std::path::Path;
 use guatiao::Map;
 use guatiao::library::kind::DescribedRemote;
 use guatiao::library::{Refreshed, Registry};
+use guatiao_bridge::Held;
 use mlua::prelude::*;
 use mlua::{UserData, UserDataMethods};
 
-use crate::calls::{self, BufferView, Handle, KindView, Refusal, STATUSES, Target};
+use crate::calls::{self, BufferView, Handle, KindView, Refusal, STATUSES};
 use crate::values::{self, Bytes, Exact};
 
 /// The helpers every Lua side has: what a library written in Lua
@@ -275,7 +276,7 @@ impl UserData for RegistryView {
                     LuaError::runtime(format!("`{key}` as `{}`: {e}", described.name()))
                 })?;
             Ok(Handle {
-                target: Target::Remote(remote),
+                held: Held::Provider(remote),
                 caller,
             })
         });

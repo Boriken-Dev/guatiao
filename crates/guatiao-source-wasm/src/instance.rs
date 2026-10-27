@@ -12,14 +12,11 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use guatiao::library::ProviderError;
-use guatiao::library::kind::{
-    Answer, AnswerType, Arg, ArgType, Caller as KindCaller, LentHandle, Pass, RawObject, Scalar,
-    Tree,
-};
+use guatiao::library::kind::{Answer, AnswerType, ArgType, Caller as KindCaller, Pass, Scalar};
 use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::value::wire;
-use guatiao::{Buffer, List, Map, Status, Value};
-use guatiao_bridge::{BridgeError, Kinds, Limit, Limits};
+use guatiao::{Buffer, Status, Value};
+use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Limits};
 use guatiao_libffi::Libffi;
 use wasmtime::{
     Caller, Engine, Instance, Linker, Memory, Module, ResourceLimiter, Store, StoreContextMut,
@@ -84,14 +81,6 @@ impl Shared {
         callers.insert(kind.to_string(), Arc::clone(&made));
         Ok(made)
     }
-}
-
-/// An object of the host's the guest holds a handle on.
-pub(crate) enum Held {
-    /// Handed over: the guest's until it drops it or the instance goes.
-    Owned(RawObject),
-    /// Lent for one call.
-    Lent(LentHandle),
 }
 
 pub(crate) struct HostObject {
@@ -370,21 +359,7 @@ fn write_back(
 }
 
 /// One argument of a host object's slot, from the value a guest sent.
-enum Prepared {
-    Bool(bool),
-    Int(i64),
-    Uint(u64),
-    Float(f64),
-    Str(String),
-    Bytes(Vec<u8>),
-    Value(Option<Value>),
-    Map(Map),
-    List(List),
-    TakenValue(Option<Value>),
-    TakenMap(Option<Map>),
-    TakenList(Option<List>),
-    Object(Option<RawObject>),
-}
+type Prepared = guatiao_bridge::PreparedArg;
 
 fn unsupported(why: String) -> ProviderError {
     ProviderError::new(Status::GUATIAO_ERR_UNSUPPORTED, &why)
@@ -425,28 +400,16 @@ fn prepare(
             pass,
             nullable,
         } => {
+            if *pass == Pass::Lent {
+                return Err(unsupported(format!(
+                    "{what} is lent, which a guest cannot lend: pass a value"
+                )));
+            }
             let is_null = matches!(value.tag(), Ok(guatiao::Tag::GUATIAO_NULL));
-            match (tree, pass) {
-                (_, Pass::Lent) => {
-                    return Err(unsupported(format!(
-                        "{what} is lent, which a guest cannot lend: pass a value"
-                    )));
-                }
-                (_, Pass::Borrowed) if is_null && *nullable => Prepared::Value(None),
-                (Tree::Map, Pass::Borrowed) => Prepared::Map(
-                    Map::try_from(value).map_err(|_| bad(format!("{what} is a map")))?,
-                ),
-                (Tree::List, Pass::Borrowed) => Prepared::List(
-                    List::try_from(value).map_err(|_| bad(format!("{what} is a list")))?,
-                ),
-                (_, Pass::Borrowed) => Prepared::Value(Some(value)),
-                (Tree::Map, _) => Prepared::TakenMap(Some(
-                    Map::try_from(value).map_err(|_| bad(format!("{what} is a map")))?,
-                )),
-                (Tree::List, _) => Prepared::TakenList(Some(
-                    List::try_from(value).map_err(|_| bad(format!("{what} is a list")))?,
-                )),
-                (_, _) => Prepared::TakenValue(Some(value)),
+            if is_null && *nullable && *pass == Pass::Borrowed {
+                Prepared::Value(None)
+            } else {
+                Prepared::tree(value, *tree, *pass, None, what).map_err(bad)?
             }
         }
         ArgType::Object {
@@ -456,7 +419,7 @@ fn prepare(
             let handle = u64::from_value(&value)
                 .map_err(|_| bad(format!("{what} is an object's handle")))?;
             let same = state.handles.get(&handle).is_some_and(|h| {
-                matches!(h.held, Held::Owned(_)) && h.caller.kind().name() == kind
+                matches!(h.held, Held::Object(Some(_))) && h.caller.kind().name() == kind
             });
             if !same {
                 return Err(bad(format!(
@@ -464,7 +427,7 @@ fn prepare(
                 )));
             }
             match state.handles.remove(&handle).map(|h| h.held) {
-                Some(Held::Owned(object)) => Prepared::Object(Some(object)),
+                Some(Held::Object(Some(object))) => Prepared::Object(Some(object), ()),
                 _ => unreachable!("checked just above"),
             }
         }
@@ -474,30 +437,6 @@ fn prepare(
             )));
         }
     })
-}
-
-fn args_of(prepared: &mut [Prepared]) -> Vec<Arg<'_>> {
-    prepared
-        .iter_mut()
-        .map(|p| match p {
-            Prepared::Bool(b) => Arg::Bool(*b),
-            Prepared::Int(n) => Arg::Int(*n),
-            Prepared::Uint(n) => Arg::Uint(*n),
-            Prepared::Float(x) => Arg::Float(*x),
-            Prepared::Str(s) => Arg::Str(s),
-            Prepared::Bytes(b) => Arg::Bytes(b),
-            Prepared::Value(v) => Arg::Value(v.as_ref()),
-            Prepared::Map(m) => Arg::Map(m),
-            Prepared::List(l) => Arg::List(l),
-            Prepared::TakenValue(v) => Arg::TakenValue(v.take().unwrap_or_else(Value::null)),
-            Prepared::TakenMap(m) => Arg::TakenMap(m.take().unwrap_or_default()),
-            Prepared::TakenList(l) => Arg::TakenList(l.take().unwrap_or_default()),
-            Prepared::Object(o) => match o.take() {
-                Some(o) => Arg::Object(o),
-                None => Arg::Value(None),
-            },
-        })
-        .collect()
 }
 
 /// A host object's answer as the bytes a guest reads: nothing for none.
@@ -524,7 +463,7 @@ fn answered(
                 ));
             };
             let caller = state.shared.caller(kind)?;
-            Value::from(state.hold(Held::Owned(object), caller))
+            Value::from(state.hold(Held::Object(Some(object)), caller))
         }
         _ => return Err(unsupported("an answer a guest cannot read".to_string())),
     };
@@ -571,11 +510,7 @@ fn call_object(
             let what = format!("`{method}`'s argument `{}`", arg.name());
             prepared.push(prepare(state, arg.ty(), value, &what)?);
         }
-        let args = args_of(&mut prepared);
-        let answer = match held {
-            Held::Owned(raw) => raw.call(caller, slot, args),
-            Held::Lent(lent) => lent.call(caller, slot, args),
-        }?;
+        let answer = Prepared::with_args(&mut prepared, |args| held.call(caller, slot, args))?;
         answered(state, described.answer(), answer)
     })();
     state.handles.insert(handle, object);

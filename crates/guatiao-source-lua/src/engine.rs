@@ -16,8 +16,8 @@ use guatiao::library::ProviderError;
 use guatiao::library::kind::ArgType;
 use guatiao::{Status, Value};
 use guatiao_bridge::{
-    BridgeError, Call, CallArg, Config, Engine, Manifest, ManifestFormat, Opened, Provided, Reply,
-    Target, ThreadModel,
+    BridgeError, Call, CallArg, Config, Engine, Held, Manifest, ManifestFormat, Opened, Provided,
+    Reply, Target, ThreadModel,
 };
 use mlua::prelude::*;
 
@@ -181,7 +181,7 @@ impl LuaEngine {
                     let caller = calls::caller(lua, &object_kind).map_err(bad)?;
                     let ud = lua
                         .create_userdata(Handle {
-                            target: calls::Target::Lent(h.clone()),
+                            held: Held::Lent(h.clone()),
                             caller,
                         })
                         .map_err(bad)?;

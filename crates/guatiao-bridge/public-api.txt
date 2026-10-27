@@ -108,6 +108,17 @@ impl core::clone::Clone for guatiao_bridge::manifest::Found
 pub fn guatiao_bridge::manifest::Found::clone(&self) -> Self
 impl core::fmt::Debug for guatiao_bridge::manifest::Found
 pub fn guatiao_bridge::manifest::Found::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum guatiao_bridge::Held
+pub guatiao_bridge::Held::Lent(guatiao::library::kind::runtime::LentHandle)
+pub guatiao_bridge::Held::Object(core::option::Option<guatiao::library::kind::runtime::RawObject>)
+pub guatiao_bridge::Held::Provider(guatiao::library::kind::runtime::DescribedRemote)
+impl guatiao_bridge::Held
+pub fn guatiao_bridge::Held::argument<T, B, O>(&mut self, &guatiao::library::kind::runtime::Caller, &str, guatiao::library::kind::description::Pass, O, &str) -> core::result::Result<guatiao_bridge::PreparedArg<T, B, O>, alloc::string::String>
+pub fn guatiao_bridge::Held::call(&self, &guatiao::library::kind::runtime::Caller, usize, alloc::vec::Vec<guatiao::library::kind::runtime::Arg<'_>>) -> core::result::Result<guatiao::library::kind::runtime::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao_bridge::Held::hand_back(&mut self, &guatiao::library::kind::runtime::Caller, &str) -> core::result::Result<guatiao::library::kind::runtime::RawObject, guatiao::library::kind::ProviderError>
+pub fn guatiao_bridge::Held::put_back(&mut self, guatiao::library::kind::runtime::RawObject)
+impl core::fmt::Debug for guatiao_bridge::Held
+pub fn guatiao_bridge::Held::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum guatiao_bridge::Limit
 pub guatiao_bridge::Limit::Depth
 pub guatiao_bridge::Limit::Memory
@@ -135,6 +146,45 @@ pub guatiao_bridge::Opened::Described::library: L
 pub guatiao_bridge::Opened::Described::providers: alloc::vec::Vec<guatiao_bridge::Provided>
 impl<L> core::fmt::Debug for guatiao_bridge::Opened<L>
 pub fn guatiao_bridge::Opened<L>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum guatiao_bridge::PreparedArg<T, B, O>
+pub guatiao_bridge::PreparedArg::Bool(bool)
+pub guatiao_bridge::PreparedArg::Buffer(alloc::vec::Vec<u8>, core::option::Option<B>)
+pub guatiao_bridge::PreparedArg::Bytes(alloc::vec::Vec<u8>)
+pub guatiao_bridge::PreparedArg::Float(f64)
+pub guatiao_bridge::PreparedArg::Int(i64)
+pub guatiao_bridge::PreparedArg::LentList(guatiao::value::types::list::List, core::option::Option<T>)
+pub guatiao_bridge::PreparedArg::LentMap(guatiao::value::types::map::Map, core::option::Option<T>)
+pub guatiao_bridge::PreparedArg::LentOwned(core::option::Option<guatiao::library::kind::runtime::RawObject>, O)
+pub guatiao_bridge::PreparedArg::LentPassed(guatiao::library::kind::runtime::LentHandle)
+pub guatiao_bridge::PreparedArg::LentValue(guatiao::value::value::Value, core::option::Option<T>)
+pub guatiao_bridge::PreparedArg::List(guatiao::value::types::list::List)
+pub guatiao_bridge::PreparedArg::Map(guatiao::value::types::map::Map)
+pub guatiao_bridge::PreparedArg::Object(core::option::Option<guatiao::library::kind::runtime::RawObject>, O)
+pub guatiao_bridge::PreparedArg::Str(alloc::string::String)
+pub guatiao_bridge::PreparedArg::TakenList(core::option::Option<guatiao::value::types::list::List>)
+pub guatiao_bridge::PreparedArg::TakenMap(core::option::Option<guatiao::value::types::map::Map>)
+pub guatiao_bridge::PreparedArg::TakenValue(core::option::Option<guatiao::value::value::Value>)
+pub guatiao_bridge::PreparedArg::Uint(u64)
+pub guatiao_bridge::PreparedArg::Value(core::option::Option<guatiao::value::value::Value>)
+impl<T, B, O> guatiao_bridge::PreparedArg<T, B, O>
+pub fn guatiao_bridge::PreparedArg<T, B, O>::scalar(guatiao_bridge::Reading, &str, guatiao::library::kind::description::Scalar, &str) -> core::result::Result<Self, alloc::string::String>
+pub fn guatiao_bridge::PreparedArg<T, B, O>::tree(guatiao::value::value::Value, guatiao::library::kind::description::Tree, guatiao::library::kind::description::Pass, core::option::Option<T>, &str) -> core::result::Result<Self, alloc::string::String>
+pub fn guatiao_bridge::PreparedArg<T, B, O>::with_args<R>(&mut [Self], impl core::ops::function::FnOnce(alloc::vec::Vec<guatiao::library::kind::runtime::Arg<'_>>) -> R) -> R
+impl<T: core::fmt::Debug, B: core::fmt::Debug, O: core::fmt::Debug> core::fmt::Debug for guatiao_bridge::PreparedArg<T, B, O>
+pub fn guatiao_bridge::PreparedArg<T, B, O>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum guatiao_bridge::Reading
+pub guatiao_bridge::Reading::Bool(bool)
+pub guatiao_bridge::Reading::Exact(alloc::string::String)
+pub guatiao_bridge::Reading::Float(f64)
+pub guatiao_bridge::Reading::Int(i64)
+pub guatiao_bridge::Reading::Other
+impl core::clone::Clone for guatiao_bridge::Reading
+pub fn guatiao_bridge::Reading::clone(&self) -> Self
+impl core::cmp::PartialEq for guatiao_bridge::Reading
+pub fn guatiao_bridge::Reading::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::Reading
+pub fn guatiao_bridge::Reading::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_bridge::Reading
 #[non_exhaustive] pub enum guatiao_bridge::Reply
 pub guatiao_bridge::Reply::Handed(guatiao::library::kind::runtime::RawObject)
 pub guatiao_bridge::Reply::Nothing

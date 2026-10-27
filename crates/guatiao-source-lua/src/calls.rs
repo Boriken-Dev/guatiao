@@ -12,11 +12,11 @@ use alloc::sync::Arc;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
-    Answer, AnswerType, Arg, ArgType, Caller, DescribedRemote, KindDescription, LentHandle,
-    LentObject, Pass, RawObject, Scalar, SlotDescription, Tree,
+    Answer, AnswerType, Arg, ArgType, Caller, KindDescription, Pass, RawObject, SlotDescription,
+    Tree,
 };
-use guatiao::{List, Map, Status, Value};
-use guatiao_bridge::{BridgeError, Kinds, Limit};
+use guatiao::{Status, Value};
+use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Reading};
 use guatiao_libffi::Libffi;
 use mlua::prelude::*;
 use mlua::{MetaMethod, UserData, UserDataFields, UserDataMethods};
@@ -275,20 +275,10 @@ pub(crate) fn kind_named(lua: &Lua, v: &LuaValue) -> LuaResult<Arc<KindDescripti
 
 // --- handles ---------------------------------------------------------------------
 
-/// What a handle calls.
-pub(crate) enum Target {
-    /// A provider's table, held loaded.
-    Remote(DescribedRemote),
-    /// An object handed over, until it is handed on.
-    Object(Option<RawObject>),
-    /// An object lent for a call that may have returned.
-    Lent(LentHandle),
-}
-
 /// A provider, an object or a lent object of a described kind: its slots
 /// are its methods (`greeter:greet("ana")`).
 pub struct Handle {
-    pub(crate) target: Target,
+    pub(crate) held: Held,
     pub(crate) caller: Arc<Caller>,
 }
 
@@ -299,15 +289,7 @@ impl Handle {
 
     /// Calls slot `slot` with `args`.
     fn call(&mut self, slot: usize, args: Vec<Arg<'_>>) -> Result<Answer, ProviderError> {
-        match &mut self.target {
-            Target::Remote(remote) => remote.call(slot, args),
-            Target::Object(Some(object)) => object.call(&self.caller, slot, args),
-            Target::Object(None) => Err(ProviderError::new(
-                Status::GUATIAO_ERR_GONE,
-                "the object was handed over",
-            )),
-            Target::Lent(handle) => handle.call(&self.caller, slot, args),
-        }
+        self.held.call(&self.caller, slot, args)
     }
 }
 
@@ -329,10 +311,10 @@ impl UserData for Handle {
             },
         );
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            let what = match this.target {
-                Target::Remote(_) => "provider",
-                Target::Object(_) => "object",
-                Target::Lent(_) => "lent object",
+            let what = match this.held {
+                Held::Provider(_) => "provider",
+                Held::Object(_) => "object",
+                Held::Lent(_) => "lent object",
             };
             Ok(format!(
                 "guatiao.handle: a {what} of {}",
@@ -360,7 +342,7 @@ fn call_slot(lua: &Lua, name: &str, args: LuaMultiValue) -> LuaResult<LuaMultiVa
     let mut prepared = prepare(lua, described, rest)?;
     let answer = {
         let mut handle = me.borrow_mut::<Handle>()?;
-        with_args(&mut prepared, |args| handle.call(slot, args))
+        Prepared::with_args(&mut prepared, |args| handle.call(slot, args))
     };
     settle(lua, prepared)?;
     match answer {
@@ -432,86 +414,22 @@ impl UserData for BufferView {
     }
 }
 
-/// One argument, held while the call runs, and where a lent one goes back.
-pub(crate) enum Prepared {
-    Bool(bool),
-    Int(i64),
-    Uint(u64),
-    Float(f64),
-    Str(String),
-    Bytes(Vec<u8>),
-    Buffer(Vec<u8>, Option<LuaAnyUserData>),
-    Value(Option<Value>),
-    Map(Map),
-    List(List),
-    TakenValue(Option<Value>),
-    TakenMap(Option<Map>),
-    TakenList(Option<List>),
-    LentValue(Value, Option<LuaTable>),
-    LentMap(Map, Option<LuaTable>),
-    LentList(List, Option<LuaTable>),
-    Object(Option<RawObject>),
-    /// An object this side owns, lent for the call and put back after:
-    /// taken out of a handle, or a Lua table served for the call.
-    LentOwned(Option<RawObject>, Option<LuaAnyUserData>),
-    /// A lent object passed on.
-    LentPassed(LentHandle),
-}
+/// One argument, held while the call runs: a lent tree goes back into its
+/// table, a buffer into its `guatiao.buffer`, and an object lent from a
+/// handle (rather than a table served for the call) into that handle.
+pub(crate) type Prepared =
+    guatiao_bridge::PreparedArg<LuaTable, LuaAnyUserData, Option<LuaAnyUserData>>;
 
-fn integer_of(v: &LuaValue, what: &str) -> LuaResult<i128> {
-    match v {
-        LuaValue::Integer(i) => Ok(i128::from(*i)),
-        LuaValue::Number(f) if f.fract() == 0.0 && f.abs() < 1.8e19 => Ok(*f as i128),
+/// A Lua value as a scalar argument reads it.
+fn reading(v: &LuaValue) -> LuaResult<Reading> {
+    Ok(match v {
+        LuaValue::Boolean(b) => Reading::Bool(*b),
+        LuaValue::Integer(i) => Reading::Int(*i),
+        LuaValue::Number(f) => Reading::Float(*f),
         LuaValue::UserData(ud) if ud.is::<values::Exact>() => {
-            let text = ud.borrow::<values::Exact>()?.0.clone();
-            text.parse::<i128>()
-                .map_err(|_| LuaError::runtime(format!("{what}: `{text}` is not a whole number")))
+            Reading::Exact(ud.borrow::<values::Exact>()?.0.clone())
         }
-        other => Err(LuaError::runtime(format!(
-            "{what} is a whole number, not a {}",
-            other.type_name()
-        ))),
-    }
-}
-
-fn scalar(v: &LuaValue, ty: Scalar, what: &str) -> LuaResult<Prepared> {
-    Ok(match ty {
-        Scalar::Bool => match v {
-            LuaValue::Boolean(b) => Prepared::Bool(*b),
-            other => {
-                return Err(LuaError::runtime(format!(
-                    "{what} is a boolean, not a {}",
-                    other.type_name()
-                )));
-            }
-        },
-        Scalar::F32 | Scalar::F64 => match v {
-            LuaValue::Integer(i) => Prepared::Float(*i as f64),
-            LuaValue::Number(f) => Prepared::Float(*f),
-            LuaValue::UserData(ud) if ud.is::<values::Exact>() => {
-                Prepared::Float(ud.borrow::<values::Exact>()?.0.parse().unwrap_or(f64::NAN))
-            }
-            other => {
-                return Err(LuaError::runtime(format!(
-                    "{what} is a number, not a {}",
-                    other.type_name()
-                )));
-            }
-        },
-        Scalar::U8 | Scalar::U16 | Scalar::U32 | Scalar::U64 | Scalar::Usize => {
-            let n = integer_of(v, what)?;
-            Prepared::Uint(
-                u64::try_from(n)
-                    .map_err(|_| LuaError::runtime(format!("{what}: {n} does not fit")))?,
-            )
-        }
-        _ => {
-            let n = integer_of(v, what)?;
-            Prepared::Int(
-                i64::try_from(n)
-                    .map_err(|_| LuaError::runtime(format!("{what}: {n} does not fit")))?,
-            )
-        }
+        _ => Reading::Other,
     })
 }
 
@@ -542,65 +460,20 @@ fn bytes_of(v: &LuaValue, what: &str) -> LuaResult<Vec<u8>> {
     }
 }
 
-fn tree_of(lua: &Lua, v: &LuaValue, tree: Tree, what: &str) -> LuaResult<Value> {
-    let empty = if tree == Tree::List {
-        Empty::List
-    } else {
-        Empty::Map
-    };
-    let value = values::to_value_as(lua, v, empty)?;
-    let fits = match tree {
-        Tree::Map => guatiao::value::convert::TryAsRef::<Map>::try_as_ref(&value).is_some(),
-        Tree::List => guatiao::value::convert::TryAsRef::<List>::try_as_ref(&value).is_some(),
-        _ => true,
-    };
-    if !fits {
-        return Err(LuaError::runtime(format!(
-            "{what} is a {}",
-            if tree == Tree::Map { "map" } else { "list" }
-        )));
-    }
-    Ok(value)
-}
-
 /// An object argument from Lua: a handle handed over or lent, or a Lua
 /// table of the kind's methods, served for as long as the callee holds it.
 fn object_arg(lua: &Lua, v: LuaValue, kind: &str, pass: Pass, what: &str) -> LuaResult<Prepared> {
     match v {
         LuaValue::UserData(ud) if ud.is::<Handle>() => {
             let mut handle = ud.borrow_mut::<Handle>()?;
-            if handle.kind().name() != kind {
-                return Err(LuaError::runtime(format!(
-                    "{what} is a `{kind}`, not a `{}`",
-                    handle.kind().name()
-                )));
-            }
-            match (&mut handle.target, pass) {
-                (Target::Object(object), Pass::Taken) => {
-                    Ok(Prepared::Object(Some(object.take().ok_or_else(|| {
-                        LuaError::runtime(format!("{what} was already handed over"))
-                    })?)))
-                }
-                (Target::Object(object), _) => {
-                    let taken = object.take().ok_or_else(|| {
-                        LuaError::runtime(format!("{what} was already handed over"))
-                    })?;
-                    drop(handle);
-                    Ok(Prepared::LentOwned(Some(taken), Some(ud)))
-                }
-                (Target::Lent(lent), Pass::Lent) => Ok(Prepared::LentPassed(lent.clone())),
-                (Target::Lent(_), _) => Err(LuaError::runtime(format!(
-                    "{what} was lent to this call, and cannot be handed over"
-                ))),
-                (Target::Remote(_), _) => Err(LuaError::runtime(format!(
-                    "{what} is a provider, not an object"
-                ))),
-            }
+            let Handle { held, caller } = &mut *handle;
+            held.argument(caller, kind, pass, Some(ud.clone()), what)
+                .map_err(LuaError::runtime)
         }
         LuaValue::Table(t) => {
             let object = crate::served::object(lua, kind, t)?;
             Ok(match pass {
-                Pass::Taken => Prepared::Object(Some(object)),
+                Pass::Taken => Prepared::Object(Some(object), None),
                 _ => Prepared::LentOwned(Some(object), None),
             })
         }
@@ -623,7 +496,8 @@ pub(crate) fn prepare(
         let v = args.next().unwrap_or(LuaValue::Nil);
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
         out.push(match described.ty() {
-            ArgType::Scalar(s) => scalar(&v, *s, &what)?,
+            ArgType::Scalar(s) => Prepared::scalar(reading(&v)?, v.type_name(), *s, &what)
+                .map_err(LuaError::runtime)?,
             ArgType::Str => Prepared::Str(text_of(&v, &what)?),
             ArgType::Bytes => Prepared::Bytes(bytes_of(&v, &what)?),
             ArgType::BytesMut => match v {
@@ -653,29 +527,14 @@ pub(crate) fn prepare(
                 if v.is_nil() && *nullable && *pass == Pass::Borrowed {
                     Prepared::Value(None)
                 } else {
-                    let value = tree_of(lua, &v, *tree, &what)?;
-                    match (tree, pass) {
-                        (Tree::Map, Pass::Borrowed) => {
-                            Prepared::Map(Map::try_from(value).unwrap_or_default())
-                        }
-                        (Tree::List, Pass::Borrowed) => {
-                            Prepared::List(List::try_from(value).unwrap_or_default())
-                        }
-                        (_, Pass::Borrowed) => Prepared::Value(Some(value)),
-                        (Tree::Map, Pass::Taken) => Prepared::TakenMap(Map::try_from(value).ok()),
-                        (Tree::List, Pass::Taken) => {
-                            Prepared::TakenList(List::try_from(value).ok())
-                        }
-                        (_, Pass::Taken) => Prepared::TakenValue(Some(value)),
-                        (Tree::Map, _) => {
-                            Prepared::LentMap(Map::try_from(value).unwrap_or_default(), lent_table)
-                        }
-                        (Tree::List, _) => Prepared::LentList(
-                            List::try_from(value).unwrap_or_default(),
-                            lent_table,
-                        ),
-                        (_, _) => Prepared::LentValue(value, lent_table),
-                    }
+                    let empty = if *tree == Tree::List {
+                        Empty::List
+                    } else {
+                        Empty::Map
+                    };
+                    let value = values::to_value_as(lua, &v, empty)?;
+                    Prepared::tree(value, *tree, *pass, lent_table, &what)
+                        .map_err(LuaError::runtime)?
                 }
             }
             ArgType::Object { kind, pass } => object_arg(lua, v, kind, *pass, &what)?,
@@ -689,71 +548,6 @@ pub(crate) fn prepare(
     Ok(out)
 }
 
-/// Runs `f` with the arguments `prepared` holds, as core takes them.
-pub(crate) fn with_args<R>(prepared: &mut [Prepared], f: impl FnOnce(Vec<Arg<'_>>) -> R) -> R {
-    // A lent object passed on is lent for as long as its own lend lasts:
-    // nest one `lend` per such argument.
-    let passed: Vec<LentHandle> = prepared
-        .iter()
-        .filter_map(|p| match p {
-            Prepared::LentPassed(h) => Some(h.clone()),
-            _ => None,
-        })
-        .collect();
-    lending(&passed, Vec::new(), move |lent| {
-        let mut lent = lent.into_iter();
-        let mut args = Vec::with_capacity(prepared.len());
-        for p in prepared.iter_mut() {
-            args.push(match p {
-                Prepared::Bool(b) => Arg::Bool(*b),
-                Prepared::Int(n) => Arg::Int(*n),
-                Prepared::Uint(n) => Arg::Uint(*n),
-                Prepared::Float(x) => Arg::Float(*x),
-                Prepared::Str(s) => Arg::Str(s),
-                Prepared::Bytes(b) => Arg::Bytes(b),
-                Prepared::Buffer(b, _) => Arg::Buffer(b),
-                Prepared::Value(v) => Arg::Value(v.as_ref()),
-                Prepared::Map(m) => Arg::Map(m),
-                Prepared::List(l) => Arg::List(l),
-                Prepared::TakenValue(v) => Arg::TakenValue(v.take().unwrap_or_else(Value::null)),
-                Prepared::TakenMap(m) => Arg::TakenMap(m.take().unwrap_or_default()),
-                Prepared::TakenList(l) => Arg::TakenList(l.take().unwrap_or_default()),
-                Prepared::LentValue(v, _) => Arg::LentValue(v),
-                Prepared::LentMap(m, _) => Arg::LentMap(m),
-                Prepared::LentList(l, _) => Arg::LentList(l),
-                Prepared::Object(o) => match o.take() {
-                    Some(o) => Arg::Object(o),
-                    None => Arg::Value(None),
-                },
-                Prepared::LentOwned(Some(o), _) => Arg::LentObject(o.lend()),
-                Prepared::LentOwned(None, _) => Arg::Value(None),
-                Prepared::LentPassed(_) => match lent.next().flatten() {
-                    Some(o) => Arg::LentObject(o),
-                    None => Arg::Value(None),
-                },
-            });
-        }
-        f(args)
-    })
-}
-
-/// Lends each of `handles` in turn (each lend lives only inside its
-/// closure), then runs `f` with all of them.
-fn lending<R>(
-    handles: &[LentHandle],
-    lent: Vec<Option<LentObject<'_>>>,
-    f: impl FnOnce(Vec<Option<LentObject<'_>>>) -> R,
-) -> R {
-    match handles.split_first() {
-        None => f(lent),
-        Some((first, rest)) => first.lend(|object| {
-            let mut all = lent;
-            all.push(object);
-            lending(rest, all, f)
-        }),
-    }
-}
-
 /// After the call: each lent tree written back over the Lua table it came
 /// from, each buffer back into its `guatiao.buffer`, each object lent from
 /// a handle put back in it.
@@ -765,9 +559,7 @@ pub(crate) fn settle(lua: &Lua, prepared: Vec<Prepared>) -> LuaResult<()> {
             Prepared::LentList(l, Some(t)) => values::refill(lua, &t, &Value::from(l))?,
             Prepared::Buffer(b, Some(ud)) => ud.borrow_mut::<BufferView>()?.0 = b,
             Prepared::LentOwned(Some(object), Some(ud)) => {
-                if let Target::Object(slot) = &mut ud.borrow_mut::<Handle>()?.target {
-                    *slot = Some(object);
-                }
+                ud.borrow_mut::<Handle>()?.held.put_back(object);
             }
             _ => {}
         }
@@ -781,7 +573,7 @@ pub(crate) fn settle(lua: &Lua, prepared: Vec<Prepared>) -> LuaResult<()> {
 pub(crate) fn object_handle(lua: &Lua, kind: &str, object: RawObject) -> LuaResult<LuaValue> {
     let caller = caller(lua, kind)?;
     Ok(LuaValue::UserData(lua.create_userdata(Handle {
-        target: Target::Object(Some(object)),
+        held: Held::Object(Some(object)),
         caller,
     })?))
 }
@@ -847,21 +639,17 @@ pub(crate) fn outcome(
             LuaValue::Table(t) => Outcome::Table(kind.clone(), t),
             LuaValue::UserData(ud) if ud.is::<Handle>() => {
                 let mut handle = ud.borrow_mut::<Handle>().map_err(bad)?;
-                let same = handle.caller.kind().name() == kind;
-                match &mut handle.target {
-                    Target::Object(o) if same => Outcome::Handed(o.take().ok_or_else(|| {
+                let Handle { held, caller } = &mut *handle;
+                Outcome::Handed(held.hand_back(caller, kind).map_err(|e| {
+                    if e.status == Status::GUATIAO_ERR_WRONG_KIND {
                         ProviderError::new(
-                            Status::GUATIAO_ERR_GONE,
-                            "the object was already handed over",
-                        )
-                    })?),
-                    _ => {
-                        return Err(ProviderError::new(
                             Status::GUATIAO_ERR_WRONG_KIND,
                             &format!("`{}` answers an object of `{kind}`", slot.name()),
-                        ));
+                        )
+                    } else {
+                        e
                     }
-                }
+                })?)
             }
             other => {
                 return Err(ProviderError::new(
