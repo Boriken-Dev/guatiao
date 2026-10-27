@@ -182,10 +182,8 @@ write now.
   `pins` and `policy` in a source file's configuration and in a peer
   manifest; `--listen tls://`, `--state-dir`, `--identity`, `--pin`,
   `--policy` on the server; `tls://` in `guatiao-remote-bench`. The
-  protocol is unchanged (the HELLO already carried trust 2). coqui-peer
-  and coqui-peer-tls are git dependencies pinned by commit, so the crate
-  cannot be published to crates.io until they are (`cargo publish` and
-  `cargo package` refuse it meanwhile). `docs/remote.md` has "Trust".
+  protocol is unchanged (the HELLO already carried trust 2).
+  `docs/remote.md` has "Trust".
 - **guatiao-source-remote: the secure level over QUIC, with datagrams**
   (feature `quic`, off by default). `quic://host:port` runs the same
   mutual TLS 1.3 as `tls://`, with the same `TlsConfig` (identity, pins
@@ -213,8 +211,6 @@ write now.
   `guatiao_source_remote::acl`. A denied peer is closed unread; nothing
   about where a listener binds is refused. `guatiao-remote-server --acl
   PATH` reads one (TOML or JSON); `--range CIDR` still adds a permit rule.
-  coqui-net-acl is a git dependency of the `tcp` feature, pinned by
-  commit.
 - **A provider a language bridge declares can be built from a
   configuration and asked whether it can run.** guatiao-bridge's
   `Provided::config(schema)` serves `create` and `destroy` for it
@@ -1415,6 +1411,16 @@ write now.
   flags.
 
 ### Changed
+
+- **guatiao-source-remote takes coqui-net-acl, coqui-peer and
+  coqui-peer-tls from crates.io**, each at `=0.0.0-alpha.0`, so the crate
+  can be published. Over them, an identity file holding a chain is read
+  by `Identity::read` and `open_or_create` too, and a TLS listener whose
+  policy names an access control list gives coqui-peer-tls the
+  connection's local address as well as its source. A client the list
+  refuses by its certificate's fingerprint now hears `certificate_unknown`,
+  as one the server does not trust, and is told so in the same words,
+  which name the list too.
 
 - **TypeScript: `guatiao-remote` refuses plain data as the `guatiao`
   package does.** A string holding a lone surrogate, as an argument or an

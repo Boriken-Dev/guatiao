@@ -64,8 +64,7 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `webtransport` | `quic`, `wtransport` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash |
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
-from C). `coqui-net-acl`, `coqui-peer` and `coqui-peer-tls` are git
-dependencies pinned by commit until they are on crates.io.
+from C).
 
 ## Usage
 
