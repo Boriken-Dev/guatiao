@@ -18,7 +18,7 @@ use guatiao::library::kind::{
     SlotDescription,
 };
 use guatiao::{Status, Value};
-use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Reading};
+use guatiao_bridge::{BridgeError, Held, Kinds, Limit, ObjectHome, PreparedArgs, Reading};
 use guatiao_libffi::Libffi;
 use rhai::{Dynamic, Engine, EvalAltResult, ImmutableString, Position};
 
@@ -293,14 +293,23 @@ fn call_slot(
     }
     let mut prepared = prepare(described, args)?;
     let answer = Prepared::with_args(&mut prepared, |args| handle.call(slot, args));
-    settle(prepared);
+    // Each object lent from a handle goes back in.
+    drop(prepared);
     answer_to_dynamic(known, described, answer?)
 }
 
 // --- Rhai values as a slot's arguments ------------------------------------------
 
-/// One argument, held while the call runs: an object lent from a handle
-/// goes back into it.
+impl ObjectHome for Handle {
+    fn give_back(self, object: RawObject) {
+        if let Ok(mut held) = self.0.held.try_borrow_mut() {
+            held.put_back(object);
+        }
+    }
+}
+
+/// One argument, held while the call runs: an object taken out of a handle
+/// goes back into it unless the callee took it over.
 type Prepared = guatiao_bridge::PreparedArg<(), (), Handle>;
 
 /// A Rhai value as a scalar argument reads it.
@@ -333,9 +342,12 @@ fn object_arg(d: Dynamic, kind: &str, pass: Pass, what: &str) -> Result<Prepared
 }
 
 /// Rhai values as `slot`'s arguments, held for the call.
-fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, ProviderError> {
+fn prepare(
+    slot: &SlotDescription,
+    args: Vec<Dynamic>,
+) -> Result<PreparedArgs<(), (), Handle>, ProviderError> {
     let bad = |why: String| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why);
-    let mut out = Vec::with_capacity(args.len());
+    let mut out = PreparedArgs::with_capacity(args.len());
     for (d, described) in args.into_iter().zip(slot.args()) {
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
         out.push(match described.ty() {
@@ -390,17 +402,6 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
         });
     }
     Ok(out)
-}
-
-/// After the call: each object lent from a handle is put back in it.
-fn settle(prepared: Vec<Prepared>) {
-    for p in prepared {
-        if let Prepared::LentOwned(Some(object), handle) = p
-            && let Ok(mut held) = handle.0.held.try_borrow_mut()
-        {
-            held.put_back(object);
-        }
-    }
 }
 
 // --- a slot's answer as Rhai's ----------------------------------------------------

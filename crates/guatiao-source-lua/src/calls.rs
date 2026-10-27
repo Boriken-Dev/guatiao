@@ -16,7 +16,7 @@ use guatiao::library::kind::{
     Tree,
 };
 use guatiao::{Status, Value};
-use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Reading};
+use guatiao_bridge::{BridgeError, Held, Kinds, Limit, ObjectHome, PreparedArgs, Reading};
 use guatiao_libffi::Libffi;
 use mlua::prelude::*;
 use mlua::{MetaMethod, UserData, UserDataFields, UserDataMethods};
@@ -414,11 +414,28 @@ impl UserData for BufferView {
     }
 }
 
+/// The handle an object argument was taken out of, or none for a table
+/// served for the call alone, which is let go after it.
+pub(crate) struct Home(Option<LuaAnyUserData>);
+
+impl ObjectHome for Home {
+    fn give_back(self, object: RawObject) {
+        if let Some(ud) = self.0
+            && let Ok(mut handle) = ud.borrow_mut::<Handle>()
+        {
+            handle.held.put_back(object);
+        }
+    }
+}
+
 /// One argument, held while the call runs: a lent tree goes back into its
 /// table, a buffer into its `guatiao.buffer`, and an object lent from a
-/// handle (rather than a table served for the call) into that handle.
-pub(crate) type Prepared =
-    guatiao_bridge::PreparedArg<LuaTable, LuaAnyUserData, Option<LuaAnyUserData>>;
+/// handle into that handle.
+pub(crate) type Prepared = guatiao_bridge::PreparedArg<LuaTable, LuaAnyUserData, Home>;
+
+/// A call's arguments: whatever ends the call, an object taken out of a
+/// handle and not handed over goes back in.
+pub(crate) type Args = PreparedArgs<LuaTable, LuaAnyUserData, Home>;
 
 /// A Lua value as a scalar argument reads it.
 fn reading(v: &LuaValue) -> LuaResult<Reading> {
@@ -467,14 +484,14 @@ fn object_arg(lua: &Lua, v: LuaValue, kind: &str, pass: Pass, what: &str) -> Lua
         LuaValue::UserData(ud) if ud.is::<Handle>() => {
             let mut handle = ud.borrow_mut::<Handle>()?;
             let Handle { held, caller } = &mut *handle;
-            held.argument(caller, kind, pass, Some(ud.clone()), what)
+            held.argument(caller, kind, pass, Home(Some(ud.clone())), what)
                 .map_err(LuaError::runtime)
         }
         LuaValue::Table(t) => {
             let object = crate::served::object(lua, kind, t)?;
             Ok(match pass {
-                Pass::Taken => Prepared::Object(Some(object), None),
-                _ => Prepared::LentOwned(Some(object), None),
+                Pass::Taken => Prepared::Object(Some(object), Home(None)),
+                _ => Prepared::LentOwned(Some(object), Home(None)),
             })
         }
         other => Err(LuaError::runtime(format!(
@@ -485,13 +502,9 @@ fn object_arg(lua: &Lua, v: LuaValue, kind: &str, pass: Pass, what: &str) -> Lua
 }
 
 /// Lua values as `slot`'s arguments, held for the call.
-pub(crate) fn prepare(
-    lua: &Lua,
-    slot: &SlotDescription,
-    args: Vec<LuaValue>,
-) -> LuaResult<Vec<Prepared>> {
+pub(crate) fn prepare(lua: &Lua, slot: &SlotDescription, args: Vec<LuaValue>) -> LuaResult<Args> {
     let mut args = args.into_iter();
-    let mut out = Vec::with_capacity(slot.args().len());
+    let mut out = Args::with_capacity(slot.args().len());
     for described in slot.args() {
         let v = args.next().unwrap_or(LuaValue::Nil);
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
@@ -549,17 +562,21 @@ pub(crate) fn prepare(
 }
 
 /// After the call: each lent tree written back over the Lua table it came
-/// from, each buffer back into its `guatiao.buffer`, each object lent from
-/// a handle put back in it.
-pub(crate) fn settle(lua: &Lua, prepared: Vec<Prepared>) -> LuaResult<()> {
-    for p in prepared {
+/// from, each buffer back into its `guatiao.buffer`; each object lent from
+/// a handle goes back in as `prepared` drops, whether or not a write-back
+/// failed.
+pub(crate) fn settle(lua: &Lua, mut prepared: Args) -> LuaResult<()> {
+    for p in prepared.iter_mut() {
         match p {
-            Prepared::LentValue(v, Some(t)) => values::refill(lua, &t, &v)?,
-            Prepared::LentMap(m, Some(t)) => values::refill(lua, &t, &Value::from(m))?,
-            Prepared::LentList(l, Some(t)) => values::refill(lua, &t, &Value::from(l))?,
-            Prepared::Buffer(b, Some(ud)) => ud.borrow_mut::<BufferView>()?.0 = b,
-            Prepared::LentOwned(Some(object), Some(ud)) => {
-                ud.borrow_mut::<Handle>()?.held.put_back(object);
+            Prepared::LentValue(v, Some(t)) => values::refill(lua, t, v)?,
+            Prepared::LentMap(m, Some(t)) => {
+                values::refill(lua, t, &Value::from(core::mem::take(m)))?;
+            }
+            Prepared::LentList(l, Some(t)) => {
+                values::refill(lua, t, &Value::from(core::mem::take(l)))?;
+            }
+            Prepared::Buffer(b, Some(ud)) => {
+                ud.borrow_mut::<BufferView>()?.0 = core::mem::take(b);
             }
             _ => {}
         }

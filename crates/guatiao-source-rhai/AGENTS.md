@@ -109,7 +109,8 @@ float (`+ - * /`, `< <= > >=`, `==` between two as text), and has
 except those the host lends *to the callee* (a lent tree, a buffer): a
 script cannot pass them, and says so. A handle can be handed on to a slot
 taking an object of its kind (handed over: it is gone from the handle; or
-lent). A failing slot raises a `Refusal` (`try { .. } catch (e) { e.status
+lent); a call that fails, at a later argument or after it ran, gives it
+back to the handle. A failing slot raises a `Refusal` (`try { .. } catch (e) { e.status
 }`). A copy of a handle is the same object. An object handed to the script is
 used by one call at a time: a call into it from inside one of its own
 (through the host) raises a `busy` refusal.
