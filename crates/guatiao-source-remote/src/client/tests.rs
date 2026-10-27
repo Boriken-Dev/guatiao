@@ -21,10 +21,11 @@ use crate::acl::{Acl, Action, Rule};
 use crate::link::{Handler, Inner, Link, LinkOptions, Proxies, Setup};
 use crate::protocol::Trust;
 use crate::protocol::catalog::{Catalog, LibraryEntry, ProviderEntry, TableEntry};
-use crate::server::{Described, Server};
+use crate::server::Server;
 use crate::transport::Connection;
 use crate::transport::tcp::{Accepted, TcpListen};
 use guatiao::library::ProviderError;
+use guatiao_bridge::Kinds;
 
 const KEY: &str = "a key every device here holds";
 
@@ -66,8 +67,8 @@ fn device() -> (u16, Server) {
         .unwrap()
         .loaded()
         .unwrap();
-    let mut described = Described::new();
-    described
+    let mut kinds = Kinds::new();
+    kinds
         .load(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../examples/greeter_kind/include/greeter_kind.kinds.json"),
@@ -75,7 +76,7 @@ fn device() -> (u16, Server) {
         .unwrap();
     let server = Server::new(
         registry,
-        described,
+        kinds,
         LinkOptions::new(Trust::Trusted).key(KEY.as_bytes()),
     );
     let serving = server.clone();

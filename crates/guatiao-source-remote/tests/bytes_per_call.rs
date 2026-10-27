@@ -16,10 +16,10 @@ use guatiao::{List, Map, Value};
 use guatiao_source_remote::protocol::{self, Target, encode_answer, encode_args};
 
 fn greeter() -> Arc<KindDescription> {
-    let mut d = guatiao_source_remote::Described::new();
+    let mut d = guatiao_source_remote::Kinds::new();
     d.add_json(&greeter_kind::GreeterVtable::description())
         .unwrap();
-    Arc::clone(d.kinds().get("greeter").unwrap())
+    Arc::clone(d.get("greeter").unwrap())
 }
 
 /// A frame: four bytes of length, then the wire value.

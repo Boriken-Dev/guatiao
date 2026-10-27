@@ -51,6 +51,7 @@ impl core::marker::Copy for guatiao_bridge::manifest::ManifestFormat
 impl core::marker::StructuralPartialEq for guatiao_bridge::manifest::ManifestFormat
 pub const guatiao_bridge::manifest::SUFFIX: &str
 pub const guatiao_bridge::manifest::TYPES: &[&str]
+pub fn guatiao_bridge::manifest::content_stamp(&[u8]) -> alloc::string::String
 pub fn guatiao_bridge::manifest::find(&guatiao_bridge::manifest::ManifestFormat, &[std::path::PathBuf], &[std::path::PathBuf]) -> alloc::vec::Vec<guatiao_bridge::manifest::Found>
 pub fn guatiao_bridge::manifest::read(&guatiao_bridge::manifest::ManifestFormat, &std::path::Path) -> core::option::Option<guatiao_bridge::manifest::Found>
 #[non_exhaustive] pub enum guatiao_bridge::BridgeError

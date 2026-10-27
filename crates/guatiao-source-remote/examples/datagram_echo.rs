@@ -18,7 +18,7 @@ use guatiao::library::Registry;
 use guatiao_source_remote::acl::{Acl, Action, Rule};
 use guatiao_source_remote::transport::tcp::Accepted;
 use guatiao_source_remote::transport::webtransport::{ROTATE_EVERY, WtListen};
-use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, Server, Trust};
 
 fn main() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
@@ -45,7 +45,7 @@ fn main() -> Result<(), String> {
     eprintln!("datagram_echo: certificate hashes {}", hashes.join(" "));
     let server = Server::new(
         Registry::new("datagram_echo", "1.0"),
-        Described::new(),
+        Kinds::new(),
         LinkOptions::new(Trust::Trusted).key(key.as_bytes()),
     );
     loop {

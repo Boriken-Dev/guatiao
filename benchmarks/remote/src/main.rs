@@ -38,7 +38,7 @@ use greeter_kind::{Counter, Greeter, Wide};
 use guatiao::library::{ProviderError, Registry};
 use guatiao::{Map, Status};
 use guatiao_source_remote::transport::{self, Connect, Connection, FrameRead, FrameWrite};
-use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, RemoteSource, Server, Trust};
 
 /// Process CPU time, user and system, in nanoseconds.
 fn cpu_ns() -> u64 {
@@ -231,7 +231,7 @@ fn serve(a: &Args) -> Result<(), String> {
     registry
         .register_local("bench", library)
         .map_err(|e| e.to_string())?;
-    let mut described = Described::new();
+    let mut kinds = Kinds::new();
     for d in [
         greeter_kind::GreeterVtable::description(),
         greeter_kind::CounterVtable::description(),
@@ -239,11 +239,9 @@ fn serve(a: &Args) -> Result<(), String> {
         greeter_kind::ListenerVtable::description(),
         greeter_kind::ConversationVtable::description(),
     ] {
-        described
-            .add_json(&d)
-            .map_err(|e| e.message().to_string())?;
+        kinds.add_json(&d).map_err(|e| e.to_string())?;
     }
-    let server = Server::new(registry, described, options(scheme, a));
+    let server = Server::new(registry, kinds, options(scheme, a));
     let serve_one = |conn: io::Result<Connection>| {
         let server = server.clone();
         std::thread::spawn(move || match conn {

@@ -13,18 +13,18 @@ use guatiao::value::convert::{FromValue, TryAsRef};
 
 use crate::error::{BridgeError, Limit};
 
-/// A list of text under `key`, or none when it is absent.
+/// A list of text under `key` (paths, names), or none when it is absent.
 pub fn text_list(map: &Map, key: &str) -> Result<Vec<String>, BridgeError> {
     let Some(value) = map.get(key) else {
         return Ok(Vec::new());
     };
     let list: &guatiao::List = TryAsRef::try_as_ref(value)
-        .ok_or_else(|| BridgeError::config(key, "is not a list of paths"))?;
+        .ok_or_else(|| BridgeError::config(key, "is not a list of text"))?;
     list.iter()
         .map(|v| {
             TryAsRef::<str>::try_as_ref(v)
                 .map(str::to_string)
-                .ok_or_else(|| BridgeError::config(key, "holds something that is not a path"))
+                .ok_or_else(|| BridgeError::config(key, "holds something that is not text"))
         })
         .collect()
 }
@@ -225,7 +225,7 @@ mod tests {
         let mut wrong = Map::new();
         wrong.set("dirs", "libs");
         let e = Config::from_map(&wrong).unwrap_err();
-        assert_eq!(e.to_string(), "`dirs` is not a list of paths");
+        assert_eq!(e.to_string(), "`dirs` is not a list of text");
 
         let mut misspelled = Map::new();
         let mut limits = Map::new();

@@ -30,7 +30,7 @@ use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 use guatiao_source_remote::acl::{Acl, Action, Rule};
 use guatiao_source_remote::transport::tcp::{Accepted, TcpConnect, TcpListen};
-use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, RemoteSource, Server, Trust};
 
 /// The pre-shared key every link here proves. A real deployment reads
 /// its own from a file.
@@ -69,11 +69,11 @@ fn device() -> Result<SocketAddr, String> {
     registry
         .register_local("device", library)
         .map_err(|e| e.to_string())?;
-    let mut described = Described::new();
-    described
+    let mut kinds = Kinds::new();
+    kinds
         .add_json(&greeter_kind::GreeterVtable::description())
-        .map_err(|e| e.message().to_string())?;
-    let server = Server::new(registry, described, options());
+        .map_err(|e| e.to_string())?;
+    let server = Server::new(registry, kinds, options());
     let mut acl = Acl::default();
     acl.push(Rule::new(
         Action::Permit,

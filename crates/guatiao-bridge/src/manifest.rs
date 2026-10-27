@@ -27,7 +27,9 @@
 use std::path::{Path, PathBuf};
 
 use guatiao::value::convert::TryAsRef;
-use guatiao::{Alloc, List, Map};
+use guatiao::{Alloc, Map};
+
+use crate::config::text_list;
 
 /// What every manifest's file name ends with.
 pub const SUFFIX: &str = ".guatiao.toml";
@@ -215,10 +217,13 @@ pub fn find(format: &ManifestFormat, dirs: &[PathBuf], files: &[PathBuf]) -> Vec
     paths.iter().filter_map(|p| read(format, p)).collect()
 }
 
-fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+/// A stamp of `bytes`, which changes when they do: FNV-1a (64-bit) as 16
+/// hex digits. Not a digest: it notices an edit, it proves nothing.
+pub fn content_stamp(bytes: &[u8]) -> String {
+    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
         (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
+    });
+    format!("{hash:016x}")
 }
 
 fn modified(path: &Path) -> u128 {
@@ -261,23 +266,6 @@ fn newest_code(
     }
 }
 
-fn text_list(map: &Map, key: &str) -> Result<Vec<String>, String> {
-    match map.get(key) {
-        None => Ok(Vec::new()),
-        Some(value) => {
-            let list: &List = TryAsRef::<List>::try_as_ref(value)
-                .ok_or_else(|| format!("`{key}` is not a list"))?;
-            list.iter()
-                .map(|v| {
-                    TryAsRef::<str>::try_as_ref(v)
-                        .map(str::to_string)
-                        .ok_or_else(|| format!("`{key}` holds something that is not text"))
-                })
-                .collect()
-        }
-    }
-}
-
 /// Reads one manifest, or `None` when its `type` is another source's.
 /// Runs nothing.
 pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
@@ -292,7 +280,7 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
         Ok(bytes) => bytes,
         Err(e) => return broken(format!("{}", modified(path)), e.to_string()),
     };
-    let file_stamp = format!("{:016x}", fnv1a(&bytes));
+    let file_stamp = content_stamp(&bytes);
     let text = match core::str::from_utf8(&bytes) {
         Ok(text) => text,
         Err(_) => return broken(file_stamp, "not UTF-8".to_string()),
@@ -345,8 +333,8 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
                     .to_string(),
             ),
         };
-        let kinds = text_list(map, "kinds")?;
-        let mut relative = text_list(map, "paths")?;
+        let kinds = text_list(map, "kinds").map_err(|e| e.to_string())?;
+        let mut relative = text_list(map, "paths").map_err(|e| e.to_string())?;
         if relative.is_empty() {
             relative.push(".".to_string());
         }

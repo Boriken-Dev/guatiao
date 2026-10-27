@@ -19,9 +19,9 @@ use greeter_kind::{Counter, Greeter, Listener};
 use guatiao::library::Registry;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
-use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, RemoteSource, Server, Trust};
 
-fn server(described: Described) -> Server {
+fn server(described: Kinds) -> Server {
     let mut registry = Registry::new("server", "1.0");
     registry
         .register_local("shapes", common::library)
@@ -48,7 +48,7 @@ fn greeting(map: &Map) -> String {
 
 #[test]
 fn a_server_given_no_descriptions_serves_providers_that_carry_their_own() {
-    let server = server(Described::new());
+    let server = server(Kinds::new());
     let registry = host(&server);
     let greeter = registry
         .offers::<dyn Greeter>()
@@ -107,7 +107,7 @@ fn a_description_the_server_is_given_decides_its_kind() {
     let text = std::fs::read_to_string(path).unwrap();
     let edited = text.replace("\"Greets by name.\"", "\"Greets by name, as given.\"");
     assert_ne!(edited, text, "the greeter's doc is where it was");
-    let mut described = Described::new();
+    let mut described = Kinds::new();
     described.add_json(&edited).unwrap();
 
     let server = server(described);

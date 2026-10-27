@@ -1,4 +1,5 @@
 pub mod guatiao_source_remote
+pub use guatiao_source_remote::Kinds
 pub use guatiao_source_remote::acl
 pub mod guatiao_source_remote::client
 pub struct guatiao_source_remote::client::RemoteSource
@@ -369,25 +370,12 @@ pub fn guatiao_source_remote::protocol::start(&mut alloc::vec::Vec<u8>, u8) -> u
 pub fn guatiao_source_remote::protocol::start_call(&mut alloc::vec::Vec<u8>, u64, u64, guatiao_source_remote::protocol::Target, u64) -> usize
 pub fn guatiao_source_remote::protocol::start_reply(&mut alloc::vec::Vec<u8>, u64, u32) -> usize
 pub mod guatiao_source_remote::server
-pub struct guatiao_source_remote::server::Described
-impl guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::add_json(&mut self, &str) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::kinds(&self) -> &guatiao_bridge::kinds::Kinds
-pub fn guatiao_source_remote::server::Described::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::new() -> guatiao_source_remote::server::Described
-impl core::clone::Clone for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::clone(&self) -> Self
-impl core::default::Default for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::default() -> Self
-impl core::fmt::Debug for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao_source_remote::server::Server
 impl guatiao_source_remote::server::Server
 pub fn guatiao_source_remote::server::Server::end_links(&self)
 pub fn guatiao_source_remote::server::Server::links(&self) -> usize
 pub fn guatiao_source_remote::server::Server::links_holding(&self) -> usize
-pub fn guatiao_source_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_source_remote::server::Described, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::server::Server
+pub fn guatiao_source_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_bridge::kinds::Kinds, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::server::Server
 pub fn guatiao_source_remote::server::Server::objects_out(&self) -> usize
 pub fn guatiao_source_remote::server::Server::options(&self) -> &guatiao_source_remote::link::LinkOptions
 pub fn guatiao_source_remote::server::Server::refresh(&self) -> guatiao::library::source::Refreshed
@@ -763,19 +751,6 @@ impl core::hash::Hash for guatiao_source_remote::protocol::Trust
 pub fn guatiao_source_remote::protocol::Trust::hash<__H: core::hash::Hasher>(&self, &mut __H)
 impl core::marker::Copy for guatiao_source_remote::protocol::Trust
 impl core::marker::StructuralPartialEq for guatiao_source_remote::protocol::Trust
-pub struct guatiao_source_remote::Described
-impl guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::add_json(&mut self, &str) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::kinds(&self) -> &guatiao_bridge::kinds::Kinds
-pub fn guatiao_source_remote::server::Described::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao::library::kind::ProviderError>
-pub fn guatiao_source_remote::server::Described::new() -> guatiao_source_remote::server::Described
-impl core::clone::Clone for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::clone(&self) -> Self
-impl core::default::Default for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::default() -> Self
-impl core::fmt::Debug for guatiao_source_remote::server::Described
-pub fn guatiao_source_remote::server::Described::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao_source_remote::Link
 impl guatiao_source_remote::link::Link
 pub fn guatiao_source_remote::link::Link::alive(&self) -> bool
@@ -830,7 +805,7 @@ impl guatiao_source_remote::server::Server
 pub fn guatiao_source_remote::server::Server::end_links(&self)
 pub fn guatiao_source_remote::server::Server::links(&self) -> usize
 pub fn guatiao_source_remote::server::Server::links_holding(&self) -> usize
-pub fn guatiao_source_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_source_remote::server::Described, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::server::Server
+pub fn guatiao_source_remote::server::Server::new(guatiao::library::registry::Registry, guatiao_bridge::kinds::Kinds, guatiao_source_remote::link::LinkOptions) -> guatiao_source_remote::server::Server
 pub fn guatiao_source_remote::server::Server::objects_out(&self) -> usize
 pub fn guatiao_source_remote::server::Server::options(&self) -> &guatiao_source_remote::link::LinkOptions
 pub fn guatiao_source_remote::server::Server::refresh(&self) -> guatiao::library::source::Refreshed

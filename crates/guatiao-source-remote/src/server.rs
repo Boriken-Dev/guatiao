@@ -16,15 +16,14 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
-use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use guatiao::library::kind::{
     Answer, Arg, Caller, DescribedRemote, KindDescription, SlotDescription,
 };
 use guatiao::library::{Provider, ProviderError, Refreshed, Registry};
-use guatiao::value::convert::{ToValue, TryAsRef};
-use guatiao::{Alloc, List, Map, Status, Value};
+use guatiao::value::convert::ToValue;
+use guatiao::{Status, Value};
 use guatiao_bridge::Kinds;
 use guatiao_libffi::Libffi;
 
@@ -34,84 +33,6 @@ use crate::transport::Connection;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// The kinds a server describes to its links: each as it was given, for
-/// the catalog, and read.
-#[derive(Debug, Default, Clone)]
-pub struct Described {
-    kinds: Kinds,
-    values: Vec<Value>,
-}
-
-impl Described {
-    /// None yet.
-    pub fn new() -> Described {
-        Described::default()
-    }
-
-    /// Adds every kind a value describes (a document or one kind). The
-    /// catalog lists each kind on its own, once.
-    pub fn add_value(&mut self, value: &Value) -> Result<usize, ProviderError> {
-        let n = self.kinds.add_value(value).map_err(ProviderError::from)?;
-        let kinds = TryAsRef::<Map>::try_as_ref(value)
-            .and_then(|m| m.get("kinds"))
-            .and_then(TryAsRef::<List>::try_as_ref);
-        let one = [value.clone()];
-        let each: Vec<Value> = match kinds {
-            Some(list) => list.iter().cloned().collect(),
-            None => one.to_vec(),
-        };
-        for kind in each {
-            let name = TryAsRef::<Map>::try_as_ref(&kind)
-                .and_then(|m| m.get("name"))
-                .and_then(TryAsRef::<str>::try_as_ref)
-                .map(str::to_string);
-            let known = self.values.iter().any(|v| {
-                TryAsRef::<Map>::try_as_ref(v)
-                    .and_then(|m| m.get("name"))
-                    .and_then(TryAsRef::<str>::try_as_ref)
-                    == name.as_deref()
-            });
-            if !known {
-                self.values.push(kind);
-            }
-        }
-        Ok(n)
-    }
-
-    /// Adds every kind JSON text describes: a `<crate>.kinds.json`
-    /// document, or `<Trait>Vtable::description()`.
-    pub fn add_json(&mut self, json: &str) -> Result<usize, ProviderError> {
-        let value = guatiao_serde::text::json::from_str(
-            json,
-            Alloc::rust(),
-            guatiao_serde::Presentation::new(),
-        )
-        .map_err(|e| {
-            ProviderError::new(
-                Status::GUATIAO_ERR_BAD_VALUE,
-                &format!("a kind description is not JSON: {e}"),
-            )
-        })?;
-        self.add_value(&value)
-    }
-
-    /// Adds every kind a description document on disk holds.
-    pub fn load(&mut self, path: &Path) -> Result<usize, ProviderError> {
-        let text = std::fs::read_to_string(path).map_err(|e| {
-            ProviderError::new(
-                Status::GUATIAO_ERR_NOT_FOUND,
-                &format!("{}: {e}", path.display()),
-            )
-        })?;
-        self.add_json(&text)
-    }
-
-    /// The kinds, read.
-    pub fn kinds(&self) -> &Kinds {
-        &self.kinds
-    }
 }
 
 /// A library's tables held for a link, by id.
@@ -150,10 +71,14 @@ struct Known {
 }
 
 impl Known {
-    fn new(described: Described) -> Known {
+    fn new(kinds: Kinds) -> Known {
+        let values = kinds
+            .names()
+            .filter_map(|name| kinds.get(name)?.to_value().ok())
+            .collect();
         Known {
-            kinds: Arc::new(described.kinds),
-            values: described.values,
+            kinds: Arc::new(kinds),
+            values,
         }
     }
 
@@ -540,16 +465,16 @@ impl Handler for Handle {
 
 impl Server {
     /// Serves `registry`'s providers to links set up with `options`, each
-    /// kind through the description `described` gives of it, else through
+    /// kind through the description `kinds` gives of it, else through
     /// the one the first provider serving it carries. A provider whose own
     /// description of a kind is called otherwise than the one served (docs
     /// and slots past the shorter aside) is left out, as is one of a kind
     /// described by neither.
-    pub fn new(registry: Registry, described: Described, options: LinkOptions) -> Server {
+    pub fn new(registry: Registry, kinds: Kinds, options: LinkOptions) -> Server {
         Server {
             inner: Arc::new(ServerInner {
                 registry: Mutex::new(registry),
-                known: Mutex::new(Known::new(described)),
+                known: Mutex::new(Known::new(kinds)),
                 callers: Mutex::new(BTreeMap::new()),
                 proxies: Proxies::new(),
                 generations: Mutex::new(BTreeMap::new()),
@@ -681,7 +606,7 @@ mod tests {
 
     fn document() -> serde_json::Value {
         let text = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../examples/greeter_kind/include/greeter_kind.kinds.json"),
         )
         .unwrap();
@@ -708,7 +633,7 @@ mod tests {
 
     #[test]
     fn a_provider_calling_a_kind_otherwise_is_left_out() {
-        let mut known = Known::new(Described::new());
+        let mut known = Known::new(Kinds::new());
         assert!(known.learn(&kinds("Greets by name.")));
         assert_eq!(known.values.len(), 5, "every kind listed once");
         assert!(known.learn(&kinds("Greets by name.")), "the same again");
@@ -723,7 +648,7 @@ mod tests {
 
     #[test]
     fn docs_do_not_count_and_a_slot_fewer_disagrees() {
-        let mut known = Known::new(Described::new());
+        let mut known = Known::new(Kinds::new());
         assert!(known.learn(&kinds("Greets by name.")));
         assert!(known.learn(&kinds("Greets otherwise.")), "a doc differs");
         let mut shorter = document();
@@ -739,18 +664,18 @@ mod tests {
         let mut twice = document();
         let first = twice["kinds"][0].clone();
         twice["kinds"].as_array_mut().unwrap().push(first);
-        let mut known = Known::new(Described::new());
+        let mut known = Known::new(Kinds::new());
         assert!(known.learn(&read(&twice)));
         assert_eq!(known.values.len(), 5);
     }
 
     #[test]
     fn a_given_description_is_the_one_served() {
-        let mut described = Described::new();
-        for kind in &kinds("Greets as given.") {
-            described.add_value(&kind.to_value().unwrap()).unwrap();
+        let mut given = Kinds::new();
+        for kind in kinds("Greets as given.") {
+            given.add(kind).unwrap();
         }
-        let mut known = Known::new(described);
+        let mut known = Known::new(given);
         assert!(known.learn(&kinds("Greets by name.")));
         assert_eq!(greeter(&known).as_deref(), Some("Greets as given."));
         assert_eq!(known.values.len(), 5, "nothing added over the given");
@@ -771,7 +696,7 @@ mod tests {
         let options = LinkOptions::new(Trust::Trusted)
             .key(b"a key")
             .handshake_timeout(Duration::from_secs(5));
-        let server = Server::new(Registry::new("server", "1.0"), Described::new(), options);
+        let server = Server::new(Registry::new("server", "1.0"), Kinds::new(), options);
         let ending = server.clone();
         *lock(&server.inner.between) = Some(Box::new(move || ending.end_links()));
         let mut acl = Acl::default();
