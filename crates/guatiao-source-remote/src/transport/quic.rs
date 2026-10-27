@@ -1362,7 +1362,7 @@ impl QuicListen {
             Some(acl) => Some(Arc::new(canonical_acl(acl)?)),
             None => None,
         };
-        let tls = config.server()?;
+        let tls = config.listing_nobody().server()?;
         let verifier: Option<Arc<dyn ClientCertVerifier>> = if config.is_mutual() {
             Some(
                 config

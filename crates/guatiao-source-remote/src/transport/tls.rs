@@ -178,7 +178,7 @@ pub(crate) fn untrusted_client(me: &str) -> io::Error {
     io::Error::new(
         io::ErrorKind::PermissionDenied,
         format!(
-            "the server does not trust this client, {me}: it refused its certificate (certificate_unknown), which is not pinned there or not yet accepted by its trust store; a server with a trust store keeps an unknown client waiting until an operator accepts it"
+            "the server does not trust this client, {me}: it refused its certificate (certificate_unknown), which is not pinned there or not yet accepted by its trust store, or its access control list refuses it; a server with a trust store keeps an unknown client waiting until an operator accepts it"
         ),
     )
 }
@@ -610,6 +610,20 @@ impl TlsConfig {
         }
     }
 
+    /// The same configuration under its policy without the access control
+    /// list: quinn runs rustls on its own threads, where coqui-peer-tls
+    /// cannot learn a connection's addresses, so a QUIC listener applies
+    /// the list itself.
+    #[cfg(feature = "quic")]
+    pub(crate) fn listing_nobody(&self) -> TlsConfig {
+        let mut policy = self.policy.clone();
+        policy.acl = None;
+        TlsConfig {
+            policy,
+            ..self.clone()
+        }
+    }
+
     /// This side's fingerprint: what a peer pins or accepts.
     pub fn fingerprint(&self) -> PeerId {
         self.identity.fingerprint()
@@ -963,8 +977,9 @@ impl Pending {
             )?,
             _ => Arc::clone(&self.config),
         };
-        let handshake =
-            TlsHandshake::server(config, Some(self.source)).map_err(|e| invalid(words(&e)))?;
+        let handshake = TlsHandshake::server(config, Some(self.source))
+            .map_err(|e| invalid(words(&e)))?
+            .with_local(self.local);
         // The bound the link set on a read bounds the whole handshake.
         let bound = core.socket.read_timeout()?;
         let mut io = Bounded {
@@ -1617,9 +1632,10 @@ mod tests {
             "the certificate's, not the chain's"
         );
         assert_eq!(read.intermediates_der().len(), 1);
-        assert!(
-            Identity::read(&file).is_err(),
-            "the plain reader refuses a chain"
+        assert_eq!(
+            Identity::read(&file).unwrap().unwrap().fingerprint(),
+            leaf.fingerprint(),
+            "coqui-peer-tls's reader keeps the chain too"
         );
         assert_eq!(
             TlsConfig::open(&dir).unwrap().fingerprint(),
