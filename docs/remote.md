@@ -551,10 +551,13 @@ fingerprint = "sha256:3f5a..."
 ```
 
 A listener decides by address as it accepts, before anything is read: a
-denied peer is closed unread. A rule naming a fingerprint is decided
-after the TLS handshake has proved one, and never matches a peer with no
-security, which proves none. A fingerprint in the list is
-canonicalised (any spelling `PeerId` reads) and must be a SHA-256 one. In
+denied peer is closed unread. At mutual TLS a rule naming a fingerprint
+is decided as the client presents its certificate, in the handshake and
+before the trust store sees it (coqui-peer-tls applies the list); it
+never matches a peer that presents none, at server TLS or with no
+security, so there the rules without one decide. A fingerprint in the
+list is canonicalised (any spelling `PeerId` reads) and must be a
+SHA-256 one: a listener given another is refused as it is made. In
 Rust the listeners take a `coqui_net_acl::Acl` (re-exported as
 `guatiao_source_remote::acl`); `guatiao-remote-server` reads one with
 `--acl PATH` (this form, in TOML or JSON) or builds one of permit rules
@@ -612,14 +615,25 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   Removing a peer from the
   store refuses its next link: TLS session resumption is off at both
   ends unless the policy's `allow_resumption` keeps it.
-- **A refusal says why.** The side that refuses a certificate names the
-  reason: not pinned, not accepted by the trust store (a server's
-  waiting client), or a chain where a pinned peer presents one
-  certificate. The refused side hears the TLS alert
-  `certificate_unknown`: a client is told the server does not trust it,
-  in words naming its own fingerprint. TLS 1.3 lets a client finish its
-  handshake before the server has checked its certificate, so that
-  refusal arrives with the link's first read. A refused link answers
+- **A refusal says why.** The side that refuses names the reason, one
+  wording for each of coqui-peer-tls's refusals:
+
+  | refusal | decided | the refusing side says | the refused side hears |
+  | --- | --- | --- | --- |
+  | an address the list denies | as the listener accepts (and at the hello by coqui-peer-tls) | the connection is closed unread; `guatiao-remote-server` reports "the access control list denies ADDRESS" | the end of the connection; from another server applying it at the hello, `access_denied`: "its access control list does not admit this client's address" |
+  | an address the list cannot decide | as above: a rule on the local address the connection does not tell | closed unread | as above |
+  | a fingerprint the list denies | as the client presents its certificate, before pins and store | "the access control list denies the client (rule N)" | `certificate_unknown`: "the server does not trust this client, FINGERPRINT ..." |
+  | not pinned | the same | "... is not pinned: its certificate's fingerprint matches none of the pins" | the same |
+  | not accepted by the trust store | the same; the client then waits there | "... is not accepted ...; once it has proved its key it waits there" | the same |
+  | a chain where a pinned peer presents one certificate | the same | "... presented a certificate chain ..." | the same |
+  | no pin, and no authority the roots hold issued it | a client checking its server | "the server at ADDRESS is not one this client trusts: it is not trusted ..." | the server hears `certificate_unknown` |
+  | the roots trust it, but not for the name dialled | the same | "... not for `NAME`, the name dialled ..." | the same |
+  | a CA bundle (`roots`) that cannot be used | when the source or connector is built | "the roots (`roots`) cannot be used: CA file PATH: ..." | nothing: no connection is made |
+
+  A rule is named by its number counted in tens (`rule 10` is the
+  first), or `its default`. TLS 1.3 lets a client finish its handshake
+  before the server has checked its certificate, so that refusal arrives
+  with the link's first read. A refused link answers
   `GUATIAO_ERR_BAD_VALUE`, as every failed trust check does, never
   `GUATIAO_ERR_GONE`.
 - **The handshake** runs on the server's serving thread, bounded as a
@@ -637,7 +651,7 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
 
   | key | strict (the default) |
   | --- | --- |
-  | `profile` | `strict`; `compatible` and `legacy` add TLS 1.2 (and SHA-1 pins), which this build lacks: they are refused |
+  | `profile` | `strict`; `compatible` and `legacy` add TLS 1.2 (and SHA-1 pins); QUIC and WebTransport run TLS 1.3 alone, so a policy allowing only 1.2 is refused there |
   | `tls_versions` | `["1.3"]` |
   | `cipher_suites`, `kx_groups` | all ring has for those versions; IANA names narrow them |
   | `pin_digests` | `["sha256", "sha384", "sha512"]` |
@@ -861,7 +875,7 @@ no security. A source file's configuration names `connect =
 "https://host:port/path"` with the keys of `quic://`. Not measured.
 
 Not in this build: CA-signed client certificates (coqui-peer-tls's `ca`
-feature) and TLS 1.2.
+feature).
 
 ## The protocol
 
