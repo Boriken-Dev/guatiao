@@ -231,6 +231,13 @@ a method per slot implementing every interface, and the cgo calling and
 serving each slot.
 
 ```go
+// The floor hash of a kind born outside Rust, from one kind of a kinds
+// document as JSON ("object" and "slots" read): FNV-1a over the shape and
+// every slot in table order as #[guatiao::kind] spells them.
+func KindFloorHash(kind []byte) (uint32, error) // *Error ErrBadValue: not a kind
+```
+
+```go
 package greeterkind
 
 //go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -description ../include/greeter_kind.kinds.json
@@ -266,8 +273,9 @@ the package's directory; `-check` compares it instead), and the glue from
 it. Directives in doc comments say what a Go type cannot: on the kind's
 interface `//guatiao:appended <Iface>...` (the appended slots, an
 interface of one method each, in table order) and `//guatiao:floorhash
-<n>` (else computed as `#[guatiao::kind]` would for the same required
-slots); on a method `//guatiao:infallible` (else fallible) and
+<n>` (else computed by the library, `guatiao.KindFloorHash`, as
+`#[guatiao::kind]` computes it for the same slots, so `-document` needs
+the library found); on a method `//guatiao:infallible` (else fallible) and
 `//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable`, `//guatiao:mut`
 followed by argument names. A `Ref`/`MapRef`/`ListRef` is borrowed (a
 list must be lent), `*guatiao.Value` a value handed over, a struct or map

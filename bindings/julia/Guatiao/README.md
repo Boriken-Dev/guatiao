@@ -129,7 +129,7 @@ close(reg)
 A kind is declared once, from its C header:
 
 ```julia
-@kind Greeter floor_hash = 2695856491 begin
+@kind Greeter floor_hash = 2032737757 begin
     @required @fallible greet(name::String)::MapRef
     shout(name::String)::String
 end

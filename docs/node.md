@@ -180,10 +180,11 @@ the first step from code and answers the document.
   come back the same (`parseHTTP`) is refused. `@throws` marks a slot
   that can refuse.
 - **Doc comments** are the descriptions' `doc`.
-- **The floor hash** is the FNV-1a of the shape and the required slots,
-  spelled as Rust spells them, so an interface repeating a trait's
-  required slots hashes as the trait does; `@floorHash 123` says it where
-  a kind must keep a hash it already has.
+- **The floor hash** is the FNV-1a of the shape and every slot in table
+  order, spelled as Rust spells them, so an interface repeating a trait's
+  slots hashes as the trait does; the library computes it, so describing
+  needs it found (`GUATIAO_LIBRARY`). `@floorHash 123` says it where a
+  kind must keep a hash it already has.
 - **Reading is done by the compiler**, the `typescript` package, version
   7.0 or newer, which the project already has if it checks its types: the
   files are read through the nearest `tsconfig.json`, or `--project`. A
@@ -209,7 +210,7 @@ export const Listener = kind('listener', {
 });
 
 export const Greeter = kind('greeter', {
-  floorHash: 2695856491,
+  floorHash: 2032737757,
   methods: {
     greet: { args: [t.str], answer: t.map, required: true, fallible: true },
     shout: { args: [t.str], answer: t.text },

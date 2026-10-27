@@ -40,7 +40,7 @@ end
     @required turns()::Int64
 end
 
-@kind Greeter floor_hash = 2695856491 begin
+@kind Greeter floor_hash = 2032737757 begin
     @required @fallible greet(name::String)::MapRef
     shout(name::String)::String
     @fallible start(listener::Taken{Listener})::Conversation
@@ -51,8 +51,8 @@ end
 end
 ```
 
-`@required` marks the slots every provider fills, the ones the floor hash
-covers; the rest are optional, which a provider may leave out.
+`@required` marks the slots every provider fills; the rest are optional,
+which a provider may leave out. The floor hash covers every slot.
 `@fallible` marks a slot ending in `guatiao_provider_error *err`. A slot
 is found by its position, so its Julia name is free. `MapRef` answers a
 map, `String` a text, `Nothing` nothing; `Lent{MapRef}` is the caller's

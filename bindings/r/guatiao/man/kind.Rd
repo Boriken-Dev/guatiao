@@ -146,7 +146,7 @@ queued and done on R's thread at its next call into the package.
 }
 \examples{
 \dontrun{
-Greeter <- kind("greeter", floor_hash = 2695856491,
+Greeter <- kind("greeter", floor_hash = 2032737757,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"))
 }

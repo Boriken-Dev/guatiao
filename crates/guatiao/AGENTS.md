@@ -1781,7 +1781,7 @@ drop(s);                                                             // the libr
   defaulted method is an optional slot a provider may leave null (the
   proxy runs the default). A table smaller than the kind's whole table is
   refused (`BelowFloor`). The table header `KindHeader { struct_size,
-  floor_hash }` carries FNV-1a over the required signatures; a mismatch
+  floor_hash }` carries FNV-1a over every slot's signature; a mismatch
   is refused, never called. The
   signatures are hashed as spelled, with `std`/`core`/`alloc` paths of
   `Vec`, `String`, `Option`, `Result`, `Box` and `guatiao` paths of
@@ -1934,6 +1934,9 @@ kind.to_value()? / kind.to_value_in(alloc)?         // ToValue: written back key
                                                     // order the kind macro writes it
 // C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;
 //    BAD_VALUE with `why` (a string, or null) naming the byte or the place
+// C: guatiao_kind_floor_hash(kind, alloc, &hash, &why): the floor hash of one kind as JSON
+//    text (its "object" and "slots"), as #[guatiao::kind] hashes a trait with those slots;
+//    refused as guatiao_kind_document_read refuses
 kind.name() .floor_hash() .object() .slots() .slot("greet") -> Option<(usize, &SlotDescription)>
      .size() .floor() .word_of(slot)
 slot.name() .required() .fallible() .args() .answer() .doc()

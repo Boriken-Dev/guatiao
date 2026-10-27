@@ -16,7 +16,7 @@ ships no native code of its own.
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
 | `guatiao/kinds` | `kindsOf`, `kindOf`, `describeKinds`, `Kind`, `slot`, `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `DescribedKind`, `liveObjects`; the types a kind written as an interface is spelled with: `u8`..`u32`, `i8`..`i64`, `u64`, `usize`, `isize`, `f32`, `f64`, `BytesMut`, `Borrowed`, `Taken`, `Lent`, `ObjectKind`, `MapAnswer`, `ListAnswer`, `ValueAnswer` |
-| `guatiao/describe` | `describeInterfaces`, `floorHashOf`, `DescribeError`: a kind written as TypeScript interfaces, read into its description (needs `typescript` 7.0 or newer) |
+| `guatiao/describe` | `describeInterfaces`, `floorHashOf`, `DescribeError`: a kind written as TypeScript interfaces, read into its description (needs `typescript` 7.0 or newer, and the library for the floor hash) |
 | `guatiao-kind` (bin) | writes `<base>.js` and `<base>.d.ts` from a kinds description, or from TypeScript interfaces |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
@@ -284,12 +284,13 @@ is), else the nearest one above each file.
   plain value fits a `u32`, and a `u32` is not an `i32`. `Taken<K>` and
   `Lent<K>` of an object kind are `K` (with `close()` and `Disposable`
   for `Taken`): close to what a provider is handed, not the `Remote`.
-- The floor hash is `@floorHash N` when written, else the FNV-1a (32-bit)
-  of `provider` or `object` and the required slots as `name(args)->answer`
-  spelled as Rust spells them (`&str`, `&mutMap`,
-  `Result<Map,ProviderError>`, `()`): a trait's required slots hash the
-  same, except where one passes or answers an object, which Rust spells
-  with the trait's own name (`floorHashOf(object, slots)`).
+- The floor hash is `@floorHash N` when written, else the library's
+  `guatiao_kind_floor_hash` (so describing loads it): the FNV-1a (32-bit)
+  of `provider` or `object` and every slot in table order as
+  `name(args)->answer` spelled as Rust spells them (`&str`, `&mutMap`,
+  `Result<Map,ProviderError>`, `()`): a trait's slots hash the same,
+  except where one passes or answers an object, which Rust spells with the
+  trait's own name (`floorHashOf(object, slots)`).
 
 **Underneath all of these, `kind()`**: a method per slot in the header's order
 (the `methods` object's order), the shapes from `t`, and the header's
@@ -305,7 +306,7 @@ export const Listener = kind('listener', {
   methods: { heard: { args: [t.str], required: true } },
 });
 export const Greeter = kind('greeter', {
-  floorHash: 2695856491,
+  floorHash: 2032737757,
   methods: {
     greet: { args: [t.str], answer: t.map, required: true, fallible: true },
     shout: { args: [t.str], answer: t.text },
