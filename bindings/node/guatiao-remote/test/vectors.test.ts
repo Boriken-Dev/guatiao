@@ -32,10 +32,12 @@ import {
 } from '../src/codec.js';
 import { BadValue } from '../src/errors.js';
 import { CLIENT_LABEL, SERVER_LABEL, proofOf, proves } from '../src/proof.js';
-import { fromWire, toWire } from '../src/wire.js';
+import { TapeError, jsToWire as toWire, wireToJS } from '../../guatiao/src/tape.js';
 import { hex, kinds, toHex, vectors, wireVectors } from './support.js';
 
 type Case = Record<string, unknown>;
+/** A value as a peer's bytes are read. */
+const fromWire = (bytes: Uint8Array): unknown => wireToJS(bytes, { strict: true });
 const list = (key: string): Case[] => vectors[key] as Case[];
 
 /** An integer the file writes, quoted when wide. */
@@ -315,7 +317,7 @@ describe("the wire encoding's shared vectors", () => {
       } catch (e) {
         refused = e;
       }
-      expect(refused, `accepted bytes the vectors refuse: ${c.name}`).toBeInstanceOf(BadValue);
+      expect(refused, `accepted bytes the vectors refuse: ${c.name}`).toBeInstanceOf(TapeError);
       expect((refused as Error).message, c.name).toMatch(new RegExp(` at ${c.at}$`));
     }
   });
@@ -327,10 +329,25 @@ describe("the wire encoding's shared vectors", () => {
   });
 });
 
+test('plain data is refused as the guatiao package refuses it', () => {
+  const cyclic: unknown[] = [];
+  cyclic.push(cyclic);
+  for (const bad of ['\ud800', { '\udc00': 1 }, `${'x'.repeat(100)}\ud800`, cyclic, new Map([[1, 2]]), Symbol('s')]) {
+    expect(() => new FrameWriter().value(bad), String(typeof bad)).toThrow(TypeError);
+  }
+  expect(() => new FrameWriter().value(Number.NaN)).toThrow(RangeError);
+  let deep: unknown = [];
+  for (let i = 0; i < 128; i++) deep = [deep];
+  expect(() => new FrameWriter().value(deep)).toThrow(BadValue);
+  expect(() => new FrameWriter().value((deep as unknown[])[0])).not.toThrow();
+});
+
 test('the source names nothing of Node', async () => {
-  // A page imports this package: no `node:` module, no `process`, no `Buffer`.
-  const sources = import.meta.glob('../src/*.ts', { query: '?raw', import: 'default', eager: true });
+  // A page imports this package: no `node:` module, no `process`, no
+  // `Buffer`, here or in the guatiao package's tape, which it compiles in.
+  const sources = import.meta.glob(['../src/*.ts', '../../guatiao/src/tape.ts'], { query: '?raw', import: 'default', eager: true });
   expect(Object.keys(sources).length).toBeGreaterThan(5);
+  expect(Object.keys(sources)).toContain('../../guatiao/src/tape.ts');
   for (const [file, text] of Object.entries(sources)) {
     expect(text as string, file).not.toMatch(/from 'node:|\bprocess\.|\bBuffer\b|require\(/);
   }

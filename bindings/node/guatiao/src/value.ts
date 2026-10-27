@@ -17,6 +17,9 @@
 import { ENTRY, OWNED, SIZE, Status, Tag, VALUE } from './abi.js';
 import { raiseForStatus } from './errors.js';
 import * as n from './native.js';
+import { type ReadOptions, asBytes, define, isPlainObject, numberTextFor, readNumber } from './tape.js';
+
+export type { ReadOptions } from './tape.js';
 
 /** A step of a path: a key into a map, an index into a list. */
 export type Step = string | number;
@@ -36,19 +39,6 @@ export interface Owner {
   buildAlloc(): bigint;
   /** The allocator a clone is made in. */
   cloneAlloc(): bigint;
-}
-
-/** How `toJS` reads numbers and maps. */
-export interface ReadOptions {
-  /**
-   * `'auto'` (the default): a `number` for a fraction or an exponent, and
-   * for an integer a `number` when it is safe and a `bigint` when it is
-   * not. `'bigint'`: a `bigint` for every integer. `'text'`: the exact
-   * text, always.
-   */
-  numbers?: 'auto' | 'bigint' | 'text';
-  /** `'object'` (the default) reads a map as a plain object, `'map'` as a `Map`. */
-  maps?: 'object' | 'map';
 }
 
 // ---- reading, with nothing from the library ------------------------------------
@@ -133,22 +123,6 @@ function numberText(node: bigint | null): string {
 const INT64_MIN = -(2n ** 63n);
 const INT64_MAX = 2n ** 63n - 1n;
 
-/** A number's text read as `ReadOptions.numbers` says. @internal */
-export function readNumber(text: string, numbers: ReadOptions['numbers']): number | bigint | string {
-  if (numbers === 'text') return text;
-  const fractional = /[.eE]/.test(text);
-  if (fractional) return Number(text);
-  if (numbers === 'bigint') return BigInt(text);
-  if (numbers !== undefined && numbers !== 'auto') throw new TypeError(`unknown numbers mode: ${String(numbers)}`);
-  const asNumber = Number(text);
-  return Number.isSafeInteger(asNumber) ? asNumber : BigInt(text);
-}
-
-function define(target: Record<string, unknown>, key: string, value: unknown): void {
-  // Defined, not assigned: a key named `__proto__` is data here.
-  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
-}
-
 function nodeToJS(node: bigint | null, options: ReadOptions): unknown {
   switch (tagOf(node)) {
     case Tag.ABSENT:
@@ -189,27 +163,6 @@ function nodeToJS(node: bigint | null, options: ReadOptions): unknown {
 }
 
 // ---- writing, through the library -----------------------------------------------
-
-/** The text a JS number or bigint is written as. @internal */
-export function numberTextFor(value: number | bigint): string {
-  if (typeof value === 'bigint') return value.toString();
-  if (!Number.isFinite(value)) throw new RangeError(`${value} is not a finite number`);
-  return Object.is(value, -0) ? '-0' : String(value);
-}
-
-/** @internal */
-export function isPlainObject(value: object): value is Record<string, unknown> {
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return proto === Object.prototype || proto === null;
-}
-
-/** A byte view's bytes, without copying; `undefined` for anything else. @internal */
-export function asBytes(value: unknown): Uint8Array | undefined {
-  if (value instanceof Uint8Array) return value;
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-  return undefined;
-}
 
 /**
  * Writes `value` into the node at `raw`, which must be empty (absent or

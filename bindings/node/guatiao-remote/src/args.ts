@@ -23,7 +23,7 @@
 
 import { FrameReader, FrameWriter, MalformedFrame, bigOf } from './codec.js';
 import type { RemoteSlot } from './described.js';
-import { isPlainObject } from './wire.js';
+import { isPlainObject } from '../../guatiao/src/tape.js';
 
 /** An object as it crosses: `id` in the numbering of the side that holds it, `receivers` when that side is the receiver. */
 export class ObjectRef {

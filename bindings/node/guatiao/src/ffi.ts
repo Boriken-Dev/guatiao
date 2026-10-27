@@ -67,5 +67,6 @@ export {
   u64,
   u8,
 } from './native.js';
-export { MAX_DEPTH, jsToWire, wireToJS } from './tape.js';
+export { jsToWire, wireToJS } from './documents.js';
+export { MAX_DEPTH } from './tape.js';
 export { Ref, Value, adopt, borrow, nodeOf, withNodes } from './value.js';
