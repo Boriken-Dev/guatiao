@@ -26,7 +26,7 @@ end
 function tally()
   gt_env('examples');
   e = guatiao.internal.kinds('of', 'tallykind.Tally');
-  expect_equal(e.desc.floor_hash, 1286177969, 'the floor hash the document names');
+  expect_equal(e.desc.floor_hash, 2688319391, 'the floor hash the document names');
   [~, most] = computer();
   word = 4 + 4 * (most > 2^32);
   expect_equal(e.size, 8 + word * 7, 'a word per slot');

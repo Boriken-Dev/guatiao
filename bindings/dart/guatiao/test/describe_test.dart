@@ -33,6 +33,8 @@ Map<String, Object?> _describe(String body) =>
     describeDeclarations('$_head$body', file: 'kinds.dart');
 
 void main() {
+  setUpAll(setUpLibrary);
+
   test('the greeter kinds declared in Dart describe as the trait does', () {
     expect(
       describedText(

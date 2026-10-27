@@ -35,8 +35,8 @@
           }
         }
       ],
-      "spelled": "provider;greet(&str)->Result<Map,ProviderError>",
-      "floor_hash": 2695856491
+      "spelled": "provider;greet(&str)->Result<Map,ProviderError>;shout(&str)->String",
+      "floor_hash": 1283548087
     },
     {
       "name": "scalars",
@@ -293,8 +293,8 @@
           }
         }
       ],
-      "spelled": "provider;read(&Value,&Map,Option<&Value>)->Value;take(Value,Map,List)->Result<List,ProviderError>;lend(&mutValue,&mutMap,&mutList)->Result<Map,ProviderError>;text()->Result<String,ProviderError>",
-      "floor_hash": 192743130
+      "spelled": "provider;read(&Value,&Map,Option<&Value>)->Value;take(Value,Map,List)->Result<List,ProviderError>;lend(&mutValue,&mutMap,&mutList)->Result<Map,ProviderError>;text()->Result<String,ProviderError>;later(&Map)->bool",
+      "floor_hash": 1916241363
     },
     {
       "name": "sound_level",
@@ -331,8 +331,8 @@
           }
         }
       ],
-      "spelled": "object;level()->f64;set(f64)->Result<(),ProviderError>",
-      "floor_hash": 282193007
+      "spelled": "object;level()->f64;set(f64)->Result<(),ProviderError>;label()->String",
+      "floor_hash": 2657342211
     },
     {
       "name": "mixer",

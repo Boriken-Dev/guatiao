@@ -19,7 +19,7 @@ var _ unsafe.Pointer
 // GreeterKind is the greeter kind (greeter_vtable), as a host binds it and a provider names it.
 var GreeterKind = guatiao.NewKind(guatiao.KindSpec{
 	Name:      "greeter",
-	FloorHash: 2695856491,
+	FloorHash: 2032737757,
 	Object:    false,
 	Slots: []guatiao.SlotSpec{
 		{Name: "greet", Required: true, Fallible: true, Serve: C.gk91140e18_serve_greeter_greet(), Iface: reflect.TypeFor[Greeter]()},

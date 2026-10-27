@@ -26,7 +26,7 @@ module greeter_kinds
     WIDE_FLOOR_HASH
 
   ! The kinds' floor hashes, as the uint32 bits an int32 holds.
-  integer(c_int32_t), parameter :: GREETER_FLOOR_HASH = -1599110805_c_int32_t  ! 2695856491
+  integer(c_int32_t), parameter :: GREETER_FLOOR_HASH = 2032737757_c_int32_t
   integer(c_int32_t), parameter :: LISTENER_FLOOR_HASH = 1867921573_c_int32_t
   integer(c_int32_t), parameter :: CONVERSATION_FLOOR_HASH = -1525342793_c_int32_t  ! 2769624503
   integer(c_int32_t), parameter :: COUNTER_FLOOR_HASH = 1227528937_c_int32_t

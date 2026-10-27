@@ -133,7 +133,7 @@ void main() {
 
   test('the kind is what the interfaces say', () {
     expect(Tally.kind.name, 'tally');
-    expect(Tally.kind.floorHash, 1286177969);
+    expect(Tally.kind.floorHash, 2688319391);
     expect(Watcher.kind.isObject, isTrue);
     expect(Watcher.kind.floorHash, 297588550);
   });

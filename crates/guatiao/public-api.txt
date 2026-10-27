@@ -32,6 +32,7 @@ pub const guatiao::exports::channel::GUATIAO_WIRE_NO_SCHEMA: u32
 #[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_send(*const guatiao::value::alloc::Allocator, u64, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::kind
 #[no_mangle] pub unsafe c fn guatiao::exports::kind::guatiao_kind_document_read(guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::kind::guatiao_kind_floor_hash(guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut u32, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::library
 pub struct guatiao::exports::library::HostRegistry
 impl core::fmt::Debug for guatiao::exports::library::HostRegistry

@@ -577,6 +577,12 @@ func MapSettleLent(node, home unsafe.Pointer) uint32 {
 	return uint32(C.gt_core_guatiao_map_settle_lent(n(node), a(home)))
 }
 
+// KindFloorHash is the floor hash of the kind whose description kind
+// holds as JSON, or the status and, in why, the reason it is not one.
+func KindFloorHash(kind string, alloc unsafe.Pointer, out *uint32, why unsafe.Pointer) uint32 {
+	return uint32(C.gt_core_guatiao_kind_floor_hash(str(kind), a(alloc), (*C.uint32_t)(unsafe.Pointer(out)), n(why)))
+}
+
 func ValueNull(out unsafe.Pointer) uint32   { return uint32(C.gt_core_guatiao_value_null(n(out))) }
 func ValueAbsent(out unsafe.Pointer) uint32 { return uint32(C.gt_core_guatiao_value_absent(n(out))) }
 func ValueBool(b bool, out unsafe.Pointer) uint32 {

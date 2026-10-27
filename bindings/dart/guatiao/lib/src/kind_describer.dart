@@ -11,6 +11,9 @@ import 'dart:convert';
 
 import 'kind_generator.dart'
     show generateKinds, memberNameOf, reservedMemberNames, typeNameOf;
+import 'kind_hash.dart'
+    if (dart.library.js_interop) 'web/kind_hash_web.dart'
+    show kindFloorHash;
 
 /// The document of the kinds [source] declares: every `abstract interface
 /// class`, in the order written, as `{"kinds": [...]}`. An
@@ -40,73 +43,15 @@ Map<String, Object?> describeDeclarations(String source, {String? file}) {
 String describedText(Map<String, Object?> document) =>
     '${const JsonEncoder.withIndent('  ').convert(document)}\n';
 
-/// The floor hash of a kind born outside Rust: FNV-1a (32-bit) of
-/// `provider` or `object` and the required slots, each as
-/// `name(argument types)->answer` spelled as `#[guatiao::kind]` spells
-/// them, so a declaration repeating a trait's required slots hashes as the
-/// trait does. An object is spelled by its kind's name in PascalCase, as
-/// its trait would be named.
-int floorHashOf(bool object, List<Map<String, Object?>> slots) {
-  String pascal(String kind) => kind
-      .split(RegExp('[^A-Za-z0-9]+'))
-      .where((p) => p.isNotEmpty)
-      .map((p) => p[0].toUpperCase() + p.substring(1))
-      .join();
-  const tree = {'value': 'Value', 'map': 'Map', 'list': 'List'};
-  String arg(Map<String, Object?> a) {
-    final t = a['type'] as String;
-    switch (t) {
-      case 'str':
-        return '&str';
-      case 'bytes':
-        return '&[u8]';
-      case 'bytes_mut':
-        return '&mut[u8]';
-      case 'object':
-        final k = pascal(a['kind'] as String);
-        return a['pass'] == 'taken' ? 'Object<dyn$k>' : '&mutdyn$k';
-      case 'value' || 'map' || 'list':
-        final name = tree[t]!;
-        if (a['pass'] == 'taken') return name;
-        if (a['pass'] == 'lent') return '&mut$name';
-        return a['nullable'] == true ? 'Option<&$name>' : '&$name';
-    }
-    return t;
-  }
-
-  String answer(Object? given) {
-    if (given == null) return '()';
-    final a = (given as Map).cast<String, Object?>();
-    final t = a['type'] as String;
-    if (t == 'text') return 'String';
-    if (t == 'object') return 'Object<dyn${pascal(a['kind'] as String)}>';
-    return tree[t] ?? t;
-  }
-
-  final parts = [object ? 'object' : 'provider'];
-  for (final s in slots) {
-    if (s['required'] != true) continue;
-    final args = [
-      for (final a in (s['args'] as List? ?? const []))
-        arg((a as Map).cast<String, Object?>()),
-    ];
-    final returns = answer(s['answer']);
-    parts.add(
-      '${s['name']}(${args.join(',')})->'
-      '${s['fallible'] == true ? 'Result<$returns,ProviderError>' : returns}',
-    );
-  }
-  var hash = 0x811c9dc5;
-  for (final byte in utf8.encode(parts.join(';'))) {
-    final x = hash ^ byte;
-    // In 16-bit halves, so no product passes 2^53 where an int is a double.
-    hash =
-        ((x & 0xffff) * 0x01000193 +
-            (((x >>> 16) * 0x01000193) & 0xffff) * 0x10000) &
-        0xffffffff;
-  }
-  return hash;
-}
+/// The floor hash of a kind born outside Rust, computed by the library
+/// (`guatiao_kind_floor_hash`): FNV-1a (32-bit) of `provider` or `object`
+/// and every slot in table order, each as `name(argument types)->answer`
+/// spelled as `#[guatiao::kind]` spells them, so a declaration repeating a
+/// trait's slots hashes as the trait does. An object is spelled by its
+/// kind's name in PascalCase, as its trait would be named. Loads the
+/// library (the module, on the web).
+int floorHashOf(bool object, List<Map<String, Object?>> slots) =>
+    kindFloorHash(jsonEncode({'object': object, 'slots': slots}));
 
 // ---- reading ---------------------------------------------------------------
 

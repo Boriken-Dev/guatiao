@@ -104,6 +104,32 @@ type Kind[R any] struct {
 	wrap func(Remote) R
 }
 
+// KindFloorHash is the floor hash of a kind born outside Rust, computed by
+// the library from its description: kind is one kind as a kinds document
+// holds it, as JSON, whose "object" and "slots" are read and whose other
+// keys are not. A trait declaring the same slots has the same hash. An
+// *Error with ErrBadValue names what in kind is not a description.
+func KindFloorHash(kind []byte) (uint32, error) {
+	lib, err := core()
+	if err != nil {
+		return 0, err
+	}
+	why := native.Calloc(native.SizeValue)
+	defer func() {
+		native.ValueFree(why)
+		native.Free(why)
+	}()
+	var out uint32
+	if status := native.KindFloorHash(string(kind), lib.Alloc(), &out, why); status != native.OK {
+		message := ""
+		if native.Tag(why) == native.TagString {
+			message = native.TextOf(why)
+		}
+		return 0, check(status, message)
+	}
+	return out, nil
+}
+
 // NewKind is the descriptor of spec, whose remotes wrap answers. Code
 // guatiao-kind generates calls it; nothing else needs to.
 func NewKind[R any](spec KindSpec, wrap func(Remote) R) *Kind[R] {

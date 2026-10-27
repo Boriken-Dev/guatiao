@@ -47,10 +47,10 @@ impl GreeterVtable {
     pub const fn floor() -> usize {
         ::core::mem::size_of::<Self>()
     }
-    /// FNV-1a over the shape and the required signatures, as a
+    /// FNV-1a over the shape and every slot's signature, as a
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
-    pub const FLOOR_HASH: u32 = 4109485502;
+    pub const FLOOR_HASH: u32 = 465901636;
     /// The kind as data, compact JSON: its name, floor hash, and each
     /// slot in table order with its arguments and answer, as the
     /// header declares them, and whether it is required and fallible.
@@ -58,7 +58,7 @@ impl GreeterVtable {
     pub fn description() -> ::guatiao::__private::alloc::string::String {
         let mut out = ::guatiao::__private::alloc::string::String::new();
         out.push_str(
-            "{\"name\":\"greeter\",\"floor_hash\":4109485502,\"object\":false,\"slots\":[{\"name\":\"greet\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"text\"}},{\"name\":\"count\",\"required\":false,\"fallible\":false,\"args\":[{\"name\":\"bytes\",\"type\":\"bytes\"},{\"name\":\"flag\",\"type\":\"bool\"}],\"answer\":{\"type\":\"i64\"}}]}",
+            "{\"name\":\"greeter\",\"floor_hash\":465901636,\"object\":false,\"slots\":[{\"name\":\"greet\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"text\"}},{\"name\":\"count\",\"required\":false,\"fallible\":false,\"args\":[{\"name\":\"bytes\",\"type\":\"bytes\"},{\"name\":\"flag\",\"type\":\"bool\"}],\"answer\":{\"type\":\"i64\"}}]}",
         );
         out
     }

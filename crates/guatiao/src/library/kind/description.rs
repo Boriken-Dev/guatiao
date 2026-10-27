@@ -13,6 +13,7 @@
 
 #![forbid(unsafe_code)]
 
+mod floor_hash;
 mod json;
 
 use crate::value::alloc::Alloc;
@@ -457,6 +458,31 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
     })
 }
 
+/// A kind's `slots`, each name once and an object kind's never `destroy`.
+fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, DescriptionError> {
+    let mut slots = Vec::new();
+    for (i, s) in list_at(map, at, "slots")?.iter().enumerate() {
+        let slot = slot(s, &format!("{}[{i}]", under(at, "slots")))?;
+        if slots
+            .iter()
+            .any(|known: &SlotDescription| known.name == slot.name)
+        {
+            return Err(DescriptionError::new(
+                format!("{}[{i}]", under(at, "slots")),
+                format!("names `{}` a second time", slot.name),
+            ));
+        }
+        if object && slot.name == "destroy" {
+            return Err(DescriptionError::new(
+                format!("{}[{i}]", under(at, "slots")),
+                "names `destroy`, which an object kind's table holds before its slots",
+            ));
+        }
+        slots.push(slot);
+    }
+    Ok(slots)
+}
+
 impl KindDescription {
     /// Reads one kind, as `<Trait>Vtable::description()` writes it.
     pub fn from_value(value: &Value) -> Result<KindDescription, DescriptionError> {
@@ -472,26 +498,7 @@ impl KindDescription {
         )
         .map_err(|_| DescriptionError::new(under(at, "floor_hash"), "is not a u32"))?;
         let object = flag(map, at, "object", None)?;
-        let mut slots = Vec::new();
-        for (i, s) in list_at(map, at, "slots")?.iter().enumerate() {
-            let slot = slot(s, &format!("{}[{i}]", under(at, "slots")))?;
-            if slots
-                .iter()
-                .any(|known: &SlotDescription| known.name == slot.name)
-            {
-                return Err(DescriptionError::new(
-                    format!("{}[{i}]", under(at, "slots")),
-                    format!("names `{}` a second time", slot.name),
-                ));
-            }
-            if object && slot.name == "destroy" {
-                return Err(DescriptionError::new(
-                    format!("{}[{i}]", under(at, "slots")),
-                    "names `destroy`, which an object kind's table holds before its slots",
-                ));
-            }
-            slots.push(slot);
-        }
+        let slots = slots_of(map, at, object)?;
         Ok(KindDescription {
             name,
             floor_hash,

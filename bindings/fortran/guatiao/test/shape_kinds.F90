@@ -25,8 +25,8 @@ module shape_kinds
   public :: NOTE_FLOOR_HASH, SHAPES_FLOOR_HASH
 
   ! The kinds' floor hashes, as the uint32 bits an int32 holds.
-  integer(c_int32_t), parameter :: NOTE_FLOOR_HASH = -1569425488_c_int32_t  ! 2725541808
-  integer(c_int32_t), parameter :: SHAPES_FLOOR_HASH = -1160675053_c_int32_t  ! 3134292243
+  integer(c_int32_t), parameter :: NOTE_FLOOR_HASH = -1451907028_c_int32_t  ! 2843060268
+  integer(c_int32_t), parameter :: SHAPES_FLOOR_HASH = -915739982_c_int32_t  ! 3379227314
 
   ! ---- the tables ------------------------------------------------------
 

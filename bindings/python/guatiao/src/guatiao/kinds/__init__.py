@@ -18,7 +18,7 @@ class Listener(KindProtocol, Protocol, kind="listener", floor_hash=1867921573, i
     @required
     def heard(self, what: str) -> None: ...
 
-class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2032737757):
     @required
     @fallible
     def greet(self, name: str) -> MapAnswer: ...

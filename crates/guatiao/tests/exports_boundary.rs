@@ -825,6 +825,21 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
             );
             assert!(is_absent(&why), "kind_document_read left `why` as it was");
         }),
+        ("guatiao_kind_floor_hash", || {
+            let (mut why, mut hash) = (stale(), 7u32);
+            // SAFETY: a null allocator is the failure under test; `why`
+            // and `hash` are writable slots.
+            let status = unsafe {
+                guatiao::exports::kind::guatiao_kind_floor_hash(
+                    Str::new("{}"),
+                    core::ptr::null(),
+                    &mut hash,
+                    &mut why,
+                )
+            };
+            assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
+            assert!(is_absent(&why), "kind_floor_hash left `why` as it was");
+        }),
         ("guatiao_value_from_walker", || {
             let walker = guatiao::exports::visit::WalkerTable {
                 struct_size: size_of::<guatiao::exports::visit::WalkerTable>() as u32,

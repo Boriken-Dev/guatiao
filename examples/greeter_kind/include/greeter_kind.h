@@ -81,11 +81,11 @@ typedef struct greeter_vtable {
   guatiao_status (*check)(void *ctx, guatiao_map *config, bool *out, guatiao_provider_error *err);
 } greeter_vtable;
 /*
- FNV-1a over the shape and the required signatures, as a
+ FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
-#define greeter_vtable_FLOOR_HASH 2695856491
+#define greeter_vtable_FLOOR_HASH 2032737757
 
 /*
  The kind's function table: a header, then one slot per method,
@@ -96,7 +96,7 @@ typedef struct counter_vtable {
   guatiao_status (*count)(void *ctx, int64_t *out);
 } counter_vtable;
 /*
- FNV-1a over the shape and the required signatures, as a
+ FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
@@ -114,7 +114,7 @@ typedef struct conversation_vtable {
   guatiao_status (*turns)(void *ctx, int64_t *out);
 } conversation_vtable;
 /*
- FNV-1a over the shape and the required signatures, as a
+ FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
@@ -130,7 +130,7 @@ typedef struct listener_vtable {
   guatiao_status (*heard)(void *ctx, guatiao_str what);
 } listener_vtable;
 /*
- FNV-1a over the shape and the required signatures, as a
+ FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
@@ -146,7 +146,7 @@ typedef struct wide_vtable {
   guatiao_status (*echo_u64)(void *ctx, uint64_t x, uint64_t *out, guatiao_provider_error *err);
 } wide_vtable;
 /*
- FNV-1a over the shape and the required signatures, as a
+ FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */

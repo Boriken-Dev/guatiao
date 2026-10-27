@@ -31,6 +31,10 @@
 //
 //	//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -document ../include/tally_kind.kinds.json
 //
+// A kind's floor hash, unless //guatiao:floorhash pins it, is computed by
+// the guatiao library, so -document needs it found as the package finds
+// it (GUATIAO_LIBRARY).
+//
 // A kind's interface holds its required slots, an object kind's its
 // Close (the destroy slot) too; each other slot is a method of an
 // interface of its own in the package. A slot's Go method is its C name

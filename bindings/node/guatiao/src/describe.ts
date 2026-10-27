@@ -18,8 +18,11 @@
 
 import path from 'node:path';
 
+import { SIZE, Status, Tag, VALUE } from './abi.js';
+import { raiseForStatus } from './errors.js';
 import type { KindDescription, KindsDocument, TypeDescription } from './kinds.js';
 import { methodName, slotName } from './kinds.js';
+import * as n from './native.js';
 
 type Api = typeof import('typescript/unstable/sync');
 type Ast = typeof import('typescript/unstable/ast');
@@ -396,59 +399,29 @@ class Reader {
 }
 
 /**
- * The floor hash a kind gets when its interface pins none: FNV-1a (32-bit)
- * over `provider` or `object` and its required slots, each as
+ * The floor hash a kind gets when its interface pins none, computed by the
+ * library (`guatiao_kind_floor_hash`): FNV-1a (32-bit) over `provider` or
+ * `object` and every slot in table order, each as
  * `name(argument types)->answer` in the spelling Rust would give it, so
- * that an interface repeating a trait's required slots hashes as the trait
- * does. An object is spelled by its kind's name, which Rust spells by its
- * trait's: pin `@floorHash` where the two differ.
+ * that an interface repeating a trait's slots hashes as the trait does. An
+ * object is spelled by its kind's name, which Rust spells by its trait's:
+ * pin `@floorHash` where the two differ. Loads the library.
  */
 export function floorHashOf(object: boolean, slots: readonly KindDescription['slots'][number][]): number {
-  const pascal = (kind: string): string =>
-    kind
-      .split(/[^A-Za-z0-9]+/)
-      .filter(Boolean)
-      .map((p) => p[0]!.toUpperCase() + p.slice(1))
-      .join('');
-  const tree = (type: string): string => (type === 'value' ? 'Value' : type === 'map' ? 'Map' : 'List');
-  const arg = (a: TypeDescription): string => {
-    switch (a.type) {
-      case 'str':
-        return '&str';
-      case 'bytes':
-        return '&[u8]';
-      case 'bytes_mut':
-        return '&mut[u8]';
-      case 'object':
-        return a.pass === 'taken' ? `Object<dyn${pascal(a.kind!)}>` : `&mutdyn${pascal(a.kind!)}`;
-      case 'value':
-      case 'map':
-      case 'list': {
-        const t = tree(a.type);
-        if (a.pass === 'taken') return t;
-        if (a.pass === 'lent') return `&mut${t}`;
-        return a.nullable ? `Option<&${t}>` : `&${t}`;
-      }
-      default:
-        return a.type;
+  const lib = n.core();
+  const out = n.alloc(4);
+  const why = n.alloc(SIZE.value);
+  try {
+    const status = lib.fn.guatiao_kind_floor_hash!(n.str(JSON.stringify({ object, slots })), lib.alloc, out, why);
+    if (status !== Status.OK) {
+      raiseForStatus(status, n.u32(why, VALUE.tag) === Tag.STRING ? n.stringText(why + BigInt(VALUE.payload)) : '');
     }
-  };
-  const answer = (a: TypeDescription | undefined): string => {
-    if (a === undefined) return '()';
-    if (a.type === 'text') return 'String';
-    if (a.type === 'object') return `Object<dyn${pascal(a.kind!)}>`;
-    return a.type === 'value' || a.type === 'map' || a.type === 'list' ? tree(a.type) : a.type;
-  };
-  const signature = (s: KindDescription['slots'][number]): string => {
-    const returns = answer(s.answer);
-    return `${s.name}(${(s.args ?? []).map(arg).join(',')})->${s.fallible ? `Result<${returns},ProviderError>` : returns}`;
-  };
-  const input = [object ? 'object' : 'provider', ...slots.filter((s) => s.required).map(signature)].join(';');
-  let hash = 0x811c9dc5;
-  for (const byte of Buffer.from(input, 'utf8')) {
-    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+    return n.u32(out);
+  } finally {
+    n.freeNode(why);
+    n.release(why);
+    n.release(out);
   }
-  return hash;
 }
 
 /**

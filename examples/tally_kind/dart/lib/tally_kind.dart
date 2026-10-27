@@ -336,7 +336,7 @@ final class TallyKind extends Kind<TallyRemote> {
   TallyKind._()
     : super(
         name: 'tally',
-        floorHash: 1286177969,
+        floorHash: 2688319391,
         isObject: false,
         slots: const [
           KindSlot('add', required: true, fallible: true),

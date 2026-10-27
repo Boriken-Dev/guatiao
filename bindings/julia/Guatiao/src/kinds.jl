@@ -30,7 +30,7 @@ it).
 """
 struct Taken{T} end
 
-"Marks a slot every table fills: one the kind was born with, which its floor hash covers."
+"Marks a slot every table fills: one the kind was born with."
 macro required(ex)
     return esc(Expr(:block, :__guatiao_required__, ex))
 end
