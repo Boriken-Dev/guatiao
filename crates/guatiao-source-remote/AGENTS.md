@@ -75,23 +75,24 @@ source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured poli
 ## A server
 
 ```rust
-Described::new(); d.add_value(&Value)?; d.add_json(&str)?; d.load(&Path)?; d.kinds()
-Server::new(registry: Registry, described: Described, options: LinkOptions) -> Server   // Clone
+Kinds::new(); k.add_value(&Value)?; k.add_json(&str)?; k.load(&Path)?   // guatiao_bridge::Kinds, re-exported
+Server::new(registry: Registry, kinds: Kinds, options: LinkOptions) -> Server   // Clone
 server.serve(conn: Connection) -> Result<Arc<Link>, LinkError>   // handshake here, then threads; kept until it ends
 server.refresh() -> Refreshed        // a library that loads again gets a new stamp
 server.registry() -> MutexGuard<Registry>
 server.end_links(); server.links(); server.links_holding(); server.objects_out()   // end_links: every connection in its handshake too, at once
 ```
 
-Serves every provider of a kind described either by `described` or by a
+Serves every provider of a kind described either by `kinds` or by a
 provider's own document (`Provider::kind_descriptions()`, which derived
 and bridged providers carry); a provider of a kind neither describes is
-left out of the catalog. A kind `described` names is served through that
+left out of the catalog. A kind `kinds` names is served through that
 description; otherwise the first provider describing a kind decides it
 for the server's life. A provider whose own description of a kind is
 called otherwise (a slot's arguments, answer or flags, the floor hash;
 docs and slots past the shorter description do not count) is left out.
-The catalog's `kinds` lists each description once.
+The catalog's `kinds` lists each description once, written from it: the
+given ones in name order, then each a provider adds as it is learned.
 
 Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | tls://ADDR | quic://ADDR | ws://ADDR | wss://ADDR | https://ADDR | local://NAME | shm://NAME | rdma://ADDR`,
 `--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`,

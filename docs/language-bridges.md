@@ -198,6 +198,15 @@ object it was handed or a provider a registry offers (`DescribedRemote`).
 Both take the mechanism (`&Libffi`); another one, written against
 `guatiao::library::kind::Mechanism`, plugs in the same way.
 
+A script calling such an object goes through guatiao-bridge as well:
+`Held` is what the script's handle calls, and `PreparedArg` holds the
+call's arguments while it runs (`with_args`), lent trees and buffers kept
+to write back after it. The engine reads only its own values: a number
+into a `Reading` for `PreparedArg::scalar`, a tree into a `Value` for
+`PreparedArg::tree`, text and bytes as they are, so a whole number, a
+map or an object of the wrong kind is refused in the same words by every
+engine.
+
 ## Limits and refusals
 
 `Limits` comes from the configuration; the engine enforces what it can
