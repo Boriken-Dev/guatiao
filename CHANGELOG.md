@@ -1412,6 +1412,23 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: the access control list and every TLS
+  configuration are coqui-peer-tls's.** At mutual TLS a rule naming a
+  fingerprint is decided as the client presents its certificate, before
+  the pins or the trust store, on `tls://`, `wss://`, `quic://` and
+  WebTransport alike; a QUIC or WebTransport listener verifies each
+  client through a verifier coqui-peer-tls makes for that connection's
+  addresses. A policy may allow TLS 1.2 (`compatible`, `legacy`, or
+  `tls_versions`): `tls://` and `wss://` run it, QUIC and WebTransport run
+  TLS 1.3 alone. Every refusal coqui-peer-tls makes has its own words (an
+  address or a fingerprint the list denies, by `rule N` or `its default`;
+  not pinned; not accepted; a chain; not trusted or the wrong name by the
+  roots; an unusable CA bundle), and a client told `access_denied` hears
+  that the server's list refuses its address. `transport::tls::identity_at`
+  is gone: `Identity::open_or_create` reads an identity file holding a
+  chain. `config::roots_of` names the bundle by its path; it is read, and
+  refused naming the file, when a client's configuration is built over it.
+
 - **guatiao-source-remote takes coqui-net-acl, coqui-peer and
   coqui-peer-tls from crates.io**, each at `=0.0.0-alpha.0`, so the crate
   can be published. Over them, an identity file holding a chain is read
@@ -1653,6 +1670,19 @@ write now.
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
 ### Fixed
+
+- **guatiao-source-remote: a certificate's chain and the policy's TLS
+  versions reach every connection.** A QUIC or WebTransport listener at
+  mutual TLS, and a TLS listener whose access control list deferred a
+  source to a rule naming a fingerprint, built that connection's TLS
+  configuration again by hand: TLS 1.3 alone and the certificate without
+  its chain, so a client verifying the server by its roots refused it, and
+  a client offering TLS 1.2 under a policy allowing it was refused.
+- **guatiao-source-remote: a list naming a fingerprint no longer admits a
+  client presenting none.** A QUIC or WebTransport listener at server TLS
+  let a client in when the first rule matching its address named a
+  fingerprint, whatever the rules after it said; such a rule now never
+  matches there, and the others decide.
 
 - **Lua, Rhai and WebAssembly: a call that fails leaves the script's
   objects alive.** A script passing a host's object to a slot, handed over

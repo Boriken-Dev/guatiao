@@ -14,7 +14,7 @@ coqui-peer-tls, each at `=0.0.0-alpha.0`.
 | feature | adds |
 | --- | --- |
 | `tcp` | TCP with no TLS: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`), admission by access control list (`coqui-net-acl`, re-exported as `acl`) |
-| `tls` | `tcp` and `transport::tls`: TLS 1.3 over TCP, mutual TLS (`coqui-peer`, `coqui-peer-tls`, `rustls` with ring); with `ws`, `wss://` |
+| `tls` | `tcp` and `transport::tls`: TLS over TCP (1.3, and 1.2 where the policy allows), mutual TLS or server TLS (`coqui-peer`, `coqui-peer-tls` with `tls12`, `rustls` with ring); with `ws`, `wss://` |
 | `platform-roots` | `tls` and coqui-peer-tls's `platform-roots` (rustls-platform-verifier): `Roots::platform()`, `roots = "platform"`, a server verified by the operating system's authorities and verifier |
 | `quic` | `tls` and `transport::quic`: QUIC, at mutual TLS or no security, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
@@ -217,9 +217,14 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   the list is refused (an empty `Acl` denies every peer). The first rule
   matching the source (and the local address and port) decides, else
   `default` (`Deny` unless set); `accept` closes a denied peer unread
-  (`Accepted::Refused`). A rule naming a fingerprint never matches at the
-  trusted level; a TLS listener decides it after the handshake, refusing
-  a list naming a fingerprint of a digest other than SHA-256.
+  (`Accepted::Refused`). A rule naming a fingerprint never matches a peer
+  presenting no certificate (no security, server TLS: `decide_anonymous`,
+  `Policy::admits_anonymous`); at mutual TLS coqui-peer-tls decides it as
+  the client presents its certificate, before pins or the store (TLS
+  through the handshake's addresses, QUIC and WebTransport through a
+  verifier made per connection by `Trust::client_cert_verifier_for`). A
+  listener whose list names something that is not a SHA-256 fingerprint
+  is refused as it is made.
 - **Server TLS** (`TlsConfig::server_tls`): a server presents its
   certificate and asks for none (coqui-peer-tls's configuration without
   client authentication, listed by `weakened()` as `client_auth`); a
@@ -236,8 +241,16 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`TrustStore::with_ipv6_prefix`). Session resumption is off at both
   ends unless the policy sets `allow_resumption` (a weakening), so a peer
   removed from the store is refused at its next link. A refusal names its
-  reason (not pinned, not accepted, a chain where a pinned peer presents
-  one certificate), and a refused link is `BAD_VALUE`, never `GONE`.
+  reason, one wording for each of coqui-peer-tls's `Refusal`s (the
+  list by address or by fingerprint, `rule N` counted in tens or `its
+  default`; not pinned; not accepted; a chain where a pinned peer
+  presents one certificate; not trusted or the wrong name by the roots)
+  and for an unusable CA bundle (`PeerError::CaFile`, "the roots
+  (`roots`) cannot be used"); a client hearing `access_denied` is told
+  the server's list refuses its address. A refused link is `BAD_VALUE`,
+  never `GONE`. An identity file may hold the certificate's chain after
+  it (`Identity::open_or_create` reads it), and every listener presents
+  the whole chain.
   A client may also trust a server by the web PKI (`roots(Roots)`,
   coqui-peer-tls's `Trust::Roots`, or `PinnedOrRoots` beside pins or a
   store): the chain to one of the roots, the dates and the name dialled
@@ -250,9 +263,10 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`NameMismatch`), an authority the roots do not hold (`NotTrusted`).
   A mutual-TLS listener given roots and no pins or store is refused:
   roots verify only a server this side dials.
-  Strict policy by default (TLS 1.3); this build has no TLS 1.2, so
-  `compatible` and `legacy` policies are refused when the configuration
-  is built; a client's policy may hold no `acl`. ALPN `guatiao-remote` is required at both
+  Strict policy by default (TLS 1.3); `compatible` and `legacy` add
+  TLS 1.2 (coqui-peer-tls's `tls12`), which QUIC and WebTransport never
+  run (a policy allowing only 1.2 is refused there); a client's policy
+  may hold no `acl`. ALPN `guatiao-remote` is required at both
   ends. `TlsConnect::connect` runs the handshake within its timeout; a
   listener's runs on the serving thread's first read, bounded as a whole
   by the read timeout the link sets (its handshake timeout). The reader
