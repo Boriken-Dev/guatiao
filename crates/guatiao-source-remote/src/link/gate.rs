@@ -12,9 +12,15 @@
 //! nothing holds up only the thread writing: every other caller is already
 //! waiting for its answer, and at its deadline takes back a frame not yet
 //! written.
+//!
+//! A write that panics fails as a transport error does: the thread writing
+//! hears `Failed` naming the panic and ends the link, so no caller is left
+//! waiting on a writer that never comes back.
 
 use alloc::sync::Arc;
+use core::panic::AssertUnwindSafe;
 use std::io;
+use std::panic::catch_unwind;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use super::buffers::Buffers;
@@ -141,11 +147,8 @@ impl Gate {
             head.extend_from_slice(tail);
             return self.send(call, head);
         };
-        if let Err(e) = writer.write_frame_parts(&head, tail) {
-            let mut state = lock(&self.state);
-            state.queued.clear();
-            state.writer = Some(writer);
-            return Err(Unsent::Failed(e));
+        if let Err(e) = guarded(|| writer.write_frame_parts(&head, tail)) {
+            return Err(self.failed(writer, e));
         }
         self.drain(writer)
     }
@@ -186,6 +189,16 @@ impl Gate {
         }
     }
 
+    /// A write failed part way: nothing more goes through this writer, which
+    /// stays for the link's end to shut down.
+    fn failed(&self, writer: Box<dyn FrameWrite>, e: io::Error) -> Unsent {
+        let mut state = lock(&self.state);
+        state.closed = true;
+        state.queued.clear();
+        state.writer = Some(writer);
+        Unsent::Failed(e)
+    }
+
     /// Writes what is queued until nothing is, then gives the writer back.
     fn drain(&self, mut writer: Box<dyn FrameWrite>) -> Result<(), Unsent> {
         let mut batch = Vec::new();
@@ -202,11 +215,8 @@ impl Gate {
             }
             core::mem::swap(&mut batch, &mut state.queued);
             drop(state);
-            if let Err(e) = write_batch(&mut *writer, &batch) {
-                let mut state = lock(&self.state);
-                state.queued.clear();
-                state.writer = Some(writer);
-                return Err(Unsent::Failed(e));
+            if let Err(e) = guarded(|| write_batch(&mut *writer, &batch)) {
+                return Err(self.failed(writer, e));
             }
             for written in batch.drain(..) {
                 self.buffers.give(written.head);
@@ -216,6 +226,17 @@ impl Gate {
             }
         }
     }
+}
+
+/// Runs a write, a panic in it answered as the transport failing: the
+/// writer would otherwise unwind out of the gate and never come back.
+fn guarded(write: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
+    catch_unwind(AssertUnwindSafe(write)).unwrap_or_else(|payload| {
+        Err(io::Error::other(format!(
+            "the writer panicked: {}",
+            super::panic_words(&*payload)
+        )))
+    })
 }
 
 /// Writes `batch` in order: runs of whole frames together, a frame with a
