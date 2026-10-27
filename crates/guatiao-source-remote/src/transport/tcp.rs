@@ -140,22 +140,6 @@ pub enum Accepted {
     Refused(SocketAddr),
 }
 
-/// Whether `acl` admits a peer at `source` that proves no identity, before
-/// anything is read. A rule naming a fingerprint, whatever it names, cannot
-/// match such a peer: the rules without one decide.
-pub(crate) fn admits_plain(acl: &Acl, source: SocketAddr, local: SocketAddr) -> bool {
-    let plain = Acl {
-        rules: acl
-            .rules
-            .iter()
-            .filter(|r| r.fingerprint.is_none())
-            .cloned()
-            .collect(),
-        default: acl.default,
-    };
-    plain.decide(source, local).outcome == Outcome::Permit
-}
-
 impl TcpListen {
     /// Binds `address`, any address a wildcard (`0.0.0.0`, `::`)
     /// included, admitting the peers `acl` permits. Nothing about the
@@ -204,7 +188,9 @@ impl TcpListen {
     pub(crate) fn accept_stream(&self) -> io::Result<Result<(TcpStream, SocketAddr), SocketAddr>> {
         let (stream, peer) = self.listener.accept()?;
         let local = stream.local_addr()?;
-        if !admits_plain(&self.acl, peer, local) {
+        // A peer proving no identity: a rule naming a fingerprint never
+        // matches it.
+        if self.acl.decide_anonymous(peer, local).outcome != Outcome::Permit {
             let _ = stream.shutdown(Shutdown::Both);
             return Ok(Err(peer));
         }
@@ -260,44 +246,24 @@ mod tests {
     }
 
     #[test]
-    fn the_first_matching_rule_decides_and_a_fingerprint_rule_never_admits_a_plain_peer() {
-        let source: SocketAddr = "127.0.0.1:5000".parse().unwrap();
-        let local: SocketAddr = "127.0.0.1:7000".parse().unwrap();
-        let mut acl = permit(&["127.0.0.0/8"]);
-        acl.prepend(Rule::new(Action::Deny, "127.0.0.1".parse().unwrap()));
-        assert!(!admits_plain(&acl, source, local));
+    fn a_fingerprint_rule_never_admits_a_plain_peer_and_a_later_rule_decides() {
         let mut named = Rule::new(Action::Permit, "any".parse().unwrap());
         named.fingerprint = Some(format!("sha256:{}", "ab".repeat(32)));
         let mut acl = Acl::default();
         acl.push(named);
+        let l = TcpListen::bind("127.0.0.1:0", acl.clone()).unwrap();
+        let _c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
         assert!(
-            !admits_plain(&acl, source, local),
+            matches!(l.accept().unwrap(), Accepted::Refused(_)),
             "no fingerprint, no match: the default denies"
         );
-        let mut empty = Rule::new(Action::Permit, "any".parse().unwrap());
-        empty.fingerprint = Some(String::new());
-        acl.prepend(empty);
-        assert!(
-            !admits_plain(&acl, source, local),
-            "not even a rule naming an empty fingerprint"
-        );
         acl.push(Rule::new(Action::Permit, "127.0.0.1".parse().unwrap()));
+        let l = TcpListen::bind("127.0.0.1:0", acl).unwrap();
+        let _c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
         assert!(
-            admits_plain(&acl, source, local),
+            matches!(l.accept().unwrap(), Accepted::Connection(_)),
             "a later rule without one decides"
         );
-        let mut by_port = Rule::new(Action::Permit, "any".parse().unwrap());
-        by_port.port = Some("7000".parse().unwrap());
-        let acl = Acl {
-            rules: vec![by_port],
-            default: Action::Deny,
-        };
-        assert!(admits_plain(&acl, source, local));
-        assert!(!admits_plain(
-            &acl,
-            source,
-            "127.0.0.1:7001".parse().unwrap()
-        ));
     }
 
     #[test]

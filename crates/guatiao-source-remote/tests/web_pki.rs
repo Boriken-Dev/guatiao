@@ -92,6 +92,36 @@ impl Authority {
         path
     }
 
+    /// An intermediate authority it issued: what a server's certificate
+    /// chains through to the root a client holds.
+    fn intermediate(&self, name: &str) -> Authority {
+        let key = KeyPair::generate().unwrap();
+        let mut params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.distinguished_name.push(DnType::CommonName, name);
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        let pem = params.signed_by(&key, &self.issuer).unwrap().pem();
+        Authority {
+            issuer: Issuer::new(params, key),
+            pem,
+        }
+    }
+
+    /// A server identity it issued for `names`, its own certificate
+    /// following the server's: the chain a client needs when it holds only
+    /// the root.
+    fn issue_chained(&self, names: &[&str]) -> Identity {
+        let leaf = self.issue(names, false).to_pem().unwrap();
+        let key_at = leaf.find("-----BEGIN PRIVATE KEY").unwrap();
+        Identity::from_pem_chain(&format!(
+            "{}{}{}",
+            &leaf[..key_at],
+            self.pem,
+            &leaf[key_at..]
+        ))
+        .unwrap()
+    }
+
     /// A server identity it issued for `names`, valid now or, when
     /// `expired`, only in 2020.
     fn issue(&self, names: &[&str], expired: bool) -> Identity {
@@ -117,8 +147,18 @@ fn localhost() -> SocketAddr {
 /// Serves the test greeter over `over` at server TLS presenting
 /// `identity`, at `localhost`'s first address; its port.
 fn listen(over: Over, identity: &Identity) -> u16 {
-    let config = TlsConfig::new(identity.clone()).server_tls();
-    let server = common::server(LinkOptions::new(Trust::ServerTls).key(KEY));
+    listen_as(
+        over,
+        &TlsConfig::new(identity.clone()).server_tls(),
+        LinkOptions::new(Trust::ServerTls).key(KEY),
+    )
+}
+
+/// Serves the test greeter over `over` as `config` and `options` say, at
+/// `localhost`'s first address; its port.
+fn listen_as(over: Over, config: &TlsConfig, options: LinkOptions) -> u16 {
+    let config = config.clone();
+    let server = common::server(options);
     let at = localhost().to_string();
     let (port, accept): (u16, Box<dyn Fn() -> std::io::Result<Accepted> + Send>) = match over {
         Over::Tcp => {
@@ -203,6 +243,91 @@ fn source(over: Over, host: &str, port: u16, config: &TlsConfig) -> RemoteSource
         connect(over, host, port, config),
         LinkOptions::new(Trust::ServerTls).key(KEY),
     )
+}
+
+/// An access control list permitting the certificate `id` from any
+/// address, its fingerprint written in grouped base32, and nothing else
+/// unless `then` permits it.
+fn only(id: &Identity, then: Option<&str>) -> guatiao_source_remote::acl::Acl {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    let mut named = Rule::new(Action::Permit, "any".parse().unwrap());
+    named.fingerprint = Some(id.fingerprint().to_base32_grouped());
+    let mut rules = vec![named];
+    if let Some(source) = then {
+        rules.push(Rule::new(Action::Permit, source.parse().unwrap()));
+    }
+    Acl {
+        rules,
+        default: Action::Deny,
+    }
+}
+
+/// A mutual-TLS server presenting a certificate an intermediate authority
+/// issued, the intermediate's following it, keeps the chain on every
+/// transport: a client holding only the root verifies it. The server
+/// trusts its store, and its list names the client's fingerprint, so a
+/// TLS listener verifies the client through a configuration made for its
+/// connection, as QUIC and WebTransport always do.
+#[test]
+fn a_chained_identity_is_presented_whole_on_every_transport() {
+    let dir = scratch("chained");
+    let root = Authority::new("guatiao test root");
+    let bundle = root.bundle(&dir);
+    let state = dir.join("server");
+    std::fs::create_dir_all(&state).unwrap();
+    let chained = root
+        .intermediate("guatiao test intermediate")
+        .issue_chained(&["localhost"]);
+    std::fs::write(
+        state.join(guatiao_source_remote::transport::tls::IDENTITY_FILE),
+        chained.to_pem().unwrap(),
+    )
+    .unwrap();
+    let client_id = Identity::generate().unwrap();
+    let mut policy = guatiao_source_remote::transport::tls::Policy::strict();
+    policy.acl = Some(only(&client_id, None));
+    let server = TlsConfig::open(&state).unwrap().policy(policy);
+    assert_eq!(server.identity().intermediates_der().len(), 1);
+    coqui_peer_tls::TrustStoreExt::accept_certificate(
+        server.trust_store().unwrap(),
+        client_id.certificate_der(),
+    )
+    .unwrap();
+    let client = TlsConfig::new(client_id).roots(Roots::bundle_file(&bundle));
+    for over in every() {
+        let port = listen_as(over, &server, LinkOptions::new(Trust::Secure));
+        let source = RemoteSource::new(
+            connect(over, "localhost", port, &client),
+            LinkOptions::new(Trust::Secure),
+        );
+        assert_eq!(
+            greeting(&source).unwrap_or_else(|e| panic!("{over:?}: {e:?}")),
+            "hello, roots",
+            "{over:?}"
+        );
+    }
+}
+
+/// At server TLS no client presents a certificate, so a rule naming one
+/// never admits it: a list permitting a fingerprint alone refuses every
+/// client, and a rule on its address after it decides.
+#[test]
+fn a_server_tls_listener_admits_no_client_by_a_fingerprint_rule() {
+    let dir = scratch("anonymous");
+    let ca = Authority::new("guatiao test authority");
+    let client = by_roots(&ca.bundle(&dir));
+    let issued = ca.issue(&["localhost"], false);
+    let someone = Identity::generate().unwrap();
+    for (then, admitted) in [(None, false), (Some("any"), true)] {
+        let mut policy = guatiao_source_remote::transport::tls::Policy::strict();
+        policy.acl = Some(only(&someone, then));
+        let config = TlsConfig::new(issued.clone()).server_tls().policy(policy);
+        for over in every() {
+            let port = listen_as(over, &config, LinkOptions::new(Trust::ServerTls).key(KEY));
+            let linked = source(over, "localhost", port, &client).link();
+            assert_eq!(linked.is_ok(), admitted, "{over:?} {then:?}: {linked:?}");
+        }
+    }
 }
 
 fn greeting(source: &RemoteSource) -> Result<String, Vec<String>> {
