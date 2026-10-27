@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **guatiao-source-remote: a token from a file, in a peer manifest and
+  a source's configuration.** `token_file` names a file whose text is
+  the token a client presents, read as `guatiao-remote-server
+  --token-file` reads its own (a byte order mark and one last line end
+  left out, an empty or white-space token refused): beside the manifest
+  in a peer manifest, which still never holds `token`; in a source's
+  configuration, the token of every peer whose manifest names none, and
+  refused beside `token`. An edited token file is a new peer, as an
+  edited key file is. `config::token_in` reads one in Rust.
 - **A page's WebTransport datagrams, in TypeScript and Dart.**
   `link.datagrams` sends and receives the session's datagrams beside the
   calls, the payload alone as a Rust server's `Link::datagrams()` reads

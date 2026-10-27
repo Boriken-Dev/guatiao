@@ -632,6 +632,7 @@ key_file = "lab-printer.key"     # the pre-shared key, relative to this file
 | `connect` | required text: `tcp://host:port`, `ws://host:port/path`, `tls://host:port`, `local://name`, `shm://name` or `rdma://host:port` |
 | `security` | text: `none`, `server-tls` or `mutual-tls` ([which a scheme runs](remote.md#security)); when absent, the source's configuration's, else `none` for `local://` and `shm://` and `mutual-tls` for a network transport; `trust`, its former name, is refused with what to write now |
 | `key_file` | text, relative to the manifest's directory: a file holding the pre-shared key (`none`, and server TLS when the server asks for it) |
+| `token_file` | text, relative to the manifest's directory: a file whose text is the token the client presents when its server requires one (server TLS and mutual TLS). A byte order mark and one last line end (`\n` or `\r\n`) are not the token's; a token empty or only white space is refused |
 | `pins` | list of text: the fingerprints (`sha256:<hex>`) of the peer's certificate TLS trusts |
 | `roots` | text: `platform` (the operating system's certificate authorities), or a CA bundle relative to the manifest's directory: also trust the peer's certificate when one of them issued it for the host in `connect` |
 | `policy` | table: the TLS policy, coqui-peer-tls's text form version 1 ([the keys](remote.md#mutual-tls)) |
@@ -644,9 +645,10 @@ secret in a search path is a credential anyone reading the directory
 holds, as is one naming `child` (a manifest describes a peer that
 listens; a child the host starts is the host's own configuration) and
 one naming a key not listed here. Keys the manifest leaves out are taken
-from the source's configuration. Its stamp is its content and the path
-and content of the key file, the identity file and the CA bundle the
-peer uses: a change to any is a new peer.
+from the source's configuration; a manifest's `key_file` or `token_file`
+replaces the source's `key` or `token`. Its stamp is its content and the
+path and content of the key file, the token file, the identity file and
+the CA bundle the peer uses: a change to any is a new peer.
 
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
