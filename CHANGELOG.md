@@ -1401,6 +1401,12 @@ write now.
 
 ### Changed
 
+- **TypeScript: `guatiao-remote` refuses plain data as the `guatiao`
+  package does.** A string holding a lone surrogate, as an argument or an
+  answer, is a `TypeError` (it was sent with U+FFFD in its place), and so
+  is data that refers to itself (it was `BadValue`, nested too deep). Both
+  packages read and write the wire encoding with the same code.
+
 - **Every field of a descriptor this build knows is required.** A
   `guatiao_host_info`, `guatiao_host_services`, `guatiao_library_info`,
   `guatiao_provider_info`, `guatiao_kind_table`, `guatiao_source_info` or
@@ -1616,6 +1622,12 @@ write now.
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
 ### Fixed
+
+- **Node: text keeps a leading U+FEFF.** Every string the Node binding
+  read from a value (`toJS()`, `stringOr`, a map's keys, the registry's
+  answers) and from wire bytes (`guatiao/ffi`'s `wireToJS`, so
+  `guatiao-serde`'s `parse`) lost a byte order mark at its start. It is
+  text, and kept, as `guatiao-remote` keeps it.
 
 - **guatiao-source-remote: a transport write that panics ends the link.**
   The thread writing held the link's writer while it wrote, and a panic
