@@ -499,7 +499,7 @@ a file beside the header (`include/<crate>.kinds.json`):
   "kinds": [
     {
       "name": "greeter",
-      "floor_hash": 2695856491,
+      "floor_hash": 2032737757,
       "object": false,
       "doc": "Greets by name.",
       "slots": [
@@ -532,9 +532,9 @@ a file beside the header (`include/<crate>.kinds.json`):
   (an object kind: its table has `destroy` right after the header), an
   optional `doc`, and `slots`.
 - **A slot**: `name` (its field in the table), `required` (a slot every
-  provider fills, not null: the required slots come first, and the floor
-  hash covers them; any other is optional, which a provider may leave
-  null), `fallible` (it ends in `guatiao_provider_error
+  provider fills, not null: the required slots come first; any other is
+  optional, which a provider may leave null; the floor hash covers every
+  slot, required or not), `fallible` (it ends in `guatiao_provider_error
   *err`), `args` (after `ctx`, in order), `answer` (written through a
   pointer before `err`; absent when there is none), and an optional `doc`.
 - **An argument** is `name`, `type`, and for a tree or an object
@@ -560,13 +560,23 @@ reads TypeScript interfaces (`guatiao-kind`, `describeInterfaces`) and
 JavaScript classes (`describeKinds`), Python `KindProtocol` classes
 (`kinds.describe_kinds`), Dart abstract interface classes (`dart run
 guatiao:kind describe`) and Go interfaces (`guatiao-kind -document`),
-into the same document, and a floor
-hash it is not given is the FNV-1a of the shape and the required slots
-spelled as Rust spells them (`provider;greet(&str)->Result<Map,ProviderError>`).
+into the same document. A floor hash it is not given is computed by the
+library, `guatiao_kind_floor_hash(kind, alloc, &hash, &why)`, from the
+kind as JSON (its `object` and `slots`): the FNV-1a (32-bit) of `provider`
+or `object` and every slot in table order, optional ones too, each as
+`name(arguments)->answer` spelled as Rust spells them, joined by `;`
+(`provider;greet(&str)->Result<Map,ProviderError>;shout(&str)->String`).
+An argument is `&str`, `&[u8]`, `&mut[u8]`, a scalar's name, a tree as
+`&Value`, `Option<&Value>` (nullable), `&mutMap` (lent) or `List`
+(taken), an object as `Object<dynK>` (taken) or `&mutdynK` (lent), where
+`K` is the kind's name in PascalCase (split at every character that is
+not an ASCII letter or digit); an answer is a scalar, `String`, a tree's
+name, `Object<dynK>` or `()`; a fallible one is
+`Result<answer,ProviderError>`.
 `crates/guatiao-derive/tests/vectors/floor_hash.json` holds kinds as
 their description says them, beside the Rust trait declaring the same
-slots, that input and the hash: the derive and every language computing
-the hash check themselves against it.
+slots, that input and the hash: the derive and the library check
+themselves against it.
 
 A provider carries the same document in its descriptor
 (`guatiao_provider_info.kind_descriptions`, JSON text): the kinds it

@@ -391,8 +391,9 @@ otherwise); `implements ObjectKind` makes an object kind. Its methods are
 the slots in table order, required first: `@appended` marks an optional
 one after them, `@fallible` one that can refuse; a method's name in snake_case is the
 slot's (capitals in a row refused). `///` comments are the docs. The floor
-hash is the one `#[guatiao::kind]` gives the same required slots
-(`@FloorHash(n)` pins one). Plain arguments only; an import prefix is read
+hash is the one `#[guatiao::kind]` gives the same slots, computed by the
+library (`guatiao_kind_floor_hash`, so describing loads it; `@FloorHash(n)`
+pins one). Plain arguments only; an import prefix is read
 through (`k.U32`). Refused as well: a name the generator would not write
 back (a kind's class is its name in PascalCase, a method its slot's in
 camelCase), two slots or arguments of one name, a slot named `destroy` or

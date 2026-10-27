@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **The library computes a kind's floor hash.**
+  `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
+  hash of one kind's description, given as JSON text (its `object` and
+  `slots`), refused as `guatiao_kind_document_read` refuses what is not a
+  description. Python's `KindProtocol` classes, Node's
+  `describeInterfaces`, Go's `guatiao-kind -document` and Dart's `dart run
+  guatiao:kind describe` call it instead of hashing the slots themselves,
+  so describing a kind born in one of them loads the library; Go gains
+  `guatiao.KindFloorHash`.
 - **guatiao-source-remote: a token from a file, in a peer manifest and
   a source's configuration.** `token_file` names a file whose text is
   the token a client presents, read as `guatiao-remote-server
@@ -1426,6 +1435,15 @@ write now.
   null: the proxy runs the trait's default body, and a binding's remote
   answers Unsupported. The generated `<method>_end()` functions are gone,
   as is Fortran's `guatiao_kind%floor_size`.
+- **A kind's floor hash covers every slot.** `FLOOR_HASH`, the
+  `<table>_FLOOR_HASH` a kind header defines and a description's
+  `floor_hash` hash the shape and every slot in table order, optional
+  slots too, so a table whose optional slot has another signature is
+  refused rather than called with the wrong ABI. A kind with an optional
+  slot has a new hash: the greeter kind's is 2032737757, the tally kind's
+  2688319391. Rebuild its providers, and take the hash a C table or a
+  binding's kind declaration writes from the regenerated header or
+  document.
 - **A kinds document is `{"kinds": [...]}`.** No writer puts `"format": 1`
   in it any more (the derive, guatiao-bridge, guatiao-source-remote, and
   the Node, Python, Dart and Go describers), and every reader tells a

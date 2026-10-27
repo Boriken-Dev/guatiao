@@ -122,7 +122,8 @@ writes the glue from it. A Go type says most of what a description
 holds; a directive in a doc comment says the rest. On the kind's
 interface, `//guatiao:appended` names the interfaces of its appended
 slots in table order, and `//guatiao:floorhash N` pins a hash, which is
-otherwise computed as Rust would compute it for the same required slots.
+otherwise computed by the library as Rust would compute it for the same
+slots (so the command needs it found, `GUATIAO_LIBRARY`).
 On a method, `//guatiao:infallible` says the slot cannot fail, and
 `//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable` and
 `//guatiao:mut` name the arguments lent for the call, handed over, a

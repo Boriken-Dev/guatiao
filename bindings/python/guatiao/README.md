@@ -159,7 +159,7 @@ from typing import Protocol
 from guatiao import Map, Value
 from guatiao.kinds import KindProtocol, Lent, MapAnswer, fallible, required
 
-class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2032737757):
     @required
     @fallible
     def greet(self, name: str) -> MapAnswer: ...

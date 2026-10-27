@@ -360,6 +360,12 @@ built against it refuses every provider built before with
 takes the new `*_FLOOR_HASH` from the regenerated header. A kind spelled
 with bare names keeps its hash.
 
+A kind's table hash also covers every slot now, optional ones too, in
+table order: a kind with an optional slot has a new hash (the example
+greeter kind's is 2032737757), and a hash written by hand, in a C table,
+a Julia `@kind`, an R `kind()` or a Python `KindProtocol` class, is taken
+from the regenerated header or kinds document.
+
 Rebuilding is the answer either way: a provider built now also builds its
 answers in the caller's allocator (below) and passes the new checks.
 

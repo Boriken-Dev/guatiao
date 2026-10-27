@@ -371,7 +371,7 @@ Conversation <- kind("conversation", floor_hash = 2769624503, object = TRUE,
   say = method(what = "string", required = TRUE, fallible = TRUE),
   read = method(dst = lent("bytes"), returns = "int64", required = TRUE),
   turns = method(returns = "int64", required = TRUE))
-Greeter <- kind("greeter", floor_hash = 2695856491,
+Greeter <- kind("greeter", floor_hash = 2032737757,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"),
   start = method(listener = taken(Listener), returns = Conversation, fallible = TRUE),

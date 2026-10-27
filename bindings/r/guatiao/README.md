@@ -132,7 +132,7 @@ reg$close()
 A kind is declared once, from its C header:
 
 ```r
-Greeter <- kind("greeter", floor_hash = 2695856491,
+Greeter <- kind("greeter", floor_hash = 2032737757,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"))
 ```

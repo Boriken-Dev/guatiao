@@ -180,7 +180,7 @@ class Listener(KindProtocol, Protocol, kind="listener", floor_hash=1867921573, i
     @required
     def heard(self, what: str) -> None: ...
 
-class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2032737757):
     @required
     @fallible
     def greet(self, name: str) -> MapAnswer: ...
@@ -198,10 +198,11 @@ greeter.has("shout")                 # whether this table carries the slot
 `class K(KindProtocol, Protocol, kind="name", floor_hash=N, is_object=False,
 struct=None)`: `floor_hash` is the `<table>_FLOOR_HASH` the header
 defines, as written there. Left out (with `kind=` or `is_object=` given),
-the kind is one born in Python: its floor hash is computed as
-`#[guatiao::kind]` computes it from the required slots spelled as Rust
-spells them, an object kind named by its kind name in PascalCase, so a
-trait or a TypeScript interface declaring the same required slots agrees.
+the kind is one born in Python: its floor hash is the library's
+`guatiao_kind_floor_hash`, computed as `#[guatiao::kind]` computes it from
+every slot in table order spelled as Rust spells them, an object kind named
+by its kind name in PascalCase, so a trait or a TypeScript interface
+declaring the same slots agrees. Defining such a class loads the library.
 `kinds.describe_kinds(*kinds)` writes such classes (or any kinds) as the
 description document, each followed by the object kinds it reaches, the
 class and method docstrings as docs: what Node, Dart and the other

@@ -222,7 +222,7 @@ proxy copies the answer once. Then:
 | `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
 | `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`, the whole table; `FLOOR_HASH` as a **literal** the attribute computed, so a C header generator renders it as `#define <table>_FLOOR_HASH n` |
 | `<Trait>Vtable::description() -> String` | the kind as data, compact JSON: name, floor hash, `object`, each slot in table order with its arguments (`type`, and `pass` for a tree or an object), answer, `required`, `fallible` and doc text. The format is in the docs' encodings page; a kind crate commits a document of its kinds beside its header, which bindings load instead of declaring the kind again |
-| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut`, and the hidden `describe(seen, out)`: pushes `description()`, then the object kinds a slot takes or answers, each once |
+| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and every slot's signature), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut`, and the hidden `describe(seen, out)`: pushes `description()`, then the object kinds a slot takes or answers, each once |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
 | `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |
 | `impl Trait for Instance<dyn Trait>`, `impl From<Instance<dyn Trait>> for Box<dyn Trait>` | provider kinds only: an instance built from a configuration is the trait, so `Arc::new(instance)` coerces to `Arc<dyn Trait>` and `destroy` runs when the last owner goes |
@@ -288,7 +288,8 @@ which a C header renders, such an argument is written `ctx_`, `out_`,
 is pinned by `src/snapshots/greeter.expected.rs`.
 
 **What the hash covers.** `FLOOR_HASH` is FNV-1a over `provider;` or
-`object;` and each required method's `name(arg,..)->ret`, every type in a
+`object;` and every method's `name(arg,..)->ret` in table order, defaulted
+ones too, every type in a
 canonical spelling with the spaces removed. The canonical spelling makes
 these equal: a `std::`, `core::` or `alloc::` path of `Vec`, `String`,
 `Option`, `Result` or `Box` and its bare name; a `guatiao::` or
@@ -312,7 +313,7 @@ a `&mut [u8]` argument crosses as a `BytesMut` out-buffer (the one
 | item | what |
 | --- | --- |
 | `<Trait>Vtable` | `header`, then **`destroy: Option<unsafe extern "C" fn(ctx)>`**, then the slots; `destroy` is the first entry of `REQUIRED` |
-| `Kind::OBJECT` | `true`; the hash is over `object;` + the required signatures, so an object table never passes for a provider table with the same methods |
+| `Kind::OBJECT` | `true`; the hash is over `object;` + every slot's signature, so an object table never passes for a provider table with the same methods |
 | the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (`ObjectCell::new`) and hands back the handle |
 | `TableFor` | a hidden `unsafe impl<T: Trait> guatiao::library::kind::TableFor<T> for <Trait>Vtable` (`Kind = dyn Trait`, `table() = of::<T>()`): what `ObjectCell::new` and the safe `Object::from_cell` require, so a cell's table is the one built for its value's type and kind |
 | the shims | address the value through that cell: `&mut` for a `&mut self` method (`object_mut`), `&` for a `&self` one (`object_ref`), so an object of a `Sync` kind is shared between threads; `__guatiao_destroy::<T>` frees the cell |

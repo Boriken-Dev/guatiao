@@ -31,7 +31,7 @@ the header defines.
 Listener <- kind("listener", floor_hash = 1867921573, object = TRUE,
   heard = method(what = "string", required = TRUE))
 
-Greeter <- kind("greeter", floor_hash = 2695856491,
+Greeter <- kind("greeter", floor_hash = 2032737757,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"),
   start = method(listener = taken(Listener), returns = Conversation, fallible = TRUE),

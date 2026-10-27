@@ -272,8 +272,10 @@ are):
 
 After `examples/tally_kind/tally_kind.ts` changes, its document, the Node
 module and the Dart file (the document is read by the compiler, so the
-workspace's `typescript` must be installed); after
-`examples/node_js/echo_kind.js` changes, its document:
+workspace's `typescript` must be installed, and its floor hash comes from
+the library, so `GUATIAO_LIBRARY` names a build, as it must for `go
+generate` here); after `examples/node_js/echo_kind.js` changes, its
+document:
 
 ```bash
 (cd examples/tally_kind/node && node ../../../bindings/node/guatiao/dist/kind_cli.js ../tally_kind.ts \
