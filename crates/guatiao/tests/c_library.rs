@@ -18,6 +18,9 @@ use guatiao::value::convert::TryAsRef;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "support/clang_target.rs"]
+mod clang_target;
+
 use core::ffi::c_void;
 use core::ptr::NonNull;
 
@@ -84,6 +87,7 @@ fn build_c_greeter(cc: &Path, name: &str, defines: &[&str]) -> PathBuf {
         std::env::consts::DLL_SUFFIX
     ));
     let compile = Command::new(cc)
+        .args(clang_target::args(cc))
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         // Position-independent code, or a linker whose default is not
         // PIC refuses the shared object outright: `read-only segment has

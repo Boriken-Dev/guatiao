@@ -15,6 +15,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "support/clang_target.rs"]
+mod clang_target;
+
 use greeter_kind::Counter;
 use guatiao::library::{Registry, ScanRules, Skipped, SourceError};
 use guatiao::{Map, Value};
@@ -45,6 +48,7 @@ fn build_shelf(cc: &Path, name: &str) -> PathBuf {
         std::env::consts::DLL_SUFFIX
     ));
     let compile = Command::new(cc)
+        .args(clang_target::args(cc))
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         .args(if cfg!(windows) {
             &[][..]
