@@ -34,6 +34,9 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[path = "support/clang_target.rs"]
+mod clang_target;
+
 /// The C compilers worth trying, in order. See `c_consumer.rs`.
 fn find_compiler() -> Option<PathBuf> {
     for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
@@ -143,6 +146,7 @@ fn a_c_program_is_a_host() {
     });
 
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -225,6 +229,7 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
     });
 
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -309,6 +314,7 @@ fn a_c_caller_moves_an_answer_home_before_the_unload() {
         "libguatiao_carrier_ignored.so"
     });
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-shared"])
         .arg("-I")
@@ -332,6 +338,7 @@ fn a_c_caller_moves_an_answer_home_before_the_unload() {
         "guatiao_make_local_host"
     });
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -492,6 +499,7 @@ fn a_c_program_reads_and_writes_every_time_vector() {
     });
 
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -641,6 +649,7 @@ fn a_c_program_announces_sends_closes_and_receives() {
     });
 
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

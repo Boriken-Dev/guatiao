@@ -493,6 +493,25 @@ fn find_compiler() -> Option<std::path::PathBuf> {
     None
 }
 
+/// `--target=<arch>-pc-windows-msvc` for a clang on Windows MSVC, nothing
+/// otherwise: clang builds for its own host by default, and an x64 test
+/// running emulated on ARM64 cannot load the ARM64 library that makes.
+fn clang_target(compiler: &std::path::Path) -> Vec<String> {
+    let clang = compiler.file_stem().is_some_and(|stem| {
+        stem.to_string_lossy()
+            .to_ascii_lowercase()
+            .starts_with("clang")
+    });
+    if !(cfg!(all(windows, target_env = "msvc")) && clang) {
+        return Vec::new();
+    }
+    let arch = match std::env::consts::ARCH {
+        "x86" => "i686",
+        arch => arch,
+    };
+    vec![format!("--target={arch}-pc-windows-msvc")]
+}
+
 type DriveGreet = unsafe extern "C" fn(
     *const core::ffi::c_void,
     *mut core::ffi::c_void,
@@ -523,6 +542,7 @@ fn a_c_host_calls_a_table_built_at_run_time() {
         std::env::consts::DLL_SUFFIX
     ));
     let compiled = std::process::Command::new(&cc)
+        .args(clang_target(&cc))
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         .args(if cfg!(windows) {
             &[][..]

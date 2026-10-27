@@ -11,6 +11,9 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[path = "support/clang_target.rs"]
+mod clang_target;
+
 use greeter_kind::Greeter;
 use guatiao::library::{Registry, SourceError};
 use guatiao::value::convert::TryAsRef;
@@ -133,6 +136,7 @@ fn a_c_host_adds_a_source_written_in_rust() {
         "guatiao_source_host"
     });
     let mut compile = Command::new(&cc);
+    compile.args(clang_target::args(&cc));
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
