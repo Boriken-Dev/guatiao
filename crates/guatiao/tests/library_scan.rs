@@ -42,6 +42,10 @@ use guatiao::{Alloc, Value};
 /// already uses, so `cargo test` has built it and put it where a test
 /// binary can find it — no shelling out to cargo from inside a cargo
 /// run, which would fight the same target-directory lock.
+///
+/// A proc-macro is built for the host: under `cargo test --target` it
+/// lands in `<target-dir>/<profile>`, while this binary is in
+/// `<target-dir>/<triple>/<profile>/deps`, so that directory is tried last.
 fn built(stem: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().expect("a test binary knows its own path");
     let deps = exe.parent().expect("the test binary is in a directory");
@@ -50,9 +54,14 @@ fn built(stem: &str) -> Option<PathBuf> {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     );
+    let host = deps
+        .parent()
+        .and_then(|profile| Some(profile.parent()?.parent()?.join(profile.file_name()?)))
+        .unwrap_or_default();
     for dir in [
         deps.to_path_buf(),
         deps.parent().map(PathBuf::from).unwrap_or_default(),
+        host,
     ] {
         let candidate = dir.join(&name);
         if candidate.is_file() {
