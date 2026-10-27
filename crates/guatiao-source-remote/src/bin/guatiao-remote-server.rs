@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use guatiao::library::Registry;
 use guatiao::{Alloc, Map, Value};
-use guatiao_source_remote::config::{Security, security_of};
+use guatiao_source_remote::config::{Security, security_of, token_in};
 use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
 
 #[cfg(any(feature = "tcp", feature = "local"))]
@@ -255,25 +255,6 @@ fn registry(a: &Args) -> Result<(Registry, Described), String> {
     Ok((registry, described))
 }
 
-/// The token a file holds: its text, a byte order mark and one last line
-/// end left out.
-fn token_in(path: &std::path::Path) -> Result<String, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
-    let token = text
-        .strip_suffix("\r\n")
-        .or_else(|| text.strip_suffix('\n'))
-        .unwrap_or(text);
-    if token.trim().is_empty() {
-        // An empty token would match a client presenting none.
-        return Err(format!(
-            "{}: the token is empty or only white space",
-            path.display()
-        ));
-    }
-    Ok(token.to_string())
-}
-
 fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
     let mut options = LinkOptions::new(trust);
     if let Some(path) = &a.key_file {
@@ -281,7 +262,7 @@ fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
         options = options.key(&key);
     }
     if let Some(path) = &a.token_file {
-        options = options.token(&token_in(path)?);
+        options = options.token(&token_in(path).map_err(|e| e.message().to_string())?);
     }
     if let Some(n) = a.max_calls {
         options = options.max_calls(n);

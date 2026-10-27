@@ -44,6 +44,7 @@ pub fn guatiao_source_remote::config::policy_of(&guatiao::value::value::Value) -
 pub fn guatiao_source_remote::config::roots_of(&str) -> core::result::Result<coqui_peer_tls::roots::Roots, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::security_of(&str) -> core::result::Result<guatiao_source_remote::config::Security, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::config::tls_config_of(&guatiao::value::types::map::Map, guatiao_source_remote::config::Security) -> core::result::Result<guatiao_source_remote::transport::tls::TlsConfig, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::config::token_in(&std::path::Path) -> core::result::Result<alloc::string::String, guatiao::library::kind::ProviderError>
 pub mod guatiao_source_remote::link
 #[non_exhaustive] pub enum guatiao_source_remote::link::LinkError
 pub guatiao_source_remote::link::LinkError::Io(core::io::error::Error)

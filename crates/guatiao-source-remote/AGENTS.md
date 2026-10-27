@@ -389,7 +389,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
 | `child` | list: the server program and its arguments |
 | `security` | `none`, `server-tls`, `mutual-tls` (`config::Security`); none on a child, `local://`, `shm://`, mutual-tls elsewhere unless named |
 | `key`, `key_file` | the pre-shared key (none; server TLS when asked) |
-| `token` | a client's token, for a server that requires one; empty or only white space refused |
+| `token`, `token_file` | a client's token, for a server that requires one: text, or a file's text with a BOM and one last line end left out (`config::token_in`, as `--token-file` reads it); both is `BAD_VALUE`; empty or only white space refused |
 | `state_dir`, `identity_file` | TLS: this side's identity (and trust store), made when absent; one of them |
 | `pins` | TLS: list of the server fingerprints trusted |
 | `roots` | TLS: also trust a server an authority issued a certificate for the host dialled: `"platform"` (feature `platform-roots`, else `UNSUPPORTED`) or a PEM CA bundle's path, read when the source is built (`config::roots_of`) |
@@ -405,14 +405,17 @@ a TLS security in a build without `tls`. At server TLS a client names
 `wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix.
 `tcp://`, `quic://` and `https://` run any.
 `config::{security_of, Security::default_for, Security::trust, acl_of,
-policy_of, roots_of, tls_config_of}` read those values.
+policy_of, roots_of, tls_config_of, token_in}` read those values.
 
 A peer manifest (`docs/encodings.md`, "A peer"): `type = "remote"`,
-`name` (no `/`), `connect`, `security`, `key_file` (beside the manifest),
+`name` (no `/`), `connect`, `security`, `key_file` and `token_file`
+(beside the manifest, replacing the source's `key` and `token`),
 `timeout_ms`, `max_frame`, `max_calls`, `rdma_device`, `pins`, `roots`
 (a bundle beside the manifest, or `platform`), `policy`,
 `identity_file` and `state_dir` (beside the manifest); any other key is
-refused, `key` and `token` (secrets) and `child` with words of their own.
+refused, `key` and `token` (secrets, naming `key_file` and `token_file`)
+and `child` with words of their own. A peer's stamp hashes its key,
+token, identity and CA bundle files: an edited one is a new peer.
 
 ## The protocol (`protocol`)
 

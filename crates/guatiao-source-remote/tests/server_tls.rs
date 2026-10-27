@@ -416,3 +416,102 @@ fn the_server_program_refuses_an_empty_token_and_a_token_with_no_tls() {
     assert!(!ok);
     assert!(said.contains("is for server-tls and mutual-tls"), "{said}");
 }
+
+/// Sources over the peer manifests `dirs` and `manifests` name, with the
+/// rest of `config`.
+fn peers(registry: &mut Registry, name: &str, mut config: guatiao::Map, dirs: &[&std::path::Path]) {
+    let mut list = guatiao::List::new();
+    for dir in dirs {
+        list.push(dir.display().to_string().as_str());
+    }
+    config.set("dirs", list);
+    registry
+        .add_source(name, RemoteSource::from_config(&config).unwrap())
+        .unwrap();
+}
+
+#[test]
+fn a_peer_manifest_s_token_file_holds_the_token_the_server_program_requires() {
+    let Some(derived) = common::procs::library("derived_greeter") else {
+        panic!("derived_greeter is not built: `cargo build -p derived_greeter` first");
+    };
+    let dir = scratch("manifest_token_file");
+    std::fs::write(dir.join("token"), "s3cret\n").unwrap();
+    let (child, lines) = common::procs::start(
+        server_program()
+            .args(["--listen", "tls://127.0.0.1:0", "--security", "server-tls"])
+            .arg("--identity")
+            .arg(dir.join("identity.pem"))
+            .arg("--token-file")
+            .arg(dir.join("token"))
+            .arg("--load")
+            .arg(&derived),
+    );
+    let _running = Running(child);
+    let first = lines
+        .recv_timeout(common::procs::DEADLINE)
+        .expect("the server says where it serves");
+    let serving = first
+        .split("serving tls://")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{first}"));
+    let (address, rest) = serving.split_once(" as ").unwrap();
+    let fingerprint = rest.split(',').next().unwrap();
+    let manifest = |name: &str, extra: &str| {
+        format!(
+            "type = \"remote\"\nname = \"{name}\"\nconnect = \"tls://{address}\"\nsecurity = \"server-tls\"\npins = [\"{fingerprint}\"]\n{extra}"
+        )
+    };
+    let lab = dir.join("lab");
+    std::fs::create_dir_all(&lab).unwrap();
+    // As an editor that marks UTF-8 and ends lines in CRLF writes it.
+    std::fs::write(lab.join("lab.token"), "\u{feff}s3cret\r\n").unwrap();
+    std::fs::write(
+        lab.join("lab.guatiao.toml"),
+        manifest("lab", "token_file = \"lab.token\"\n"),
+    )
+    .unwrap();
+
+    let mut registry = Registry::new("host", "1.0");
+    peers(&mut registry, "peers", guatiao::Map::new(), &[&lab]);
+    let refreshed = registry.refresh();
+    assert!(refreshed.refused.is_empty(), "{refreshed:?}");
+    assert_eq!(refreshed.loaded.len(), 1, "{refreshed:?}");
+    assert_eq!(greeting(&registry), "hello, server tls");
+    assert!(registry.refresh().is_empty(), "nothing changed");
+
+    // The same token, its line end gone: an edited token file is a new peer
+    // over a new link, and the old one retired.
+    std::fs::write(lab.join("lab.token"), "s3cret").unwrap();
+    let refreshed = registry.refresh();
+    assert!(refreshed.refused.is_empty(), "{refreshed:?}");
+    assert_eq!(refreshed.loaded.len(), 1, "{refreshed:?}");
+    assert_eq!(refreshed.retired.len(), 1, "{refreshed:?}");
+    assert_eq!(greeting(&registry), "hello, server tls");
+
+    // A source's `token_file` is every peer's whose manifest names none, and
+    // a manifest's own replaces the source's `token`.
+    let others = dir.join("others");
+    std::fs::create_dir_all(&others).unwrap();
+    std::fs::write(others.join("plain.guatiao.toml"), manifest("plain", "")).unwrap();
+    let own = dir.join("own");
+    std::fs::create_dir_all(&own).unwrap();
+    std::fs::write(
+        own.join("own.guatiao.toml"),
+        manifest("own", "token_file = \"../lab/lab.token\"\n"),
+    )
+    .unwrap();
+    let mut registry = Registry::new("host", "1.0");
+    let mut by_file = guatiao::Map::new();
+    by_file.set(
+        "token_file",
+        dir.join("token").display().to_string().as_str(),
+    );
+    peers(&mut registry, "by_file", by_file, &[&others]);
+    let mut by_token = guatiao::Map::new();
+    by_token.set("token", "not the server's");
+    peers(&mut registry, "by_token", by_token, &[&own]);
+    let refreshed = registry.refresh();
+    assert!(refreshed.refused.is_empty(), "{refreshed:?}");
+    assert_eq!(refreshed.loaded.len(), 2, "{refreshed:?}");
+}

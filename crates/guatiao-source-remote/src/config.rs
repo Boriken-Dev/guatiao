@@ -12,7 +12,7 @@
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `security` | `none`, `server-tls` or `mutual-tls`: none on a child, `local://` and `shm://` (the only one they run), mutual TLS on every network transport unless told |
 //! | `key`, `key_file` | the pre-shared key, as text or a file's bytes: proved both ways with `none`, and at server TLS when the server asks for it |
-//! | `token` | what a client presents when its server requires a token; one empty or only white space is refused |
+//! | `token`, `token_file` | what a client presents when its server requires a token, as text or a file's text (a byte order mark and one last line end left out); one or the other, and one empty or only white space is refused |
 //! | `state_dir` | TLS: this side's identity (`identity.pem`, made when absent) and trust store (`peers/`) |
 //! | `identity_file` | TLS: the identity file instead (made when absent) |
 //! | `pins` | TLS: the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
@@ -33,7 +33,7 @@
 //! ```
 //!
 //! It may also name `timeout_ms`, `max_frame`, `max_calls`,
-//! `rdma_device`, and for TLS `pins`, `roots`, `policy`,
+//! `rdma_device`, and for TLS `token_file`, `pins`, `roots`, `policy`,
 //! `identity_file` and `state_dir` (paths relative to it), and nothing
 //! else: never `key` or `token` (a secret in a search path), never `child`
 //! (a manifest names a peer that listens).
@@ -143,6 +143,25 @@ fn security_in(map: &Map, scheme: &str) -> Result<Security, ProviderError> {
     text(map, "security")?.map_or(Ok(Security::default_for(scheme)), security_of)
 }
 
+/// The token a file holds: its text, a byte order mark and one last line
+/// end left out. One empty or only white space is refused.
+pub fn token_in(path: &Path) -> Result<String, ProviderError> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| refused(format!("{}: {e}", path.display())))?;
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let token = text
+        .strip_suffix("\r\n")
+        .or_else(|| text.strip_suffix('\n'))
+        .unwrap_or(text);
+    if token.trim().is_empty() {
+        return Err(refused(format!(
+            "{}: the token is empty or only white space, and proves nothing",
+            path.display()
+        )));
+    }
+    Ok(token.to_string())
+}
+
 /// The link options a configuration names, at `trust`.
 pub fn options_of(map: &Map, trust: Trust) -> Result<LinkOptions, ProviderError> {
     let mut options = LinkOptions::new(trust);
@@ -153,13 +172,22 @@ pub fn options_of(map: &Map, trust: Trust) -> Result<LinkOptions, ProviderError>
         let key = std::fs::read(path).map_err(|e| refused(format!("`key_file` {path}: {e}")))?;
         options = options.key(&key);
     }
-    if let Some(token) = text(map, "token")? {
-        if token.trim().is_empty() {
-            return Err(refused(
-                "`token` is empty or only white space, and proves nothing: name the token the server requires, or leave `token` out",
-            ));
+    match (text(map, "token")?, text(map, "token_file")?) {
+        (Some(_), Some(_)) => return Err(refused("name `token` or `token_file`, not both")),
+        (Some(token), None) => {
+            if token.trim().is_empty() {
+                return Err(refused(
+                    "`token` is empty or only white space, and proves nothing: name the token the server requires, or leave `token` out",
+                ));
+            }
+            options = options.token(token);
         }
-        options = options.token(token);
+        (None, Some(path)) => {
+            let token = token_in(Path::new(path))
+                .map_err(|e| refused(format!("`token_file` {}", e.message())))?;
+            options = options.token(&token);
+        }
+        (None, None) => {}
     }
     if let Some(ms) = number(map, "timeout_ms")? {
         options = options.timeout((ms > 0).then(|| Duration::from_millis(ms)));
@@ -488,6 +516,7 @@ const PEER_KEYS: &[&str] = &[
     "connect",
     "security",
     "key_file",
+    "token_file",
     "timeout_ms",
     "max_frame",
     "max_calls",
@@ -500,7 +529,7 @@ const PEER_KEYS: &[&str] = &[
 ];
 
 /// What a peer manifest names by a path, resolved against its directory.
-const PEER_PATHS: &[&str] = &["key_file", "identity_file", "state_dir"];
+const PEER_PATHS: &[&str] = &["key_file", "token_file", "identity_file", "state_dir"];
 
 /// The paths a configuration lists under `key`, or none.
 pub(crate) fn paths(map: &Map, key: &str) -> Result<Vec<PathBuf>, ProviderError> {
@@ -535,12 +564,13 @@ fn peer_file(defaults: &Map, manifest: &Map, path: &Path, key: &str) -> Option<P
 }
 
 /// What changes when a file a peer's trust rests on does (the key file,
-/// the identity file or the one in its state directory, the CA bundle):
-/// each one's path and a hash of its bytes, so a replaced key, identity or
-/// bundle is a new peer.
+/// the token file, the identity file or the one in its state directory,
+/// the CA bundle): each one's path and a hash of its bytes, so a replaced
+/// key, token, identity or bundle is a new peer.
 pub(crate) fn key_stamp(defaults: &Map, manifest: &Map, path: &Path) -> String {
     let mut files = Vec::new();
     files.extend(peer_file(defaults, manifest, path, "key_file"));
+    files.extend(peer_file(defaults, manifest, path, "token_file"));
     files.extend(peer_file(defaults, manifest, path, "identity_file"));
     let roots = [manifest, defaults]
         .into_iter()
@@ -580,7 +610,8 @@ pub(crate) fn check_defaults(defaults: &Map) -> Result<(), ProviderError> {
 }
 
 /// The peer a manifest at `path` describes: its keys over the source's
-/// `defaults`, its `key_file` read from beside it; and that configuration.
+/// `defaults`, its `key_file` and `token_file` read from beside it; and
+/// that configuration.
 pub(crate) fn peer_of(
     defaults: &Map,
     manifest: &Map,
@@ -592,7 +623,7 @@ pub(crate) fn peer_of(
             key if PEER_KEYS.contains(&key) => {}
             secret @ ("key" | "token") => {
                 return Err(refused(format!(
-                    "`{secret}` is a secret, and a manifest in a search path holds none: name the file holding the key with `key_file`"
+                    "`{secret}` is a secret, and a manifest in a search path holds none: name the file holding it with `{secret}_file`"
                 )));
             }
             "child" => {
@@ -634,6 +665,9 @@ pub(crate) fn peer_of(
     let named = |key: &str| manifest.contains_key(key);
     if named("key_file") {
         merged.remove("key");
+    }
+    if named("token_file") {
+        merged.remove("token");
     }
     if named("identity_file") && !named("state_dir") {
         merged.remove("state_dir");
