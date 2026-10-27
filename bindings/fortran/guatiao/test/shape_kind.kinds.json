@@ -2,7 +2,7 @@
   "kinds": [
     {
       "name": "note",
-      "floor_hash": 2725541808,
+      "floor_hash": 2843060268,
       "object": true,
       "doc": "Something told what is said: an object kind.",
       "slots": [
@@ -47,7 +47,7 @@
     },
     {
       "name": "shapes",
-      "floor_hash": 3134292243,
+      "floor_hash": 3379227314,
       "object": false,
       "doc": "Every shape a slot can take or answer.",
       "slots": [

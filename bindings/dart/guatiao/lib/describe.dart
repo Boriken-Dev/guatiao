@@ -45,8 +45,8 @@
 /// object kind. Its methods are the slots in table order, the required
 /// ones first; [appended] marks a slot added after them and [fallible] one
 /// that can refuse. `///` comments are the docs. The floor hash is the one
-/// `#[guatiao::kind]` gives the same required slots, unless [FloorHash]
-/// pins one.
+/// `#[guatiao::kind]` gives the same slots, computed by the library, unless
+/// [FloorHash] pins one.
 ///
 /// | Dart | in the description |
 /// | --- | --- |

@@ -1777,6 +1777,34 @@ guatiao_status guatiao_kind_document_read(struct guatiao_str text,
                                           struct guatiao_value *why);
 
 /*
+ The floor hash of a kind born outside Rust, from its description as
+ JSON text: one kind as a kinds document holds it, whose `object` and
+ `slots` are read and checked as `guatiao_kind_document_read` checks
+ them, and whose other keys (`name`, `floor_hash`, `doc`) are not. The
+ hash is FNV-1a (32-bit) over `provider` or `object` and every slot in
+ table order, each spelled as `#[guatiao::kind]` spells a trait's method
+ (`docs/encodings.md`, "A kind, described"), so a declaration in any
+ language repeating a trait's slots gets the trait's hash. On
+ `GUATIAO_OK`, `*out` holds it.
+
+ `GUATIAO_ERR_BAD_VALUE` for text that is not JSON or not a kind, `why`
+ (which may be null) then holding the reason as a string built in
+ `alloc`, worded as `guatiao_kind_document_read` words it, else ABSENT.
+ `GUATIAO_ERR_ALLOC` for a null or unusable allocator, `GUATIAO_ERR_NULL`
+ for a null `out`.
+
+ # Safety
+
+ The view's bytes are readable for the call; `alloc` is null or valid;
+ `out` is null or writable; `why` is null or addresses writable storage
+ for one value holding nothing the caller still owns.
+ */
+guatiao_status guatiao_kind_floor_hash(struct guatiao_str kind,
+                                       const struct guatiao_alloc *alloc,
+                                       uint32_t *out,
+                                       struct guatiao_value *why);
+
+/*
  A new registry introducing its host as `id`/`version`.
 
  `alloc` may be null, and is the allocator offered to every library, so

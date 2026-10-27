@@ -34,7 +34,7 @@ end
 `greeter_vtable`: greets by name. `greet` is the one slot every provider
 fills; the rest are optional, which a provider may leave out.
 """
-@kind Greeter floor_hash = 2695856491 begin
+@kind Greeter floor_hash = 2032737757 begin
     @required @fallible greet(name::String)::MapRef
     shout(name::String)::String
     @fallible start(listener::Taken{Listener})::Conversation

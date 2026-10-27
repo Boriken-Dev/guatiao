@@ -83,7 +83,7 @@ describe('the tally kind', () => {
     using reg = new Registry('tally', '0.1');
     reg.registerLibrary(library('counts', '1.0', { providers: [Counts] }));
     const counts = reg.bind('counts_counts', tally.Tally);
-    expect(counts.kind.floorHash).toBe(1286177969);
+    expect(counts.kind.floorHash).toBe(2688319391);
     expect(counts.add('a', 2)).toBe(2n);
     expect(counts.add('a', 3)).toBe(5n);
     expect(counts.total('a')).toBe(5n);

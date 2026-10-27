@@ -146,7 +146,7 @@ func TestAKindBornInGoIsServedAndCalledInEverySlot(t *testing.T) {
 	if err := tally.Report(w); err != nil || !reflect.DeepEqual(w.said, []string{"apples=4", "pears=2"}) {
 		t.Fatalf("report: %v, %v", w.said, err)
 	}
-	if TallyKind.FloorHash() != 1286177969 || WatcherKind.FloorHash() != 297588550 {
+	if TallyKind.FloorHash() != 2688319391 || WatcherKind.FloorHash() != 297588550 {
 		t.Fatalf("floor hashes %d, %d", TallyKind.FloorHash(), WatcherKind.FloorHash())
 	}
 }

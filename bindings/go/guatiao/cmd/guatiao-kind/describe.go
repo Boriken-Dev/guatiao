@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"hash/fnv"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 )
 
 // A kind born in Go: its interfaces are the only source, and what a Go type
@@ -25,7 +26,7 @@ import (
 //
 //	//guatiao:kind tally                  the kind (on the interface)
 //	//guatiao:appended Aller Knower       its appended slots, an interface each, in table order
-//	//guatiao:floorhash 1286177969        the floor hash, when it is not to be computed
+//	//guatiao:floorhash 2688319391        the floor hash, when it is not to be computed
 //	//guatiao:infallible                  the slot cannot fail (on a method)
 //	//guatiao:lent watcher                these arguments are lent for the call
 //	//guatiao:taken counts                these trees are handed over
@@ -246,8 +247,8 @@ func (p *pkgInfo) describeKind(k *kindDecl) (outKind, error) {
 			return d, fmt.Errorf("%s: //guatiao:floorhash is a 32-bit unsigned integer, not %q", where, strings.Join(pinned, " "))
 		}
 		d.FloorHash = uint32(n)
-	} else {
-		d.FloorHash = floorHashOf(object, d.Slots)
+	} else if d.FloorHash, err = floorHashOf(object, d.Slots); err != nil {
+		return d, fmt.Errorf("%s: %w", where, err)
 	}
 	return d, nil
 }
@@ -455,74 +456,18 @@ func (p *pkgInfo) decoded(expr ast.Expr, gt string) (string, error) {
 	return of(expr, p.exprText(expr))
 }
 
-// floorHashOf is the floor hash of a kind born outside Rust: FNV-1a
-// (32-bit) of provider or object and the required slots, each as
-// name(argument types)->answer spelled as #[guatiao::kind] spells them, so
-// an interface repeating a trait's required slots hashes as the trait
-// does. An object is spelled by its kind's name in PascalCase, as its
-// trait would be named.
-func floorHashOf(object bool, slots []outSlot) uint32 {
-	tree := map[string]string{"value": "Value", "map": "Map", "list": "List"}
-	arg := func(a outType) string {
-		switch a.Type {
-		case "str":
-			return "&str"
-		case "bytes":
-			return "&[u8]"
-		case "bytes_mut":
-			return "&mut[u8]"
-		case "object":
-			if a.Pass == "taken" {
-				return "Object<dyn" + camel(a.Kind) + ">"
-			}
-			return "&mutdyn" + camel(a.Kind)
-		case "value", "map", "list":
-			t := tree[a.Type]
-			switch {
-			case a.Pass == "taken":
-				return t
-			case a.Pass == "lent":
-				return "&mut" + t
-			case a.Nullable:
-				return "Option<&" + t + ">"
-			}
-			return "&" + t
-		}
-		return a.Type
+// floorHashOf is the floor hash of a kind born outside Rust, computed by
+// the library (guatiao.KindFloorHash): FNV-1a (32-bit) of provider or
+// object and every slot in table order, each spelled as #[guatiao::kind]
+// spells it, so an interface repeating a trait's slots hashes as the
+// trait does. Describing a kind therefore loads the library.
+func floorHashOf(object bool, slots []outSlot) (uint32, error) {
+	kind, err := json.Marshal(struct {
+		Object bool      `json:"object"`
+		Slots  []outSlot `json:"slots"`
+	}{object, slots})
+	if err != nil {
+		return 0, err
 	}
-	answer := func(a *outType) string {
-		switch {
-		case a == nil:
-			return "()"
-		case a.Type == "text":
-			return "String"
-		case a.Type == "object":
-			return "Object<dyn" + camel(a.Kind) + ">"
-		case tree[a.Type] != "":
-			return tree[a.Type]
-		}
-		return a.Type
-	}
-	shape := "provider"
-	if object {
-		shape = "object"
-	}
-	parts := []string{shape}
-	for _, s := range slots {
-		if !s.Required {
-			continue
-		}
-		args := make([]string, len(s.Args))
-		for i, a := range s.Args {
-			args[i] = arg(a)
-		}
-		ret := answer(s.Answer)
-		if s.Fallible {
-			ret = "Result<" + ret + ",ProviderError>"
-		}
-		parts = append(parts, s.Name+"("+strings.Join(args, ",")+")->"+ret)
-	}
-	h := fnv.New32a()
-	h.Write([]byte(strings.Join(parts, ";")))
-	return h.Sum32()
+	return guatiao.KindFloorHash(kind)
 }

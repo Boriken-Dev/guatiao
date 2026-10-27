@@ -240,7 +240,7 @@ final class GreeterKind extends Kind<GreeterRemote> {
   GreeterKind._()
     : super(
         name: 'greeter',
-        floorHash: 2695856491,
+        floorHash: 2032737757,
         isObject: false,
         slots: const [
           KindSlot('greet', required: true, fallible: true),

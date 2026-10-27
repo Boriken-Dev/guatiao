@@ -32,9 +32,9 @@ class Method:
 
     `args` are shapes: `STR`, `MAP`, `taken(MAP)`, `lent(LISTENER)` and
     the rest. `returns` is a shape, an object kind, or `None` for a slot
-    that answers nothing. `required` marks a method every table must fill,
-    which its `FLOOR_HASH` covers; a provider may leave any other slot
-    null, and a caller then finds it absent. `arg_names` and `doc` are what a description of
+    that answers nothing. `required` marks a method every table must fill;
+    a provider may leave any other slot null, and a caller then finds it
+    absent. `arg_names` and `doc` are what a description of
     the kind says of it (`kinds.describe_kinds`); unnamed arguments are
     `arg0`, `arg1`, ...
     """

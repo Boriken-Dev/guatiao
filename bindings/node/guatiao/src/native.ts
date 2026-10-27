@@ -300,6 +300,7 @@ const CORE: readonly Declared[] = [
   ['uint32_t guatiao_value_clone(void *alloc, void *src, void *out)'],
   ['uint32_t guatiao_value_make_local(void *value, void *alloc)'],
   ['uint32_t guatiao_map_settle_lent(void *node, void *home)'],
+  ['uint32_t guatiao_kind_floor_hash(guatiao_str kind, void *alloc, void *out, void *why)'],
   ['uint32_t guatiao_value_null(void *out)'],
   ['uint32_t guatiao_value_absent(void *out)'],
   ['uint32_t guatiao_value_bool(bool b, void *out)'],

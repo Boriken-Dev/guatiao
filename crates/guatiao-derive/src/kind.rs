@@ -70,8 +70,8 @@
 //! **with a default body** is an optional slot: a provider may leave it
 //! null, and the proxy then runs the default. A required method after a
 //! defaulted one is refused. A table smaller than the kind's is refused,
-//! and the header's hash covers the required methods' names and
-//! signatures, so a table built from a different declaration is refused
+//! and the header's hash covers every method's name and signature, in
+//! table order, so a table built from a different declaration is refused
 //! rather than called with the wrong ABI.
 //!
 //! The signatures are hashed as **spelled**, after one canonical rewrite
@@ -854,7 +854,7 @@ fn plain_ret(ty: &Type, roots: Roots<'_>) -> syn::Result<RetKind> {
 }
 
 /// `name(ty,ty)->ret`, each type in its canonical spelling with every
-/// space removed: a re-typed or reordered required slot changes the hash,
+/// space removed: a re-typed or reordered slot changes the hash,
 /// and a reformatted one, or one naming a standard or `guatiao` type by
 /// another path, does not. See [`Roots::canonical`] for what is
 /// recognised; any other spelling is hashed as written.
@@ -896,11 +896,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     let object = attr.object;
     let table = format_ident!("{}Vtable", trait_ident);
 
-    let required: Vec<&MethodPlan> = methods.iter().filter(|m| m.default.is_none()).collect();
     // An object kind's hash names the shape, so a provider table and an
     // object table with the same methods can never pass for each other.
+    // Every slot is hashed, optional ones too: the floor is the whole table.
     let hash_input = core::iter::once(if object { "object" } else { "provider" }.to_string())
-        .chain(required.iter().map(|m| m.signature.clone()))
+        .chain(methods.iter().map(|m| m.signature.clone()))
         .collect::<Vec<_>>()
         .join(";");
     // Computed HERE and written as a literal, not left to the runtime's
@@ -976,7 +976,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     let shims = methods
         .iter()
         .map(|m| emit_shim(trait_ident, &table, receiver, m));
-    let required_slots = required.iter().map(|m| {
+    let required_slots = methods.iter().filter(|m| m.default.is_none()).map(|m| {
         let name = m.ident.to_string();
         let ident = &m.ident;
         quote! { (#name, ::core::mem::offset_of!(#table, #ident) + ::core::mem::size_of::<usize>()), }
@@ -1346,7 +1346,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 ::core::mem::size_of::<Self>()
             }
 
-            /// FNV-1a over the shape and the required signatures, as a
+            /// FNV-1a over the shape and every slot's signature, as a
             /// literal, so a C header generator can render it: what a C
             /// implementation writes into the table's header.
             pub const FLOOR_HASH: u32 = #floor_hash;
@@ -2643,10 +2643,11 @@ mod tests {
         assert!(out.contains("(* * self) . greet (name)"), "{out}");
         assert!(out.contains("(* * self) . count (bytes , flag)"), "{out}");
         assert!(out.contains("const NAME : & 'static str = \"greeter\""));
-        // Only the required method is hashed, normalised, behind the
-        // shape -- and written as a literal on the table, where a C
-        // header generator can read it.
-        let literal = fnv1a("provider;greet(&str)->Result<String,ProviderError>");
+        // Both methods are hashed, the defaulted one too, normalised,
+        // behind the shape -- and written as a literal on the table, where
+        // a C header generator can read it.
+        let literal =
+            fnv1a("provider;greet(&str)->Result<String,ProviderError>;count(&[u8],bool)->i64");
         assert!(
             out.contains(&format!("pub const FLOOR_HASH : u32 = {literal} ;")),
             "{out}"
@@ -2712,7 +2713,8 @@ mod tests {
         assert!(out.contains(
             "(\"destroy\" , :: core :: mem :: offset_of ! (ConversationVtable , destroy) + :: core :: mem :: size_of :: < usize > ())"
         ), "{out}");
-        let literal = fnv1a("object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64");
+        let literal =
+            fnv1a("object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64;turns()->i64");
         assert!(
             out.contains(&format!("pub const FLOOR_HASH : u32 = {literal} ;")),
             "{out}"

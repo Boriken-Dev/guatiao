@@ -95,10 +95,10 @@ impl TreesVtable {
     pub const fn floor() -> usize {
         ::core::mem::size_of::<Self>()
     }
-    /// FNV-1a over the shape and the required signatures, as a
+    /// FNV-1a over the shape and every slot's signature, as a
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
-    pub const FLOOR_HASH: u32 = 3903901445;
+    pub const FLOOR_HASH: u32 = 3378259842;
     /// The kind as data, compact JSON: its name, floor hash, and each
     /// slot in table order with its arguments and answer, as the
     /// header declares them, and whether it is required and fallible.
@@ -106,7 +106,7 @@ impl TreesVtable {
     pub fn description() -> ::guatiao::__private::alloc::string::String {
         let mut out = ::guatiao::__private::alloc::string::String::new();
         out.push_str(
-            "{\"name\":\"trees\",\"floor_hash\":3903901445,\"object\":false,\"slots\":[{\"name\":\"map\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"map\"}},{\"name\":\"value\",\"required\":true,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"value\"}},{\"name\":\"list\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"list\"}}]}",
+            "{\"name\":\"trees\",\"floor_hash\":3378259842,\"object\":false,\"slots\":[{\"name\":\"map\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"map\"}},{\"name\":\"value\",\"required\":true,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"value\"}},{\"name\":\"list\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"list\"}}]}",
         );
         out
     }

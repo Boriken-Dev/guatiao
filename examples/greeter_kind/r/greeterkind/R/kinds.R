@@ -20,7 +20,7 @@ Conversation <- kind("conversation", floor_hash = 2769624503, object = TRUE,
 
 # greeter_vtable: greets by name. greet is the one slot every provider
 # fills; the rest are optional, which a provider may leave out.
-Greeter <- kind("greeter", floor_hash = 2695856491,
+Greeter <- kind("greeter", floor_hash = 2032737757,
   greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
   shout = method(name = "string", returns = "string"),
   start = method(listener = taken(Listener), returns = Conversation, fallible = TRUE),

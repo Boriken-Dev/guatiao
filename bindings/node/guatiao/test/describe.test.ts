@@ -202,10 +202,23 @@ export interface Other {
     ]);
   });
 
-  it('gets the hash Rust gives the same required slots', () => {
-    const slot = (name: string, args: object[], answer: object | undefined, fallible: boolean): never =>
-      ({ name, required: true, fallible, args, ...(answer === undefined ? {} : { answer }) }) as never;
+  it('gets the hash Rust gives the same slots, optional ones too, from the library', () => {
+    const slot = (name: string, args: object[], answer: object | undefined, fallible: boolean, required = true): never =>
+      ({
+        name,
+        required,
+        fallible,
+        args: args.map((a, i) => ({ name: `a${i}`, ...a })),
+        ...(answer === undefined ? {} : { answer }),
+      }) as never;
     expect(floorHashOf(false, [slot('greet', [{ type: 'str' }], { type: 'map' }, true)])).toBe(2695856491);
+    expect(
+      floorHashOf(false, [
+        slot('greet', [{ type: 'str' }], { type: 'map' }, true),
+        slot('shout', [{ type: 'str' }], { type: 'text' }, false, false),
+      ]),
+    ).toBe(fnv1a('provider;greet(&str)->Result<Map,ProviderError>;shout(&str)->String'));
+    expect(() => floorHashOf(false, [slot('x', [{ type: 'u256' }], undefined, false)])).toThrow(/slots\[0\]\.args\[0\]\.type/);
     expect(
       floorHashOf(false, [
         slot('f', [{ type: 'value', pass: 'borrowed' }, { type: 'map', pass: 'borrowed' }], { type: 'i64' }, false),

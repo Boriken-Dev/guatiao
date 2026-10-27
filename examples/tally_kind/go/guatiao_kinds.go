@@ -71,7 +71,7 @@ func gkd79eeb88_watcher_changed(ctx C.uintptr_t, a0 unsafe.Pointer, a0n C.size_t
 // TallyKind is the tally kind (tally_vtable), as a host binds it and a provider names it.
 var TallyKind = guatiao.NewKind(guatiao.KindSpec{
 	Name:      "tally",
-	FloorHash: 1286177969,
+	FloorHash: 2688319391,
 	Object:    false,
 	Slots: []guatiao.SlotSpec{
 		{Name: "add", Required: true, Fallible: true, Serve: C.gkd79eeb88_serve_tally_add(), Iface: reflect.TypeFor[Tally]()},

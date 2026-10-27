@@ -7,7 +7,7 @@ const described = kindsOf({
   "kinds": [
     {
       "name": "greeter",
-      "floor_hash": 2695856491,
+      "floor_hash": 2032737757,
       "object": false,
       "slots": [
         {

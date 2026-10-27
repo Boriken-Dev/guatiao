@@ -54,9 +54,14 @@ func TestComputesTheFloorHashOfTheSharedVectors(t *testing.T) {
 		t.Fatalf("%d vectors", len(file.Vectors))
 	}
 	for _, v := range file.Vectors {
-		if got := floorHashOf(v.Object, v.Slots); got != v.FloorHash {
-			t.Errorf("%s: %d, Rust %d", v.Name, got, v.FloorHash)
+		if got, err := floorHashOf(v.Object, v.Slots); err != nil || got != v.FloorHash {
+			t.Errorf("%s: %d (%v), Rust %d", v.Name, got, err, v.FloorHash)
 		}
+	}
+	// What is not a description is refused by the library, naming where.
+	_, err := floorHashOf(false, []outSlot{{Name: "x", Required: true, Args: []outType{{Name: "a", Type: "u256"}}}})
+	if err == nil || !strings.Contains(err.Error(), "slots[0].args[0].type") {
+		t.Fatalf("u256 hashed: %v", err)
 	}
 }
 
@@ -111,7 +116,10 @@ func TestWritesTheDocumentAndTheGlueOfKindsBornInGo(t *testing.T) {
 	if len(doc.Kinds) != 2 || doc.Kinds[0].Name != "ear" || doc.Kinds[1].Name != "probe" || doc.Kinds[1].FloorHash != 42 {
 		t.Fatalf("%s", text)
 	}
-	earHash := floorHashOf(true, []outSlot{{Name: "heard", Required: true, Args: []outType{{Type: "str"}}}})
+	earHash, err := floorHashOf(true, []outSlot{{Name: "heard", Required: true, Args: []outType{{Name: "what", Type: "str"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{
 		"\"name\": \"v\",\n              \"type\": \"value\",\n              \"pass\": \"borrowed\",\n              \"nullable\": true",
 		"\"name\": \"items\",\n              \"type\": \"list\",\n              \"pass\": \"taken\"",

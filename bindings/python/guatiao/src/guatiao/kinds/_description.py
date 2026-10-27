@@ -9,11 +9,15 @@ run time (`kinds_of`) or written out as typed `Protocol` classes
 
 from __future__ import annotations
 
+import ctypes
 import json
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable, Union
 
+from .. import _abi, _lib
+from ..errors import raise_for_status
+from ..value import _make_str, _str_or
 from . import _shapes as shapes
 from ._protocol import kind_of
 from ._spec import Kind, Method
@@ -244,53 +248,21 @@ def slot_description(method: Method) -> "dict[str, Any]":
 
 
 def floor_hash_of(is_object: bool, slots: "list[dict[str, Any]]") -> int:
-    """FNV-1a (32-bit) of the shape and the required slots spelled as
-    `#[guatiao::kind]` spells them (`provider;greet(&str)->Result<Map,ProviderError>`):
-    the hash a kind born outside Rust gets, which a trait declaring the same
-    required slots also has. An object kind is spelled by its name in
-    PascalCase, as its trait would be named."""
-
-    def tree(ty: str) -> str:
-        return {"value": "Value", "map": "Map", "list": "List"}[ty]
-
-    def arg(a: "dict[str, Any]") -> str:
-        ty, how = a["type"], a.get("pass")
-        if ty == "str":
-            return "&str"
-        if ty == "bytes":
-            return "&[u8]"
-        if ty == "bytes_mut":
-            return "&mut[u8]"
-        if ty == "object":
-            pascal = _class_name(a["kind"])
-            return f"Object<dyn{pascal}>" if how == "taken" else f"&mutdyn{pascal}"
-        if ty in ("value", "map", "list"):
-            if how == "taken":
-                return tree(ty)
-            if how == "lent":
-                return f"&mut{tree(ty)}"
-            return f"Option<&{tree(ty)}>" if a.get("nullable") else f"&{tree(ty)}"
-        return str(ty)
-
-    def answer(a: "dict[str, Any] | None") -> str:
-        if a is None:
-            return "()"
-        if a["type"] == "text":
-            return "String"
-        if a["type"] == "object":
-            return f"Object<dyn{_class_name(a['kind'])}>"
-        return tree(a["type"]) if a["type"] in ("value", "map", "list") else str(a["type"])
-
-    def signature(s: "dict[str, Any]") -> str:
-        returns = answer(s.get("answer"))
-        args = ",".join(arg(a) for a in s.get("args", []))
-        return f"{s['name']}({args})->" + (f"Result<{returns},ProviderError>" if s.get("fallible") else returns)
-
-    text = ";".join(["object" if is_object else "provider"] + [signature(s) for s in slots if s.get("required")])
-    hash_ = 0x811C9DC5
-    for byte in text.encode("utf-8"):
-        hash_ = ((hash_ ^ byte) * 0x01000193) & 0xFFFFFFFF
-    return hash_
+    """The floor hash a kind born outside Rust gets, which a trait declaring
+    the same slots also has: the library's `guatiao_kind_floor_hash`, FNV-1a
+    (32-bit) of the shape and every slot in table order spelled as
+    `#[guatiao::kind]` spells them (`docs/encodings.md`, "A kind,
+    described"). Raises `BadValue` for slots that are not a description."""
+    text = json.dumps({"object": is_object, "slots": slots}).encode("utf-8")
+    view, _buf = _make_str(text)
+    core = _lib.core()
+    out, why = ctypes.c_uint32(), _abi.Value()
+    status = core.guatiao_kind_floor_hash(view, ctypes.byref(core.alloc), ctypes.byref(out), ctypes.byref(why))
+    if status != _abi.Status.OK:
+        message = _str_or(why, "the slots are not a kind's")
+        core.guatiao_value_free(ctypes.byref(why))
+        raise_for_status(status, message)
+    return out.value
 
 
 def describe_kinds(*kinds: Any) -> "dict[str, Any]":

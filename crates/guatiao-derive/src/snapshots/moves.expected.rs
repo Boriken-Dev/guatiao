@@ -52,7 +52,7 @@ impl MovesVtable {
     pub const fn floor() -> usize {
         ::core::mem::size_of::<Self>()
     }
-    /// FNV-1a over the shape and the required signatures, as a
+    /// FNV-1a over the shape and every slot's signature, as a
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
     pub const FLOOR_HASH: u32 = 2716657938;

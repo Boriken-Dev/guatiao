@@ -351,6 +351,36 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_kind_floor_hash(
+    guatiao_str kind,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<ffi.Uint32> out,
+    ffi.Pointer<guatiao_value> why,
+  ) {
+    return _guatiao_kind_floor_hash(kind, alloc, out, why);
+  }
+
+  late final _guatiao_kind_floor_hashPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<ffi.Uint32>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_kind_floor_hash');
+  late final _guatiao_kind_floor_hash = _guatiao_kind_floor_hashPtr
+      .asFunction<
+        int Function(
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<ffi.Uint32>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_list_clear(ffi.Pointer<guatiao_value> node) {
     return _guatiao_list_clear(node);
   }

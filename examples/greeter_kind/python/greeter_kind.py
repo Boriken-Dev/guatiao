@@ -44,7 +44,7 @@ class Conversation(KindProtocol, Protocol, kind="conversation", floor_hash=27696
         ...
 
 
-class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2032737757):
     """Greets by name."""
 
     @required

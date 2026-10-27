@@ -388,7 +388,7 @@ fn the_literal_floor_hash_is_the_runtime_hash() {
     use guatiao::library::kind::fnv1a;
     assert_eq!(
         TallyVtable::FLOOR_HASH,
-        fnv1a("object;add(i64)->i64;render(&mut[u8])->i64")
+        fnv1a("object;add(i64)->i64;render(&mut[u8])->i64;total()->i64")
     );
     assert_eq!(<dyn Tally as Kind>::FLOOR_HASH, TallyVtable::FLOOR_HASH);
     assert_eq!(
@@ -396,7 +396,7 @@ fn the_literal_floor_hash_is_the_runtime_hash() {
         fnv1a(
             "provider;greet(&str)->Result<String,ProviderError>;\
              shapes(bool,u32,f64,&[u8],&Value,Option<&Value>,&Map,Greeting)->Result<Greeting,ProviderError>;\
-             describe(&str)->Result<Map,ProviderError>;count()->i64"
+             describe(&str)->Result<Map,ProviderError>;count()->i64;shout(&str)->String"
         )
     );
     // The known vectors, so a wrong constant on either side shows here

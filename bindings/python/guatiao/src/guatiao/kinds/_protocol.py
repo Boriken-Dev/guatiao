@@ -68,8 +68,8 @@ _FALLIBLE = "__guatiao_fallible__"
 
 
 def required(fn: F) -> F:
-    """Marks a slot every table fills, which its `FLOOR_HASH` covers. A
-    provider may leave any other slot null."""
+    """Marks a slot every table fills. A provider may leave any other slot
+    null."""
     setattr(fn, _REQUIRED, True)
     return fn
 
@@ -165,7 +165,7 @@ _OWN = frozenset({"kind"})
 
 class KindProtocol(Protocol):
     """The base of a kind written as a class: `class Greeter(KindProtocol,
-    Protocol, kind="greeter", floor_hash=2695856491)`, a method per slot in
+    Protocol, kind="greeter", floor_hash=2032737757)`, a method per slot in
     the order the kind's C header lists them, `floor_hash` as the header
     defines it. Each method's shapes come from its annotations; `@required`
     and `@fallible` say the rest. `Greeter.kind` is the `Kind` built, and
@@ -219,8 +219,8 @@ class KindProtocol(Protocol):
         name = kind if kind is not None else cls.__name__.lower()
         doc = cls.__dict__.get("__doc__")
         if floor_hash is None:
-            # A kind born here: hashed as #[guatiao::kind] would hash the
-            # same required slots, so another language's declaration agrees.
+            # A kind born here: hashed by the library as #[guatiao::kind]
+            # hashes the same slots, so another language's declaration agrees.
             from ._description import floor_hash_of, slot_description
 
             floor_hash = floor_hash_of(is_object, [slot_description(m) for m in methods])

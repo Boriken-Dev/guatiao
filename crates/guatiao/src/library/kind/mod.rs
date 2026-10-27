@@ -64,7 +64,8 @@ pub trait Kind: 'static {
     /// The size of [`Kind::Vtable`]: every slot. A table declaring less is
     /// refused; a larger one has slots appended after these.
     const FLOOR: usize;
-    /// FNV-1a over the required methods' names and normalised signatures.
+    /// FNV-1a over the shape and every method's name and normalised
+    /// signature, in table order.
     /// A table carrying another number was built from a different
     /// declaration of this kind.
     ///

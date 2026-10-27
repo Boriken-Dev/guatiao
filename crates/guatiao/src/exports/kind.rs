@@ -4,7 +4,7 @@
 
 //! A kind's description from C: the document a kind crate commits beside
 //! its header, read from its text, for a binding with no JSON reader of
-//! its own.
+//! its own; and the floor hash of a kind a language describes itself.
 
 use crate::exports::{entry, out};
 use crate::library::kind::KindDescription;
@@ -44,16 +44,8 @@ pub unsafe extern "C" fn guatiao_kind_document_read(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        let refused = |message: String| {
-            if !why.is_null()
-                && let Ok(text) = Text::new_in(alloc, &message)
-            {
-                // SAFETY: `why` is non-null and writable by the caller's
-                // contract, and holds the ABSENT written on entry.
-                unsafe { Value::from(text).write_to(why, alloc.as_raw()) };
-            }
-            Status::GUATIAO_ERR_BAD_VALUE
-        };
+        // SAFETY: `why` is null or the caller's slot, holding ABSENT.
+        let refused = |message: String| unsafe { refuse(why, alloc, &message) };
         let text = match core::str::from_utf8(text.into()) {
             Ok(text) => text,
             Err(e) => return refused(format!("byte {}: is not UTF-8", e.valid_up_to())),
@@ -65,4 +57,72 @@ pub unsafe extern "C" fn guatiao_kind_document_read(
             Err(e) => refused(e.to_string()),
         }
     })
+}
+
+/// The floor hash of a kind born outside Rust, from its description as
+/// JSON text: one kind as a kinds document holds it, whose `object` and
+/// `slots` are read and checked as `guatiao_kind_document_read` checks
+/// them, and whose other keys (`name`, `floor_hash`, `doc`) are not. The
+/// hash is FNV-1a (32-bit) over `provider` or `object` and every slot in
+/// table order, each spelled as `#[guatiao::kind]` spells a trait's method
+/// (`docs/encodings.md`, "A kind, described"), so a declaration in any
+/// language repeating a trait's slots gets the trait's hash. On
+/// `GUATIAO_OK`, `*out` holds it.
+///
+/// `GUATIAO_ERR_BAD_VALUE` for text that is not JSON or not a kind, `why`
+/// (which may be null) then holding the reason as a string built in
+/// `alloc`, worded as `guatiao_kind_document_read` words it, else ABSENT.
+/// `GUATIAO_ERR_ALLOC` for a null or unusable allocator, `GUATIAO_ERR_NULL`
+/// for a null `out`.
+///
+/// # Safety
+///
+/// The view's bytes are readable for the call; `alloc` is null or valid;
+/// `out` is null or writable; `why` is null or addresses writable storage
+/// for one value holding nothing the caller still owns.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_kind_floor_hash(
+    kind: Str,
+    alloc: *const Allocator,
+    out: *mut u32,
+    why: *mut Value,
+) -> Status {
+    out!(why);
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: `why` is null or the caller's slot, holding ABSENT.
+        let refused = |message: String| unsafe { refuse(why, alloc, &message) };
+        let text = match core::str::from_utf8(kind.into()) {
+            Ok(text) => text,
+            Err(e) => return refused(format!("byte {}: is not UTF-8", e.valid_up_to())),
+        };
+        match KindDescription::floor_hash_json(text) {
+            Ok(hash) => {
+                // SAFETY: `out` is non-null and writable by the caller's
+                // contract.
+                unsafe { out.write(hash) };
+                Status::GUATIAO_OK
+            }
+            Err(e) => refused(e.to_string()),
+        }
+    })
+}
+
+/// Writes `message` into `why`, when it is not null, and answers
+/// `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// `why` is null or addresses writable storage holding ABSENT.
+unsafe fn refuse(why: *mut Value, alloc: Alloc, message: &str) -> Status {
+    if !why.is_null()
+        && let Ok(text) = Text::new_in(alloc, message)
+    {
+        // SAFETY: non-null, writable and holding ABSENT by the contract.
+        unsafe { Value::from(text).write_to(why, alloc.as_raw()) };
+    }
+    Status::GUATIAO_ERR_BAD_VALUE
 }

@@ -29,7 +29,7 @@ const described = kindsOf({
     },
     {
       "name": "tally",
-      "floor_hash": 1286177969,
+      "floor_hash": 2688319391,
       "object": false,
       "slots": [
         {

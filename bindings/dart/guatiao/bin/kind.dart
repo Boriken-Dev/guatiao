@@ -14,7 +14,9 @@
 ///
 /// `dart run guatiao:kind describe FILE.dart -o DOCUMENT [--check]` writes
 /// the document of the kinds a Dart file declares
-/// (`package:guatiao/describe.dart`), which the first form then reads.
+/// (`package:guatiao/describe.dart`), which the first form then reads; a
+/// floor hash no declaration pins comes from the guatiao library, found as
+/// the package finds it (`GUATIAO_LIBRARY` among the places).
 ///
 /// `--check` writes nothing and exits 1 when the file is not what it would
 /// write.

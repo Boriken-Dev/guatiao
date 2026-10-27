@@ -81,7 +81,7 @@ export interface MethodSpec {
   readonly args?: readonly Shape<any, any, any, any>[];
   /** A shape, an object kind (an object the caller then owns), or none. */
   readonly answer?: Shape<any, any, any, any> | ObjectKindLike;
-  /** A slot every table fills, which its floor hash covers; a provider may leave any other null. */
+  /** A slot every table fills; a provider may leave any other null. */
   readonly required?: boolean;
   /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
   readonly fallible?: boolean;

@@ -220,7 +220,7 @@ func TestWritesGlueForAKindWithNoHeader(t *testing.T) {
 	}
 	goSrc, _ := os.ReadFile(filepath.Join(dir, "guatiao_kinds.go"))
 	for _, want := range []string{
-		"var TallyKind = guatiao.NewKind", "FloorHash: 1286177969", "var WatcherKind = guatiao.NewKind",
+		"var TallyKind = guatiao.NewKind", "FloorHash: 2688319391", "var WatcherKind = guatiao.NewKind",
 		"func (r *TallyRemote) Report(watcher Watcher) error", "c.Take(counts, guatiao.MapClass)",
 	} {
 		if !strings.Contains(string(goSrc), want) {
