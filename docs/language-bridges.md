@@ -199,9 +199,13 @@ Both take the mechanism (`&Libffi`); another one, written against
 `guatiao::library::kind::Mechanism`, plugs in the same way.
 
 A script calling such an object goes through guatiao-bridge as well:
-`Held` is what the script's handle calls, and `PreparedArg` holds the
-call's arguments while it runs (`with_args`), lent trees and buffers kept
-to write back after it. The engine reads only its own values: a number
+`Held` is what the script's handle calls, and `PreparedArgs` holds the
+call's arguments (each a `PreparedArg`) while it runs (`with_args`), lent
+trees and buffers kept to write back after it. However the call ends, an
+object an argument took out of the script's handle and the callee did not
+take over goes back to that handle (the engine's `ObjectHome`), so a call
+refused at a later argument destroys nothing the script holds. The engine
+reads only its own values: a number
 into a `Reading` for `PreparedArg::scalar`, a tree into a `Value` for
 `PreparedArg::tree`, text and bytes as they are, so a whole number, a
 map or an object of the wrong kind is refused in the same words by every
