@@ -702,7 +702,7 @@ impl WasmEngine {
         let outcome = live.call(&self.limits, object, target, &request);
         let state = live.store.data_mut();
         for handle in lent {
-            state.handles.remove(&handle);
+            state.handles.get_mut().remove(&handle);
         }
         let (status, answer) = match outcome {
             Ok(done) => done,
