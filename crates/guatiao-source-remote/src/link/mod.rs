@@ -527,10 +527,10 @@ fn proves_key(options: &LinkOptions) -> bool {
     }
 }
 
-#[cfg(feature = "tcp")]
 /// A token that proves nothing, refused at both ends.
 const BLANK_TOKEN: &str = "token is empty or only white space, and proves nothing";
 
+#[cfg(feature = "tcp")]
 fn need_key(options: &LinkOptions) -> Result<&[u8], LinkError> {
     options
         .key
