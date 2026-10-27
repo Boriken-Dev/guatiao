@@ -13,11 +13,11 @@ use guatiao::library::kind::{
 };
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Status, Tag, Value};
-use guatiao_bridge::CallArg;
+use guatiao_bridge::{CallArg, Held};
 use rquickjs::{Ctx, Object, TypedArray, Value as Js};
 
 use crate::errors::{self, bad_value};
-use crate::host::{self, Shared, Target};
+use crate::host::{self, Shared};
 use crate::prelude::Core;
 use crate::values;
 
@@ -92,11 +92,11 @@ pub(crate) fn argument<'js>(
             let CallArg::Object(o) = core::mem::replace(arg, CallArg::Value(Value::null())) else {
                 unreachable!("matched just above")
             };
-            let object = host::object_for(ctx, shared, object_kind, Target::Object(Some(o)))?;
+            let object = host::object_for(ctx, shared, object_kind, Held::Object(Some(o)))?;
             (object.into_value(), Received::Plain)
         }
         CallArg::LentObject(h) => {
-            let object = host::object_for(ctx, shared, object_kind, Target::Lent(h.clone()))?;
+            let object = host::object_for(ctx, shared, object_kind, Held::Lent(h.clone()))?;
             (object.into_value(), Received::Plain)
         }
         _ => {

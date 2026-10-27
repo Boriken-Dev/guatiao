@@ -14,11 +14,11 @@ use core::cell::RefCell;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
-    Answer, AnswerType, Arg, ArgType, Caller, KindDescription, LentHandle, LentObject, Pass,
-    RawObject, Scalar, SlotDescription, Tree,
+    Answer, AnswerType, Arg, ArgType, Caller, KindDescription, LentHandle, Pass, RawObject,
+    SlotDescription,
 };
-use guatiao::{List, Map, Status, Value};
-use guatiao_bridge::{BridgeError, Kinds, Limit};
+use guatiao::{Status, Value};
+use guatiao_bridge::{BridgeError, Held, Kinds, Limit, Reading};
 use guatiao_libffi::Libffi;
 use rhai::{Dynamic, Engine, EvalAltResult, ImmutableString, Position};
 
@@ -190,17 +190,9 @@ impl Known {
 
 // --- handles ------------------------------------------------------------------
 
-/// What a handle calls.
-enum Target {
-    /// An object handed over, until it is handed on.
-    Object(Option<RawObject>),
-    /// An object lent for a call that may have returned.
-    Lent(LentHandle),
-}
-
 struct Inner {
     caller: Arc<Caller>,
-    target: RefCell<Target>,
+    held: RefCell<Held>,
 }
 
 /// An object of a described kind that a host handed to a script (a
@@ -217,65 +209,47 @@ fn busy() -> ProviderError {
 }
 
 impl Handle {
-    fn new(target: Target, caller: Arc<Caller>) -> Handle {
+    fn new(held: Held, caller: Arc<Caller>) -> Handle {
         Handle(Rc::new(Inner {
             caller,
-            target: RefCell::new(target),
+            held: RefCell::new(held),
         }))
     }
 
     pub(crate) fn object(caller: Arc<Caller>, object: RawObject) -> Handle {
-        Handle::new(Target::Object(Some(object)), caller)
+        Handle::new(Held::Object(Some(object)), caller)
     }
 
     pub(crate) fn lent(caller: Arc<Caller>, lent: LentHandle) -> Handle {
-        Handle::new(Target::Lent(lent), caller)
+        Handle::new(Held::Lent(lent), caller)
     }
 
     /// The object, if this handle still holds it: what an answer that is a
     /// handle hands back.
     pub(crate) fn take_object(&self, kind: &str) -> Result<RawObject, ProviderError> {
-        if self.0.caller.kind().name() != kind {
-            return Err(ProviderError::new(
-                Status::GUATIAO_ERR_WRONG_KIND,
-                &format!(
-                    "an object of `{kind}` is answered, not of `{}`",
-                    self.0.caller.kind().name()
-                ),
-            ));
-        }
-        match &mut *self.0.target.try_borrow_mut().map_err(|_| busy())? {
-            Target::Object(o) => o.take().ok_or_else(|| {
-                ProviderError::new(
-                    Status::GUATIAO_ERR_GONE,
-                    "the object was already handed over",
-                )
-            }),
-            Target::Lent(_) => Err(ProviderError::new(
-                Status::GUATIAO_ERR_WRONG_KIND,
-                "an object lent to this call cannot be handed back",
-            )),
-        }
+        self.0
+            .held
+            .try_borrow_mut()
+            .map_err(|_| busy())?
+            .hand_back(&self.0.caller, kind)
     }
 
     fn call(&self, slot: usize, args: Vec<Arg<'_>>) -> Result<Answer, ProviderError> {
         let caller = &self.0.caller;
         // A lent object is the host's to guard: only a held one is borrowed
         // for the length of the call.
-        let lent = match &*self.0.target.try_borrow().map_err(|_| busy())? {
-            Target::Lent(handle) => Some(handle.clone()),
-            Target::Object(_) => None,
+        let lent = match &*self.0.held.try_borrow().map_err(|_| busy())? {
+            Held::Lent(handle) => Some(handle.clone()),
+            _ => None,
         };
         if let Some(handle) = lent {
             return handle.call(caller, slot, args);
         }
-        match &mut *self.0.target.try_borrow_mut().map_err(|_| busy())? {
-            Target::Object(Some(object)) => object.call(caller, slot, args),
-            _ => Err(ProviderError::new(
-                Status::GUATIAO_ERR_GONE,
-                "the object was handed over",
-            )),
-        }
+        self.0
+            .held
+            .try_borrow_mut()
+            .map_err(|_| busy())?
+            .call(caller, slot, args)
     }
 }
 
@@ -318,95 +292,30 @@ fn call_slot(
         )));
     }
     let mut prepared = prepare(described, args)?;
-    let answer = with_args(&mut prepared, |args| handle.call(slot, args));
+    let answer = Prepared::with_args(&mut prepared, |args| handle.call(slot, args));
     settle(prepared);
     answer_to_dynamic(known, described, answer?)
 }
 
 // --- Rhai values as a slot's arguments ------------------------------------------
 
-/// One argument, held while the call runs.
-enum Prepared {
-    Bool(bool),
-    Int(i64),
-    Uint(u64),
-    Float(f64),
-    Str(String),
-    Bytes(Vec<u8>),
-    Value(Option<Value>),
-    Map(Map),
-    List(List),
-    TakenValue(Option<Value>),
-    TakenMap(Option<Map>),
-    TakenList(Option<List>),
-    Object(Option<RawObject>),
-    /// An object this side owns, lent for the call and put back after.
-    LentOwned(Option<RawObject>, Handle),
-    /// A lent object passed on.
-    LentPassed(LentHandle),
-}
+/// One argument, held while the call runs: an object lent from a handle
+/// goes back into it.
+type Prepared = guatiao_bridge::PreparedArg<(), (), Handle>;
 
-fn integer_of(d: &Dynamic, what: &str) -> Result<i128, String> {
-    if let Ok(i) = d.as_int() {
-        return Ok(i128::from(i));
+/// A Rhai value as a scalar argument reads it.
+fn reading(d: &Dynamic) -> Reading {
+    if let Ok(b) = d.as_bool() {
+        Reading::Bool(b)
+    } else if let Ok(i) = d.as_int() {
+        Reading::Int(i)
+    } else if let Ok(f) = d.as_float() {
+        Reading::Float(f)
+    } else if let Some(n) = d.read_lock::<Exact>() {
+        Reading::Exact(n.0.clone())
+    } else {
+        Reading::Other
     }
-    if let Ok(f) = d.as_float()
-        && f.fract() == 0.0
-        && f.abs() < 1.8e19
-    {
-        return Ok(f as i128);
-    }
-    if let Some(n) = d.read_lock::<Exact>() {
-        return n
-            .0
-            .parse::<i128>()
-            .map_err(|_| format!("{what}: `{}` is not a whole number", n.0));
-    }
-    Err(format!("{what} is a whole number, not a {}", type_name(d)))
-}
-
-fn scalar(d: &Dynamic, ty: Scalar, what: &str) -> Result<Prepared, String> {
-    Ok(match ty {
-        Scalar::Bool => Prepared::Bool(
-            d.as_bool()
-                .map_err(|_| format!("{what} is a boolean, not a {}", type_name(d)))?,
-        ),
-        Scalar::F32 | Scalar::F64 => {
-            if let Ok(f) = d.as_float() {
-                Prepared::Float(f)
-            } else if let Ok(i) = d.as_int() {
-                Prepared::Float(i as f64)
-            } else if let Some(n) = d.read_lock::<Exact>() {
-                Prepared::Float(n.float())
-            } else {
-                return Err(format!("{what} is a number, not a {}", type_name(d)));
-            }
-        }
-        Scalar::U8 | Scalar::U16 | Scalar::U32 | Scalar::U64 | Scalar::Usize => {
-            let n = integer_of(d, what)?;
-            Prepared::Uint(u64::try_from(n).map_err(|_| format!("{what}: {n} does not fit"))?)
-        }
-        _ => {
-            let n = integer_of(d, what)?;
-            Prepared::Int(i64::try_from(n).map_err(|_| format!("{what}: {n} does not fit"))?)
-        }
-    })
-}
-
-fn tree_of(d: &Dynamic, tree: Tree, what: &str) -> Result<Value, String> {
-    let value = values::to_value(d)?;
-    let fits = match tree {
-        Tree::Map => guatiao::value::convert::TryAsRef::<Map>::try_as_ref(&value).is_some(),
-        Tree::List => guatiao::value::convert::TryAsRef::<List>::try_as_ref(&value).is_some(),
-        _ => true,
-    };
-    if !fits {
-        return Err(format!(
-            "{what} is a {}",
-            if tree == Tree::Map { "map" } else { "list" }
-        ));
-    }
-    Ok(value)
 }
 
 /// An object argument: a handle handed over, lent, or passed on.
@@ -418,31 +327,9 @@ fn object_arg(d: Dynamic, kind: &str, pass: Pass, what: &str) -> Result<Prepared
             "{what} is an object of `{kind}` (a handle), not a {shown}"
         )));
     };
-    if handle.0.caller.kind().name() != kind {
-        return Err(bad(format!(
-            "{what} is a `{kind}`, not a `{}`",
-            handle.0.caller.kind().name()
-        )));
-    }
-    let mut target = handle.0.target.try_borrow_mut().map_err(|_| busy())?;
-    match (&mut *target, pass) {
-        (Target::Object(object), Pass::Taken) => {
-            Ok(Prepared::Object(Some(object.take().ok_or_else(|| {
-                bad(format!("{what} was already handed over"))
-            })?)))
-        }
-        (Target::Object(object), _) => {
-            let taken = object
-                .take()
-                .ok_or_else(|| bad(format!("{what} was already handed over")))?;
-            drop(target);
-            Ok(Prepared::LentOwned(Some(taken), handle))
-        }
-        (Target::Lent(lent), Pass::Lent) => Ok(Prepared::LentPassed(lent.clone())),
-        (Target::Lent(_), _) => Err(bad(format!(
-            "{what} was lent to this call, and cannot be handed over"
-        ))),
-    }
+    let mut held = handle.0.held.try_borrow_mut().map_err(|_| busy())?;
+    held.argument(&handle.0.caller, kind, pass, handle.clone(), what)
+        .map_err(bad)
 }
 
 /// Rhai values as `slot`'s arguments, held for the call.
@@ -452,7 +339,9 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
     for (d, described) in args.into_iter().zip(slot.args()) {
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
         out.push(match described.ty() {
-            ArgType::Scalar(s) => scalar(&d, *s, &what).map_err(bad)?,
+            ArgType::Scalar(s) => {
+                Prepared::scalar(reading(&d), &type_name(&d), *s, &what).map_err(bad)?
+            }
             ArgType::Str => {
                 if let Some(s) = d.read_lock::<ImmutableString>() {
                     Prepared::Str(s.to_string())
@@ -483,19 +372,8 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
                         "{what} is lent to the slot by its caller; a script cannot lend a value"
                     )));
                 } else {
-                    let value = tree_of(&d, *tree, &what).map_err(bad)?;
-                    match (tree, pass) {
-                        (Tree::Map, Pass::Borrowed) => {
-                            Prepared::Map(Map::try_from(value).unwrap_or_default())
-                        }
-                        (Tree::List, Pass::Borrowed) => {
-                            Prepared::List(List::try_from(value).unwrap_or_default())
-                        }
-                        (_, Pass::Borrowed) => Prepared::Value(Some(value)),
-                        (Tree::Map, _) => Prepared::TakenMap(Map::try_from(value).ok()),
-                        (Tree::List, _) => Prepared::TakenList(List::try_from(value).ok()),
-                        (_, _) => Prepared::TakenValue(Some(value)),
-                    }
+                    let value = values::to_value(&d).map_err(bad)?;
+                    Prepared::tree(value, *tree, *pass, None, &what).map_err(bad)?
                 }
             }
             ArgType::Object { kind, pass } => object_arg(d, kind, *pass, &what)?,
@@ -514,75 +392,13 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
     Ok(out)
 }
 
-/// Runs `f` with the arguments `prepared` holds, as core takes them.
-fn with_args<R>(prepared: &mut [Prepared], f: impl FnOnce(Vec<Arg<'_>>) -> R) -> R {
-    // A lent object passed on is lent for as long as its own lend lasts:
-    // nest one `lend` per such argument.
-    let passed: Vec<LentHandle> = prepared
-        .iter()
-        .filter_map(|p| match p {
-            Prepared::LentPassed(h) => Some(h.clone()),
-            _ => None,
-        })
-        .collect();
-    lending(&passed, Vec::new(), move |lent| {
-        let mut lent = lent.into_iter();
-        let mut args = Vec::with_capacity(prepared.len());
-        for p in prepared.iter_mut() {
-            args.push(match p {
-                Prepared::Bool(b) => Arg::Bool(*b),
-                Prepared::Int(n) => Arg::Int(*n),
-                Prepared::Uint(n) => Arg::Uint(*n),
-                Prepared::Float(x) => Arg::Float(*x),
-                Prepared::Str(s) => Arg::Str(s),
-                Prepared::Bytes(b) => Arg::Bytes(b),
-                Prepared::Value(v) => Arg::Value(v.as_ref()),
-                Prepared::Map(m) => Arg::Map(m),
-                Prepared::List(l) => Arg::List(l),
-                Prepared::TakenValue(v) => Arg::TakenValue(v.take().unwrap_or_else(Value::null)),
-                Prepared::TakenMap(m) => Arg::TakenMap(m.take().unwrap_or_default()),
-                Prepared::TakenList(l) => Arg::TakenList(l.take().unwrap_or_default()),
-                Prepared::Object(o) => match o.take() {
-                    Some(o) => Arg::Object(o),
-                    None => Arg::Value(None),
-                },
-                Prepared::LentOwned(Some(o), _) => Arg::LentObject(o.lend()),
-                Prepared::LentOwned(None, _) => Arg::Value(None),
-                Prepared::LentPassed(_) => match lent.next().flatten() {
-                    Some(o) => Arg::LentObject(o),
-                    None => Arg::Value(None),
-                },
-            });
-        }
-        f(args)
-    })
-}
-
-/// Lends each of `handles` in turn (each lend lives only inside its
-/// closure), then runs `f` with all of them.
-fn lending<R>(
-    handles: &[LentHandle],
-    lent: Vec<Option<LentObject<'_>>>,
-    f: impl FnOnce(Vec<Option<LentObject<'_>>>) -> R,
-) -> R {
-    match handles.split_first() {
-        None => f(lent),
-        Some((first, rest)) => first.lend(|object| {
-            let mut all = lent;
-            all.push(object);
-            lending(rest, all, f)
-        }),
-    }
-}
-
 /// After the call: each object lent from a handle is put back in it.
 fn settle(prepared: Vec<Prepared>) {
     for p in prepared {
         if let Prepared::LentOwned(Some(object), handle) = p
-            && let Ok(mut target) = handle.0.target.try_borrow_mut()
-            && let Target::Object(slot) = &mut *target
+            && let Ok(mut held) = handle.0.held.try_borrow_mut()
         {
-            *slot = Some(object);
+            held.put_back(object);
         }
     }
 }

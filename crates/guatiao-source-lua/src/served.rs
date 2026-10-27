@@ -19,10 +19,11 @@ use guatiao::library::kind::{
     Answer, Arg, KindDescription, LentHandle, LentObject, RawObject, Serve, ServedTable,
 };
 use guatiao::{List, Map, Status, Value};
+use guatiao_bridge::Held;
 use guatiao_libffi::Libffi;
 use mlua::prelude::*;
 
-use crate::calls::{self, Handle, Outcome, ReadBack, Received, Target};
+use crate::calls::{self, Handle, Outcome, ReadBack, Received};
 
 /// One thread's served objects, and the tables they are served through.
 #[derive(Default)]
@@ -163,7 +164,7 @@ pub(crate) fn call_table(
                         let caller = calls::caller(lua, &kind).map_err(bad)?;
                         let ud = lua
                             .create_userdata(Handle {
-                                target: Target::Lent(handle),
+                                held: Held::Lent(handle),
                                 caller,
                             })
                             .map_err(bad)?;

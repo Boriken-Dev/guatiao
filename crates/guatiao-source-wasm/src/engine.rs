@@ -21,14 +21,14 @@ use guatiao::library::kind::{AnswerType, ArgType};
 use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::{Status, Value};
 use guatiao_bridge::{
-    BridgeError, Call, CallArg, Config, Engine, Kinds, Limits, Manifest, ManifestFormat, Opened,
-    Provided, Reply, Target, ThreadModel,
+    BridgeError, Call, CallArg, Config, Engine, Held, Kinds, Limits, Manifest, ManifestFormat,
+    Opened, Provided, Reply, Target, ThreadModel,
 };
 use wasmtime::{ExternType, FuncType, Linker, Module};
 
 use crate::abi::{self, export};
 use crate::budget::{self, Refused, Undecoded};
-use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
+use crate::instance::{self, Live, Shared, State, Stopped, Writable, with_stack};
 use crate::{meter, section, wasi};
 
 /// The largest module a source reads and compiles.
@@ -688,7 +688,7 @@ impl WasmEngine {
                     else {
                         unreachable!("only objects have callers")
                     };
-                    Held::Owned(object)
+                    Held::Object(Some(object))
                 }
             };
             let lend = matches!(held, Held::Lent(_));
