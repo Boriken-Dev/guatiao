@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use guatiao::library::ProviderError;
 use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::{List, Map, Status};
-use guatiao_bridge::manifest::ManifestFormat;
+use guatiao_bridge::manifest::{self, ManifestFormat};
 
 use crate::link::LinkOptions;
 use crate::protocol::Trust;
@@ -533,18 +533,10 @@ const PEER_PATHS: &[&str] = &["key_file", "token_file", "identity_file", "state_
 
 /// The paths a configuration lists under `key`, or none.
 pub(crate) fn paths(map: &Map, key: &str) -> Result<Vec<PathBuf>, ProviderError> {
-    let Some(value) = map.get(key) else {
-        return Ok(Vec::new());
-    };
-    let list = TryAsRef::<List>::try_as_ref(value)
-        .ok_or_else(|| refused(format!("`{key}` is not a list of paths")))?;
-    list.iter()
-        .map(|v| {
-            TryAsRef::<str>::try_as_ref(v)
-                .map(PathBuf::from)
-                .ok_or_else(|| refused(format!("`{key}` is not a list of paths")))
-        })
-        .collect()
+    Ok(guatiao_bridge::text_list(map, key)?
+        .into_iter()
+        .map(PathBuf::from)
+        .collect())
 }
 
 /// A path a peer manifest names under `key`, resolved against its
@@ -588,12 +580,7 @@ pub(crate) fn key_stamp(defaults: &Map, manifest: &Map, path: &Path) -> String {
         .map(|file| {
             let hash = std::fs::read(file).map_or_else(
                 |_| "absent".to_string(),
-                |bytes| {
-                    let h = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-                        (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
-                    });
-                    format!("{h:016x}")
-                },
+                |bytes| manifest::content_stamp(&bytes),
             );
             format!("{}={hash}", file.display())
         })

@@ -204,7 +204,7 @@ fn large_and_small_bytes_from_many_threads_arrive_whole() {
     // The kind comes from the provider's own description.
     let server = Server::new(
         registry,
-        guatiao_source_remote::Described::new(),
+        guatiao_source_remote::Kinds::new(),
         LinkOptions::new(Trust::Local),
     );
     let name = listen(&server, "bytes");

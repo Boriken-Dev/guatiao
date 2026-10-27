@@ -24,7 +24,7 @@ use guatiao::library::{Object, ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 use guatiao_source_remote::transport::{Connect, Connection, memory};
-use guatiao_source_remote::{Described, LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, RemoteSource, Server, Trust};
 
 /// An access control list permitting `sources` alone.
 #[cfg(feature = "tcp")]
@@ -180,13 +180,13 @@ guatiao::local_providers!(id = "shapes", version = "1.0.0", providers = [Hello])
 
 /// The kinds `greeter_kind` describes, found above whichever package
 /// includes this file.
-pub fn described() -> Described {
+pub fn described() -> Kinds {
     let kinds = Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .map(|dir| dir.join("examples/greeter_kind/include/greeter_kind.kinds.json"))
         .find(|path| path.is_file())
         .expect("greeter_kind's descriptions, in the checkout");
-    let mut described = Described::new();
+    let mut described = Kinds::new();
     described.load(&kinds).expect("greeter_kind's descriptions");
     described
 }

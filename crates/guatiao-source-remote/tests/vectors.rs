@@ -191,11 +191,11 @@ fn every_malformed_body_is_refused_where_the_file_says() {
 fn kinds() -> Vec<Arc<KindDescription>> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/greeter_kind/include/greeter_kind.kinds.json");
-    let mut d = guatiao_source_remote::Described::new();
+    let mut d = guatiao_source_remote::Kinds::new();
     d.load(&path).unwrap();
     ["greeter", "conversation", "wide", "listener", "counter"]
         .iter()
-        .map(|k| Arc::clone(d.kinds().get(k).unwrap()))
+        .map(|k| Arc::clone(d.get(k).unwrap()))
         .collect()
 }
 

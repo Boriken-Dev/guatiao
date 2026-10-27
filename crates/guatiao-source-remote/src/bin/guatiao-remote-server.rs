@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use guatiao::library::Registry;
 use guatiao::{Alloc, Map, Value};
 use guatiao_source_remote::config::{Security, security_of, token_in};
-use guatiao_source_remote::{Described, LinkOptions, Server, Trust};
+use guatiao_source_remote::{Kinds, LinkOptions, Server, Trust};
 
 #[cfg(any(feature = "tcp", feature = "local"))]
 use front::Front;
@@ -230,12 +230,11 @@ fn config_map(json: Option<&str>) -> Result<Map, String> {
     Map::try_from(v).map_err(|_| "a source's configuration is not a JSON object".to_string())
 }
 
-fn registry(a: &Args) -> Result<(Registry, Described), String> {
-    let mut described = Described::new();
+fn registry(a: &Args) -> Result<(Registry, Kinds), String> {
+    let mut kinds = Kinds::new();
     for path in &a.kinds {
-        described
-            .load(path)
-            .map_err(|e| format!("{}: {}", path.display(), e.message()))?;
+        // The refusal names the file.
+        kinds.load(path).map_err(|e| e.to_string())?;
     }
     let mut registry = Registry::new("guatiao-remote-server", env!("CARGO_PKG_VERSION"));
     for path in &a.load {
@@ -252,7 +251,7 @@ fn registry(a: &Args) -> Result<(Registry, Described), String> {
             .add_source_file(path, &config_map(json.as_deref())?)
             .map_err(|e| format!("{}: {e}", path.display()))?;
     }
-    Ok((registry, described))
+    Ok((registry, kinds))
 }
 
 fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
@@ -312,7 +311,7 @@ fn run() -> Result<(), String> {
     if a.waiting || a.accept.is_some() {
         return pairing(&a);
     }
-    let (registry, described) = registry(&a)?;
+    let (registry, kinds) = registry(&a)?;
     let scheme = match a.listen.as_deref() {
         Some(url) => url
             .split_once("://")
@@ -361,7 +360,7 @@ fn run() -> Result<(), String> {
         }
         _ => {}
     }
-    let server = Server::new(registry, described, options(&a, security.trust(local))?);
+    let server = Server::new(registry, kinds, options(&a, security.trust(local))?);
     let refreshed = server.refresh();
     for r in &refreshed.refused {
         eprintln!("guatiao-remote-server: {}: {}", r.source, r.reason);

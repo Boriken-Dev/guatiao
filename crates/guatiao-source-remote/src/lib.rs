@@ -36,4 +36,8 @@ pub use coqui_net_acl as acl;
 pub use client::RemoteSource;
 pub use link::{Link, LinkError, LinkOptions};
 pub use protocol::Trust;
-pub use server::{Described, Server};
+pub use server::Server;
+
+/// The kinds a [`Server`] serves, read from their descriptions
+/// (`guatiao-bridge`).
+pub use guatiao_bridge::Kinds;
