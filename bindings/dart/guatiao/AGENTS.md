@@ -5,7 +5,8 @@ Self-contained — this file ships with the package, so it names no repo path.
 
 A plain Dart package, Dart 3.10 or newer. Its dependencies are
 `package:ffi`, `package:hooks` and `package:code_assets` for its build
-hook (below), and `package:crypto` for the remote protocol's key proof. It does **not** depend on Flutter: a plain Dart package
+hook (below), `package:crypto` for the remote protocol's key proof and
+`package:clock` for the time a remote call's bound counts. It does **not** depend on Flutter: a plain Dart package
 works inside a Flutter app, and the reverse is not true. 32- and 64-bit
 native platforms (`armeabi-v7a` included), and the web: there the same
 API runs over the WebAssembly module a page loads (below).

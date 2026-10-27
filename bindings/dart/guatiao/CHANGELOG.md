@@ -38,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the server and presents an identity.
   Calls are typed by the kinds' descriptions the catalog carries; a page
   serves objects (`Served`) the server calls back while a call is open.
-  The package depends on `package:crypto` for the key proof.
+  The package depends on `package:crypto` for the key proof and on
+  `package:clock` for the time a call's bound counts.
 
 ### Changed
 
