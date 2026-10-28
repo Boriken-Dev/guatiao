@@ -100,6 +100,10 @@ func run(w io.Writer, dirs []string, pythonSource string, pythonDirs, pythonPath
 		fmt.Fprintf(w, "registered %s %s from Go\n", lib.ID(), lib.Version())
 	}
 	if pythonSource != "" {
+		// The bridge imports python3.dll from the Python installation, on PATH.
+		if err := reg.SetImportSearch(guatiao.ImportSearchPath); err != nil {
+			return err
+		}
 		if err := reg.AddSourceFile(pythonSource, map[string]any{"dirs": pythonDirs, "paths": pythonPaths}); err != nil {
 			return err
 		}

@@ -272,6 +272,12 @@ none), `available(kind, answer)`, `why_not(kind, answer)`, `best(kind,
 answer)`, `provider_available(key, ok, reason)`, `keyed_by(template)`
 and `libraries_keyed_by(template)` (`%id` by default, `%version`,
 `%name`, `%library`, `%source`), `set_priority(id, p)`, `priority(id)`,
+`set_import_search(GUATIAO_IMPORT_SEARCH_PATH)` / `import_search()` (where
+Windows finds what a file the registry opens imports:
+`GUATIAO_IMPORT_SEARCH_LIBRARY`, the default, looks beside the file,
+beside the host's executable and in the system directory,
+`GUATIAO_IMPORT_SEARCH_PATH` also in the current directory and on `PATH`,
+as a host adding a Python bridge needs; unix ignores it),
 `provider_table(key, kind, table, size)` (`kind` `''` for a single
 table), `provider_ctx(key)`, `provider_config(key)` (a read-only handle on
 the schema, absent for none), `provider_meta(key, answer [, stat, errmsg])`

@@ -97,7 +97,7 @@ Binary `guatiao-remote-server` (`--stdio` | `--listen tcp://ADDR | tls://ADDR | 
 `--security none|server-tls|mutual-tls`, `--range CIDR`..., `--acl PATH`, `--key-file`,
 `--token-file PATH`, `--state-dir DIR`, `--identity PATH`, `--hashes-file PATH`,
 `--pin FP`..., `--policy PATH`, `--rdma-device NAME`, `--kinds PATH`... (optional), `--load`,
-`--scan`, `--source PATH[=JSON]`, `--refresh-ms`, `--max-calls`,
+`--scan`, `--source PATH[=JSON]`, `--import-search library|path`, `--refresh-ms`, `--max-calls`,
 `--max-frame`, `--max-handshakes N`; `--state-dir DIR --waiting | --accept FP` pair clients and exit).
 At most `--max-handshakes` connections (default 64) are in their handshake
 at once; past it a new one is closed unread. A refused source (denied by

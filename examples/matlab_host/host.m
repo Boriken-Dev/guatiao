@@ -68,6 +68,8 @@ function host(varargin)
   reg.register_library(lib);
   fprintf('registered %s %s from M\n', lib.Id, lib.Version);
   if ~isempty(python_source)
+    % The bridge imports python3.dll from the Python installation, on PATH.
+    reg.set_import_search('path');
     reg.add_source_file(python_source, struct('dirs', {python_dirs}, 'paths', {python_paths}));
     changed = reg.refresh();
     for k = 1:numel(changed.loaded)

@@ -161,6 +161,8 @@ void add_sources(guatiao::registry& reg, std::vector<greeter_case>& cases) {
     guatiao::value config = guatiao::make(item::map(
         {{"dirs", item::list({repo + "/examples/python_provider"})},
          {"paths", item::list({repo + "/bindings/python/guatiao/src", repo + "/examples/greeter_kind/python"})}}));
+    // The bridge imports python3.dll from the Python installation, on PATH.
+    check(reg.try_set_import_search(guatiao::import_search::path).ok(), "the import search becomes path");
     auto added = reg.try_add_source_file(bridge, config);
     check(added.ok(), "the bridge maps: " + (added.ok() ? std::string() : added.error().message()));
     cases[2].present = added.ok();

@@ -133,6 +133,24 @@ set_priority!(reg::Registry, id::AbstractString, priority::Integer) =
 priority(reg::Registry, id::AbstractString) = GC.@preserve reg with_text(i -> Int(guatiao_registry_priority(handle(reg), i)), id)
 
 """
+    set_import_search!(reg, search::Symbol)
+
+Where Windows finds what the files `reg` opens from now on import:
+`:library` (the default) looks beside the file, beside the host's
+executable and in the system directory; `:path` also in the current
+directory and on `PATH`, as a Julia host adding a Python bridge needs.
+Unix ignores it. Any other symbol throws `GuatiaoError` (`BAD_VALUE`).
+"""
+function set_import_search!(reg::Registry, search::Symbol)
+    code = search === :library ? UInt32(0) : search === :path ? UInt32(1) : UInt32(2)
+    GC.@preserve reg check(guatiao_registry_set_import_search(handle(reg), code))
+    reg
+end
+"`import_search(reg)`: `:library` or `:path`, where a file `reg` opens has its imports found."
+import_search(reg::Registry) =
+    (GC.@preserve reg guatiao_registry_import_search(handle(reg))) == 1 ? :path : :library
+
+"""
     provider_table(reg, key; kind = nothing) -> (table, size, ctx)
 
 The table the provider filed under `key` speaks `kind` through (without

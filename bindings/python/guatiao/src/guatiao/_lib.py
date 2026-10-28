@@ -284,6 +284,8 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         "load",
     ),
     "guatiao_registry_priority": ([c_void_p, Str], c_int32, "load"),
+    "guatiao_registry_set_import_search": ([c_void_p, c_uint32], c_uint32, "load"),
+    "guatiao_registry_import_search": ([c_void_p], c_uint32, "load"),
     "guatiao_registry_best": (
         [c_void_p, Str, _P(Alloc), _P(Value)],
         c_uint32,

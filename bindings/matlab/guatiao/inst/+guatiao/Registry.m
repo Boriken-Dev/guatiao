@@ -146,6 +146,17 @@ classdef Registry < handle
       p = guatiao_mex('registry_priority', self.id(), id);
     end
 
+    function set_import_search(self, search)
+    % Where Windows finds what the files opened from now on import:
+    % 'library' (the default) or 'path'. Unix ignores it.
+      guatiao_mex('registry_set_import_search', self.id(), search);
+    end
+
+    function s = import_search(self)
+    % 'library' or 'path': where a file this registry opens has its imports found.
+      s = guatiao_mex('registry_import_search', self.id());
+    end
+
     function t = provider_table(self, key, kind)
     % struct(table, size, ctx): the table a provider speaks `kind` through
     % (table [] for none); without `kind`, its single table.

@@ -56,6 +56,10 @@ int main(int argc, char **argv) {
   guatiao_value_free(&dirs);
   guatiao_value_free(&paths);
 
+  /* python3.dll, which this file imports, is in the Python installation, on PATH. */
+  if (guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_PATH) != GUATIAO_OK) {
+    return fail("guatiao_registry_set_import_search", GUATIAO_ERR_INTERNAL);
+  }
   guatiao_provider_error err;
   memset(&err, 0, sizeof(err));
   guatiao_status status = guatiao_registry_add_source_file(reg, guatiao_cstr(argv[1]), &config, &err);

@@ -84,6 +84,8 @@ contains
     else
       call guatiao_parse('{"dirs": ["../python_provider"], "paths": ["../../bindings/python/guatiao/src", ' // &
                          '"../greeter_kind/python"]}', GUATIAO_FORMAT_JSON, config)
+      ! The bridge imports python3.dll from the Python installation, on PATH.
+      call host%set_import_search(GUATIAO_IMPORT_SEARCH_PATH)
       call host%add_source_file(bridge, config, st, msg)
       if (st == GUATIAO_OK) then
         have(3) = .true.

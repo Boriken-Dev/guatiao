@@ -75,6 +75,8 @@ fn a_crashing_python_provider_leaves_the_host_running_and_a_refresh_restarts_it(
     let child = ChildCommand::new(env!("CARGO_BIN_EXE_guatiao-remote-server"))
         .args(["--stdio", "--kinds"])
         .arg(here().join("../../examples/greeter_kind/include/greeter_kind.kinds.json"))
+        // The bridge imports python3.dll from the Python installation, on PATH.
+        .args(["--import-search", "path"])
         .arg("--source")
         .arg(config)
         .env("PYTHONPATH", python_path)

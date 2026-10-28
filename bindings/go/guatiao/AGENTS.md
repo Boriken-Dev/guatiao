@@ -177,7 +177,12 @@ data is plain Go data, already freed (numbers as `Number`). Also
 (`[!]KEY=VALUE`, matched against what a library declares) and
 `Descending()`, `Libraries()`, `Provider(key)`, `Available(kind)`,
 `ProviderAvailable(key) (bool, string, error)`, `KeyedBy(template)` /
-`LibrariesKeyedBy`, `SetPriority` / `Priority`, `ProviderTable(key, kind)
+`LibrariesKeyedBy`, `SetPriority` / `Priority`, `SetImportSearch(s)` /
+`ImportSearch()` (where Windows finds what a file the registry opens
+imports: `ImportSearchLibrary`, the default, looks beside the file, beside
+the host's executable and in the system directory, `ImportSearchPath` also
+in the current directory and on `PATH`, as a Go host adding a Python
+bridge needs; unix ignores it), `ProviderTable(key, kind)
 (Table, error)` (`ErrNotFound` for none; `kind` "" for a single table),
 `ProviderConfig(key) (Ref, bool, error)` (a borrowed, read-only view of the
 schema), `ProviderMeta(key) (*Value, bool, error)` (what the provider

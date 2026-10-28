@@ -8,6 +8,7 @@ import 'package:ffi/ffi.dart';
 
 import 'bindings.g.dart';
 import 'errors.dart';
+import 'import_search.dart';
 import 'kind_runtime.dart';
 import 'library.dart' as native;
 import 'provide.dart';
@@ -367,6 +368,24 @@ class Registry implements Finalizable {
       (arena) => native.core().bindings.guatiao_registry_priority(
         _handle,
         strOf(arena, id).ref,
+      ),
+    );
+  }
+
+  /// Where Windows finds what the files this registry opens from now on
+  /// import; [ImportSearch.library] unless set.
+  ImportSearch get importSearch {
+    _checkOpen();
+    final code = native.core().bindings.guatiao_registry_import_search(_handle);
+    return ImportSearch.values.firstWhere((s) => s.code == code);
+  }
+
+  set importSearch(ImportSearch search) {
+    _checkOpen();
+    checkStatus(
+      native.core().bindings.guatiao_registry_set_import_search(
+        _handle,
+        search.code,
       ),
     );
   }

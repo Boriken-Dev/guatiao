@@ -127,7 +127,12 @@ Also `loadFile(path)`, `scanPath(spec, { descending, rules })`,
 `registerLibrary(library)` (see Providers), `libraries()`,
 `provider(key)`, `available(kind)`, `providerAvailable(key)` (`{
 available, reason? }`), `keyedBy(template)` / `librariesKeyedBy`,
-`setPriority` / `priority`, `providerTable(key, kind?)` (`{ table, size,
+`setPriority` / `priority`, `importSearch` (get and set, `ImportSearch`:
+where Windows finds what a file the registry opens imports; `'library'`,
+the default, looks beside the file, beside the host's executable and in
+the system directory, `'path'` also in the current directory and on
+`PATH`, as a Node host adding a Python bridge needs; unix ignores it),
+`providerTable(key, kind?)` (`{ table, size,
 ctx }`, `table` `0n` for none), `providerConfig(key)` (a borrowed,
 read-only `Ref` onto the schema, never closed), `providerMeta(key)` (a
 copy of the provider's `meta` as a `Value` you close, `undefined` when it

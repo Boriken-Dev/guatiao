@@ -38,8 +38,15 @@ reg:providers([kind])            --> {{key, id, name, library, version, kinds, c
 reg:bind(key, kind)              --> a handle; raises when the provider has no table of the kind
 reg:retire(key)                  --> true; raises on refusal
 reg:collect()                    --> the keys of the libraries closed
+reg:set_import_search("path")    --> where Windows finds what a file opened from now on imports
+reg:import_search()              --> "library" (the default) or "path"
 reg:close()
 ```
+
+- `import_search`: `"library"` looks beside the file, beside the host's
+  executable and in the system directory; `"path"` also in the current
+  directory and on `PATH`, as a host adding a Python bridge needs. Unix
+  ignores it. Any other word raises.
 
 - `refresh` entries: `loaded` and `retired` are `{source, id, stamp,
   key}`, `skipped` `{source, id, why}`, `refused` `{source, id, reason}`.

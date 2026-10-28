@@ -25,7 +25,7 @@ from .errors import (
     WrongKind,
 )
 from ._lib import LibraryNotFound, MissingSymbol, use_library
-from .registry import Instance, Registry
+from .registry import ImportSearch, Instance, Registry
 from .schema import redact
 from .value import ABSENT, List, Map, Ref, Value
 from . import wire
@@ -40,6 +40,7 @@ __all__ = [
     "Map",
     "List",
     "Registry",
+    "ImportSearch",
     "Instance",
     "redact",
     "wire",

@@ -12,7 +12,7 @@ use core::time::Duration;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use guatiao::library::Registry;
+use guatiao::library::{ImportSearch, Registry};
 use guatiao::{Alloc, Map, Value};
 use guatiao_source_remote::config::{Security, options_of, security_of};
 use guatiao_source_remote::{Kinds, LinkOptions, Server, Trust};
@@ -75,6 +75,11 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --load PATH           a library to load (repeatable)
   --scan DIR            a directory of libraries to load (repeatable)
   --source PATH[=JSON]  a source file and its configuration (repeatable)
+  --import-search WORD  library | path: where Windows finds what a loaded
+                        file imports; path adds the current directory and
+                        PATH, as the Python bridge's python3.dll needs
+                        (default library: beside the file, beside this
+                        program, the system directory)
   --refresh-ms N        refresh the sources every N milliseconds
   --max-calls N         calls one link may have running at once
   --max-frame N         the largest frame read, in bytes
@@ -101,6 +106,7 @@ struct Args {
     load: Vec<PathBuf>,
     scan: Vec<PathBuf>,
     sources: Vec<(PathBuf, Option<String>)>,
+    import_search: ImportSearch,
     refresh: Option<Duration>,
     max_calls: Option<usize>,
     max_frame: Option<usize>,
@@ -129,6 +135,7 @@ fn parse() -> Result<Args, String> {
         load: Vec::new(),
         scan: Vec::new(),
         sources: Vec::new(),
+        import_search: ImportSearch::Library,
         refresh: None,
         max_calls: None,
         max_frame: None,
@@ -171,6 +178,13 @@ fn parse() -> Result<Args, String> {
                     Some((p, json)) => (p.into(), Some(json.to_string())),
                     None => (v.into(), None),
                 });
+            }
+            "--import-search" => {
+                a.import_search = match need(&mut it, &flag)?.as_str() {
+                    "library" => ImportSearch::Library,
+                    "path" => ImportSearch::Path,
+                    other => return Err(format!("{flag} is library or path, not `{other}`")),
+                };
             }
             "--refresh-ms" => {
                 a.refresh = Some(Duration::from_millis(num(need(&mut it, &flag)?, &flag)?));
@@ -237,6 +251,7 @@ fn registry(a: &Args) -> Result<(Registry, Kinds), String> {
         kinds.load(path).map_err(|e| e.to_string())?;
     }
     let mut registry = Registry::new("guatiao-remote-server", env!("CARGO_PKG_VERSION"));
+    registry.set_import_search(a.import_search);
     for path in &a.load {
         registry
             .load_file(path)

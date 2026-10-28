@@ -135,6 +135,17 @@ case("builds an instance, and gives a copy of its configuration schema", with_ex
   close(schema)
 }))
 
+case("the import search is the library's until the host names path", with_examples({
+  reg <- registry("r-tests", "0.1")
+  expect_equal(reg$import_search(), "library")
+  reg$set_import_search("path")
+  expect_equal(reg$import_search(), "path")
+  e <- expect_error(reg$set_import_search("everywhere"), "guatiao_error")
+  expect_equal(e$status, "BadValue")
+  expect_equal(reg$import_search(), "path")
+  reg$close()
+}))
+
 case("keys, ranks and re-keys", with_examples({
   reg <- scanned()
   reg$set_priority("derived_greeter_hello", 7)

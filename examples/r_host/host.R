@@ -125,6 +125,8 @@ main <- function(args = commandArgs(trailingOnly = TRUE)) {
   reg$register_library(lib)
   cat("registered ", lib$id, " ", lib$version, " from R\n", sep = "")
   if (!is.null(python_source)) {
+    # The bridge imports python3.dll from the Python installation, on PATH.
+    reg$set_import_search("path")
     reg$add_source_file(python_source, list(dirs = python_dirs, paths = python_paths))
     changed <- reg$refresh()
     for (served in changed$loaded) cat("served ", served$id, " from Python\n", sep = "")

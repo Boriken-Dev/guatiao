@@ -137,6 +137,10 @@ fn a_lua_host_calls_greeters_written_in_rust_c_and_python() {
     }
     match std::env::var_os("GUATIAO_PY_BRIDGE").map(PathBuf::from) {
         Some(bridge) if bridge.is_file() => {
+            // The bridge imports python3.dll from the Python installation,
+            // found on PATH.
+            args.push("--import-search".into());
+            args.push("path".into());
             args.push("--source".into());
             args.push(bridge.display().to_string());
             args.push(format!(

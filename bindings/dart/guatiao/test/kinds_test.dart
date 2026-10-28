@@ -381,6 +381,8 @@ void main() {
         markTestSkipped('no guatiao-source-py build: set GUATIAO_PY_BRIDGE');
         return;
       }
+      // The bridge imports python3.dll from the Python installation, on PATH.
+      reg.importSearch = ImportSearch.path;
       reg.addSourceFile(file, {
         'dirs': [
           repoPath(['examples', 'python_provider']),

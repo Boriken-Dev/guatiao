@@ -88,6 +88,14 @@ void main() {
     expect(reg.priority('derived_greeter_hello'), 5);
   });
 
+  test('the import search is the library\'s until the host names path', () {
+    final reg = Registry('dart-tests', '0.1');
+    addTearDown(reg.close);
+    expect(reg.importSearch, ImportSearch.library);
+    reg.importSearch = ImportSearch.path;
+    expect(reg.importSearch, ImportSearch.path);
+  });
+
   test('a provider with no per-kind table has no single table', () {
     final reg = scanned();
     addTearDown(reg.close);

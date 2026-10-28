@@ -47,6 +47,18 @@ def test_scan_dir_rules_finds_the_greeter_providers():
         reg.close()
 
 
+def test_the_import_search_is_the_librarys_until_the_host_names_path():
+    from guatiao import ImportSearch
+
+    with Registry("py-tests", "0.1") as reg:
+        assert reg.import_search() is ImportSearch.LIBRARY
+        reg.set_import_search(ImportSearch.PATH)
+        assert reg.import_search() is ImportSearch.PATH
+        with pytest.raises(errors.BadValue):
+            reg.set_import_search(2)  # type: ignore[arg-type]
+        assert reg.import_search() is ImportSearch.PATH
+
+
 def test_best_provider_carries_the_documented_fields():
     with _scanned() as reg:
         best = reg.best("greeter")

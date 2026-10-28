@@ -277,6 +277,11 @@ library declares before it is mapped), `libraries`, `providers(reg, kind
 `best`, `provider_available(reg, key) -> (Bool, reason)`,
 `keyed_by!(reg, template)` / `libraries_keyed_by!` (`%id` by default;
 `%name`, `%library`, `%version`, `%source`), `set_priority!` / `priority`,
+`set_import_search!(reg, :path)` / `import_search(reg)` (where Windows
+finds what a file the registry opens imports: `:library`, the default,
+looks beside the file, beside the host's executable and in the system
+directory, `:path` also in the current directory and on `PATH`, as a
+Julia host adding a Python bridge needs; unix ignores it),
 `provider_table(reg, key; kind) -> (table, size, ctx)` (`C_NULL` for
 none; no `kind` for a single table), `provider_config(reg, key)` (a
 borrowed, read-only view of the schema, or `nothing`),

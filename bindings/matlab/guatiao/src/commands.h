@@ -91,6 +91,8 @@
   X(registry_keyed_by)                                                         \
   X(registry_set_priority)                                                     \
   X(registry_priority)                                                         \
+  X(registry_set_import_search)                                                \
+  X(registry_import_search)                                                    \
   X(registry_provider_table)                                                   \
   X(registry_provider_config)                                                  \
   X(registry_provider_meta)                                                    \

@@ -92,6 +92,8 @@ function refresh_all()
   if isempty(py)
     missing{end + 1} = 'the Python greeter: no guatiao-source-py build (set GUATIAO_PY_BRIDGE)';
   else
+    % The bridge imports python3.dll from the Python installation, on PATH.
+    reg.set_import_search('path');
     reg.add_source_file(py, gt_env('bridge_config'));
     present{end + 1} = 'python';
   end

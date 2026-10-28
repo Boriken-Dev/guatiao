@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use guatiao::library::Registry;
+use guatiao::library::{ImportSearch, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map};
 
@@ -70,6 +70,8 @@ fn a_rust_host_serves_python_libraries() {
         return;
     };
     let mut registry = Registry::new("rust-host", "1.0");
+    // python3.dll, which the bridge imports, is in the Python installation, on PATH.
+    registry.set_import_search(ImportSearch::Path);
     let name = registry
         .add_source_file(&bridge, &config())
         .unwrap_or_else(|e| panic!("the bridge was refused: {e}"));

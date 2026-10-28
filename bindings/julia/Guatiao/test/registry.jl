@@ -144,6 +144,16 @@ end
     @test_throws InvalidStateException schema[]
 end
 
+@testset "the import search is the library's until the host names path" begin
+    reg = Guatiao.Registry("julia-tests", "0.1")
+    @test Guatiao.import_search(reg) === :library
+    Guatiao.set_import_search!(reg, :path)
+    @test Guatiao.import_search(reg) === :path
+    @test_throws GuatiaoError Guatiao.set_import_search!(reg, :everywhere)
+    @test Guatiao.import_search(reg) === :path
+    close(reg)
+end
+
 @testset "keys, ranks and re-keys" begin
     reg = scanned()
     Guatiao.set_priority!(reg, "derived_greeter_hello", 7)

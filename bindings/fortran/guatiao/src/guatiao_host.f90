@@ -47,6 +47,8 @@ module guatiao_host
     procedure :: libraries_keyed_by => reg_libraries_keyed_by
     procedure :: set_priority => reg_set_priority
     procedure :: priority => reg_priority
+    procedure :: set_import_search => reg_set_import_search
+    procedure :: import_search => reg_import_search
     procedure :: provider_table => reg_provider_table
     procedure :: provider_ctx => reg_provider_ctx
     procedure :: provider_config => reg_provider_config
@@ -557,6 +559,36 @@ contains
     reg_priority = 0
     p = gt_registry_ptr(self)
     if (c_associated(p)) reg_priority = gt_registry_priority(p, gt_view(id))
+  end function
+
+  !> Where Windows finds what the files the registry opens from now on
+  !> import: GUATIAO_IMPORT_SEARCH_LIBRARY (the default: beside the file,
+  !> beside the host's executable, the system directory) or
+  !> GUATIAO_IMPORT_SEARCH_PATH (also the current directory and PATH, as a
+  !> host adding a Python bridge needs). Unix ignores it.
+  recursive subroutine reg_set_import_search(self, search, stat, errmsg)
+    class(guatiao_registry), intent(in) :: self
+    integer, intent(in) :: search
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    type(c_ptr) :: p
+    integer :: st
+    character(:), allocatable :: msg
+    call open_reg(self, p, st, msg)
+    if (st == GUATIAO_OK) then
+      st = gt_registry_set_import_search(p, int(search, c_int32_t))
+      if (st /= GUATIAO_OK) msg = 'guatiao: no such import search'
+    end if
+    call gt_report(st, msg, stat, errmsg)
+  end subroutine
+
+  !> GUATIAO_IMPORT_SEARCH_LIBRARY or _PATH; the first for a closed registry.
+  recursive integer function reg_import_search(self)
+    class(guatiao_registry), intent(in) :: self
+    type(c_ptr) :: p
+    reg_import_search = GUATIAO_IMPORT_SEARCH_LIBRARY
+    p = gt_registry_ptr(self)
+    if (c_associated(p)) reg_import_search = gt_registry_import_search(p)
   end function
 
   !> The table the provider under `key` offers for `kind` ('' for its
