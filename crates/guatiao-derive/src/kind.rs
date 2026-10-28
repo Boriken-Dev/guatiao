@@ -66,10 +66,9 @@
 //!
 //! # Slots
 //!
-//! Slots follow declaration order, the required ones first. A method
-//! **with a default body** is an optional slot: a provider may leave it
-//! null, and the proxy then runs the default. A required method after a
-//! defaulted one is refused. A table smaller than the kind's is refused,
+//! Slots follow declaration order. A method **with a default body** is an
+//! optional slot, wherever it is declared: a provider may leave it null,
+//! and the proxy then runs the default. A table smaller than the kind's is refused,
 //! and the header's hash covers every method's name and signature, in
 //! table order, so a table built from a different declaration is refused
 //! rather than called with the wrong ABI.
@@ -321,7 +320,6 @@ struct MethodPlan {
 
 fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<Vec<MethodPlan>> {
     let mut plans = Vec::new();
-    let mut seen_default = false;
     for item in &tr.items {
         let f = match item {
             TraitItem::Fn(f) => f,
@@ -344,17 +342,7 @@ fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<V
                 ));
             }
         };
-        let plan = plan_method(f, object, roots)?;
-        if plan.default.is_some() {
-            seen_default = true;
-        } else if seen_default {
-            return Err(syn::Error::new_spanned(
-                &f.sig.ident,
-                "a required method cannot follow one with a default body: the required slots \
-                 come first",
-            ));
-        }
-        plans.push(plan);
+        plans.push(plan_method(f, object, roots)?);
     }
     if plans.is_empty() {
         return Err(syn::Error::new_spanned(
@@ -3223,6 +3211,22 @@ mod tests {
                 "{name}: the trait"
             );
         }
+        // What no kind may declare: the trait the vector pairs with is refused.
+        let refused = doc["refused"].as_array().expect("a list of refusals");
+        let mut traits = 0;
+        for v in refused.iter().filter(|v| v["by"] == "every reader") {
+            let attr = if v["object"].as_bool().unwrap() {
+                "object"
+            } else {
+                ""
+            };
+            let why = v["why"].as_str().unwrap();
+            let err = expand_str(attr, v["trait"].as_str().unwrap())
+                .expect_err(&format!("{}: refused", v["name"]));
+            assert!(err.contains(why), "{}: {err}", v["name"]);
+            traits += 1;
+        }
+        assert!(traits >= 1);
     }
 
     /// The shim's own parameters are `__ctx`, `__out` and `__err`, so an
@@ -3327,6 +3331,27 @@ mod tests {
         ] {
             assert!(pretty.contains(expected), "missing {expected} in {pretty}");
         }
+    }
+
+    /// A required method may follow one with a default body: the slots
+    /// keep declaration order, each saying whether it is required.
+    #[test]
+    fn a_required_method_may_follow_an_optional_one() {
+        let out = expand_str(
+            "",
+            "pub trait G: Send + Sync { fn a(&self) -> i64; fn b(&self) -> i64 { 0 } fn c(&self) -> i64; }",
+        )
+        .expect("expands");
+        let file: syn::File = syn::parse_str(&out).unwrap();
+        let pretty = prettyplease::unparse(&file);
+        let at = |slot: &str| {
+            pretty
+                .find(&format!(r#"{{\"name\":\"{slot}\",\"required\":"#))
+                .unwrap_or_else(|| panic!("no slot {slot} in {pretty}"))
+        };
+        assert!(at("a") < at("b") && at("b") < at("c"));
+        assert!(pretty.contains(r#"{\"name\":\"b\",\"required\":false"#));
+        assert!(pretty.contains(r#"{\"name\":\"c\",\"required\":true"#));
     }
 
     /// Every refusal, pinned by text so a message cannot drift into
@@ -3498,11 +3523,6 @@ mod tests {
                 "object = 1",
                 "pub trait G: Send { fn f(&mut self) -> i64; }",
                 "`object` takes no value",
-            ),
-            (
-                "",
-                "pub trait G: Send + Sync { fn a(&self) -> i64 { 0 } fn b(&self) -> i64; }",
-                "a required method cannot follow one with a default body",
             ),
             (
                 "nam = \"x\"",

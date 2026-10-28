@@ -542,8 +542,8 @@ mod tests {
     }
 
     /// A slot of each argument type, each answering a map; those named
-    /// `back_` write back.
-    const WRITES: &str = r#"{"kinds": [{"name": "w", "floor_hash": 1, "object": false,
+    /// `back_` write back. An object kind, as `bytes_mut` needs.
+    const WRITES: &str = r#"{"kinds": [{"name": "w", "floor_hash": 1, "object": true,
       "slots": [
         {"name": "back_lent_map", "args": [{"name": "a", "type": "map", "pass": "lent"}]},
         {"name": "back_lent_list", "args": [{"name": "a", "type": "list", "pass": "lent"}]},
