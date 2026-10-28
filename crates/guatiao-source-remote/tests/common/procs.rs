@@ -81,16 +81,7 @@ pub fn compiler() -> Option<PathBuf> {
     if let Ok(cc) = std::env::var("GUATIAO_TEST_CC") {
         return Some(PathBuf::from(cc));
     }
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
+    super::c_compiler::find()
 }
 
 /// The directory the workspace's build put its libraries in: the test
@@ -124,7 +115,7 @@ pub fn c_greeter(cc: &Path, dir: &Path) -> PathBuf {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
-    let mut cmd = Command::new(cc);
+    let mut cmd = super::c_compiler::command(cc);
     cmd.args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]);
     if !cfg!(windows) {
         cmd.arg("-fPIC");

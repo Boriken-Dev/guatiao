@@ -16,10 +16,9 @@
 
 use guatiao::value::convert::TryAsRef;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-#[path = "support/clang_target.rs"]
-mod clang_target;
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 use core::ffi::c_void;
 use core::ptr::NonNull;
@@ -59,20 +58,6 @@ fn allocations<R>(f: impl FnOnce() -> R) -> (R, usize) {
     (r, ALLOCATIONS.with(|n| n.get()) - before)
 }
 
-/// The C compilers worth trying, in order (as `c_consumer.rs`).
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 /// Builds the C greeter into a shared library named `name` beside the
 /// test artefacts, with `defines` passed to the compiler, or says why it
 /// could not.
@@ -86,8 +71,7 @@ fn build_c_greeter(cc: &Path, name: &str, defines: &[&str]) -> PathBuf {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
-    let compile = Command::new(cc)
-        .args(clang_target::args(cc))
+    let compile = c_compiler::command(cc)
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         // Position-independent code, or a linker whose default is not
         // PIC refuses the shared object outright: `read-only segment has
@@ -120,7 +104,7 @@ fn build_c_greeter(cc: &Path, name: &str, defines: &[&str]) -> PathBuf {
 
 #[test]
 fn a_greeter_written_in_c_is_called_as_the_trait() {
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM install path, \
              cc and gcc). This is the test that proves a kind is a C ABI, so it is \
@@ -387,7 +371,7 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
 /// map outlives the library.
 #[test]
 fn a_lent_map_a_careless_slot_rebuilt_in_its_own_allocator_outlives_the_unload() {
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM install path, cc and gcc)"
         );

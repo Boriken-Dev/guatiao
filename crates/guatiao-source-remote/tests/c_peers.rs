@@ -230,7 +230,7 @@ fn compile(
         .and_then(Path::parent)
         .map_or_else(|| exe.parent().unwrap().to_path_buf(), Path::to_path_buf);
     let out = dir.join(format!("{out_name}{}", std::env::consts::EXE_SUFFIX));
-    let mut cmd = Command::new(&cc);
+    let mut cmd = common::c_compiler::command(&cc);
     cmd.args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
         .arg(here().join("tests/c"))

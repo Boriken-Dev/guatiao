@@ -169,7 +169,7 @@ fn a_c_host_calls_a_remote_rust_and_a_remote_c_greeter() {
         "guatiao_remote_host{}",
         std::env::consts::EXE_SUFFIX
     ));
-    let mut cmd = Command::new(&cc);
+    let mut cmd = common::c_compiler::command(&cc);
     cmd.args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
         .arg(here.join("../guatiao/include"))
         .arg("-I")

@@ -34,22 +34,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-#[path = "support/clang_target.rs"]
-mod clang_target;
-
-/// The C compilers worth trying, in order. See `c_consumer.rs`.
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 /// The directory holding the built `guatiao` shared library.
 ///
@@ -121,7 +107,7 @@ fn a_c_program_is_a_host() {
         source.display()
     );
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found. See the other test here for why that is a skip.");
         return;
     };
@@ -145,8 +131,7 @@ fn a_c_program_is_a_host() {
         "guatiao_registry_consumer"
     });
 
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -200,7 +185,7 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
         source.display()
     );
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM \
              install path, cc and gcc). This is what proves the exported \
@@ -228,8 +213,7 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
         "guatiao_exports_consumer"
     });
 
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -294,7 +278,7 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
 fn a_c_caller_moves_an_answer_home_before_the_unload() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let include = manifest.join("include");
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found. See the test above for why that is a skip.");
         return;
     };
@@ -313,8 +297,7 @@ fn a_c_caller_moves_an_answer_home_before_the_unload() {
     } else {
         "libguatiao_carrier_ignored.so"
     });
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-shared"])
         .arg("-I")
@@ -337,8 +320,7 @@ fn a_c_caller_moves_an_answer_home_before_the_unload() {
     } else {
         "guatiao_make_local_host"
     });
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -474,7 +456,7 @@ fn a_c_program_reads_and_writes_every_time_vector() {
     let source = manifest.join("tests/c_consumer/time_consumer.c");
     let include = manifest.join("include");
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
         return;
     };
@@ -498,8 +480,7 @@ fn a_c_program_reads_and_writes_every_time_vector() {
         "guatiao_time_consumer"
     });
 
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
@@ -626,7 +607,7 @@ fn a_c_program_announces_sends_closes_and_receives() {
     let source = manifest.join("tests/c_consumer/wire_consumer.c");
     let include = manifest.join("include");
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
         return;
     };
@@ -648,8 +629,7 @@ fn a_c_program_announces_sends_closes_and_receives() {
         "guatiao_wire_consumer"
     });
 
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

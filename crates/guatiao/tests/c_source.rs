@@ -13,28 +13,13 @@
 #![cfg(all(feature = "provider", feature = "load"))]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-#[path = "support/clang_target.rs"]
-mod clang_target;
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 use greeter_kind::Counter;
 use guatiao::library::{Registry, ScanRules, Skipped, SourceError};
 use guatiao::{Map, Value};
-
-/// The C compilers worth trying, in order (as `c_consumer.rs`).
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
 
 /// Builds the C source into a directory of its own, as `name`: each test
 /// maps its own copy, whose statics are its own shelf.
@@ -47,8 +32,7 @@ fn build_shelf(cc: &Path, name: &str) -> PathBuf {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
-    let compile = Command::new(cc)
-        .args(clang_target::args(cc))
+    let compile = c_compiler::command(cc)
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         .args(if cfg!(windows) {
             &[][..]
@@ -117,7 +101,7 @@ fn config(ids: &[&str]) -> Map {
 
 #[test]
 fn a_source_written_in_c_serves_libraries_that_come_and_go() {
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found; this is the test that proves a source is a C ABI");
         return;
     };
@@ -235,7 +219,7 @@ fn the_c_surface_adds_a_source_file_and_refreshes() {
     use guatiao::value::convert::TryAsRef;
     use guatiao::{Alloc, Status, Str};
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found");
         return;
     };

@@ -31,8 +31,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[path = "support/clang_target.rs"]
-mod clang_target;
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 /// How a driver spells its options.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -197,8 +197,7 @@ fn every_header_compiles_as_cpp_alone_and_together() {
 
         for year in STANDARDS {
             let object = work.join(format!("{stem}_{year}.o"));
-            let mut cmd = Command::new(&cxx);
-            cmd.args(clang_target::args(&cxx));
+            let mut cmd = c_compiler::command(&cxx);
             common_args(&mut cmd, driver, year);
             match driver {
                 Driver::Gnu => cmd.arg("-c").arg(&source).arg("-o").arg(&object),
@@ -293,8 +292,7 @@ fn a_cpp_program_calls_each_header_and_links() {
             "guatiao_cpp_all_three_{year}{}",
             std::env::consts::EXE_SUFFIX
         ));
-        let mut cmd = Command::new(&cxx);
-        cmd.args(clang_target::args(&cxx));
+        let mut cmd = c_compiler::command(&cxx);
         common_args(&mut cmd, driver, year);
         match driver {
             Driver::Gnu => {
