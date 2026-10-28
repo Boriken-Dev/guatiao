@@ -369,6 +369,8 @@ jobs:
             macOS)   bridge=crates/guatiao-source-py/target/debug/libguatiao_source_py.dylib ;;
             Windows) bridge=crates/guatiao-source-py/target/debug/guatiao_source_py.dll ;;
           esac
+          # On Windows the bridge's python3.dll is found on PATH.
+          GREETER_HOST_IMPORT_SEARCH=path \
           GREETER_HOST_SOURCE=$bridge \
           GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
             "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
