@@ -1,5 +1,5 @@
 {
-  "about": "Kinds as their description says them, the Rust trait declaring the same slots, the floor hash's input as #[guatiao::kind] spells it, and the floor hash: every language that computes the hash of a kind born in it checks it against these.",
+  "about": "Kinds as their description says them, the Rust trait declaring the same slots, the floor hash's input as #[guatiao::kind] spells it, and the floor hash: every language that computes the hash of a kind born in it checks it against these. `refused` are kinds no reader takes: `why` is in every refusal, and `by` says who refuses it, `every reader` (the kind attribute, the library's reader, and every binding through it) or the bindings whose own code has that name.",
   "vectors": [
     {
       "name": "names",
@@ -381,6 +381,109 @@
       ],
       "spelled": "provider;attach(Object<dynSoundLevel>)->Result<(),ProviderError>;peek(&mutdynSoundLevel)->Result<f64,ProviderError>;make()->Result<Object<dynSoundLevel>,ProviderError>",
       "floor_hash": 1729275710
+    },
+    {
+      "name": "between",
+      "object": false,
+      "trait": "pub trait Between: Send + Sync { fn first(&self, name: &str) -> Result<Map, ProviderError>; fn middle(&self, name: &str) -> String { name.to_string() } fn last(&self, n: u32) -> u64; }",
+      "slots": [
+        {
+          "name": "first",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "map"
+          }
+        },
+        {
+          "name": "middle",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          }
+        },
+        {
+          "name": "last",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "n",
+              "type": "u32"
+            }
+          ],
+          "answer": {
+            "type": "u64"
+          }
+        }
+      ],
+      "spelled": "provider;first(&str)->Result<Map,ProviderError>;middle(&str)->String;last(u32)->u64",
+      "floor_hash": 3036448798
+    }
+  ],
+  "refused": [
+    {
+      "name": "bytes_mut_on_a_provider_kind",
+      "object": false,
+      "trait": "pub trait Filler: Send + Sync { fn fill(&self, dst: &mut [u8]) -> i64; }",
+      "slots": [
+        {
+          "name": "fill",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "dst",
+              "type": "bytes_mut"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          }
+        }
+      ],
+      "why": "on an object kind only",
+      "by": "every reader"
+    },
+    {
+      "name": "a_slot_named_like_a_remotes_method",
+      "object": false,
+      "slots": [
+        {
+          "name": "has",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "bool"
+          }
+        }
+      ],
+      "why": "a remote's own",
+      "by": [
+        "python",
+        "node",
+        "go",
+        "dart"
+      ]
     }
   ]
 }

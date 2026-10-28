@@ -50,6 +50,24 @@ fn every_vector_hashes_as_the_trait_it_pairs_with() {
     }
 }
 
+/// What no kind may declare is refused by the reader every binding
+/// reaches; a name only a binding's own code has is not the reader's.
+#[test]
+fn every_refused_vector_is_refused_by_the_reader_alone_when_it_says() {
+    let refused = kinds(VECTORS, "refused");
+    assert!(refused.len() >= 2);
+    for (name, v) in refused {
+        let (status, _, why) = hash(&v.to_string());
+        if v["by"] == "every reader" {
+            assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{name}");
+            let why: &str = TryAsRef::try_as_ref(&why).expect("why is a string");
+            assert!(why.contains(v["why"].as_str().unwrap()), "{name}: {why}");
+        } else {
+            assert_eq!(status, Status::GUATIAO_OK, "{name}: {why:?}");
+        }
+    }
+}
+
 #[test]
 fn a_committed_document_hashes_as_it_says() {
     for text in DOCUMENTS {

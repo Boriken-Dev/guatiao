@@ -458,11 +458,23 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
     })
 }
 
-/// A kind's `slots`, each name once and an object kind's never `destroy`.
+/// A kind's `slots`, each name once, an object kind's never `destroy`,
+/// and `bytes_mut` on an object kind only: what `#[guatiao::kind]` refuses
+/// to declare, checked here for a kind declared anywhere else. Required
+/// and optional slots come in any order.
 fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, DescriptionError> {
     let mut slots = Vec::new();
     for (i, s) in list_at(map, at, "slots")?.iter().enumerate() {
         let slot = slot(s, &format!("{}[{i}]", under(at, "slots")))?;
+        if let Some(j) = slot.args.iter().position(|a| a.ty == ArgType::BytesMut)
+            && !object
+        {
+            return Err(DescriptionError::new(
+                format!("{}[{i}].args[{j}].type", under(at, "slots")),
+                "is `bytes_mut`, the caller's bytes written in place, which cross on an object \
+                 kind only",
+            ));
+        }
         if slots
             .iter()
             .any(|known: &SlotDescription| known.name == slot.name)
@@ -839,6 +851,47 @@ mod tests {
                 .why()
                 .contains("destroy")
         );
+    }
+
+    /// `bytes_mut` crosses on an object kind only, as `#[guatiao::kind]`
+    /// says; whether a slot is required has nothing to do with its place.
+    #[test]
+    fn bytes_mut_is_an_object_kinds_and_slots_are_in_any_order() {
+        let kind = |object: bool, required: [bool; 3]| {
+            let slot = |name: &str, required: bool, ty: &str| {
+                map_of(vec![
+                    ("name", text_value(name)),
+                    ("required", Value::from(required)),
+                    ("fallible", Value::from(false)),
+                    (
+                        "args",
+                        list_of(vec![map_of(vec![
+                            ("name", text_value("dst")),
+                            ("type", text_value(ty)),
+                        ])]),
+                    ),
+                ])
+            };
+            map_of(vec![
+                ("name", text_value("k")),
+                ("floor_hash", Value::from(1u32)),
+                ("object", Value::from(object)),
+                (
+                    "slots",
+                    list_of(vec![
+                        slot("a", required[0], "bytes"),
+                        slot("b", required[1], "str"),
+                        slot("c", required[2], "bytes_mut"),
+                    ]),
+                ),
+            ])
+        };
+        let e = KindDescription::from_value(&kind(false, [true; 3])).unwrap_err();
+        assert_eq!(e.at(), "slots[2].args[0].type");
+        assert!(e.why().contains("on an object kind only"), "{e}");
+        let read = KindDescription::from_value(&kind(true, [true, false, true])).expect("read");
+        let required: Vec<bool> = read.slots().iter().map(|s| s.required()).collect();
+        assert_eq!(required, [true, false, true]);
     }
 
     #[test]

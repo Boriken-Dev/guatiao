@@ -282,7 +282,7 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(e.message(), "nobody to greet, says C");
 
-    // 4. The slots C left null are appended ones: the proxy runs the
+    // 4. The slots C left null are optional ones: the proxy runs the
     // trait's default bodies -- `shout` through C's own `greet`, `start`
     // refusing as a greeter that holds no conversations.
     assert_eq!(greeter.shout("bo"), "HELLO FROM C, BO");
