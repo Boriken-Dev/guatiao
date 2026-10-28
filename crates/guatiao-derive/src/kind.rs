@@ -487,18 +487,27 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     }
 
     let (ret, fallible) = ret_kind(&sig.output, roots)?;
-    let converts = args.iter().any(|a| {
+    let objects = args.iter().any(|a| {
         matches!(
             a.kind,
-            ArgKind::Owned(_) | ArgKind::Object(_) | ArgKind::BorrowMut(_) | ArgKind::Borrow(_)
+            ArgKind::Object(_) | ArgKind::BorrowMut(_) | ArgKind::Borrow(_)
         )
-    }) || matches!(ret, RetKind::Owned(_) | RetKind::Object(_));
+    }) || matches!(ret, RetKind::Object(_));
+    if objects && !fallible {
+        return Err(syn::Error::new_spanned(
+            &sig.ident,
+            "an object (`Object<dyn K>`, `&mut dyn K`, `&dyn K`) crosses on a fallible slot only: \
+             a method passing or answering one returns `Result<_, ProviderError>`, since the \
+             object's table is checked where it arrives",
+        ));
+    }
+    let converts = args.iter().any(|a| matches!(a.kind, ArgKind::Owned(_)))
+        || matches!(ret, RetKind::Owned(_));
     if converts && !fallible {
         return Err(syn::Error::new_spanned(
             &sig.ident,
-            "a method converting an argument or its return through `ToValue`/`FromValue`, or \
-             passing an `Object`, must return `Result<_, ProviderError>`, because the conversion \
-             or the validation can fail; so must one lending an object (`&mut dyn K`, `&dyn K`)",
+            "a method converting an argument or its return through `ToValue`/`FromValue` must \
+             return `Result<_, ProviderError>`, because the conversion or the validation can fail",
         ));
     }
 
@@ -705,6 +714,10 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             Type::Slice(s) if last_ident(&s.elem).is_some_and(|i| i == "u8") => Ok(ArgKind::Bytes),
             Type::Path(_) if special(elem, roots)? == Some("Value") => Ok(ArgKind::ValueRef),
             Type::Path(_) if special(elem, roots)? == Some("Map") => Ok(ArgKind::MapRef),
+            Type::Path(_) if special(elem, roots)? == Some("List") => Err(syn::Error::new_spanned(
+                ty,
+                "a list is not borrowed: lend it (`&mut List`) or hand it over (`List`)",
+            )),
             _ => Err(syn::Error::new_spanned(
                 ty,
                 "a borrowed argument of this type cannot cross; `&str`, `&[u8]`, `&Value` and \
@@ -3487,7 +3500,7 @@ mod tests {
             (
                 "",
                 "pub trait G: Send + Sync { fn f(&self) -> Object<dyn K>; }",
-                "or passing an `Object`, must return `Result<_, ProviderError>`",
+                "an object (`Object<dyn K>`, `&mut dyn K`, `&dyn K`) crosses on a fallible slot only",
             ),
             (
                 "",
@@ -3497,7 +3510,17 @@ mod tests {
             (
                 "",
                 "pub trait G: Send + Sync { fn f(&self, l: &mut dyn Listener) -> i64; }",
-                "so must one lending an object",
+                "on a fallible slot only",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, l: Object<dyn Listener>) -> i64; }",
+                "on a fallible slot only",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, l: &List) -> i64; }",
+                "a list is not borrowed: lend it (`&mut List`) or hand it over (`List`)",
             ),
             (
                 "",

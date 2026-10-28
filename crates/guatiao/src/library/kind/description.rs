@@ -458,21 +458,66 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
     })
 }
 
-/// A kind's `slots`, each name once, an object kind's never `destroy`,
-/// and `bytes_mut` on an object kind only: what `#[guatiao::kind]` refuses
-/// to declare, checked here for a kind declared anywhere else. Required
-/// and optional slots come in any order.
+/// A kind's `slots`, each name once and none `header`, an object kind's
+/// never `destroy`, `bytes_mut` on an object kind only, an object only on
+/// a fallible slot and a list never borrowed: what `#[guatiao::kind]`
+/// refuses to declare, checked here for a kind declared anywhere else.
+/// Required and optional slots come in any order.
 fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, DescriptionError> {
     let mut slots = Vec::new();
     for (i, s) in list_at(map, at, "slots")?.iter().enumerate() {
-        let slot = slot(s, &format!("{}[{i}]", under(at, "slots")))?;
+        let here = format!("{}[{i}]", under(at, "slots"));
+        let slot = slot(s, &here)?;
         if let Some(j) = slot.args.iter().position(|a| a.ty == ArgType::BytesMut)
             && !object
         {
             return Err(DescriptionError::new(
-                format!("{}[{i}].args[{j}].type", under(at, "slots")),
+                format!("{here}.args[{j}].type"),
                 "is `bytes_mut`, the caller's bytes written in place, which cross on an object \
                  kind only",
+            ));
+        }
+        if let Some(j) = slot.args.iter().position(|a| {
+            matches!(
+                a.ty,
+                ArgType::Tree {
+                    tree: Tree::List,
+                    pass: Pass::Borrowed,
+                    ..
+                }
+            )
+        }) {
+            return Err(DescriptionError::new(
+                format!("{here}.args[{j}].pass"),
+                "is borrowed: a list is not borrowed, but taken or lent",
+            ));
+        }
+        // The object's table is checked where it arrives, and only a
+        // fallible slot can answer that it was refused.
+        if !slot.fallible {
+            let fallible_only = "is `object`, which crosses on a fallible slot only: its table is \
+                                 checked where it arrives";
+            if let Some(j) = slot
+                .args
+                .iter()
+                .position(|a| matches!(a.ty, ArgType::Object { .. }))
+            {
+                return Err(DescriptionError::new(
+                    format!("{here}.args[{j}].type"),
+                    fallible_only,
+                ));
+            }
+            if matches!(slot.answer, Some(AnswerType::Object { .. })) {
+                return Err(DescriptionError::new(
+                    format!("{here}.answer.type"),
+                    fallible_only,
+                ));
+            }
+        }
+        if slot.name == "header" {
+            return Err(DescriptionError::new(
+                here,
+                "names `header`: the table's first field is its `header`",
             ));
         }
         if slots
@@ -480,13 +525,13 @@ fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, D
             .any(|known: &SlotDescription| known.name == slot.name)
         {
             return Err(DescriptionError::new(
-                format!("{}[{i}]", under(at, "slots")),
+                here,
                 format!("names `{}` a second time", slot.name),
             ));
         }
         if object && slot.name == "destroy" {
             return Err(DescriptionError::new(
-                format!("{}[{i}]", under(at, "slots")),
+                here,
                 "names `destroy`, which an object kind's table holds before its slots",
             ));
         }
@@ -894,6 +939,100 @@ mod tests {
         assert_eq!(required, [true, false, true]);
     }
 
+    /// What `#[guatiao::kind]` cannot declare: an object on a slot that
+    /// cannot fail, a borrowed list, a slot named `header`; each refused
+    /// where it is said.
+    #[test]
+    fn what_no_trait_declares_is_refused_where_it_is_said() {
+        let kind = |slot: Value| {
+            map_of(vec![
+                ("name", text_value("k")),
+                ("floor_hash", Value::from(1u32)),
+                ("object", Value::from(false)),
+                ("slots", list_of(vec![slot])),
+            ])
+        };
+        let slot = |name: &str, fallible: bool, args: Vec<Value>, answer: Option<&str>| {
+            let mut entries = vec![
+                ("name", text_value(name)),
+                ("required", Value::from(true)),
+                ("fallible", Value::from(fallible)),
+                ("args", list_of(args)),
+            ];
+            if let Some(kind) = answer {
+                entries.push((
+                    "answer",
+                    map_of(vec![
+                        ("type", text_value("object")),
+                        ("kind", text_value(kind)),
+                    ]),
+                ));
+            }
+            map_of(entries)
+        };
+        let object = |pass: &str| {
+            map_of(vec![
+                ("name", text_value("memo")),
+                ("type", text_value("object")),
+                ("kind", text_value("memo")),
+                ("pass", text_value(pass)),
+            ])
+        };
+        let list = |pass: &str| {
+            map_of(vec![
+                ("name", text_value("items")),
+                ("type", text_value("list")),
+                ("pass", text_value(pass)),
+            ])
+        };
+        for (description, at, why) in [
+            (
+                slot("f", false, vec![text_arg(), object("lent")], None),
+                "slots[0].args[1].type",
+                "on a fallible slot only",
+            ),
+            (
+                slot("f", false, vec![object("taken")], None),
+                "slots[0].args[0].type",
+                "on a fallible slot only",
+            ),
+            (
+                slot("f", false, vec![], Some("memo")),
+                "slots[0].answer.type",
+                "on a fallible slot only",
+            ),
+            (
+                slot("f", true, vec![list("borrowed")], None),
+                "slots[0].args[0].pass",
+                "a list is not borrowed",
+            ),
+            (
+                slot("header", true, vec![], None),
+                "slots[0]",
+                "the table's first field",
+            ),
+        ] {
+            let e = KindDescription::from_value(&kind(description)).unwrap_err();
+            assert_eq!(e.at(), at, "{e}");
+            assert!(e.why().contains(why), "{e}");
+        }
+        for fine in [
+            slot(
+                "f",
+                true,
+                vec![object("lent"), object("taken")],
+                Some("memo"),
+            ),
+            slot("f", false, vec![list("lent"), list("taken")], None),
+        ] {
+            KindDescription::from_value(&kind(fine)).expect("a kind");
+        }
+    }
+
+    fn text_arg() -> Value {
+        map_of(vec![("name", text_value("s")), ("type", text_value("str"))])
+    }
+
     #[test]
     fn an_object_kind_counts_its_destroy_slot() {
         let listener = map_of(vec![
@@ -964,7 +1103,7 @@ mod tests {
                 list_of(vec![map_of(vec![
                     ("name", text_value("weigh")),
                     ("required", Value::from(true)),
-                    ("fallible", Value::from(false)),
+                    ("fallible", Value::from(true)),
                     (
                         "args",
                         list_of(vec![

@@ -23,9 +23,11 @@ use crate::value::types::{Str, Text, Value};
 /// `GUATIAO_ERR_BAD_VALUE` for text that is not JSON (`why` then names the
 /// byte where it stops) or not a description (`why` names the place, such
 /// as `kinds[0].slots[2].args[1]`, and what is wrong there), a kind that
-/// declares what `#[guatiao::kind]` refuses included: a slot named twice,
-/// an object kind's `destroy`, `bytes_mut` on a kind that is not an object
-/// kind. Required and optional slots come in any order. `why`, which
+/// declares what `#[guatiao::kind]` refuses included: a slot named twice
+/// or named `header`, an object kind's `destroy`, `bytes_mut` on a kind
+/// that is not an object kind, an object passed or answered on a slot that
+/// is not fallible, a list passed borrowed. Required and optional slots
+/// come in any order. `why`, which
 /// may be null, holds that text as a string built in `alloc`, else stays
 /// ABSENT. `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
 ///
