@@ -156,6 +156,26 @@ SEXP C_registry_priority(SEXP x, SEXP id) {
   return Rf_ScalarInteger(GT_CORE_FN(guatiao_registry_priority)(reg, gt_str_arg(id, "the id")));
 }
 
+/* "library" or "path"; any other text reaches the library as a value it
+ * refuses (BAD_VALUE). */
+SEXP C_registry_set_import_search(SEXP x, SEXP search) {
+  guatiao_registry *reg = reg_of(x);
+  guatiao_str s = gt_str_arg(search, "the import search");
+  uint32_t code = 2;
+  if (s.len == 7 && memcmp(s.ptr, "library", 7) == 0) code = GUATIAO_IMPORT_SEARCH_LIBRARY;
+  if (s.len == 4 && memcmp(s.ptr, "path", 4) == 0) code = GUATIAO_IMPORT_SEARCH_PATH;
+  guatiao_status st = GT_CORE_FN(guatiao_registry_set_import_search)(reg, code);
+  if (st) gt_raise(st, "the import search is \"library\" or \"path\"");
+  return R_NilValue;
+}
+
+SEXP C_registry_import_search(SEXP x) {
+  guatiao_registry *reg = reg_of(x);
+  return Rf_mkString(GT_CORE_FN(guatiao_registry_import_search)(reg) == GUATIAO_IMPORT_SEARCH_PATH
+                         ? "path"
+                         : "library");
+}
+
 SEXP C_registry_provider_table(SEXP x, SEXP key, SEXP kind) {
   guatiao_registry *reg = reg_of(x);
   guatiao_str k = gt_str_arg(key, "the key");

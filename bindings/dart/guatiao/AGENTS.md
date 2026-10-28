@@ -263,7 +263,12 @@ reg.close();
 
 Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 `available(kind)`, `keyedBy` / `librariesKeyedBy`, `setPriority` /
-`priority`, `providerConfig(key)` (a borrowed, read-only `Ref` onto the
+`priority`, `importSearch` (get and set: where Windows finds what a file
+the registry opens imports; `ImportSearch.library`, the default, looks
+beside the file, beside the host's executable and in the system
+directory, `ImportSearch.path` also in the current directory and on
+`PATH`, as a host adding a Python bridge needs; unix ignores it),
+`providerConfig(key)` (a borrowed, read-only `Ref` onto the
 schema — writing through it throws), `providerMeta(key)` (a copy of the
 provider's `meta` as a `Value` to close, `null` when it declares none,
 `NotFound` for an unknown key; its form is under `'form'`,

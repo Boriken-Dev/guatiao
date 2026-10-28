@@ -273,6 +273,42 @@ func (r *Registry) Priority(id string) (int32, error) {
 	return native.RegistryPriority(h, id), nil
 }
 
+// ImportSearch is where Windows finds the libraries a file a registry
+// opens imports. Unix ignores it: a library's own RUNPATH ($ORIGIN for
+// its directory) and LD_LIBRARY_PATH decide there.
+type ImportSearch uint32
+
+const (
+	// ImportSearchLibrary looks beside the file, beside the host's
+	// executable, in the system directory and in directories the process
+	// added; not the current directory or PATH. The default.
+	ImportSearchLibrary ImportSearch = 0
+	// ImportSearchPath looks there first; a file left with an import missing
+	// is opened again with Windows' standard search from its own directory
+	// (the system directories, the current directory and PATH), as a Go
+	// host adding a Python bridge needs.
+	ImportSearchPath ImportSearch = 1
+)
+
+// SetImportSearch sets where the files the registry opens from now on have
+// their imports found; ErrBadValue for a value that is neither constant.
+func (r *Registry) SetImportSearch(search ImportSearch) error {
+	h, err := r.open()
+	if err != nil {
+		return err
+	}
+	return check(native.RegistrySetImportSearch(h, uint32(search)), "")
+}
+
+// ImportSearch is where a file the registry opens has its imports found.
+func (r *Registry) ImportSearch() (ImportSearch, error) {
+	h, err := r.open()
+	if err != nil {
+		return ImportSearchLibrary, err
+	}
+	return ImportSearch(native.RegistryImportSearch(h)), nil
+}
+
 // ---- a provider's table and configuration ---------------------------------------------
 
 // ProviderTable is the table the provider under key speaks kind through

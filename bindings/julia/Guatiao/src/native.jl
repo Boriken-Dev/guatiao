@@ -296,6 +296,8 @@ end
 @cdef "guatiao" "load" :safe guatiao_registry_provider_available(reg::P, key::GStr, reason::Ptr{GStr})::Bool
 @cdef "guatiao" "load" :safe guatiao_registry_set_priority(reg::P, id::GStr, priority::Int32)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_priority(reg::P, id::GStr)::Int32
+@cdef "guatiao" "load" :safe guatiao_registry_set_import_search(reg::P, search::UInt32)::UInt32
+@cdef "guatiao" "load" :safe guatiao_registry_import_search(reg::P)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_best(reg::P, kind::GStr, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_provider_vtable(reg::P, key::GStr, size::Ptr{Csize_t})::P
 @cdef "guatiao" "load" :safe guatiao_registry_provider_table(reg::P, key::GStr, kind::GStr, size::Ptr{Csize_t})::P

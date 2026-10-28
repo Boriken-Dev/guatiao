@@ -85,6 +85,8 @@ int main(int argc, char** argv) {
     guatiao::registry reg("cpp-host", "1.0");
     for (const std::string& dir : dirs) reg.watch_dir(dir, guatiao::rules({"kind=greeter"}));
     if (!bridge.empty()) {
+      // The bridge imports python3.dll from the Python installation, on PATH.
+      reg.set_import_search(guatiao::import_search::path);
       std::vector<item> listed(python_dirs.begin(), python_dirs.end());
       reg.add_source_file(bridge, guatiao::make(item::map({{"dirs", item::list_from(listed)}})));
     }

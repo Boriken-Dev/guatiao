@@ -217,6 +217,12 @@ nothing. Not safe to call from two threads at once. Each method has its
   `guatiao_host_info *`, alive for the process).
 - ranking and keys: `set_priority(id, n)`, `priority(id)`,
   `keyed_by(template)`, `libraries_keyed_by(template)`.
+- `set_import_search(guatiao::import_search::path)` / `import_search()`:
+  where Windows finds what a file the registry opens imports;
+  `import_search::library`, the default, looks beside the file, beside the
+  host's executable and in the system directory, `import_search::path`
+  also in the current directory and on `PATH`, as a host adding a Python
+  bridge needs. Unix ignores it.
 - instances: `create(key, config)` checks the configuration against the
   provider's schema first (BAD_VALUE naming the field), then builds an
   `instance` (move-only; `close()` or its destructor destroys it through

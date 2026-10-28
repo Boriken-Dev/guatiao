@@ -77,6 +77,8 @@ let py = bridge()
         absent_greeter(:python, "no guatiao-source-py build: set GUATIAO_PY_BRIDGE")
     else
         try
+            # The bridge imports python3.dll from the Python installation, on PATH.
+            Guatiao.set_import_search!(HOST, :path)
             Guatiao.add_source_file!(HOST, py, bridge_config())
             push!(PRESENT, :python)
         catch e

@@ -70,6 +70,8 @@ files:
         name: guatiao_registry_free
       c:@F@guatiao_registry_host:
         name: guatiao_registry_host
+      c:@F@guatiao_registry_import_search:
+        name: guatiao_registry_import_search
       c:@F@guatiao_registry_keyed_by:
         name: guatiao_registry_keyed_by
       c:@F@guatiao_registry_kind_descriptions:
@@ -116,6 +118,8 @@ files:
         name: guatiao_registry_scan_dir_rules
       c:@F@guatiao_registry_scan_path:
         name: guatiao_registry_scan_path
+      c:@F@guatiao_registry_set_import_search:
+        name: guatiao_registry_set_import_search
       c:@F@guatiao_registry_set_priority:
         name: guatiao_registry_set_priority
       c:@F@guatiao_registry_unload:

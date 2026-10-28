@@ -90,6 +90,14 @@
       "What the host ranked that id; 0 unless it said otherwise."
       .Call(C_registry_priority, .gt_reg(.self), id)
     },
+    set_import_search = function(search) {
+      "Where Windows finds what the files opened from now on import: \"library\" (the default) or \"path\"."
+      invisible(.Call(C_registry_set_import_search, .gt_reg(.self), search))
+    },
+    import_search = function() {
+      "\"library\" or \"path\": where a file this registry opens has its imports found."
+      .Call(C_registry_import_search, .gt_reg(.self))
+    },
     provider_table = function(key, kind = NULL) {
       "list(table, size, ctx) of the table a provider speaks kind through; table NULL for none."
       .Call(C_registry_provider_table, .gt_reg(.self), key, if (is.null(kind)) NULL else kind)

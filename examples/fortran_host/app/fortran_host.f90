@@ -55,6 +55,8 @@ program fortran_host
     call config%set('dirs', guatiao_list())
     item = config%key('dirs')
     if (len(pydir) > 0) call item%push(pydir)
+    ! The bridge imports python3.dll from the Python installation, on PATH.
+    call reg%set_import_search(GUATIAO_IMPORT_SEARCH_PATH)
     call reg%add_source_file(bridge, config)
     call reg%refresh(refreshed)
     call guatiao_emit(refreshed%key('loaded'), GUATIAO_FORMAT_JSON, text)

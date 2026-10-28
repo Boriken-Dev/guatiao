@@ -14,6 +14,7 @@ function cases = t_registry()
     'a provider''s meta is a copy carrying its form', @meta
     'a provider''s form, read from its meta, fits its schema', @form_fits
     'keys, ranks and re-keys', @keys
+    'the import search is the library''s until the host names path', @import_searches
     'retires a library and frees its key', @retires
     'unloads only when the library agrees', @unloads
     'collects a retired library once nothing of it is alive', @collects
@@ -135,6 +136,16 @@ function instances()
   reg.close();
   expect_equal(schema.tag(), 'map', 'a copy outlives the registry');
   schema.close();
+end
+
+function import_searches()
+  reg = guatiao.Registry('m-tests', '0.1');
+  expect_equal(reg.import_search(), 'library');
+  reg.set_import_search('path');
+  expect_equal(reg.import_search(), 'path');
+  expect_error(@() reg.set_import_search('everywhere'), 'guatiao:BadValue');
+  expect_equal(reg.import_search(), 'path');
+  reg.close();
 end
 
 function keys()

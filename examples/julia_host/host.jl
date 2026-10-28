@@ -119,6 +119,8 @@ function main(args = ARGS; io = stdout)
         Guatiao.register_library(reg, lib)
         println(io, "registered ", lib.id, " ", lib.version, " from Julia")
         if python_source !== nothing
+            # The bridge imports python3.dll from the Python installation, on PATH.
+            Guatiao.set_import_search!(reg, :path)
             Guatiao.add_source_file!(reg, python_source, Dict("dirs" => python_dirs, "paths" => python_paths))
             changed = Guatiao.refresh!(reg)
             for served in changed["loaded"]

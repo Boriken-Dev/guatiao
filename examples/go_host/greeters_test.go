@@ -177,6 +177,10 @@ func setup() (int, error) {
 	if py := bridge(); py == "" {
 		present["python"] = "no guatiao-source-py build: set GUATIAO_PY_BRIDGE"
 	} else {
+		// The bridge imports python3.dll from the Python installation, on PATH.
+		if err := reg.SetImportSearch(guatiao.ImportSearchPath); err != nil {
+			return 1, err
+		}
 		if err := reg.AddSourceFile(py, bridgeConfig()); err != nil {
 			if os.Getenv("GUATIAO_PY_BRIDGE") != "" {
 				return 1, err

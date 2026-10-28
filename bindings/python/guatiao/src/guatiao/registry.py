@@ -8,12 +8,28 @@ they offer, over `guatiao_registry_*`."""
 from __future__ import annotations
 
 import ctypes
+import enum
 import types
 from typing import Any, Callable, Dict, List, Optional, cast
 
 from . import _abi, _lib, kinds
 from .errors import NotFound, check
 from .value import Ref, Value, _make_str
+
+
+class ImportSearch(enum.IntEnum):
+    """Where Windows finds the libraries a file the registry opens imports
+    (`guatiao_registry_set_import_search`); unix ignores it."""
+
+    #: Beside the file, beside the host's executable, in the system
+    #: directory and in directories the process added
+    #: (`os.add_dll_directory`); not the current directory or `PATH`.
+    LIBRARY = 0
+    #: `LIBRARY`'s directories first; a file they leave an import missing
+    #: for is opened again with Windows' standard search from its own
+    #: directory: the system directories, the current directory and `PATH`.
+    PATH = 1
+
 
 #: A `guatiao_library_entry`-shaped callback for `Registry.register_entry`:
 #: `const guatiao_library_info *(*)(const guatiao_host_info *)`, both
@@ -262,6 +278,15 @@ class Registry:
         self._check_open()
         view, _buf = _make_str(id.encode("utf-8"))
         return int(_lib.core().guatiao_registry_priority(self._handle, view))
+
+    def set_import_search(self, search: ImportSearch) -> None:
+        """Where the files opened from now on have their imports found."""
+        self._check_open()
+        check(_lib.core().guatiao_registry_set_import_search(self._handle, int(search)))
+
+    def import_search(self) -> ImportSearch:
+        self._check_open()
+        return ImportSearch(_lib.core().guatiao_registry_import_search(self._handle))
 
     # ---- a provider's table and configuration ------------------------
 

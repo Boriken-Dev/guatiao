@@ -236,6 +236,10 @@ module guatiao_c
   !> many items follow.
   integer(c_int64_t), parameter :: GUATIAO_LEN_UNKNOWN = -1_c_int64_t
 
+  !> `GUATIAO_IMPORT_SEARCH_*`: where Windows finds what a file a registry
+  !> opens imports (`guatiao_registry_set_import_search`).
+  integer(c_int32_t), parameter :: GUATIAO_IMPORT_SEARCH_LIBRARY = 0, GUATIAO_IMPORT_SEARCH_PATH = 1
+
   !> `guatiao_visitor`: thirteen words. What receives a walk's events:
   !> `struct_size` (`c_sizeof` of this type), `ctx` handed back to each
   !> function, then a function per event; a null one refuses its event
@@ -272,7 +276,7 @@ module guatiao_c
     character(len=8) :: feature
   end type
 
-  type(gt_export), parameter :: gt_core_exports(84) = [ &
+  type(gt_export), parameter :: gt_core_exports(86) = [ &
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
@@ -346,6 +350,8 @@ module guatiao_c
     gt_export('guatiao_registry_provider_available', 3, 'load'), &
     gt_export('guatiao_registry_set_priority      ', 3, 'load'), &
     gt_export('guatiao_registry_priority          ', 2, 'load'), &
+    gt_export('guatiao_registry_set_import_search ', 2, 'load'), &
+    gt_export('guatiao_registry_import_search     ', 1, 'load'), &
     gt_export('guatiao_registry_provider_vtable   ', 3, 'load'), &
     gt_export('guatiao_registry_provider_table    ', 4, 'load'), &
     gt_export('guatiao_registry_provider_ctx      ', 2, 'load'), &
@@ -835,6 +841,17 @@ module guatiao_c
       type(gt_str), value :: id
       integer(c_int32_t) :: r
     end function
+    function guatiao_registry_set_import_search_i(reg, search) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: reg
+      integer(c_int32_t), value :: search
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_registry_import_search_i(reg) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: reg
+      integer(c_int32_t) :: r
+    end function
     function guatiao_registry_provider_vtable_i(reg, key, size_out) bind(c) result(r)
       import :: c_ptr, gt_str
       type(c_ptr), value :: reg
@@ -1032,6 +1049,8 @@ module guatiao_c
   procedure(guatiao_registry_provider_available_i), pointer :: gt_registry_provider_available => null()
   procedure(guatiao_registry_set_priority_i), pointer :: gt_registry_set_priority => null()
   procedure(guatiao_registry_priority_i), pointer :: gt_registry_priority => null()
+  procedure(guatiao_registry_set_import_search_i), pointer :: gt_registry_set_import_search => null()
+  procedure(guatiao_registry_import_search_i), pointer :: gt_registry_import_search => null()
   procedure(guatiao_registry_provider_vtable_i), pointer :: gt_registry_provider_vtable => null()
   procedure(guatiao_registry_provider_table_i), pointer :: gt_registry_provider_table => null()
   procedure(guatiao_registry_provider_ctx_i), pointer :: gt_registry_provider_ctx => null()
@@ -1125,6 +1144,8 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_available'), gt_registry_provider_available)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_set_priority'), gt_registry_set_priority)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_priority'), gt_registry_priority)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_set_import_search'), gt_registry_set_import_search)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_import_search'), gt_registry_import_search)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_vtable'), gt_registry_provider_vtable)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_table'), gt_registry_provider_table)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_ctx'), gt_registry_provider_ctx)

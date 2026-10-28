@@ -32,6 +32,7 @@ export 'src/library.dart'
         loadModule,
         loadModuleBytes,
         surfaces;
+export 'src/import_search.dart' show ImportSearch;
 export 'src/platform_native.dart'
     if (dart.library.js_interop) 'src/web/platform_web.dart';
 export 'src/registry.dart'

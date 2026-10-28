@@ -358,6 +358,8 @@ const CORE: readonly Declared[] = [
   ['bool guatiao_registry_provider_available(void *reg, guatiao_str key, void *reason)', 'load'],
   ['uint32_t guatiao_registry_set_priority(void *reg, guatiao_str id, int32_t priority)', 'load'],
   ['int32_t guatiao_registry_priority(void *reg, guatiao_str id)', 'load'],
+  ['uint32_t guatiao_registry_set_import_search(void *reg, uint32_t search)', 'load'],
+  ['uint32_t guatiao_registry_import_search(void *reg)', 'load'],
   ['void *guatiao_registry_provider_table(void *reg, guatiao_str key, guatiao_str kind, void *size)', 'load'],
   ['void *guatiao_registry_provider_vtable(void *reg, guatiao_str key, void *size)', 'load'],
   ['void *guatiao_registry_provider_ctx(void *reg, guatiao_str key)', 'load'],

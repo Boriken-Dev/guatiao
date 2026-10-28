@@ -100,6 +100,13 @@ with Registry("my-host", "1.0") as reg:
 Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries()`,
 `provider(key)`, `available(kind)`, `provider_available(key)`,
 `keyed_by`/`libraries_keyed_by`, `set_priority`/`priority`,
+`set_import_search(ImportSearch.PATH)`/`import_search()` (where Windows
+finds what a file the registry opens imports: `ImportSearch.LIBRARY`, the
+default, looks beside the file, beside the host's executable, in the
+system directory and in `os.add_dll_directory` directories;
+`ImportSearch.PATH` then retries a missing import with Windows' standard
+search, which reaches the current directory and `PATH`, as a non-Python
+host adding a Python bridge needs; unix ignores it),
 `provider_config(key)` (a borrowed, read-only `Ref` onto the schema --
 writing through it raises `TypeError`, and it is never `.close()`d),
 `provider_meta(key)` (a copy of the provider's `meta` as a `Value` you

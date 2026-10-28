@@ -133,6 +133,14 @@ func RegistryPriority(r unsafe.Pointer, id string) int32 {
 	return int32(C.gt_core_guatiao_registry_priority(reg(r), str(id)))
 }
 
+func RegistrySetImportSearch(r unsafe.Pointer, search uint32) uint32 {
+	return uint32(C.gt_core_guatiao_registry_set_import_search(reg(r), C.uint32_t(search)))
+}
+
+func RegistryImportSearch(r unsafe.Pointer) uint32 {
+	return uint32(C.gt_core_guatiao_registry_import_search(reg(r)))
+}
+
 // RegistryTable is the provider's table for kind (its single one when
 // kind is empty and single), its size, and its ctx.
 func RegistryTable(r unsafe.Pointer, key, kind string, single bool) (unsafe.Pointer, uintptr, uintptr) {

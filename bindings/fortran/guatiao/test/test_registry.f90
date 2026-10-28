@@ -88,6 +88,7 @@ contains
     type(guatiao_registry) :: reg
     type(guatiao_value) :: providers, first
     logical :: ok
+    integer :: stat
     character(:), allocatable :: reason
     reg = guatiao_open_registry('fortran-keys', '0.1')
     call reg%keyed_by('%id@%version')
@@ -96,6 +97,12 @@ contains
     call check(index(keys_of(providers), '@') > 0, 'keys follow the template')
     call reg%set_priority('derived_greeter_shouter', 50)
     call check(reg%priority('derived_greeter_shouter') == 50, 'a rank set is read back')
+    call check(reg%import_search() == GUATIAO_IMPORT_SEARCH_LIBRARY, 'the import search is the library''s')
+    call reg%set_import_search(GUATIAO_IMPORT_SEARCH_PATH)
+    call check(reg%import_search() == GUATIAO_IMPORT_SEARCH_PATH, 'the import search became path')
+    call reg%set_import_search(2, stat)
+    call check(stat == GUATIAO_ERR_BAD_VALUE, 'an unknown import search is refused')
+    call check(reg%import_search() == GUATIAO_IMPORT_SEARCH_PATH, 'a refusal changes nothing')
     call reg%providers('greeter', providers)
     first = providers%at(1, 'id')
     call check_text(first%string_or(''), 'derived_greeter_shouter', 'the highest rank first')

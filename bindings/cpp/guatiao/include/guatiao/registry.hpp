@@ -110,6 +110,21 @@ class instance {
   const guatiao_alloc* alloc_ = nullptr;
 };
 
+/// Where Windows finds the libraries a file a registry opens imports
+/// (`guatiao_registry_set_import_search`). Unix ignores it: a library's
+/// own `RUNPATH` (`$ORIGIN` for its directory) and `LD_LIBRARY_PATH`
+/// decide there.
+enum class import_search : std::uint32_t {
+  /// Beside the file, beside the host's executable, in the system
+  /// directory and in directories the process added; not the current
+  /// directory or `PATH`. The default.
+  library = GUATIAO_IMPORT_SEARCH_LIBRARY,
+  /// Those first; a file they leave an import missing for is opened again
+  /// with Windows' standard search from its own directory: the system
+  /// directories, the current directory and `PATH`.
+  path = GUATIAO_IMPORT_SEARCH_PATH,
+};
+
 /// A host's registry: the libraries it loaded or registered, the sources
 /// it keeps, and what they offer. Every answer that is data is a `value`
 /// built in the registry's allocator. Not safe to use from two threads at
@@ -289,6 +304,14 @@ class registry {
     return detail::check(guatiao_registry_set_priority(r_, detail::str(id), priority));
   }
   std::int32_t priority(std::string_view id) const noexcept { return guatiao_registry_priority(r_, detail::str(id)); }
+  /// Where the files this registry opens from now on have their imports
+  /// found; `import_search::library` unless set.
+  result<void> try_set_import_search(guatiao::import_search search) {
+    return detail::check(guatiao_registry_set_import_search(r_, static_cast<std::uint32_t>(search)));
+  }
+  guatiao::import_search import_search() const noexcept {
+    return static_cast<guatiao::import_search>(guatiao_registry_import_search(r_));
+  }
   /// Files providers under `key_template` (`%id`, `%version`, `%name`,
   /// `%library`, `%source`) instead of `%id`.
   result<void> try_keyed_by(std::string_view key_template) {
@@ -364,6 +387,7 @@ class registry {
   value best(std::string_view kind) const { return try_best(kind).value(); }
   value provider_meta(std::string_view key) const { return try_provider_meta(key).value(); }
   void set_priority(std::string_view id, std::int32_t priority) { try_set_priority(id, priority).value(); }
+  void set_import_search(guatiao::import_search search) { try_set_import_search(search).value(); }
   void keyed_by(std::string_view key_template) { try_keyed_by(key_template).value(); }
   void libraries_keyed_by(std::string_view key_template) { try_libraries_keyed_by(key_template).value(); }
   instance create(std::string_view key, view config) { return try_create(key, config).value(); }

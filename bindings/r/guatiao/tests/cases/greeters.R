@@ -69,6 +69,8 @@ case("one refresh loads every greeter its sources serve", with_examples({
   if (is.null(py)) {
     absent_greeter("python", "no guatiao-source-py build: set GUATIAO_PY_BRIDGE")
   } else {
+    # The bridge imports python3.dll from the Python installation, on PATH.
+    HOST$set_import_search("path")
     HOST$add_source_file(py, bridge_config())
     PRESENT <- c(PRESENT, "python")
   }

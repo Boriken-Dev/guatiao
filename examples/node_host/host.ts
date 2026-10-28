@@ -144,6 +144,8 @@ async function host(
     console.log(`registered ${library.id} ${library.version} from Node`);
   }
   if (values['python-source'] !== undefined) {
+    // The bridge imports python3.dll from the Python installation, on PATH.
+    reg.importSearch = 'path';
     reg.addSourceFile(values['python-source'], { dirs: values['python-dir'], paths: values['python-path'] });
     const changed = reg.refresh();
     for (const served of changed.loaded) console.log(`served ${String(served.id)} from Python`);

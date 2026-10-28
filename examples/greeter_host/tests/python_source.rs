@@ -40,6 +40,8 @@ fn the_host_calls_greeters_written_in_python_through_the_bridge() {
     let output = Command::new(env!("CARGO_BIN_EXE_greeter_host"))
         .arg(&deps)
         .env("GREETER_HOST_SOURCE", &bridge)
+        // The bridge imports python3.dll from the Python installation, on PATH.
+        .env("GREETER_HOST_IMPORT_SEARCH", "path")
         .env("GREETER_HOST_SOURCE_CONFIG", &config)
         .output()
         .expect("the host runs");

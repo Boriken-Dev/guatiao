@@ -29,6 +29,13 @@ export {
   WrongKind,
 } from './errors.js';
 export { useLibrary } from './native.js';
-export { Instance, Registry, type ProviderTable, type RegistrableLibrary, type ScanOptions } from './registry.js';
+export {
+  type ImportSearch,
+  Instance,
+  Registry,
+  type ProviderTable,
+  type RegistrableLibrary,
+  type ScanOptions,
+} from './registry.js';
 export { redact } from './schema.js';
 export { ListRef, MapRef, Ref, Value, type ReadOptions, type Step, type ValueOptions } from './value.js';

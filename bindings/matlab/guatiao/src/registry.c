@@ -205,6 +205,30 @@ int cmd_registry_priority(gt_call *c) {
   return 1;
 }
 
+/* 'library' or 'path'; any other text reaches the library as a value it
+ * refuses (BAD_VALUE). */
+int cmd_registry_set_import_search(gt_call *c) {
+  guatiao_registry *reg = NULL;
+  guatiao_str s;
+  if (!reg_arg(c, 0, &reg) || !gt_arg_text(c, 1, "the import search", &s)) return 0;
+  uint32_t code = 2;
+  if (s.len == 7 && memcmp(s.ptr, "library", 7) == 0) code = GUATIAO_IMPORT_SEARCH_LIBRARY;
+  if (s.len == 4 && memcmp(s.ptr, "path", 4) == 0) code = GUATIAO_IMPORT_SEARCH_PATH;
+  guatiao_status st = gt_core.guatiao_registry_set_import_search(reg, code);
+  if (st) return gt_fail(c, st, "the import search is 'library' or 'path'");
+  return 1;
+}
+
+int cmd_registry_import_search(gt_call *c) {
+  guatiao_registry *reg = NULL;
+  if (!reg_arg(c, 0, &reg)) return 0;
+  gt_answer(c, 0,
+            mxCreateString(gt_core.guatiao_registry_import_search(reg) == GUATIAO_IMPORT_SEARCH_PATH
+                               ? "path"
+                               : "library"));
+  return 1;
+}
+
 /* registry_provider_table(reg, key, kind or []) -> struct(table, size, ctx);
  * table [] for none */
 int cmd_registry_provider_table(gt_call *c) {

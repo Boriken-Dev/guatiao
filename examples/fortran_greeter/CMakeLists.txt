@@ -40,5 +40,8 @@ if(WIN32)
   if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     # No libgfortran DLL for a host to find beside the library.
     target_link_options(fortran_greeter PRIVATE -static)
+  elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^Intel")
+    # Nor Intel's runtime DLLs, which a host would look for on PATH.
+    set_target_properties(fortran_greeter PROPERTIES MSVC_RUNTIME_LIBRARY MultiThreaded)
   endif()
 endif()

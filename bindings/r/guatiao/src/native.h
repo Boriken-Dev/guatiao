@@ -153,6 +153,9 @@
   X(guatiao_status, guatiao_registry_set_priority, (guatiao_registry *reg, guatiao_str id, int32_t p), \
     (reg, id, p), "load")                                                                       \
   X(int32_t, guatiao_registry_priority, (const guatiao_registry *reg, guatiao_str id), (reg, id), "load") \
+  X(guatiao_status, guatiao_registry_set_import_search, (guatiao_registry *reg, uint32_t search), \
+    (reg, search), "load")                                                                      \
+  X(uint32_t, guatiao_registry_import_search, (const guatiao_registry *reg), (reg), "load")     \
   X(const void *, guatiao_registry_provider_vtable,                                            \
     (const guatiao_registry *reg, guatiao_str key, size_t *size), (reg, key, size), "load")     \
   X(const void *, guatiao_registry_provider_table,                                             \

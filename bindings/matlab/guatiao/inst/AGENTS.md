@@ -331,7 +331,12 @@ it is mapped), `libraries()`, `providers(kind)`, `available(kind)`,
 `why_not(kind)`, `provider(key)`, `best(kind)`, `provider_available(key)`
 (struct(available, reason)), `keyed_by(template)` /
 `libraries_keyed_by(template)` (`%id` by default; `%name`, `%library`,
-`%version`, `%source`), `set_priority(id, p)` / `priority(id)`, `provider_table(key,
+`%version`, `%source`), `set_priority(id, p)` / `priority(id)`,
+`set_import_search('path')` / `import_search()` (where Windows finds what
+a file the registry opens imports: `'library'`, the default, looks beside
+the file, beside the host's executable and in the system directory,
+`'path'` also in the current directory and on `PATH`, as a host adding a
+Python bridge needs; unix ignores it), `provider_table(key,
 kind)` (struct(table, size, ctx), addresses as `uint64`, `table` `[]` for
 none; no `kind` for a single table), `provider_config(key)` (a copy of the
 schema, a `guatiao.Value`, or `[]`), `provider_meta(key)` (what the

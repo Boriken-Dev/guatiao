@@ -27,6 +27,11 @@ R (\code{\link{library_of}}).}
 \code{provider_available(key)}}{Ask what is loaded: lists of lists, best first.}
 \item{\code{keyed_by(template)}, \code{libraries_keyed_by(template)},
 \code{set_priority(id, priority)}, \code{priority(id)}}{File and rank providers.}
+\item{\code{set_import_search(search)}, \code{import_search()}}{Where Windows
+finds what a file the registry opens imports: \code{"library"}, the default,
+looks beside the file, beside the host's executable and in the system
+directory; \code{"path"} also in the current directory and on \code{PATH}, as
+an R host adding a Python bridge needs. Unix ignores it.}
 \item{\code{provider_table(key, kind = NULL)}, \code{provider_config(key)},
 \code{host()}}{A provider's table (\code{list(table, size, ctx)}), a copy of its
 configuration schema (or \code{NULL}), and the registry's host block.}

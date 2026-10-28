@@ -52,6 +52,8 @@ beforeAll(async () => {
   }
   const py = bridge();
   if (py !== null) {
+    // The bridge imports python3.dll from the Python installation, on PATH.
+    reg.importSearch = 'path';
     reg.addSourceFile(py, bridgeConfig());
     const changed = reg.refresh();
     expect(changed.refused).toEqual([]);

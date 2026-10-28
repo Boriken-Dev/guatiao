@@ -104,6 +104,17 @@ describe('Registry', () => {
     expect(() => reg.keyedBy('%nonsense')).toThrow(BadValue);
   });
 
+  it("searches for a file's imports the library's way until the host names path", () => {
+    using reg = new Registry('node-tests', '0.1');
+    expect(reg.importSearch).toBe('library');
+    reg.importSearch = 'path';
+    expect(reg.importSearch).toBe('path');
+    expect(() => {
+      reg.importSearch = 'everywhere' as never;
+    }).toThrow(BadValue);
+    expect(reg.importSearch).toBe('path');
+  });
+
   it('retires a library and frees its key', () => {
     using reg = scanned();
     reg.retire('derived_greeter');

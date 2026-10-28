@@ -213,6 +213,29 @@ func TestBuildsAnInstanceAndLendsItsSchema(t *testing.T) {
 	}
 }
 
+func TestTheImportSearchIsTheLibrarysUntilTheHostNamesPath(t *testing.T) {
+	reg, err := guatiao.NewRegistry("go-tests", "0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	if s, err := reg.ImportSearch(); err != nil || s != guatiao.ImportSearchLibrary {
+		t.Fatalf("the default: %v %v", s, err)
+	}
+	if err := reg.SetImportSearch(guatiao.ImportSearchPath); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := reg.ImportSearch(); s != guatiao.ImportSearchPath {
+		t.Fatalf("after path: %v", s)
+	}
+	if err := reg.SetImportSearch(2); !errors.Is(err, guatiao.ErrBadValue) {
+		t.Fatalf("an unknown search: %v", err)
+	}
+	if s, _ := reg.ImportSearch(); s != guatiao.ImportSearchPath {
+		t.Fatalf("a refusal changed it: %v", s)
+	}
+}
+
 func TestKeysRanksAndReKeys(t *testing.T) {
 	reg := scanned(t)
 	if err := reg.SetPriority("derived_greeter_hello", 7); err != nil {

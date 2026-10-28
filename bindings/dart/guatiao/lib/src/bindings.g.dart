@@ -789,6 +789,18 @@ class GuatiaoBindings {
         ffi.Pointer<guatiao_host_info> Function(ffi.Pointer<guatiao_registry>)
       >();
 
+  int guatiao_registry_import_search(ffi.Pointer<guatiao_registry> reg) {
+    return _guatiao_registry_import_search(reg);
+  }
+
+  late final _guatiao_registry_import_searchPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Uint32 Function(ffi.Pointer<guatiao_registry>)>
+      >('guatiao_registry_import_search');
+  late final _guatiao_registry_import_search =
+      _guatiao_registry_import_searchPtr
+          .asFunction<int Function(ffi.Pointer<guatiao_registry>)>();
+
   int guatiao_registry_keyed_by(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str template_,
@@ -1459,6 +1471,23 @@ class GuatiaoBindings {
           ffi.Pointer<guatiao_value>,
         )
       >();
+
+  int guatiao_registry_set_import_search(
+    ffi.Pointer<guatiao_registry> reg,
+    int search,
+  ) {
+    return _guatiao_registry_set_import_search(reg, search);
+  }
+
+  late final _guatiao_registry_set_import_searchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, ffi.Uint32)
+        >
+      >('guatiao_registry_set_import_search');
+  late final _guatiao_registry_set_import_search =
+      _guatiao_registry_set_import_searchPtr
+          .asFunction<int Function(ffi.Pointer<guatiao_registry>, int)>();
 
   int guatiao_registry_set_priority(
     ffi.Pointer<guatiao_registry> reg,
@@ -2438,6 +2467,10 @@ const int GUATIAO_FRAME_CLOSE = 2;
 const int GUATIAO_FRAME_SCHEMA = 0;
 
 const int GUATIAO_FRAME_VALUE = 1;
+
+const int GUATIAO_IMPORT_SEARCH_LIBRARY = 0;
+
+const int GUATIAO_IMPORT_SEARCH_PATH = 1;
 
 const String GUATIAO_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
 

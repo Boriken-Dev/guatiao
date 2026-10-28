@@ -167,6 +167,8 @@ void main(List<String> argv) {
     reg.registerLibrary(library);
     stdout.writeln('registered ${library.id} ${library.version} from Dart');
     if (pythonSource.isNotEmpty) {
+      // The bridge imports python3.dll from the Python installation, on PATH.
+      reg.importSearch = ImportSearch.path;
       reg.addSourceFile(pythonSource.single, {
         'dirs': pythonDirs,
         'paths': pythonPaths,

@@ -33,7 +33,10 @@
 //!    libraries that are not files themselves, such as the guatiao-source-py
 //!    bridge serving greeters written in Python, configured by the JSON
 //!    in `GREETER_HOST_SOURCE_CONFIG`. One refresh loads what it serves,
-//!    and its greeters are offered beside the rest.
+//!    and its greeters are offered beside the rest. On Windows the
+//!    bridge imports `python3.dll` from the Python installation:
+//!    `GREETER_HOST_IMPORT_SEARCH=path` lets every file this host opens
+//!    find its imports on `PATH` too.
 //!
 //! ```text
 //! cargo build --workspace            # puts derived_greeter beside this binary
@@ -55,7 +58,7 @@ use std::sync::Mutex;
 
 use greeter_kind::{Counter, Greeter, Listener};
 use guatiao::library::{
-    Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, scan_path,
+    ImportSearch, Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, scan_path,
 };
 use guatiao::schema::{SchemaRef, validate_map};
 use guatiao::{Map, Provider, Schema, ToValue, Value};
@@ -83,6 +86,13 @@ fn main() -> ExitCode {
     // The host's registry: its own id and version, and its own allocator
     // for every value that crosses back (`None` is the Rust one).
     let mut registry = Registry::with_alloc("greeter_host", env!("CARGO_PKG_VERSION"), None);
+    // Where Windows finds what a file this host opens imports: beside it,
+    // beside this program and in the system directory, unless
+    // `GREETER_HOST_IMPORT_SEARCH=path` adds the current directory and
+    // PATH, as the Python bridge's python3.dll needs.
+    if std::env::var("GREETER_HOST_IMPORT_SEARCH").as_deref() == Ok("path") {
+        registry.set_import_search(ImportSearch::Path);
+    }
 
     // A provider this program carries compiled in, registered beside
     // what it loads: same keys, same dedup, same offers, no file. It is

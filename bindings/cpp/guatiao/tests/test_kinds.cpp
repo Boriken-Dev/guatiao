@@ -290,6 +290,15 @@ void the_library_says_when_it_may_go() {
   CHECK(info->providers.len == 3 && info->meta != nullptr);
 }
 
+void the_import_search_is_the_librarys_until_the_host_names_path() {
+  guatiao::registry reg = MUST(guatiao::registry::try_open("cpp-search", "1"));
+  CHECK(reg.import_search() == guatiao::import_search::library);
+  CHECK(reg.try_set_import_search(guatiao::import_search::path).ok());
+  CHECK(reg.import_search() == guatiao::import_search::path);
+  CHECK(reg.try_set_import_search(static_cast<guatiao::import_search>(2)).code() == guatiao::status::bad_value);
+  CHECK(reg.import_search() == guatiao::import_search::path);
+}
+
 /// Handed over in the caller's allocator, a map is moved into this side's
 /// before the method keeps it.
 void a_map_handed_over_and_kept_is_the_providers_own() {
@@ -335,6 +344,7 @@ int main() {
     CHECK(providers.size() == 3);
   }
   the_library_says_when_it_may_go();
+  the_import_search_is_the_librarys_until_the_host_names_path();
   a_map_handed_over_and_kept_is_the_providers_own();
   CHECK(guatiao::detail::live().load() == 0);
   CHECK_NONE_LEFT("every call, refusal, object and instance");

@@ -10,10 +10,25 @@
  */
 
 import { SIZE, VIEW, WORD } from './abi.js';
-import { NotFound, raiseForStatus } from './errors.js';
+import { BadValue, NotFound, raiseForStatus } from './errors.js';
 import { type KindLike, type KindsDocument, type Remote, asKind } from './kinds.js';
 import * as n from './native.js';
 import { Borrowed, Ref, Value, adopt } from './value.js';
+
+/**
+ * Where Windows finds what a file a registry opens imports. `'library'`:
+ * beside the file, beside the host's executable and in the system
+ * directory, not the current directory or `PATH` (the default). `'path'`:
+ * those first; a file they leave an import missing for is opened again
+ * with Windows' standard search from its own directory (the system
+ * directories, the current directory and `PATH`), as a host adding a
+ * Python bridge needs.
+ */
+export type ImportSearch = 'library' | 'path';
+
+/** `GUATIAO_IMPORT_SEARCH_LIBRARY` and `_PATH`. */
+const IMPORT_SEARCH_LIBRARY = 0;
+const IMPORT_SEARCH_PATH = 1;
 
 /** What `providerTable` answers: a table, its size, and the provider's `ctx`. */
 export interface ProviderTable {
@@ -245,6 +260,21 @@ export class Registry implements Disposable {
 
   priority(id: string): number {
     return n.core().fn.guatiao_registry_priority!(this.#open(), n.str(id)) as number;
+  }
+
+  /**
+   * Where Windows finds what the files this registry opens from now on
+   * import: `'library'` (the default) or `'path'`. Unix ignores it.
+   */
+  get importSearch(): ImportSearch {
+    const code = n.core().fn.guatiao_registry_import_search!(this.#open()) as number;
+    return code === IMPORT_SEARCH_PATH ? 'path' : 'library';
+  }
+
+  set importSearch(search: ImportSearch) {
+    const code = search === 'path' ? IMPORT_SEARCH_PATH : search === 'library' ? IMPORT_SEARCH_LIBRARY : -1;
+    if (code < 0) throw new BadValue(`no import search ${String(search)}: 'library' or 'path'`);
+    raiseForStatus(n.core().fn.guatiao_registry_set_import_search!(this.#open(), code) as number);
   }
 
   // ---- a provider's table and configuration --------------------------------------

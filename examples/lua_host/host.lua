@@ -6,12 +6,14 @@
 -- language wrote them, and calls every greeter through the `greeter`
 -- kind, as its description says.
 --
---   lua host.lua KINDS [--library FILE]... [--source FILE KEY=A;B ...]...
+--   lua host.lua KINDS [--import-search path] [--library FILE]... [--source FILE KEY=A;B ...]...
 --
 -- KINDS is a kind description document (greeter_kind.kinds.json). A
 -- source's configuration follows its file: each KEY=A;B is a list of
--- text under KEY. It raises an error on the first check that fails, and
--- prints "all checks passed" at the end.
+-- text under KEY. `--import-search path` lets Windows find what the files
+-- named after it import in the current directory and on PATH too, as the
+-- Python bridge's python3.dll is. It raises an error on the first check
+-- that fails, and prints "all checks passed" at the end.
 
 local guatiao = require "guatiao"
 
@@ -20,11 +22,16 @@ local kinds = guatiao.kinds(assert(args[1], "usage: host.lua KINDS [--library FI
 local greeter = kinds.greeter
 
 local registry = guatiao.registry("lua-host", "1.0")
+assert(registry:import_search() == "library", "the import search is the library's by default")
 
 local i = 2
 while args[i] do
   local what = args[i]
-  if what == "--library" then
+  if what == "--import-search" then
+    registry:set_import_search(args[i + 1])
+    assert(registry:import_search() == args[i + 1], "the import search was not taken")
+    i = i + 2
+  elseif what == "--library" then
     local loaded, why = registry:load_file(args[i + 1])
     if loaded then
       print(("loaded %s %s"):format(loaded.id, loaded.version))

@@ -11,7 +11,7 @@ use std::path::Path;
 
 use guatiao::Map;
 use guatiao::library::kind::DescribedRemote;
-use guatiao::library::{Refreshed, Registry};
+use guatiao::library::{ImportSearch, Refreshed, Registry};
 use guatiao_bridge::Held;
 use mlua::prelude::*;
 use mlua::{UserData, UserDataMethods};
@@ -139,8 +139,9 @@ fn all_kinds(lua: &Lua) -> LuaResult<LuaTable> {
 ///
 /// `registry(id, version)` answers a registry whose methods are
 /// `load_file(path)`, `add_source_file(path, config)`, `refresh()`,
-/// `providers([kind])`, `bind(key, kind)`, `retire(key)`, `collect()`
-/// and `close()`.
+/// `providers([kind])`, `bind(key, kind)`, `retire(key)`, `collect()`,
+/// `set_import_search("library" | "path")`, `import_search()` and
+/// `close()`.
 pub fn module(lua: &Lua) -> LuaResult<LuaTable> {
     let t = helpers(lua)?;
     t.set(
@@ -288,6 +289,25 @@ impl UserData for RegistryView {
         });
         methods.add_method_mut("collect", |lua, this, ()| {
             lua.create_sequence_from(this.get()?.collect())
+        });
+        methods.add_method_mut("set_import_search", |_, this, search: String| {
+            let search = match search.as_str() {
+                "library" => ImportSearch::Library,
+                "path" => ImportSearch::Path,
+                other => {
+                    return Err(LuaError::runtime(format!(
+                        "no import search {other:?}: \"library\" or \"path\""
+                    )));
+                }
+            };
+            this.get()?.set_import_search(search);
+            Ok(())
+        });
+        methods.add_method_mut("import_search", |_, this, ()| {
+            Ok(match this.get()?.import_search() {
+                ImportSearch::Library => "library",
+                ImportSearch::Path => "path",
+            })
         });
         methods.add_method_mut("close", |_, this, ()| {
             this.0 = None;

@@ -41,8 +41,6 @@ SEXP C_node_names(SEXP);
 SEXP C_node_pointer(SEXP);
 SEXP C_node_push(SEXP, SEXP);
 SEXP C_node_read(SEXP, SEXP);
-SEXP C_wire_read(SEXP, SEXP);
-SEXP C_wire_of(SEXP);
 SEXP C_node_set(SEXP, SEXP, SEXP);
 SEXP C_node_tag(SEXP);
 SEXP C_number_read(SEXP);
@@ -55,6 +53,7 @@ SEXP C_registry_create(SEXP, SEXP, SEXP);
 SEXP C_registry_destroy(SEXP, SEXP, SEXP);
 SEXP C_registry_free(SEXP);
 SEXP C_registry_host(SEXP);
+SEXP C_registry_import_search(SEXP);
 SEXP C_registry_keyed_by(SEXP, SEXP, SEXP);
 SEXP C_registry_kind_descriptions(SEXP, SEXP);
 SEXP C_registry_load_file(SEXP, SEXP);
@@ -69,6 +68,7 @@ SEXP C_registry_refresh(SEXP);
 SEXP C_registry_register_entry(SEXP, SEXP, SEXP);
 SEXP C_registry_retire(SEXP, SEXP);
 SEXP C_registry_scan(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP C_registry_set_import_search(SEXP, SEXP);
 SEXP C_registry_set_priority(SEXP, SEXP, SEXP);
 SEXP C_registry_unload(SEXP, SEXP, SEXP);
 SEXP C_registry_watch_dir(SEXP, SEXP, SEXP);
@@ -92,6 +92,8 @@ SEXP C_wire_accept(SEXP, SEXP);
 SEXP C_wire_decode(SEXP, SEXP);
 SEXP C_wire_encode(SEXP);
 SEXP C_wire_frame(SEXP, SEXP, SEXP);
+SEXP C_wire_of(SEXP);
+SEXP C_wire_read(SEXP, SEXP);
 SEXP C_wire_receiver_free(SEXP);
 SEXP C_wire_receiver_new(void);
 SEXP C_xptr_live(SEXP);
@@ -132,8 +134,6 @@ static const R_CallMethodDef calls[] = {
     {"C_node_pointer", (DL_FUNC)(void (*)(void)) & C_node_pointer, 1},
     {"C_node_push", (DL_FUNC)(void (*)(void)) & C_node_push, 2},
     {"C_node_read", (DL_FUNC)(void (*)(void)) & C_node_read, 2},
-    {"C_wire_read", (DL_FUNC)(void (*)(void)) & C_wire_read, 2},
-    {"C_wire_of", (DL_FUNC)(void (*)(void)) & C_wire_of, 1},
     {"C_node_set", (DL_FUNC)(void (*)(void)) & C_node_set, 3},
     {"C_node_tag", (DL_FUNC)(void (*)(void)) & C_node_tag, 1},
     {"C_number_read", (DL_FUNC)(void (*)(void)) & C_number_read, 1},
@@ -146,6 +146,7 @@ static const R_CallMethodDef calls[] = {
     {"C_registry_destroy", (DL_FUNC)(void (*)(void)) & C_registry_destroy, 3},
     {"C_registry_free", (DL_FUNC)(void (*)(void)) & C_registry_free, 1},
     {"C_registry_host", (DL_FUNC)(void (*)(void)) & C_registry_host, 1},
+    {"C_registry_import_search", (DL_FUNC)(void (*)(void)) & C_registry_import_search, 1},
     {"C_registry_keyed_by", (DL_FUNC)(void (*)(void)) & C_registry_keyed_by, 3},
     {"C_registry_kind_descriptions", (DL_FUNC)(void (*)(void)) & C_registry_kind_descriptions, 2},
     {"C_registry_load_file", (DL_FUNC)(void (*)(void)) & C_registry_load_file, 2},
@@ -160,6 +161,7 @@ static const R_CallMethodDef calls[] = {
     {"C_registry_register_entry", (DL_FUNC)(void (*)(void)) & C_registry_register_entry, 3},
     {"C_registry_retire", (DL_FUNC)(void (*)(void)) & C_registry_retire, 2},
     {"C_registry_scan", (DL_FUNC)(void (*)(void)) & C_registry_scan, 5},
+    {"C_registry_set_import_search", (DL_FUNC)(void (*)(void)) & C_registry_set_import_search, 2},
     {"C_registry_set_priority", (DL_FUNC)(void (*)(void)) & C_registry_set_priority, 3},
     {"C_registry_unload", (DL_FUNC)(void (*)(void)) & C_registry_unload, 3},
     {"C_registry_watch_dir", (DL_FUNC)(void (*)(void)) & C_registry_watch_dir, 3},
@@ -183,6 +185,8 @@ static const R_CallMethodDef calls[] = {
     {"C_wire_decode", (DL_FUNC)(void (*)(void)) & C_wire_decode, 2},
     {"C_wire_encode", (DL_FUNC)(void (*)(void)) & C_wire_encode, 1},
     {"C_wire_frame", (DL_FUNC)(void (*)(void)) & C_wire_frame, 3},
+    {"C_wire_of", (DL_FUNC)(void (*)(void)) & C_wire_of, 1},
+    {"C_wire_read", (DL_FUNC)(void (*)(void)) & C_wire_read, 2},
     {"C_wire_receiver_free", (DL_FUNC)(void (*)(void)) & C_wire_receiver_free, 1},
     {"C_wire_receiver_new", (DL_FUNC)(void (*)(void)) & C_wire_receiver_new, 0},
     {"C_xptr_live", (DL_FUNC)(void (*)(void)) & C_xptr_live, 1},

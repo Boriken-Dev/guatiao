@@ -6,6 +6,7 @@
 /// maps no libraries, so opening one throws `Unsupported` saying so.
 library;
 
+import '../import_search.dart';
 import 'library_web.dart';
 import 'module.dart';
 import 'value_web.dart';
@@ -64,6 +65,8 @@ class Registry {
   Registry librariesKeyedBy(String template) => _no();
   void setPriority(String id, int priority) => _no();
   int priority(String id) => _no();
+  ImportSearch get importSearch => _no();
+  set importSearch(ImportSearch search) => _no();
   ProviderTable providerTable(String key, {String? kind}) => _no();
   Ref? providerConfig(String key) => _no();
   Value? providerMeta(String key) => _no();
