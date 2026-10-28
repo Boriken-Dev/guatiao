@@ -1412,6 +1412,12 @@ write now.
 
 ### Changed
 
+- **guatiao-source-remote: a WebTransport client told `certificate_unknown`
+  as its link's first read arrives** is told the server does not trust it,
+  in the words a QUIC client hears, rather than that the server ended the
+  link before answering. QUIC and WebTransport links share how they are
+  opened, ended and reported lost; nothing else a peer sees changes.
+
 - **guatiao-source-remote: the access control list and every TLS
   configuration are coqui-peer-tls's.** At mutual TLS a rule naming a
   fingerprint is decided as the client presents its certificate, before
