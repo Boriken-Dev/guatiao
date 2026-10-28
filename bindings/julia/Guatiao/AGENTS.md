@@ -357,7 +357,8 @@ unless `name` says it. `@required` marks a slot every table fills,
 wherever it is declared, `@fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close` on
 its remote. Object kinds a slot names are declared before it. `@kind`
-refuses, as `#[guatiao::kind]` and the library's reader do, a slot named
+refuses, as `#[guatiao::kind]` and the library's reader do, a kind with
+no slot, two arguments of one slot with one name, a slot named
 `header`, a bare `ListRef` argument (a list is lent or taken),
 `Lent{Vector{UInt8}}` on a kind that is not an object kind, and an object
 passed or answered on a slot that is not `@fallible`.

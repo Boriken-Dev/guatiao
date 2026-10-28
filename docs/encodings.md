@@ -636,8 +636,10 @@ themselves against it.
 **What no kind may declare** is refused by the library's reader
 (`guatiao_kind_document_read`, `guatiao_kind_floor_hash`, and a
 provider's carried document), as `#[guatiao::kind]` refuses to declare
-it: a slot named twice or named `header` (the table's first field), an
-object kind's `destroy`, `bytes_mut` on a kind that is not an object kind,
+it: a kind with no slot (an object kind's `destroy` alone included), a
+slot named twice or named `header` (the table's first field), an object
+kind's `destroy`, an argument named twice in one slot, `bytes_mut` on a
+kind that is not an object kind,
 a `list` passed `borrowed` (a list is lent or taken), and an `object`
 argument or answer on a slot that is not `fallible` (the object's table is
 checked where it arrives, and only a fallible slot can say it was

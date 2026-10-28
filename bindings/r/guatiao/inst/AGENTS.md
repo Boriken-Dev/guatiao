@@ -400,7 +400,8 @@ FALSE)` lists a slot's arguments, named, in order; `required` marks a
 slot every table fills, wherever it is, `fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close()`
 on its remote. Refused, as the kind attribute and the library's reader
-refuse them: a slot named `header`, a `"list"` argument (a list is lent
+refuse them: a kind with no slot, two arguments of one slot with one name,
+a slot named `header`, a `"list"` argument (a list is lent
 or taken), `lent("bytes")` on a kind that is not an object kind, and an
 object passed or answered on a slot that is not `fallible`.
 

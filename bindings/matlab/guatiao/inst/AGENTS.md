@@ -383,7 +383,7 @@ slot names given by the folder's package (`+a/+b` is `a.b`). It reads the
 document with `jsondecode`; a document it cannot write a class from
 (a borrowed list, an object kind not in it, a slot named like a method of
 `guatiao.Kind` or named `header`, an object on a slot that is not
-fallible, an unknown type) raises `guatiao:BadValue` naming the
+fallible, a kind with no slot, two arguments of one name, an unknown type) raises `guatiao:BadValue` naming the
 slot. A kind with no description is written by hand, the same way:
 
 ```matlab
@@ -411,7 +411,8 @@ header's order (required and optional in any order); an object kind's `destroy` 
 remote's `close()`. `guatiao.slot(name, {argname, shape, ...}, 'Returns',
 shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
 `self.call(slotname, args...)`. `describe` refuses, as the kind attribute
-and the library's reader do, a slot named `header`, a `'list'` argument
+and the library's reader do, no slot at all, two arguments of one slot
+with one name, a slot named `header`, a `'list'` argument
 (a list is lent or taken), `guatiao.lent('bytes')` on a kind that is not
 an object kind, and an object passed or answered on a slot that is not
 `'Fallible'` (`guatiao:BadValue` naming the slot).
