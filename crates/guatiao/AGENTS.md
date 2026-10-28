@@ -1930,9 +1930,10 @@ learns at run time, and call one -- is a `Mechanism`'s, and
 KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"kinds": [..]}
 KindDescription::document_json(text)?               // the same from JSON text; an error at "byte N"
                                                     // where it stops being JSON
-// Refused where it goes wrong: what #[guatiao::kind] refuses to declare (a slot named twice,
-// an object kind's `destroy`, `bytes_mut` on a kind that is not an object kind) and what no
-// description says. Required and optional slots come in any order.
+// Refused where it goes wrong: what #[guatiao::kind] refuses to declare (a slot named twice
+// or `header`, an object kind's `destroy`, `bytes_mut` on a kind that is not an object kind,
+// an object passed or answered on a slot that is not fallible, a list passed borrowed) and
+// what no description says. Required and optional slots come in any order.
 kind.to_value()? / kind.to_value_in(alloc)?         // ToValue: written back key for key, in the
                                                     // order the kind macro writes it
 // C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;

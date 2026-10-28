@@ -244,7 +244,7 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | return `Value`, `Map`, `List` | an out-pointer the proxy fills first with a **carrier**: an empty container recording the allocator the answer is wanted in (ABSENT, its map arm recording it, for a `Value`). The shim reads it (`kind::return_alloc`) and calls `<method>_in` with it; a tree arriving in any other allocator is copied there by the proxy |
 | any other return type | `*mut Value` via `ToValue` into the carrier's allocator, read back with `FromValue` |
 | return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
-| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, passes an `Object` or lends one |
+| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, or passes, lends or answers an object |
 
 A method **with a default body** is an optional slot, wherever it is
 declared: a provider may leave it null, and the proxy then runs the
@@ -257,7 +257,8 @@ self`/`self`/no receiver, a `&mut` argument other than a lent tree
 (`&mut Value`/`&mut Map`/`&mut List`), a lent object or `&mut [u8]` on
 an object kind, `Option<&mut T>`, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
-a borrowed argument of any other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
+`&List` (a list is lent or handed over), a borrowed argument of any
+other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
 error is not `ProviderError`, a method named `header` (or `destroy` or
 `into_object` on an object kind), a method named `<m>_in` beside a method

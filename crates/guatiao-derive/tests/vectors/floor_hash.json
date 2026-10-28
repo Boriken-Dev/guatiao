@@ -1,5 +1,5 @@
 {
-  "about": "Kinds as their description says them, the Rust trait declaring the same slots, the floor hash's input as #[guatiao::kind] spells it, and the floor hash: every language that computes the hash of a kind born in it checks it against these. `refused` are kinds no reader takes: `why` is in every refusal, and `by` says who refuses it, `every reader` (the kind attribute, the library's reader, and every binding through it) or the bindings whose own code has that name.",
+  "about": "Kinds as their description says them, the Rust trait declaring the same slots, the floor hash's input as #[guatiao::kind] spells it, and the floor hash: every language that computes the hash of a kind born in it checks it against these. `refused` are kinds no reader takes: `why` is in every refusal, and `by` says who refuses it, `every reader` (the kind attribute, the library's reader, and every binding through it) or the bindings whose own code has that name. `with` are kinds the document holds beside it, which every reader takes.",
   "vectors": [
     {
       "name": "names",
@@ -456,6 +456,128 @@
         }
       ],
       "why": "on an object kind only",
+      "by": "every reader"
+    },
+    {
+      "name": "a_slot_named_header",
+      "object": false,
+      "trait": "pub trait Headed: Send + Sync { fn header(&self) -> u32; }",
+      "slots": [
+        {
+          "name": "header",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "u32"
+          }
+        }
+      ],
+      "why": "the table's first field",
+      "by": "every reader"
+    },
+    {
+      "name": "a_borrowed_list",
+      "object": false,
+      "trait": "pub trait Summer: Send + Sync { fn sum(&self, items: &List) -> i64; }",
+      "slots": [
+        {
+          "name": "sum",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "items",
+              "type": "list",
+              "pass": "borrowed"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          }
+        }
+      ],
+      "why": "a list is not borrowed",
+      "by": "every reader"
+    },
+    {
+      "name": "an_object_lent_on_an_infallible_slot",
+      "object": false,
+      "trait": "pub trait Reader: Send + Sync { fn read(&self, memo: &dyn Memo) -> u64; }",
+      "slots": [
+        {
+          "name": "read",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "memo",
+              "type": "object",
+              "kind": "memo",
+              "pass": "lent"
+            }
+          ],
+          "answer": {
+            "type": "u64"
+          }
+        }
+      ],
+      "with": [
+        {
+          "name": "memo",
+          "floor_hash": 1,
+          "object": true,
+          "slots": [
+            {
+              "name": "read",
+              "required": true,
+              "fallible": false,
+              "args": [],
+              "answer": {
+                "type": "text"
+              }
+            }
+          ]
+        }
+      ],
+      "why": "on a fallible slot only",
+      "by": "every reader"
+    },
+    {
+      "name": "an_object_answered_on_an_infallible_slot",
+      "object": false,
+      "trait": "pub trait Opener: Send + Sync { fn open(&self) -> Object<dyn Memo>; }",
+      "slots": [
+        {
+          "name": "open",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "object",
+            "kind": "memo"
+          }
+        }
+      ],
+      "with": [
+        {
+          "name": "memo",
+          "floor_hash": 1,
+          "object": true,
+          "slots": [
+            {
+              "name": "read",
+              "required": true,
+              "fallible": false,
+              "args": [],
+              "answer": {
+                "type": "text"
+              }
+            }
+          ]
+        }
+      ],
+      "why": "on a fallible slot only",
       "by": "every reader"
     },
     {
