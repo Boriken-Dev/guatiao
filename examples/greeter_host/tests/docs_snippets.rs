@@ -782,6 +782,18 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
     // MIG-LOCAL-END
     assert!(registry.provider("acme_hello").is_some());
 
+    {
+        // MIG-IMPORT-BEGIN
+        use guatiao::library::{ImportSearch, Registry};
+
+        let mut registry = Registry::new("my-host", "1.0");
+        // What the files opened from now on import may also be found in
+        // the current directory and on PATH, as python3.dll is.
+        registry.set_import_search(ImportSearch::Path);
+        // MIG-IMPORT-END
+        assert_eq!(registry.import_search(), ImportSearch::Path);
+    }
+
     for (n, name) in [
         "MIG-UNLOAD",
         "MIG-VIEW",
@@ -790,6 +802,7 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
         "MIG-MALFORMED",
         "MIG-LOADED",
         "MIG-KEYFIELDS",
+        "MIG-IMPORT",
     ]
     .into_iter()
     .enumerate()
@@ -835,7 +848,7 @@ fn migrating_serde_and_intake() -> Result<(), Box<dyn core::error::Error>> {
     // MIG-SPLIT-END
 
     for (n, name) in ["MIG-SYNTAX", "MIG-SPLIT"].into_iter().enumerate() {
-        assert_eq!(rust_block(MIGRATING, 22 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 23 + n), marked(name), "{name}");
     }
     Ok(())
 }

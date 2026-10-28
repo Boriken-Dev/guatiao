@@ -210,7 +210,7 @@ old build still answer.
 
 | OS | one bridge build serves |
 | --- | --- |
-| Windows | every CPython from 3.9 on (it links `python3.dll`, found through `PATH` by a host that is not Python) |
+| Windows | every CPython from 3.9 on (it links `python3.dll`: a host that is not Python puts the Python installation on `PATH` and sets its registry's import search to `path`) |
 | Linux, macOS | the CPython minor it was built with: build one per minor |
 
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)

@@ -289,7 +289,8 @@ below), and `--acl PATH` or `--range CIDR` the access control list.
 
 It serves the providers of the libraries it loads (`--load`, `--scan`)
 and of the sources it adds (`--source path=json`, refreshed every
-`--refresh-ms`), for the kinds it has descriptions of: those a provider
+`--refresh-ms`; `--import-search path` lets Windows find what they
+import on `PATH` too, as the Python bridge's `python3.dll` is), for the kinds it has descriptions of: those a provider
 carries of its own (every derived provider and every provider a bridge
 serves does), and those `--kinds` names (a kind crate's
 `<crate>.kinds.json`), which a hand-written C provider needs. A kind

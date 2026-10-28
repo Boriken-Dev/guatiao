@@ -743,6 +743,31 @@ field, `kind_descriptions: Str::new("")` for none. A library compiled
 before the field keeps loading, read as carrying none, and C, C++ and
 every binding's descriptor are unchanged unless they set it.
 
+### On Windows, what a loaded file imports is not looked for on `PATH`
+
+The libraries a library or source file imports (its DLLs) are looked
+for beside the file, beside the host's executable, in the system
+directory and in directories the process added, and no longer in the
+current directory or on `PATH`. A file whose imports live elsewhere,
+such as the Python bridge's `python3.dll` in a host that is not Python,
+is refused, the reason saying where the search did not look, until the
+host names the search that adds them:
+
+```rust
+use guatiao::library::{ImportSearch, Registry};
+
+let mut registry = Registry::new("my-host", "1.0");
+// What the files opened from now on import may also be found in
+// the current directory and on PATH, as python3.dll is.
+registry.set_import_search(ImportSearch::Path);
+```
+
+From C, `guatiao_registry_set_import_search(reg,
+GUATIAO_IMPORT_SEARCH_PATH)`; every binding's registry has the same
+setting ([where a library's imports are found](index.md#where-a-librarys-imports-are-found)).
+Shipping what a plugin imports beside it needs nothing. Linux and macOS
+are unchanged.
+
 ## guatiao-serde
 
 ### Reading a JSON number exactly is its own feature
