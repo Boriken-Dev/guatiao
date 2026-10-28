@@ -25,11 +25,9 @@
 #![forbid(unsafe_code)]
 
 use alloc::sync::Arc;
-use core::cell::Cell;
 use core::net::SocketAddr;
-use core::sync::atomic::Ordering;
 use core::time::Duration;
-use std::io::{self, IoSlice, Read, Write};
+use std::io;
 use std::net::UdpSocket;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
@@ -44,16 +42,16 @@ use wtransport::endpoint::{IncomingSessionFuture, SessionRequest};
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 use super::quic::{
-    CLEAN, Kept, Over, REFUSED, Rt, Shared, Watched, accept_incoming, checked, fingerprint,
-    for_connection, for_quinn, left, serving, transport_config, trusted, wait_at_most,
+    CLEAN, Handshake, Kept, Over, REFUSED, Rt, Shared, Watched, accept_incoming, checked,
+    connection, fingerprint, for_connection, for_quinn, left, serving, transport_config, trusted,
+    wait_at_most,
 };
-use super::stream::{StreamReader, StreamWriter};
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{
     TlsConfig, ended_before_answering, host_of, invalid, server_name, unbuilt, untrusted_by_server,
     untrusted_server, words,
 };
-use super::{Connect, Connection, Datagrams, FrameRead};
+use super::{Connect, Connection, Datagrams};
 use crate::lock;
 
 /// HTTP/3's application protocol, which a WebTransport session runs in.
@@ -91,8 +89,11 @@ enum Ends {
 impl Over for Wt {
     type Conn = wtransport::Connection;
     type Stream = wtransport::SendStream;
+    type Recv = wtransport::RecvStream;
+    type Pending = Pending;
     type Ends = Ends;
     const NOUN: &'static str = "WebTransport session";
+    const STREAM: &'static str = "WebTransport stream";
     const CLEAN: u32 = H3_NO_ERROR;
 
     fn clean(code: VarInt) -> bool {
@@ -105,6 +106,16 @@ impl Over for Wt {
 
     fn stream(stream: &mut wtransport::SendStream) -> &mut quinn::SendStream {
         stream.quic_stream_mut()
+    }
+
+    fn recv(stream: &mut wtransport::RecvStream) -> &mut quinn::RecvStream {
+        stream.quic_stream_mut()
+    }
+
+    fn datagrams(shared: &Arc<Shared<Wt>>) -> Arc<dyn Datagrams> {
+        Arc::new(WtDatagrams {
+            shared: Arc::clone(shared),
+        })
     }
 
     async fn idle(ends: &Ends) {
@@ -249,7 +260,7 @@ struct Pending {
     local: SocketAddr,
 }
 
-impl Pending {
+impl Handshake<Wt> for Pending {
     fn run(
         self,
         shared: &Shared<Wt>,
@@ -295,124 +306,6 @@ impl Pending {
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         shared.open(conn, send, peer.as_ref());
         Ok(recv)
-    }
-}
-
-/// The reading half.
-struct WtRead {
-    shared: Arc<Shared<Wt>>,
-    pending: Option<Pending>,
-    recv: Option<wtransport::RecvStream>,
-    /// The bound the link set on a read; the first bounds the handshake.
-    timeout: Cell<Option<Duration>>,
-}
-
-impl Read for WtRead {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if let Some(pending) = self.pending.take() {
-            self.recv = Some(pending.run(&self.shared, self.timeout.get())?);
-        }
-        let recv = self.recv.as_mut().ok_or(io::ErrorKind::NotConnected)?;
-        let reading = recv.quic_stream_mut().read(buf);
-        match wait_at_most(self.shared.rt.handle(), self.timeout.get(), reading)? {
-            Ok(Some(n)) => {
-                self.shared.heard.store(true, Ordering::Release);
-                Ok(n)
-            }
-            Ok(None) => Ok(0),
-            Err(quinn::ReadError::ConnectionLost(e)) => self.shared.lost(&e),
-            Err(quinn::ReadError::Reset(code)) => Err(io::Error::new(
-                io::ErrorKind::ConnectionReset,
-                format!("the peer reset the link's WebTransport stream (code {code})"),
-            )),
-            Err(e) => Err(io::Error::other(e.to_string())),
-        }
-    }
-}
-
-/// The frames of the reading half, the peer the handshake proved and the
-/// session's datagrams.
-struct WtFrames {
-    frames: StreamReader<WtRead>,
-    shared: Arc<Shared<Wt>>,
-}
-
-impl FrameRead for WtFrames {
-    fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
-        self.frames.read_frame(buf, max)
-    }
-
-    fn read_frame_in(
-        &mut self,
-        buf: &mut Vec<u8>,
-        max: usize,
-        room: &mut dyn FnMut(usize) -> Vec<u8>,
-    ) -> io::Result<bool> {
-        self.frames.read_frame_in(buf, max, room)
-    }
-
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
-        self.frames.set_timeout(timeout)
-    }
-
-    fn peer_id(&self) -> Option<String> {
-        self.shared.peer.get().cloned()
-    }
-
-    fn encrypted(&self) -> bool {
-        true
-    }
-
-    fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
-        Some(Arc::new(WtDatagrams {
-            shared: Arc::clone(&self.shared),
-        }))
-    }
-}
-
-/// The writing half.
-struct WtWrite {
-    shared: Arc<Shared<Wt>>,
-    timeout: Option<Duration>,
-}
-
-impl WtWrite {
-    fn send(&self, parts: &[&[u8]]) -> io::Result<()> {
-        let mut send = lock(&self.shared.send);
-        let stream = send
-            .as_mut()
-            .ok_or(io::ErrorKind::NotConnected)?
-            .quic_stream_mut();
-        let writing = async move {
-            for part in parts {
-                stream.write_all(part).await?;
-            }
-            Ok::<_, quinn::WriteError>(())
-        };
-        wait_at_most(self.shared.rt.handle(), self.timeout, writing)?.map_err(|e| match e {
-            quinn::WriteError::ConnectionLost(lost) => match self.shared.lost(&lost) {
-                Ok(_) => io::Error::new(io::ErrorKind::BrokenPipe, "the link ended"),
-                Err(e) => e,
-            },
-            other => io::Error::new(io::ErrorKind::BrokenPipe, other.to_string()),
-        })
-    }
-}
-
-impl Write for WtWrite {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.send(&[bytes])?;
-        Ok(bytes.len())
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        let parts: Vec<&[u8]> = bufs.iter().map(|b| &**b).collect();
-        self.send(&parts)?;
-        Ok(parts.iter().map(|p| p.len()).sum())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
     }
 }
 
@@ -465,50 +358,6 @@ impl Datagrams for WtDatagrams {
 
     fn max_size(&self) -> Option<usize> {
         self.shared.conn.get()?.max_datagram_size()
-    }
-}
-
-fn connection(
-    shared: Shared<Wt>,
-    pending: Option<Pending>,
-    recv: Option<wtransport::RecvStream>,
-    peer: String,
-) -> Connection {
-    let shared = Arc::new(shared);
-    let closing = Arc::clone(&shared);
-    let shutting = Arc::clone(&shared);
-    let reader = StreamReader::with_timeout(
-        WtRead {
-            shared: Arc::clone(&shared),
-            pending,
-            recv,
-            timeout: Cell::new(None),
-        },
-        |r: &WtRead, t| {
-            r.timeout.set(t);
-            Ok(())
-        },
-    );
-    Connection {
-        reader: Box::new(WtFrames {
-            frames: reader,
-            shared: Arc::clone(&shared),
-        }),
-        writer: Box::new(
-            StreamWriter::with_shutdown(
-                WtWrite {
-                    shared,
-                    timeout: None,
-                },
-                move || shutting.close(),
-            )
-            .bounded_by(|w: &mut WtWrite, t| {
-                w.timeout = t;
-                Ok(())
-            }),
-        ),
-        peer,
-        closer: Some(Box::new(move || closing.shut())),
     }
 }
 
@@ -672,7 +521,7 @@ impl Connect for WtConnect {
         let (send, recv) = wait_at_most(handle, left(until)?, opening)?.map_err(|e| {
             ended_before_answering(&io::Error::new(io::ErrorKind::ConnectionReset, e), &self.me)
         })?;
-        let shared = Shared::new(
+        let shared = Shared::<Wt>::new(
             self.proves,
             Some(self.me.clone()),
             Ends::Client(endpoint),
@@ -809,7 +658,7 @@ impl WtListen {
                 Ok(accepted) => accepted,
                 Err(refused) => return Ok(Accepted::Refused(refused)),
             };
-        let shared = Shared::new(
+        let shared = Shared::<Wt>::new(
             self.listener.trust.is_some(),
             None,
             Ends::Server(self.endpoint.clone()),
