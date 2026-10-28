@@ -819,9 +819,10 @@ fn median(v: &mut [Duration]) -> Duration {
 }
 
 /// The reader thread is never held up by a writer: small calls while
-/// large ones stream stay within reach of small calls alone. The bound is
-/// loose (a shared machine moves timings); a reader starved by a lock held
-/// across a read waits whole transfers, hundreds of milliseconds.
+/// large ones stream wait less than a large call takes, at most behind a
+/// frame already on the connection; a reader starved by a lock held across
+/// a read waits whole transfers. Both are timed in the same run, so a
+/// loaded machine slows them together.
 #[test]
 fn small_calls_stay_quick_while_large_ones_stream() {
     let (_source, registry) = linked_pair();
@@ -854,12 +855,13 @@ fn small_calls_stay_quick_while_large_ones_stream() {
             let stop = Arc::clone(&stop);
             std::thread::spawn(move || {
                 let name = "y".repeat(4 << 20);
-                let mut n = 0;
+                let mut took = Vec::new();
                 while !stop.load(core::sync::atomic::Ordering::Relaxed) {
+                    let t = Instant::now();
                     greeter.greet(&name).unwrap();
-                    n += 1;
+                    took.push(t.elapsed());
                 }
-                n
+                took
             })
         })
         .collect();
@@ -872,13 +874,19 @@ fn small_calls_stay_quick_while_large_ones_stream() {
         })
         .collect();
     stop.store(true, core::sync::atomic::Ordering::Relaxed);
-    let large: usize = streaming.into_iter().map(|t| t.join().unwrap()).sum();
-    let (idle, busy) = (median(&mut idle), median(&mut busy));
-    println!("small call p50: {idle:?} alone, {busy:?} beside {large} calls of 4 MiB");
-    assert!(large > 0);
+    let mut large: Vec<Duration> = streaming
+        .into_iter()
+        .flat_map(|t| t.join().unwrap())
+        .collect();
+    assert!(!large.is_empty());
+    let n = large.len();
+    let (idle, busy, large) = (median(&mut idle), median(&mut busy), median(&mut large));
+    println!(
+        "small call p50: {idle:?} alone, {busy:?} beside {n} calls of 4 MiB taking {large:?} each"
+    );
     assert!(
-        busy < Duration::from_millis(100),
-        "small calls waited {busy:?} beside large ones ({idle:?} alone)"
+        busy < large,
+        "small calls waited {busy:?} beside large ones taking {large:?} ({idle:?} alone)"
     );
 }
 
