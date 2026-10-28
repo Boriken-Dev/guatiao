@@ -32,9 +32,9 @@ use core::net::SocketAddr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::io::{self, IoSlice, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use coqui_peer::DriveError;
@@ -45,8 +45,9 @@ use rustls::{AlertDescription, ClientConfig, ServerConfig};
 pub use coqui_peer_tls::{Identity, PeerId, Policy, Roots, TrustStore, WaitingEntry, Weakening};
 
 use super::stream::{StreamReader, StreamWriter};
-use super::tcp::{Accepted, CONNECT_TIMEOUT};
+use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address, dial};
 use super::{Connect, Connection, FrameRead};
+use crate::lock;
 
 /// The application protocol both ends name and require, so a link never
 /// completes with a TLS endpoint of something else.
@@ -69,7 +70,8 @@ const RAW_READ: usize = 64 << 10;
 /// on Windows quadrupled a transfer.
 const RAW_READ_MAX: usize = 1 << 20;
 
-fn invalid(why: impl core::fmt::Display) -> io::Error {
+/// `why` as an error of what the caller gave (`InvalidInput`).
+pub(crate) fn invalid(why: impl core::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
 }
 
@@ -91,10 +93,6 @@ pub(crate) fn unbuilt(e: &PeerError) -> io::Error {
         }
         _ => invalid(words(e)),
     }
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The rustls error under a handshake's failure, if that is what it is.
@@ -1195,14 +1193,8 @@ impl TlsConnect {
 
 impl Connect for TlsConnect {
     fn connect(&self) -> io::Result<Connection> {
-        let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
-        for addr in self.address.to_socket_addrs()? {
-            match TcpStream::connect_timeout(&addr, self.timeout) {
-                Ok(socket) => return self.handshake(socket, addr),
-                Err(e) => last = e,
-            }
-        }
-        Err(last)
+        let (socket, addr) = dial(&self.address, self.timeout)?;
+        self.handshake(socket, addr)
     }
 
     fn describe(&self) -> String {
@@ -1237,11 +1229,7 @@ impl core::fmt::Debug for TlsListen {
 impl TlsListen {
     /// Binds `address` (a wildcard included) as `config` says.
     pub fn bind(address: &str, config: &TlsConfig) -> io::Result<TlsListen> {
-        let addr = address
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| invalid("no address to bind"))?;
-        TlsListen::from_listener(TcpListener::bind(addr)?, config)
+        TlsListen::from_listener(TcpListener::bind(bind_address(address)?)?, config)
     }
 
     /// A listener the caller bound itself, as `config` says.

@@ -39,7 +39,7 @@ use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 use std::io::{self, IoSlice, Read, Write};
 use std::net::{ToSocketAddrs, UdpSocket};
-use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread::{self, Thread};
 use std::time::Instant;
 
@@ -57,12 +57,13 @@ use rustls::{
 use tokio::runtime::{Handle, Runtime};
 
 use super::stream::{StreamReader, StreamWriter};
-use super::tcp::{Accepted, CONNECT_TIMEOUT};
+use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{
-    ALPN, TlsConfig, address_refused, ended_before_answering, host_of, server_name, unbuilt,
-    untrusted_by_server, untrusted_client, untrusted_server,
+    ALPN, TlsConfig, address_refused, ended_before_answering, host_of, invalid, server_name,
+    unbuilt, untrusted_by_server, untrusted_client, untrusted_server,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
+use crate::lock;
 
 /// The code a connection closes with when it ends without its stream
 /// finished: the peer reads an error, not an end. quinn closes a
@@ -85,14 +86,6 @@ pub(super) const DROP_WAIT: Duration = Duration::from_millis(100);
 /// The runtime's worker threads: the endpoint's driver and the
 /// connections' drivers.
 const WORKERS: usize = 2;
-
-fn invalid(why: impl core::fmt::Display) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 /// The runtime quinn runs on, shut down without waiting when the last
 /// holder lets it go (which may be a thread inside another runtime).
@@ -534,17 +527,17 @@ pub(super) fn alert(e: &ConnectionError) -> Option<u8> {
     (0..=u8::MAX).find(|a| TransportErrorCode::crypto(*a) == code)
 }
 
-/// A connection lost, as an error a person can act on. `client` is this
-/// side's fingerprint when it is a client that has heard nothing yet, so
-/// the server most likely refused it.
-fn gone(e: ConnectionError, client: Option<&str>) -> io::Error {
-    let refused = certificate_refused(&e);
-    let kind = match &e {
+/// A connection lost, as an error a person can act on: `noun` names it,
+/// `client` is this side's fingerprint when it is a client that has heard
+/// nothing yet, so the server most likely refused it.
+fn gone(e: &ConnectionError, noun: &str, client: Option<&str>) -> io::Error {
+    let refused = certificate_refused(e);
+    let kind = match e {
         ConnectionError::TimedOut => io::ErrorKind::TimedOut,
         ConnectionError::ApplicationClosed(_) => io::ErrorKind::UnexpectedEof,
         _ => io::ErrorKind::ConnectionReset,
     };
-    let e = io::Error::new(kind, format!("the QUIC connection was lost: {e}"));
+    let e = io::Error::new(kind, format!("the {noun} was lost: {e}"));
     match client {
         Some(me) if refused => untrusted_client(me),
         Some(me) if kind != io::ErrorKind::TimedOut => ended_before_answering(&e, me),
@@ -552,35 +545,100 @@ fn gone(e: ConnectionError, client: Option<&str>) -> io::Error {
     }
 }
 
+/// What a link's connection runs as: QUIC itself, or a WebTransport
+/// session over it. Each gives the quinn connection and stream under its
+/// own, so ending a link is written once.
+pub(super) trait Over: Sized + 'static {
+    /// The connection, once its handshake is through.
+    type Conn: Send + Sync;
+    /// The stream the writer writes.
+    type Stream: Send;
+    /// What the connection runs on: waited on as a dropped connection's
+    /// close leaves.
+    type Ends: Send + Sync;
+    /// The connection in the words of its loss.
+    const NOUN: &'static str;
+    /// The code this side closes a clean end with.
+    const CLEAN: u32;
+    /// Whether a peer's close code is a clean end.
+    fn clean(code: VarInt) -> bool;
+    fn quic(conn: &Self::Conn) -> &quinn::Connection;
+    fn stream(stream: &mut Self::Stream) -> &mut SendStream;
+    fn idle(ends: &Self::Ends) -> impl Future<Output = ()> + '_;
+}
+
+/// A link over QUIC itself.
+pub(super) struct Quic;
+
+impl Over for Quic {
+    type Conn = quinn::Connection;
+    type Stream = SendStream;
+    type Ends = quinn::Endpoint;
+    const NOUN: &'static str = "QUIC connection";
+    const CLEAN: u32 = CLEAN;
+
+    fn clean(code: VarInt) -> bool {
+        code == VarInt::from_u32(CLEAN)
+    }
+
+    fn quic(conn: &quinn::Connection) -> &quinn::Connection {
+        conn
+    }
+
+    fn stream(stream: &mut SendStream) -> &mut SendStream {
+        stream
+    }
+
+    fn idle(ends: &quinn::Endpoint) -> impl Future<Output = ()> + '_ {
+        ends.wait_idle()
+    }
+}
+
 /// What both halves of a link share: the connection once its handshake is
 /// through, and the stream the writer writes.
-struct Shared {
-    conn: OnceLock<quinn::Connection>,
-    send: Mutex<Option<SendStream>>,
+pub(super) struct Shared<O: Over> {
+    pub(super) conn: OnceLock<O::Conn>,
+    pub(super) send: Mutex<Option<O::Stream>>,
     /// The peer's verified fingerprint, canonical.
-    peer: OnceLock<String>,
+    pub(super) peer: OnceLock<String>,
     /// Whether the peer's certificate was checked: false at no security,
-    /// where it proves nothing and [`peer`](Shared::peer) stays empty.
+    /// where it proves nothing and [`peer`](Shared::peer) stays empty, and
+    /// for a client at server TLS, which presents none.
     proves: bool,
-    /// A client: this side's own fingerprint, to name in a refusal.
+    /// A client: this side's own words, to name in a refusal.
     client: Option<String>,
     /// Whether anything has come from the peer since the handshake.
-    heard: AtomicBool,
+    pub(super) heard: AtomicBool,
     /// Ended by the closer or the writer: a server's handshake not yet
     /// through stops at once.
     ending: Ending,
-    /// The endpoint the connection runs on (a client's is its own).
-    endpoint: Option<quinn::Endpoint>,
+    ends: O::Ends,
     /// Last, so it stops only once the connection has been let go.
-    rt: Arc<Rt>,
+    pub(super) rt: Arc<Rt>,
 }
 
-impl Shared {
-    fn handle(&self) -> &Handle {
+impl<O: Over> Shared<O> {
+    /// A link's state before its handshake: `client` names this side when
+    /// it is a client.
+    pub(super) fn new(proves: bool, client: Option<String>, ends: O::Ends, rt: Arc<Rt>) -> Self {
+        Shared {
+            conn: OnceLock::new(),
+            send: Mutex::new(None),
+            peer: OnceLock::new(),
+            proves,
+            client,
+            heard: AtomicBool::new(false),
+            ending: Ending::default(),
+            ends,
+            rt,
+        }
+    }
+
+    pub(super) fn handle(&self) -> &Handle {
         self.rt.handle()
     }
 
-    fn open(&self, conn: quinn::Connection, send: SendStream, peer: Option<&PeerId>) {
+    pub(super) fn open(&self, conn: O::Conn, send: O::Stream, peer: Option<&PeerId>) {
         *lock(&self.send) = Some(send);
         if let Some(peer) = peer.filter(|_| self.proves) {
             let _ = self.peer.set(peer.canonical());
@@ -591,29 +649,27 @@ impl Shared {
     /// The connection lost, in what a reader answers: a clean end when the
     /// peer or this side ended the link as it should, else an error a
     /// person can act on.
-    fn lost(&self, e: ConnectionError) -> io::Result<usize> {
+    pub(super) fn lost(&self, e: &ConnectionError) -> io::Result<usize> {
         let early = !self.heard.load(Ordering::Acquire);
-        match &e {
+        match e {
             ConnectionError::LocallyClosed => return Ok(0),
-            ConnectionError::ApplicationClosed(c) if c.error_code == VarInt::from_u32(CLEAN) => {
-                return Ok(0);
-            }
+            ConnectionError::ApplicationClosed(c) if O::clean(c.error_code) => return Ok(0),
             _ => {}
         }
-        Err(gone(e, self.client.as_deref().filter(|_| early)))
+        Err(gone(e, O::NOUN, self.client.as_deref().filter(|_| early)))
     }
 
     /// Ends the connection both ways without the writer, which a blocked
     /// write may hold: what was written still reaches the peer, as TCP
     /// delivers what was sent before its end, unless a write is under way,
     /// when the connection closes at once as an error.
-    fn shut(&self) {
+    pub(super) fn shut(&self) {
         self.ending.end();
         match self.send.try_lock() {
             Ok(mut send) => self.finish(send.as_mut()),
             Err(_) => {
                 if let Some(conn) = self.conn.get() {
-                    conn.close(VarInt::from_u32(ABRUPT), b"ended");
+                    O::quic(conn).close(VarInt::from_u32(ABRUPT), b"ended");
                 }
             }
         }
@@ -621,25 +677,26 @@ impl Shared {
 
     /// Finishes the stream, waits for the peer to acknowledge it, then
     /// closes the connection as a clean end.
-    fn close(&self) {
+    pub(super) fn close(&self) {
         self.ending.end();
         self.finish(lock(&self.send).as_mut());
     }
 
-    fn finish(&self, send: Option<&mut SendStream>) {
-        if let Some(send) = send
-            && send.finish().is_ok()
-        {
-            let stopped = send.stopped();
-            let _ = wait_at_most(self.handle(), Some(CLOSE_WAIT), stopped);
+    fn finish(&self, send: Option<&mut O::Stream>) {
+        if let Some(send) = send {
+            let stream = O::stream(send);
+            if stream.finish().is_ok() {
+                let stopped = stream.stopped();
+                let _ = wait_at_most(self.handle(), Some(CLOSE_WAIT), stopped);
+            }
         }
         if let Some(conn) = self.conn.get() {
-            conn.close(VarInt::from_u32(CLEAN), b"");
+            O::quic(conn).close(VarInt::from_u32(O::CLEAN), b"");
         }
     }
 }
 
-impl Drop for Shared {
+impl<O: Over> Drop for Shared<O> {
     /// A connection let go unclosed ends as an error; when it holds the
     /// last of its runtime, its close gets a moment to leave before the
     /// runtime stops, or the peer would wait out its idle timeout.
@@ -647,16 +704,85 @@ impl Drop for Shared {
         let Some(conn) = self.conn.get() else {
             return;
         };
-        conn.close(VarInt::from_u32(ABRUPT), b"dropped");
-        if Arc::strong_count(&self.rt) == 1
-            && let Some(endpoint) = &self.endpoint
-        {
-            let idle = endpoint.wait_idle();
-            let _ = wait_at_most(self.rt.handle(), Some(DROP_WAIT), idle);
+        O::quic(conn).close(VarInt::from_u32(ABRUPT), b"dropped");
+        if Arc::strong_count(&self.rt) == 1 {
+            let _ = wait_at_most(self.rt.handle(), Some(DROP_WAIT), O::idle(&self.ends));
         }
     }
 }
 
+/// A listener's next connection with its source and the local address it
+/// came to (the bound one when the endpoint cannot tell), or the source
+/// of one its list refused before any handshake. A first packet's address
+/// may be forged: a Retry proves the client receives at it, as TCP's
+/// handshake does, before the list decides or a connection takes a thread.
+pub(super) fn accept_incoming(
+    endpoint: &quinn::Endpoint,
+    rt: &Rt,
+    config: &TlsConfig,
+) -> io::Result<Result<(Incoming, SocketAddr, SocketAddr), SocketAddr>> {
+    let incoming = loop {
+        let incoming = wait(rt.handle(), endpoint.accept()).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotConnected, "the QUIC endpoint is closed")
+        })?;
+        if incoming.remote_address_validated() || !incoming.may_retry() {
+            break incoming;
+        }
+        let _ = incoming.retry();
+    };
+    let source = incoming.remote_address();
+    let bound = endpoint.local_addr()?;
+    let local = match incoming.local_ip() {
+        Some(ip) => Some(SocketAddr::new(ip, bound.port())),
+        None if !bound.ip().is_unspecified() => Some(bound),
+        None => None,
+    };
+    if !admits(config, source, local, bound) {
+        incoming.refuse();
+        return Ok(Err(source));
+    }
+    Ok(Ok((incoming, source, local.unwrap_or(bound))))
+}
+
+/// quinn's server configuration over `tls`. The access control list
+/// decided on the address the handshake came from, so a connection keeps
+/// it, as a TCP one does.
+pub(super) fn for_quinn(tls: Arc<ServerConfig>) -> io::Result<Arc<quinn::ServerConfig>> {
+    let crypto = QuicServerConfig::try_from(tls)
+        .map_err(|e| invalid(format!("the TLS policy does not fit QUIC: {e}")))?;
+    let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
+    config.transport_config(transport());
+    config.migration(false);
+    Ok(Arc::new(config))
+}
+
+/// An endpoint serving on `socket` with `tls`, and the runtime it runs on.
+pub(super) fn serving(
+    socket: UdpSocket,
+    tls: Arc<ServerConfig>,
+) -> io::Result<(quinn::Endpoint, Arc<Rt>)> {
+    let server = Arc::unwrap_or_clone(for_quinn(tls)?);
+    let rt = Rt::new()?;
+    let endpoint = {
+        let _inside = rt.handle().enter();
+        quinn::Endpoint::new(
+            quinn::EndpointConfig::default(),
+            Some(server),
+            socket,
+            Arc::new(quinn::TokioRuntime),
+        )?
+    };
+    Ok((endpoint, rt))
+}
+
+/// No security: a generated identity checking no certificate, the peers
+/// `acl` permits admitted by address.
+pub(super) fn trusted(acl: Acl) -> io::Result<TlsConfig> {
+    let config = TlsConfig::checking_nobody()?;
+    let mut policy = config.tls_policy().clone();
+    policy.acl = Some(acl);
+    Ok(config.policy(policy))
+}
 /// A server's handshake, run on the serving thread's first read.
 struct Pending {
     incoming: Incoming,
@@ -684,16 +810,10 @@ impl Pending {
             )?,
             None => Arc::clone(&listener.tls),
         };
-        let crypto = QuicServerConfig::try_from(tls).map_err(invalid)?;
-        let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
-        config.transport_config(transport());
-        // The access control list decided on the address the handshake came
-        // from; a connection keeps it, as a TCP one does.
-        config.migration(false);
-        Ok(Arc::new(config))
+        for_quinn(tls)
     }
 
-    fn run(self, shared: &Shared, bound: Option<Duration>) -> io::Result<RecvStream> {
+    fn run(self, shared: &Shared<Quic>, bound: Option<Duration>) -> io::Result<RecvStream> {
         if shared.ending.ended() {
             self.incoming.refuse();
             return Err(ended_in_handshake());
@@ -750,7 +870,7 @@ impl Pending {
 
 /// The reading half.
 struct QuicRead {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Quic>>,
     pending: Option<Pending>,
     recv: Option<RecvStream>,
     /// The bound the link set on a read; the first bounds the handshake.
@@ -770,7 +890,7 @@ impl Read for QuicRead {
                 Ok(n)
             }
             Ok(None) => Ok(0),
-            Err(quinn::ReadError::ConnectionLost(e)) => self.shared.lost(e),
+            Err(quinn::ReadError::ConnectionLost(e)) => self.shared.lost(&e),
             Err(quinn::ReadError::Reset(code)) => Err(io::Error::new(
                 io::ErrorKind::ConnectionReset,
                 format!("the peer reset the link's QUIC stream (code {code})"),
@@ -784,7 +904,7 @@ impl Read for QuicRead {
 /// datagrams beside them.
 struct QuicFrames {
     frames: StreamReader<QuicRead>,
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Quic>>,
 }
 
 impl FrameRead for QuicFrames {
@@ -822,7 +942,7 @@ impl FrameRead for QuicFrames {
 
 /// The writing half.
 struct QuicWrite {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Quic>>,
     timeout: Option<Duration>,
 }
 
@@ -837,7 +957,7 @@ impl QuicWrite {
             Ok::<_, quinn::WriteError>(())
         };
         wait_at_most(self.shared.handle(), self.timeout, writing)?.map_err(|e| match e {
-            quinn::WriteError::ConnectionLost(lost) => match self.shared.lost(lost) {
+            quinn::WriteError::ConnectionLost(lost) => match self.shared.lost(&lost) {
                 Ok(_) => io::Error::new(io::ErrorKind::BrokenPipe, "the link ended"),
                 Err(e) => e,
             },
@@ -865,7 +985,7 @@ impl Write for QuicWrite {
 
 /// Datagrams on a link's connection.
 struct QuicDatagrams {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Quic>>,
 }
 
 impl QuicDatagrams {
@@ -919,7 +1039,7 @@ impl Datagrams for QuicDatagrams {
 }
 
 fn connection(
-    shared: Shared,
+    shared: Shared<Quic>,
     pending: Option<Pending>,
     recv: Option<RecvStream>,
     peer: String,
@@ -1270,19 +1390,14 @@ impl Dial {
         check_alpn(&conn)?;
         let peer = fingerprint(&conn)?;
         let opening = conn.open_bi();
-        let (send, recv) =
-            wait_at_most(handle, Some(timeout), opening)?.map_err(|e| gone(e, Some(&self.me)))?;
-        let shared = Shared {
-            conn: OnceLock::new(),
-            send: Mutex::new(None),
-            peer: OnceLock::new(),
-            proves: self.proves,
-            client: Some(self.me.clone()),
-            heard: AtomicBool::new(false),
-            ending: Ending::default(),
-            endpoint: Some(endpoint),
-            rt: Arc::clone(&self.rt),
-        };
+        let (send, recv) = wait_at_most(handle, Some(timeout), opening)?
+            .map_err(|e| gone(&e, Quic::NOUN, Some(&self.me)))?;
+        let shared = Shared::new(
+            self.proves,
+            Some(self.me.clone()),
+            endpoint,
+            Arc::clone(&self.rt),
+        );
         shared.open(conn, send, Some(&peer));
         Ok(connection(shared, None, Some(recv), format!("quic {addr}")))
     }
@@ -1349,31 +1464,19 @@ impl core::fmt::Debug for QuicListen {
 impl QuicListen {
     /// Binds the UDP `address` (a wildcard included) as `config` says.
     pub fn bind(address: &str, config: &TlsConfig) -> io::Result<QuicListen> {
-        let addr = address
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| invalid("no address to bind"))?;
-        QuicListen::from_socket(UdpSocket::bind(addr)?, config)
+        QuicListen::from_socket(UdpSocket::bind(bind_address(address)?)?, config)
     }
 
     /// Binds the UDP `address` at no security, admitting the peers `acl`
     /// permits by address: QUIC's TLS with a certificate it generated,
     /// taking any client's, the link's key proof deciding.
     pub fn bind_trusted(address: &str, acl: Acl) -> io::Result<QuicListen> {
-        let addr = address
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| invalid("no address to bind"))?;
-        QuicListen::from_socket_trusted(UdpSocket::bind(addr)?, acl)
+        QuicListen::from_socket_trusted(UdpSocket::bind(bind_address(address)?)?, acl)
     }
 
     /// A UDP socket the caller bound itself, at no security.
     pub fn from_socket_trusted(socket: UdpSocket, acl: Acl) -> io::Result<QuicListen> {
-        let mut config = TlsConfig::checking_nobody()?;
-        let mut policy = config.tls_policy().clone();
-        policy.acl = Some(acl);
-        config = config.policy(policy);
-        QuicListen::from_socket(socket, &config)
+        QuicListen::from_socket(socket, &trusted(acl)?)
     }
 
     /// A UDP socket the caller bound itself, as `config` says.
@@ -1385,20 +1488,7 @@ impl QuicListen {
         } else {
             None
         };
-        let crypto = QuicServerConfig::try_from(Arc::clone(&tls))
-            .map_err(|e| invalid(format!("the TLS policy does not fit QUIC: {e}")))?;
-        let mut server = quinn::ServerConfig::with_crypto(Arc::new(crypto));
-        server.transport_config(transport());
-        let rt = Rt::new()?;
-        let endpoint = {
-            let _inside = rt.handle().enter();
-            quinn::Endpoint::new(
-                quinn::EndpointConfig::default(),
-                Some(server),
-                socket,
-                Arc::new(quinn::TokioRuntime),
-            )?
-        };
+        let (endpoint, rt) = serving(socket, Arc::clone(&tls))?;
         Ok(QuicListen {
             endpoint,
             listener: Arc::new(Listener {
@@ -1418,42 +1508,17 @@ impl QuicListen {
     /// The next connection, before its handshake, or a peer the list
     /// denies by address, refused before any handshake.
     pub fn accept(&self) -> io::Result<Accepted> {
-        let incoming = loop {
-            let accepting = self.endpoint.accept();
-            let incoming = wait(self.rt.handle(), accepting).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotConnected, "the QUIC endpoint is closed")
-            })?;
-            // A first packet's address may be forged: a Retry proves the
-            // client receives at it, as TCP's handshake does, before the
-            // list decides or a connection takes a thread.
-            if incoming.remote_address_validated() || !incoming.may_retry() {
-                break incoming;
-            }
-            let _ = incoming.retry();
-        };
-        let source = incoming.remote_address();
-        let bound = self.endpoint.local_addr()?;
-        let local = match incoming.local_ip() {
-            Some(ip) => Some(SocketAddr::new(ip, bound.port())),
-            None if !bound.ip().is_unspecified() => Some(bound),
-            None => None,
-        };
-        if !admits(&self.listener.config, source, local, bound) {
-            incoming.refuse();
-            return Ok(Accepted::Refused(source));
-        }
-        let local = local.unwrap_or(bound);
-        let shared = Shared {
-            conn: OnceLock::new(),
-            send: Mutex::new(None),
-            peer: OnceLock::new(),
-            proves: self.listener.config.proves_peers(),
-            client: None,
-            heard: AtomicBool::new(false),
-            ending: Ending::default(),
-            endpoint: Some(self.endpoint.clone()),
-            rt: Arc::clone(&self.rt),
-        };
+        let (incoming, source, local) =
+            match accept_incoming(&self.endpoint, &self.rt, &self.listener.config)? {
+                Ok(accepted) => accepted,
+                Err(refused) => return Ok(Accepted::Refused(refused)),
+            };
+        let shared = Shared::new(
+            self.listener.config.proves_peers(),
+            None,
+            self.endpoint.clone(),
+            Arc::clone(&self.rt),
+        );
         let pending = Pending {
             incoming,
             listener: Arc::clone(&self.listener),

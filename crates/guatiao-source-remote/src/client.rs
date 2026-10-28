@@ -37,6 +37,7 @@ use guatiao_libffi::Libffi;
 
 use crate::config;
 use crate::link::{Inner, Link, LinkOptions, Nothing, Proxies, Setup};
+use crate::lock;
 use crate::protocol::Target;
 use crate::protocol::catalog::{Catalog, LibraryEntry};
 use crate::transport::Connect;
@@ -46,10 +47,6 @@ mod tests;
 
 /// Described peers listed at once by one refresh.
 const LISTED_AT_ONCE: usize = 16;
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 /// One link and what its catalog listed.
 struct Current {

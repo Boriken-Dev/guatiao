@@ -13,6 +13,7 @@ use std::thread;
 use std::time::Instant;
 
 use super::waiting::Waiting;
+use crate::lock;
 
 /// A job for a pool thread.
 pub(crate) type Job = Box<dyn FnOnce() + Send>;
@@ -55,10 +56,6 @@ impl Busy {
             Some(e) => format!("the peer could not start a thread for it: {e}"),
         }
     }
-}
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// What arrives on `rx` within `spin`, polled rather than slept on: a

@@ -143,22 +143,8 @@ impl Connect for RdmaConnect {
     fn connect(&self) -> io::Result<Connection> {
         #[cfg(target_os = "linux")]
         {
-            use std::net::{TcpStream, ToSocketAddrs};
-            let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
-            for addr in self.address.to_socket_addrs()? {
-                match TcpStream::connect_timeout(&addr, self.timeout) {
-                    Ok(stream) => {
-                        return ring::establish(
-                            stream,
-                            &self.port,
-                            self.timeout,
-                            format!("rdma {addr}"),
-                        );
-                    }
-                    Err(e) => last = e,
-                }
-            }
-            Err(last)
+            let (stream, addr) = super::tcp::dial(&self.address, self.timeout)?;
+            ring::establish(stream, &self.port, self.timeout, format!("rdma {addr}"))
         }
         #[cfg(not(target_os = "linux"))]
         {

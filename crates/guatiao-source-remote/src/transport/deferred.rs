@@ -12,7 +12,7 @@
 use alloc::sync::Arc;
 use core::time::Duration;
 use std::io;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use super::{Connection, FrameRead, FrameWrite};
 
@@ -41,7 +41,7 @@ struct Shared {
 
 impl Shared {
     fn state(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.state)
     }
 
     fn close(&self) {

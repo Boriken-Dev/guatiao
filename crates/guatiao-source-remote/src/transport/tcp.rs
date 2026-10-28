@@ -56,6 +56,29 @@ pub(crate) fn shut(stream: &TcpStream) {
     super::cancel::cancel_socket_io(std::os::windows::io::AsSocket::as_socket(stream));
 }
 
+/// The first address `address` (`host:port`) names: where a listener of
+/// any transport binds.
+pub(crate) fn bind_address(address: &str) -> io::Result<SocketAddr> {
+    address
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))
+}
+
+/// A TCP connection to the first of `address`'s addresses that answers,
+/// each tried within `timeout`, and the address it reached; the last
+/// failure when none does.
+pub(crate) fn dial(address: &str, timeout: Duration) -> io::Result<(TcpStream, SocketAddr)> {
+    let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
+    for addr in address.to_socket_addrs()? {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => return Ok((stream, addr)),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
 fn connection(stream: TcpStream, peer: String) -> io::Result<Connection> {
     stream.set_nodelay(true)?;
     let stream = Arc::new(stream);
@@ -107,14 +130,8 @@ impl TcpConnect {
 
 impl Connect for TcpConnect {
     fn connect(&self) -> io::Result<Connection> {
-        let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
-        for addr in self.address.to_socket_addrs()? {
-            match TcpStream::connect_timeout(&addr, self.timeout) {
-                Ok(stream) => return connection(stream, format!("tcp {addr}")),
-                Err(e) => last = e,
-            }
-        }
-        Err(last)
+        let (stream, addr) = dial(&self.address, self.timeout)?;
+        connection(stream, format!("tcp {addr}"))
     }
 
     fn describe(&self) -> String {
@@ -145,13 +162,8 @@ impl TcpListen {
     /// included, admitting the peers `acl` permits. Nothing about the
     /// address or the list is refused: an empty list denies every peer.
     pub fn bind(address: &str, acl: Acl) -> io::Result<TcpListen> {
-        let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
-        let addr = addrs
-            .first()
-            .copied()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))?;
         Ok(TcpListen {
-            listener: TcpListener::bind(addr)?,
+            listener: TcpListener::bind(bind_address(address)?)?,
             acl,
         })
     }

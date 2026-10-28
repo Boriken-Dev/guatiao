@@ -10,7 +10,7 @@
 //! until it ends or its pool's threads all leave idle.
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 /// Smaller buffers are not kept: an allocator serves them from memory it
 /// keeps anyway.
@@ -41,11 +41,11 @@ struct Kept {
 
 impl Buffers {
     fn kept(&self) -> MutexGuard<'_, Kept> {
-        self.kept.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.kept)
     }
 
     fn parked(&self) -> MutexGuard<'_, Vec<u8>> {
-        self.parked.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.parked)
     }
 
     /// A kept buffer, empty, or a new one.

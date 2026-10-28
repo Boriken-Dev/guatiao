@@ -27,16 +27,15 @@
 use alloc::sync::Arc;
 use core::cell::Cell;
 use core::net::SocketAddr;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::Ordering;
 use core::time::Duration;
 use std::io::{self, IoSlice, Read, Write};
-use std::net::{ToSocketAddrs, UdpSocket};
-use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::net::UdpSocket;
+use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
 use coqui_net_acl::Acl;
 use coqui_peer_tls::{Identity, PeerId, Trust};
-use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Incoming, VarInt};
 use rustls::ServerConfig;
 use rustls::client::danger::ServerCertVerifier;
@@ -45,16 +44,17 @@ use wtransport::endpoint::{IncomingSessionFuture, SessionRequest};
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 use super::quic::{
-    ABRUPT, CLEAN, CLOSE_WAIT, DROP_WAIT, Kept, REFUSED, Rt, Watched, admits, checked, fingerprint,
-    for_connection, left, transport_config, wait, wait_at_most,
+    CLEAN, Kept, Over, REFUSED, Rt, Shared, Watched, accept_incoming, checked, fingerprint,
+    for_connection, for_quinn, left, serving, transport_config, trusted, wait_at_most,
 };
 use super::stream::{StreamReader, StreamWriter};
-use super::tcp::{Accepted, CONNECT_TIMEOUT};
+use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{
-    TlsConfig, ended_before_answering, host_of, server_name, unbuilt, untrusted_by_server,
+    TlsConfig, ended_before_answering, host_of, invalid, server_name, unbuilt, untrusted_by_server,
     untrusted_server, words,
 };
 use super::{Connect, Connection, Datagrams, FrameRead};
+use crate::lock;
 
 /// HTTP/3's application protocol, which a WebTransport session runs in.
 const H3: &[u8] = wtransport::tls::WEBTRANSPORT_ALPN;
@@ -77,58 +77,9 @@ pub const ROTATE_MAX: Duration = Duration::from_secs(6 * 24 * 3600 + 22 * 3600);
 /// periods: a peer whose clock is a little off still takes it.
 const MARGIN: Duration = Duration::from_secs(3600);
 
-fn invalid(why: impl core::fmt::Display) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// A session lost, as what a reader answers: a clean end when either side
-/// ended it as it should, else an error a person can act on.
-fn lost(e: &quinn::ConnectionError, early_client: Option<&str>) -> io::Result<usize> {
-    use quinn::ConnectionError as E;
-    match e {
-        E::LocallyClosed => return Ok(0),
-        E::ApplicationClosed(c)
-            if c.error_code == VarInt::from_u32(CLEAN)
-                || c.error_code == VarInt::from_u32(H3_NO_ERROR) =>
-        {
-            return Ok(0);
-        }
-        _ => {}
-    }
-    let kind = match e {
-        E::TimedOut => io::ErrorKind::TimedOut,
-        E::ApplicationClosed(_) => io::ErrorKind::UnexpectedEof,
-        _ => io::ErrorKind::ConnectionReset,
-    };
-    let lost = io::Error::new(kind, format!("the WebTransport session was lost: {e}"));
-    Err(match early_client {
-        Some(me) if kind != io::ErrorKind::TimedOut => ended_before_answering(&lost, me),
-        _ => lost,
-    })
-}
-
-/// What both halves of a link share.
-struct Shared {
-    conn: OnceLock<wtransport::Connection>,
-    send: Mutex<Option<wtransport::SendStream>>,
-    /// The peer's verified fingerprint, canonical.
-    peer: OnceLock<String>,
-    /// Whether the peer's certificate was checked: false at no security and
-    /// for a client at server TLS, which presents none.
-    proves: bool,
-    /// A client: this side's own words, to name in a refusal.
-    client: Option<String>,
-    /// Whether anything has come from the peer since the handshake.
-    heard: AtomicBool,
-    /// The endpoint the connection runs on.
-    ends: Ends,
-    /// Last, so it stops only once the connection has been let go.
-    rt: Arc<Rt>,
-}
+/// A link over a WebTransport session: wtransport's connection and stream
+/// over quinn's, ended as `quic://`'s are.
+struct Wt;
 
 /// A connection's endpoint, waited on as a dropped connection's close
 /// leaves.
@@ -137,77 +88,29 @@ enum Ends {
     Client(wtransport::Endpoint<Client>),
 }
 
-impl Shared {
-    fn open(
-        &self,
-        conn: wtransport::Connection,
-        send: wtransport::SendStream,
-        peer: Option<&PeerId>,
-    ) {
-        *lock(&self.send) = Some(send);
-        if let Some(peer) = peer.filter(|_| self.proves) {
-            let _ = self.peer.set(peer.canonical());
-        }
-        let _ = self.conn.set(conn);
+impl Over for Wt {
+    type Conn = wtransport::Connection;
+    type Stream = wtransport::SendStream;
+    type Ends = Ends;
+    const NOUN: &'static str = "WebTransport session";
+    const CLEAN: u32 = H3_NO_ERROR;
+
+    fn clean(code: VarInt) -> bool {
+        code == VarInt::from_u32(CLEAN) || code == VarInt::from_u32(H3_NO_ERROR)
     }
 
-    fn lost(&self, e: &quinn::ConnectionError) -> io::Result<usize> {
-        let early = !self.heard.load(Ordering::Acquire);
-        lost(e, self.client.as_deref().filter(|_| early))
+    fn quic(conn: &wtransport::Connection) -> &quinn::Connection {
+        conn.quic_connection()
     }
 
-    /// Ends the session without the writer, which a blocked write may hold:
-    /// what was written still reaches the peer unless a write is under way,
-    /// when the session closes at once as an error.
-    fn shut(&self) {
-        match self.send.try_lock() {
-            Ok(mut send) => self.finish(send.as_mut()),
-            Err(_) => {
-                if let Some(conn) = self.conn.get() {
-                    conn.close(wtransport::VarInt::from_u32(ABRUPT), b"ended");
-                }
-            }
-        }
+    fn stream(stream: &mut wtransport::SendStream) -> &mut quinn::SendStream {
+        stream.quic_stream_mut()
     }
 
-    fn close(&self) {
-        self.finish(lock(&self.send).as_mut());
-    }
-
-    /// Finishes the stream, waits for the peer to acknowledge it, then
-    /// closes the session as a clean end.
-    fn finish(&self, send: Option<&mut wtransport::SendStream>) {
-        if let Some(send) = send {
-            let stream = send.quic_stream_mut();
-            if stream.finish().is_ok() {
-                let stopped = stream.stopped();
-                let _ = wait_at_most(self.rt.handle(), Some(CLOSE_WAIT), stopped);
-            }
-        }
-        if let Some(conn) = self.conn.get() {
-            conn.close(wtransport::VarInt::from_u32(H3_NO_ERROR), b"");
-        }
-    }
-}
-
-impl Drop for Shared {
-    /// A session let go unclosed ends as an error; when it holds the last
-    /// of its runtime, its close gets a moment to leave first.
-    fn drop(&mut self) {
-        let Some(conn) = self.conn.get() else {
-            return;
-        };
-        conn.close(wtransport::VarInt::from_u32(ABRUPT), b"dropped");
-        if Arc::strong_count(&self.rt) == 1 {
-            let handle = self.rt.handle();
-            let _ = match &self.ends {
-                Ends::Server(endpoint) => {
-                    wait_at_most(handle, Some(DROP_WAIT), endpoint.wait_idle())
-                }
-                Ends::Client(endpoint) => {
-                    wait_at_most(handle, Some(DROP_WAIT), endpoint.wait_idle())
-                }
-            };
+    async fn idle(ends: &Ends) {
+        match ends {
+            Ends::Server(endpoint) => endpoint.wait_idle().await,
+            Ends::Client(endpoint) => endpoint.wait_idle().await,
         }
     }
 }
@@ -334,11 +237,7 @@ impl Listener {
             )?,
             None => Arc::clone(&presented.tls),
         };
-        let crypto = QuicServerConfig::try_from(tls).map_err(invalid)?;
-        let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
-        config.transport_config(Arc::new(transport_config()));
-        config.migration(false);
-        Ok(Arc::new(config))
+        for_quinn(tls)
     }
 }
 
@@ -351,7 +250,11 @@ struct Pending {
 }
 
 impl Pending {
-    fn run(self, shared: &Shared, bound: Option<Duration>) -> io::Result<wtransport::RecvStream> {
+    fn run(
+        self,
+        shared: &Shared<Wt>,
+        bound: Option<Duration>,
+    ) -> io::Result<wtransport::RecvStream> {
         let until = bound.map(|b| Instant::now() + b);
         let refusal = Kept::default();
         let config = self.listener.config(self.source, self.local, &refusal)?;
@@ -397,7 +300,7 @@ impl Pending {
 
 /// The reading half.
 struct WtRead {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Wt>>,
     pending: Option<Pending>,
     recv: Option<wtransport::RecvStream>,
     /// The bound the link set on a read; the first bounds the handshake.
@@ -431,7 +334,7 @@ impl Read for WtRead {
 /// session's datagrams.
 struct WtFrames {
     frames: StreamReader<WtRead>,
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Wt>>,
 }
 
 impl FrameRead for WtFrames {
@@ -469,7 +372,7 @@ impl FrameRead for WtFrames {
 
 /// The writing half.
 struct WtWrite {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Wt>>,
     timeout: Option<Duration>,
 }
 
@@ -516,7 +419,7 @@ impl Write for WtWrite {
 /// A session's datagrams: HTTP/3 datagrams, each the payload alone to
 /// either side's code (a browser's `transport.datagrams`).
 struct WtDatagrams {
-    shared: Arc<Shared>,
+    shared: Arc<Shared<Wt>>,
 }
 
 impl WtDatagrams {
@@ -566,7 +469,7 @@ impl Datagrams for WtDatagrams {
 }
 
 fn connection(
-    shared: Shared,
+    shared: Shared<Wt>,
     pending: Option<Pending>,
     recv: Option<wtransport::RecvStream>,
     peer: String,
@@ -769,16 +672,12 @@ impl Connect for WtConnect {
         let (send, recv) = wait_at_most(handle, left(until)?, opening)?.map_err(|e| {
             ended_before_answering(&io::Error::new(io::ErrorKind::ConnectionReset, e), &self.me)
         })?;
-        let shared = Shared {
-            conn: OnceLock::new(),
-            send: Mutex::new(None),
-            peer: OnceLock::new(),
-            proves: self.proves,
-            client: Some(self.me.clone()),
-            heard: AtomicBool::new(false),
-            ends: Ends::Client(endpoint),
-            rt: Arc::clone(&self.rt),
-        };
+        let shared = Shared::new(
+            self.proves,
+            Some(self.me.clone()),
+            Ends::Client(endpoint),
+            Arc::clone(&self.rt),
+        );
         shared.open(conn, send, Some(&peer));
         // A dual-stack socket sees an IPv4 server as IPv4-mapped.
         let remote = SocketAddr::new(remote.ip().to_canonical(), remote.port());
@@ -821,24 +720,20 @@ impl WtListen {
     /// Binds the UDP `address` (a wildcard included) as `config` says,
     /// presenting its identity.
     pub fn bind(address: &str, config: &TlsConfig) -> io::Result<WtListen> {
-        WtListen::from_socket(UdpSocket::bind(first(address)?)?, config)
+        WtListen::from_socket(UdpSocket::bind(bind_address(address)?)?, config)
     }
 
     /// Binds the UDP `address` at no security, admitting the peers `acl`
     /// permits by address: a certificate it made itself, taking any
     /// client's, the link's key proof deciding.
     pub fn bind_trusted(address: &str, acl: Acl) -> io::Result<WtListen> {
-        WtListen::from_socket_trusted(UdpSocket::bind(first(address)?)?, acl)
+        WtListen::from_socket_trusted(UdpSocket::bind(bind_address(address)?)?, acl)
     }
 
     /// A UDP socket the caller bound itself, at no security. No client is
     /// asked for a certificate: a page has none to present.
     pub fn from_socket_trusted(socket: UdpSocket, acl: Acl) -> io::Result<WtListen> {
-        let mut config = TlsConfig::checking_nobody()?.server_tls();
-        let mut policy = config.tls_policy().clone();
-        policy.acl = Some(acl);
-        config = config.policy(policy);
-        WtListen::from_socket(socket, &config)
+        WtListen::from_socket(socket, &trusted(acl)?.server_tls())
     }
 
     /// A UDP socket the caller bound itself, as `config` says.
@@ -850,20 +745,7 @@ impl WtListen {
             None
         };
         let presented = Presented::of(config, config.identity().clone())?;
-        let crypto = QuicServerConfig::try_from(Arc::clone(&presented.tls))
-            .map_err(|e| invalid(format!("the TLS policy does not fit QUIC: {e}")))?;
-        let mut server = quinn::ServerConfig::with_crypto(Arc::new(crypto));
-        server.transport_config(Arc::new(transport_config()));
-        let rt = Rt::new()?;
-        let endpoint = {
-            let _inside = rt.handle().enter();
-            quinn::Endpoint::new(
-                quinn::EndpointConfig::default(),
-                Some(server),
-                socket,
-                Arc::new(quinn::TokioRuntime),
-            )?
-        };
+        let (endpoint, rt) = serving(socket, Arc::clone(&presented.tls))?;
         Ok(WtListen {
             endpoint,
             listener: Arc::new(Listener {
@@ -922,43 +804,22 @@ impl WtListen {
     /// The next connection, before its handshake, or a peer the list
     /// denies by address, refused before any handshake.
     pub fn accept(&self) -> io::Result<Accepted> {
-        let incoming = loop {
-            let incoming = wait(self.rt.handle(), self.endpoint.accept()).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotConnected, "the QUIC endpoint is closed")
-            })?;
-            // A first packet's address may be forged: a Retry proves the
-            // client receives at it before the list decides.
-            if incoming.remote_address_validated() || !incoming.may_retry() {
-                break incoming;
-            }
-            let _ = incoming.retry();
-        };
-        let source = incoming.remote_address();
-        let bound = self.endpoint.local_addr()?;
-        let local = match incoming.local_ip() {
-            Some(ip) => Some(SocketAddr::new(ip, bound.port())),
-            None if !bound.ip().is_unspecified() => Some(bound),
-            None => None,
-        };
-        if !admits(&self.listener.config, source, local, bound) {
-            incoming.refuse();
-            return Ok(Accepted::Refused(source));
-        }
-        let shared = Shared {
-            conn: OnceLock::new(),
-            send: Mutex::new(None),
-            peer: OnceLock::new(),
-            proves: self.listener.trust.is_some(),
-            client: None,
-            heard: AtomicBool::new(false),
-            ends: Ends::Server(self.endpoint.clone()),
-            rt: Arc::clone(&self.rt),
-        };
+        let (incoming, source, local) =
+            match accept_incoming(&self.endpoint, &self.rt, &self.listener.config)? {
+                Ok(accepted) => accepted,
+                Err(refused) => return Ok(Accepted::Refused(refused)),
+            };
+        let shared = Shared::new(
+            self.listener.trust.is_some(),
+            None,
+            Ends::Server(self.endpoint.clone()),
+            Arc::clone(&self.rt),
+        );
         let pending = Pending {
             incoming,
             listener: Arc::clone(&self.listener),
             source,
-            local: local.unwrap_or(bound),
+            local,
         };
         Ok(Accepted::Connection(connection(
             shared,
@@ -967,11 +828,4 @@ impl WtListen {
             format!("https {source}"),
         )))
     }
-}
-
-fn first(address: &str) -> io::Result<SocketAddr> {
-    address
-        .to_socket_addrs()?
-        .next()
-        .ok_or_else(|| invalid("no address to bind"))
 }
