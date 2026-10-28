@@ -86,8 +86,9 @@ arguments are \code{self} and the slot's own, dispatching on \code{self};
 and a remote class (\code{GreeterRemote}, extending the kind's class and
 \code{guatiao_remote}) with a method of each generic that calls the slot.
 A slot is found by position. A name two kinds of one package share must take
-the same arguments. It refuses what the kind attribute refuses to declare: a
-slot named \code{header}, a \code{"list"} argument (a list is lent or
+the same arguments. It refuses what the kind attribute refuses to declare: no
+slot at all, two arguments of one slot with one name, a slot named
+\code{header}, a \code{"list"} argument (a list is lent or
 taken), \code{lent("bytes")} on a kind that is not an object kind, and an
 object passed or answered on a slot that is not fallible.
 

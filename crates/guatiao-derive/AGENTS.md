@@ -260,7 +260,7 @@ lent object with another bound beside the trait (`&mut (dyn K + Send)`),
 `&List` (a list is lent or handed over), a borrowed argument of any
 other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
-error is not `ProviderError`, a method named `header` (or `destroy` or
+error is not `ProviderError`, two arguments of one name, a method named `header` (or `destroy` or
 `into_object` on an object kind), a method named `<m>_in` beside a method
 `<m>` answering a tree, an argument whose name starts with
 `__`, and an attribute key other than `name`, `object` and `crate`.

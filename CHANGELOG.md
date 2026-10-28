@@ -1745,6 +1745,12 @@ write now.
   and MATLAB's declarations now refuse `bytes_mut` on a kind that is not
   an object kind too. The kind attribute words an object on a slot that
   cannot fail, and a `&List` argument, as refusals of their own.
+- **A kind needs a slot, and a slot names each argument once.** The
+  library's reader, and every binding that builds a kind without it,
+  refuse a kind with no slot (an object kind with only `destroy` too) and
+  two arguments of one slot with the same name, as the kind attribute
+  does; the attribute names a repeated argument itself rather than leaving
+  it to rustc. Python's `kinds_of` keeps a description's argument names.
 - **A kinds document is `{"kinds": [...]}`.** No writer puts `"format": 1`
   in it any more (the derive, guatiao-bridge, guatiao-source-remote, and
   the Node, Python, Dart and Go describers), and every reader tells a

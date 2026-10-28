@@ -357,7 +357,8 @@ A description names the same shapes: its scalars as `t` does (`i64`,
 `taken` (`t.taken(...)`) or `lent` (`t.lent(...)`); `object` with its
 `kind`, `pass` `taken` or `lent`, and as an answer the object kind
 itself. `kind()`, a kind class and `kindsOf` refuse, as `#[guatiao::kind]`
-and the library's reader do, a slot named `header`, `t.bytesMut` on a
+and the library's reader do, a kind with no slot, two arguments of one
+slot with one name (`argNames`), a slot named `header`, `t.bytesMut` on a
 kind that is not an object kind, a list passed borrowed, and an object
 passed or answered on a slot that is not `fallible` (`TypeError`).
 

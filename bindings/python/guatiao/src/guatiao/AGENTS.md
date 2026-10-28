@@ -257,7 +257,8 @@ level. A method may not be named `has`, `kind`, `ctx`, `size` (a
 remote's own) or start with `_`; a slot is found by position, so name it
 otherwise. A slot may be named `close`: on a `kinds.Object` whose kind has
 one, `close()` calls it, and `destroy()` ends the object. A required method may follow an optional one. `Kind` refuses,
-as `#[guatiao::kind]` and the library's reader do, a method named
+as `#[guatiao::kind]` and the library's reader do, a kind with no method,
+two arguments of one method with one name (`arg_names`), a method named
 `header`, a `bytearray` (`BYTES_MUT`) argument on a kind that is not an
 object kind, and an object passed or answered on a method that is not
 `fallible` (`TypeError`); a list argument is `Lent[List]` or
