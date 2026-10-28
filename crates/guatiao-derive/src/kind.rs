@@ -481,6 +481,19 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
                  glue's",
             ));
         }
+        if args
+            .iter()
+            .any(|a: &ArgPlan| a.ident.unraw() == ident.unraw())
+        {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                format!(
+                    "a kind method's arguments are named once each: this names `{}` a second \
+                     time",
+                    ident.unraw()
+                ),
+            ));
+        }
         let kind = arg_kind(&pat.ty, object, roots)?;
         args.push(ArgPlan {
             ident,
@@ -3591,6 +3604,11 @@ mod tests {
                 "",
                 "pub trait G: Send + Sync {}",
                 "a kind needs at least one method",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, r#n: u32, n: u32) -> u32; }",
+                "names `n` a second time",
             ),
             (
                 "",

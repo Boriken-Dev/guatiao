@@ -920,6 +920,8 @@ macro kind(name::Symbol, args...)
         shapes = []
         for a in call.args[2:end]
             a isa Expr && a.head === :(::) || error("$where: every argument needs a shape")
+            # A kind is declared here with no description to check, and without the library.
+            a.args[1] in argnames && error("$where: an argument names $(a.args[1]) a second time")
             push!(argnames, a.args[1])
             push!(shapes, read_shape(a.args[2], false, "$where($(a.args[1]))"))
         end
@@ -936,6 +938,7 @@ macro kind(name::Symbol, args...)
         push!(slots, (fname = fname, argnames = argnames, shapes = shapes, answer = answer,
             fallible = fallible, required = required))
     end
+    isempty(slots) && error("$name: a kind needs at least one slot; an empty table serves nothing")
 
     shape_expr(sh) = sh === nothing ? :nothing : :($G.Shape($(QuoteNode(sh[1])), $(QuoteNode(sh[2])), $(sh[3] === nothing ? :nothing : sh[3])))
     slot_exprs = [:($G.SlotSpec($(QuoteNode(s.fname)), $G.Shape[$(map(shape_expr, s.shapes)...)], $(shape_expr(s.answer)),

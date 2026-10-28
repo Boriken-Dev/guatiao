@@ -348,3 +348,26 @@ func TestAHeaderTableWithBytesMutAndNoDestroyIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A header is no description: a table with no slot, an object kind's
+// holding only destroy among them, and a slot naming one argument twice
+// are refused where it is read.
+func TestAHeaderTableWithNoSlotOrAnArgumentNamedTwiceIsRefused(t *testing.T) {
+	table := func(fields string) string {
+		return "typedef struct w_vtable {\n  guatiao_kind_header header;\n" + fields +
+			"} w_vtable;\n#define w_vtable_FLOOR_HASH 1\n"
+	}
+	for fields, says := range map[string]string{
+		"":                                "w_vtable: a kind needs at least one slot; an empty table serves nothing",
+		"  void (*destroy)(void *ctx);\n": "an empty table serves nothing",
+		"  guatiao_status (*add)(void *ctx, uint32_t n, uint32_t n, uint32_t *out);\n": "w_vtable.add: a parameter names n a second time",
+	} {
+		if _, err := readTable(table(fields), "w_vtable"); err == nil || !strings.Contains(err.Error(), says) {
+			t.Errorf("%q: %v", fields, err)
+		}
+	}
+	fine := "  guatiao_status (*add)(void *ctx, uint32_t n, uint32_t m, uint32_t *out);\n"
+	if _, err := readTable(table(fine), "w_vtable"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -254,6 +254,10 @@ function text = kind_file(k, classes, objects, pkg, source)
   cls = classes(k.name);
   object = objects(k.name);
   slots = items(field(k, 'slots', []));
+  % What no trait declares: this reads JSON without the library's reader.
+  if isempty(slots)
+    error('guatiao:BadValue', '%s: a kind needs at least one slot; an empty table serves nothing', k.name);
+  end
   % guatiao.Kind's members, and handle's.
   reserved = {'has_slot', 'is_bound', 'close', 'call', 'attach', 'detach', 'check_bound', 'describe', ...
               'delete', 'Ref', 'Holder', 'RemoteId', 'addlistener', 'listener', 'notify', 'findobj', ...

@@ -251,6 +251,25 @@ def test_what_no_trait_declares_is_refused_with_no_description_and_no_library():
     assert fine.method("open").fallible
 
 
+def test_an_empty_kind_and_an_argument_named_twice_are_refused_with_no_library():
+    with pytest.raises(TypeError, match="`k`: a kind needs at least one slot; an empty table serves nothing"):
+        Kind("k", floor_hash=1, methods=[])
+    with pytest.raises(TypeError, match="an empty table serves nothing"):
+        Kind("k", floor_hash=1, is_object=True, methods=[])
+    with pytest.raises(TypeError, match="`k.add`: an argument names `n` a second time"):
+        Kind("k", floor_hash=1, methods=[Method("add", [USIZE, USIZE], USIZE, arg_names=["n", "n"])])
+    # A name given and one made up may meet.
+    with pytest.raises(TypeError, match="names `arg1` a second time"):
+        Kind("k", floor_hash=1, methods=[Method("add", [USIZE, USIZE], USIZE, arg_names=["arg1"])])
+    def adding(*names: str) -> "dict[str, object]":
+        args = [{"name": n, "type": "u32"} for n in names]
+        return {"kinds": [{"name": "k", "floor_hash": 1, "object": False, "slots": [{"name": "add", "args": args}]}]}
+
+    with pytest.raises(TypeError, match="`k.add`: an argument names `n` a second time"):
+        kinds.kinds_of(adding("n", "n"))
+    assert kinds.kinds_of(adding("n", "m"))["k"].method("add").arg_names == ("n", "m")
+
+
 def test_a_kind_born_in_python_is_written_as_its_description():
     import tally_kinds
 

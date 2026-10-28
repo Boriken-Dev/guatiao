@@ -83,6 +83,9 @@ function kind_refusals()
     {guatiao.slot('read', {'l', guatiao.lent(memo)})}, 'bad.read(l): an object crosses on a fallible slot only'
     {guatiao.slot('give', {'l', guatiao.taken(memo)})}, 'bad.give(l): an object crosses on a fallible slot only'
     {guatiao.slot('open', {}, 'Returns', memo)}, 'bad.open answer: an object crosses on a fallible slot only'
+    {}, 'bad: a kind needs at least one slot; an empty table serves nothing'
+    {'Object', true}, 'bad: a kind needs at least one slot'
+    {guatiao.slot('add', {'n', 'uint32', 'n', 'uint32'}, 'Returns', 'uint32')}, 'bad.add: an argument names n a second time'
   };
   for i = 1:size(refused, 1)
     e = expect_error(@() guatiao.Kind.describe('bad', 1, refused{i, 1}{:}), 'guatiao:BadValue', refused{i, 2});

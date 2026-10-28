@@ -108,6 +108,10 @@ end
     @test occursin("K.give(l): an object crosses on a fallible slot only", declare(:(begin give(l::Taken{Listener})::Nothing end)))
     @test occursin("K.open answer: an object crosses on a fallible slot only", declare(:(begin open()::Listener end)))
     @test declare(:(begin @fallible open(l::Lent{Listener})::Listener end)) === nothing
+    @test occursin("K: a kind needs at least one slot; an empty table serves nothing", declare(:(begin end)))
+    @test occursin("an empty table serves nothing", declare(:(begin end); object = true))
+    @test occursin("K.add: an argument names n a second time", declare(:(begin add(n::UInt32, n::UInt32)::UInt32 end)))
+    @test declare(:(begin add(n::UInt32, m::UInt32)::UInt32 end)) === nothing
 end
 
 @testset "a host binds a kind from what the library carries" begin

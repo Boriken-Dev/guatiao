@@ -71,6 +71,8 @@ function refusals()
     strrep(sprintf(slot, '', ''), '"f"', '"until"'), 'names no method'
     sprintf(slot, '{"name": "x", "type": "u256"}', ''), 'not a type an argument can have'
     sprintf(slot, '{"name": "self", "type": "i8"}, {"name": "self_", "type": "i8"}', ''), 'two arguments are self_'
+    sprintf(slot, '{"name": "n", "type": "u32"}, {"name": "n", "type": "u32"}', ''), 'two arguments are n'
+    '', 'k: a kind needs at least one slot; an empty table serves nothing'
     sprintf(slot, '{"name": "b", "type": "bytes_mut"}', ''), 'on an object kind only'
     sprintf(slot, '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}', ''), 'no object kind'
     [sprintf(slot, '', '') ', ' sprintf(slot, '', '')], 'two slots are f'

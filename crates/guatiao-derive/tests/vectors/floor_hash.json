@@ -581,6 +581,41 @@
       "by": "every reader"
     },
     {
+      "name": "an_empty_kind",
+      "object": false,
+      "trait": "pub trait Idle: Send + Sync {}",
+      "slots": [],
+      "why": "an empty table serves nothing",
+      "by": "every reader"
+    },
+    {
+      "name": "two_arguments_named_alike",
+      "object": false,
+      "trait": "pub trait Adder: Send + Sync { fn add(&self, n: u32, n: u32) -> u32; }",
+      "slots": [
+        {
+          "name": "add",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "n",
+              "type": "u32"
+            },
+            {
+              "name": "n",
+              "type": "u32"
+            }
+          ],
+          "answer": {
+            "type": "u32"
+          }
+        }
+      ],
+      "why": "a second time",
+      "by": "every reader"
+    },
+    {
       "name": "a_slot_named_like_a_remotes_method",
       "object": false,
       "slots": [
