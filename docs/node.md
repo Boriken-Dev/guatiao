@@ -31,8 +31,8 @@ npx guatiao-kind greeter_kind.kinds.json --out greeter_kind   # greeter_kind.js 
 ```
 
 In JavaScript each kind is a value, `Greeter`. In TypeScript the same
-name is also an interface: the kind's required slots as methods, its
-appended ones optional, typed from the description, so a provider class
+name is also an interface: the kind's slots as methods, its optional
+ones marked `?`, typed from the description, so a provider class
 `implements` the kind it serves:
 
 ```ts
@@ -175,7 +175,7 @@ the first step from code and answers the document.
   says otherwise); one that `extends ObjectKind` is an object kind. An
   object kind a slot reaches is described too, whichever file it is in.
 - **A method is a slot**, in the interface's order; a method with `?` is
-  an appended slot, and the required ones come first, as in a trait. A
+  an optional slot, before or after a required one, as in a trait. A
   slot's name is the method's in snake_case, so a method that would not
   come back the same (`parseHTTP`) is refused. `@throws` marks a slot
   that can refuse.
@@ -323,9 +323,9 @@ export class Shouter extends Provider implements Greeter {
 
 - **`tsc --strict` checks it**: `implements Greeter` refuses a class that
   misspells `greet`, takes a number for the name or answers the wrong
-  type, and an appended method it does implement with the wrong types.
+  type, and an optional method it does implement with the wrong types.
   `static kinds` is what serves it, since `implements` is erased. A
-  misspelled appended method is not caught: it is one more method.
+  misspelled optional method is not caught: it is one more method.
 - **Plain JavaScript runs the same class as it is**, with no build step:
   `static kinds = [Greeter, Counter];` and no types. A class missing a
   required method is refused when its library is built, with a

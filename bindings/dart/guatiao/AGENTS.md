@@ -342,7 +342,10 @@ dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]
 ```
 
 writes the Dart for it (commit the file; `--check` writes nothing and
-exits 1 when it is stale). `--import listener=listener_kind.dart` names an
+exits 1 when it is stale), after the library has read each kind
+(`checkKinds(document)` from code: what no kind may declare, such as
+`bytes_mut` on a provider kind, is a `FormatException`), so it loads the
+library. `--import listener=listener_kind.dart` names an
 object kind a slot takes or answers that another document describes, with
 the library written for that document, which is imported rather than
 written again (`generateKinds(document, imports: {...})` from code); a
@@ -352,7 +355,7 @@ kind may name itself. For each kind, named in PascalCase
 | declaration | what |
 | --- | --- |
 | `abstract interface class Greeter` | the required slots, each slot's name in camelCase (`greet_into` is `greetInto`); `static final GreeterKind kind` |
-| `abstract interface class GreeterShout`, ... | one per appended slot, `<Kind><Slot>`: a provider implements the ones it serves |
+| `abstract interface class GreeterShout`, ... | one per optional slot, `<Kind><Slot>`: a provider implements the ones it serves |
 | `final class GreeterRemote extends KindRemote implements Greeter, GreeterShout, ...` | what a caller holds: a method per slot |
 | `final class GreeterKind extends Kind<GreeterRemote>` | the kind as data, and the glue that calls and serves its table |
 
@@ -388,17 +391,19 @@ code; a `FormatException` names `file:line:column`. Every `abstract
 interface class` of the file is a kind, in the order written, named in
 snake_case (`SoundLevel` is `sound_level`; `@KindName('x')` says
 otherwise); `implements ObjectKind` makes an object kind. Its methods are
-the slots in table order, required first: `@appended` marks an optional
-one after them, `@fallible` one that can refuse; a method's name in snake_case is the
+the slots in table order: `@optional` marks one a provider may leave
+null, wherever it is, `@fallible` one that can refuse; a method's name in snake_case is the
 slot's (capitals in a row refused). `///` comments are the docs. The floor
 hash is the one `#[guatiao::kind]` gives the same slots, computed by the
 library (`guatiao_kind_floor_hash`, so describing loads it; `@FloorHash(n)`
-pins one). Plain arguments only; an import prefix is read
+pins one, and the library reads the kind either way, refusing what no
+kind may declare). Plain arguments only; an import prefix is read
 through (`k.U32`). Refused as well: a name the generator would not write
 back (a kind's class is its name in PascalCase, a method its slot's in
 camelCase), two slots or arguments of one name, a slot named `destroy` or
-as a remote's own member (`close`, `has`, `kind`, ...), `BytesMut` on a
-provider kind, and any document `generateKinds` would refuse.
+as a remote's own member (`close`, `has`, `kind`, ...), what the library
+refuses (`BytesMut` on a provider kind), and any document `generateKinds`
+would refuse.
 
 | Dart | description |
 | --- | --- |
@@ -418,7 +423,7 @@ throws its status's `GuatiaoException` with the provider's words.
 A handle dropped unclosed is destroyed when it is collected.
 
 **A Dart object as an object of a kind**: any object implementing the
-kind's interface (and the appended ones it serves). Its table is built
+kind's interface (and the optional ones it serves). Its table is built
 once per set of interfaces it implements and kept for the process; it is
 held until its holder destroys it (handed over), when it is told through
 `Disposable.dispose()` if it implements `Disposable`, or until the call
@@ -463,8 +468,8 @@ registry.registerLibrary(library);
 **A provider** extends `Provider` and implements its kinds' interfaces,
 which is what the analyzer checks: a missing required method is
 `non_abstract_class_inherits_abstract_member`, a wrong argument or answer
-type (an appended slot's included) `invalid_override`. A misspelled
-appended method implements nothing, and is not caught.
+type (an optional slot's included) `invalid_override`. A misspelled
+optional method implements nothing, and is not caught.
 
 **`Offer.single(instance, named:, kinds:, id?, displayName?, version?,
 meta?, available?)`**: the instance is the provider, its tables built

@@ -557,6 +557,17 @@ compiled with one of them changes as said:
   made by a method and handed over, never served by a provider. A registry
   answers `KindMismatch::ObjectKind` for one.
 
+### A description's `bytes_mut` belongs to an object kind
+
+`#[guatiao::kind]` has always refused `&mut [u8]` on a kind that is not
+an object kind; the library's description reader now refuses
+`"type": "bytes_mut"` there too, and so does every binding that builds
+a kind (Node's `kind()` with `t.bytesMut`, Python's `Kind` with
+`BYTES_MUT` or a `bytearray` annotation, Go's glue, Dart's describer). A
+description written by hand with one makes its kind an object kind
+(`"object": true`), or passes the bytes as `bytes` and answers what the
+callee would have written.
+
 ## Loader and handles
 
 ### `unload` is safe, and refuses while something holds the library
@@ -1202,6 +1213,10 @@ answers `Option<Found>`: `None` for another source's manifest.
 
 ## Needs nothing from you
 
+- **A required method may follow one with a default body** in
+  `#[guatiao::kind]`, and a required slot an optional one in every
+  binding's declaration: a kind declared required-first is described,
+  hashed and laid out as before.
 - **Loosened, never tightened**: the `Kind` bound is off `Remote`,
   `Instance`, `Offer` and `Object` and their `Send`/`Sync` impls; the
   `ProviderInfo` doors take `&self` on any lifetime; `ToValue`,

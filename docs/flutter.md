@@ -102,7 +102,7 @@ dart run guatiao:kind greeter_kind.kinds.json -o lib/greeter_kind.dart
 ```
 
 For each kind it writes an abstract interface class of its required
-slots (`Greeter`), one per slot appended after them (`GreeterShout`), a
+slots (`Greeter`), one per optional slot (`GreeterShout`), a
 remote class a caller holds (`GreeterRemote`), and the kind as the
 interface's static `kind`.
 

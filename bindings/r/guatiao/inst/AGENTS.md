@@ -391,8 +391,8 @@ when attached); and `<class>Remote`, extending the kind's class and
 `guatiao_remote`, with a method of each generic that calls the slot
 (`call_slot(self, i, args, int64 = NULL)`). It answers the kind's
 description, which `bind` takes. `method(..., returns = NULL, required = FALSE, fallible =
-FALSE)` lists a slot's arguments, named, in order; `required` marks the
-kind's original slots (they come first), `fallible` a slot ending in
+FALSE)` lists a slot's arguments, named, in order; `required` marks a
+slot every table fills, wherever it is, `fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close()`
 on its remote.
 

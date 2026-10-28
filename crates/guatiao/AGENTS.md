@@ -1752,8 +1752,8 @@ drop(s);                                                             // the libr
   type through `FromValue`; each optionally in `Result<_, ProviderError>`.
   A method that converts must return `Result`. Refused by name: generics,
   `async`, `&mut self`/`self`, borrowed returns, `impl Trait`, closures,
-  associated items, a required method after a defaulted one, and a method
-  named `<m>_in` beside a method `<m>` answering a `Value`, `Map` or
+  associated items, `&mut [u8]` on a kind that is not an object kind,
+  and a method named `<m>_in` beside a method `<m>` answering a `Value`, `Map` or
   `List` (the attribute adds that one; its allocator parameter is
   `alloc`, or `alloc_` when an argument already has the name).
 - **A tree lent mutably** (`&mut Map`, `&mut List`, `&mut Value`)
@@ -1777,9 +1777,9 @@ drop(s);                                                             // the libr
   a handed-over tree are the same pointer type. A C caller lending a map
   gets back whatever the callee built; a Rust callee that follows the
   fast path builds in the map's allocator.
-- **Slots.** Slots follow declaration order, the required ones first; a
-  defaulted method is an optional slot a provider may leave null (the
-  proxy runs the default). A table smaller than the kind's whole table is
+- **Slots.** Slots follow declaration order; a defaulted method is an
+  optional slot a provider may leave null (the proxy runs the default),
+  before or after a required one. A table smaller than the kind's whole table is
   refused (`BelowFloor`). The table header `KindHeader { struct_size,
   floor_hash }` carries FNV-1a over every slot's signature; a mismatch
   is refused, never called. The
@@ -1930,6 +1930,9 @@ learns at run time, and call one -- is a `Mechanism`'s, and
 KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"kinds": [..]}
 KindDescription::document_json(text)?               // the same from JSON text; an error at "byte N"
                                                     // where it stops being JSON
+// Refused where it goes wrong: what #[guatiao::kind] refuses to declare (a slot named twice,
+// an object kind's `destroy`, `bytes_mut` on a kind that is not an object kind) and what no
+// description says. Required and optional slots come in any order.
 kind.to_value()? / kind.to_value_in(alloc)?         // ToValue: written back key for key, in the
                                                     // order the kind macro writes it
 // C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;

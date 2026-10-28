@@ -246,9 +246,9 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
 | `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, passes an `Object` or lends one |
 
-A method **with a default body** is an optional slot: a provider may
-leave it null, and the proxy then runs the default. A required method
-after a defaulted one is refused. A table smaller than the whole table is
+A method **with a default body** is an optional slot, wherever it is
+declared: a provider may leave it null, and the proxy then runs the
+default. A table smaller than the whole table is
 refused. A method that cannot fail propagates a provider
 failure as a panic. Refused by name, on the author's span: a generic or
 `unsafe` trait, a `where` clause, missing `Send + Sync`, an empty trait,

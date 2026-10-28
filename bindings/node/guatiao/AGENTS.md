@@ -176,7 +176,7 @@ the docs site's encodings page). Two ways to load it:
   writes `BASE.js` (it calls `kindsOf` on the document, embedded) and
   `BASE.d.ts`, both committed. For each kind the declarations hold an
   interface of the kind's name in PascalCase (`greeter` is `Greeter`; its
-  required slots as methods, the appended ones optional, each slot's name
+  required slots as methods, the others optional, each slot's name
   in camelCase), a `<Kind>Remote` interface (what a caller holds), and a
   value of the kind's name (`DescribedKind<Greeter, GreeterRemote>`):
   TypeScript merges the two, so `implements Greeter` and `static kinds =
@@ -258,8 +258,8 @@ is), else the nearest one above each file.
 - An interface is a kind named after it in snake_case (`@kind name` says
   otherwise); `extends ObjectKind` makes it an object kind, and extending
   anything else is refused. A doc comment is the kind's `doc`.
-- A method is a slot, in order: `name?(...)` an appended one, a plain one
-  required, and required slots come first. `@throws` marks it fallible;
+- A method is a slot, in order: `name?(...)` an optional one, a plain one
+  required, in any order. `@throws` marks it fallible;
   its doc comment is the slot's. A name must come back from its snake_case
   (`methodName(slotName(m)) === m`). No type parameters, optional or rest
   arguments; an answer is always written (`: void` for none).
@@ -318,7 +318,7 @@ export type Greeter = Implementation<typeof Greeter>;
 ```
 
 `kind(name, { floorHash, object?, methods })`: `required` marks a slot
-every table fills (the kind's original ones), `fallible` one ending in
+every table fills, wherever it is, `fallible` one ending in
 `guatiao_provider_error *err`, `object: true` an object kind (`destroy`
 first). A slot is found by position, so a method's name is free; it may
 not be `has`, `close`, `closed`, `kind`, `ctx`, `size`, `table`, `then`

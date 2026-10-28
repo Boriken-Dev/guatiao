@@ -212,8 +212,8 @@ generators read. `struct` a hand-written
 is a `Listener`, and a provider class that inherits `Greeter` is checked
 against its signatures. `kinds.kind_of(K)` (or `K.kind`) is the `Kind`
 built; every API taking a `Kind` takes the class. `@required` marks a slot
-every table fills (the kind's original methods: it sets the smallest
-table accepted); `@fallible` a slot with a `guatiao_provider_error *err`
+every table fills, wherever it is declared; `@fallible` a slot with a
+`guatiao_provider_error *err`
 last (a Rust method answering `Result`).
 
 **Annotations to shapes**, checked when the class is created (a
@@ -222,7 +222,7 @@ last (a Rust method answering `Result`).
 | annotation | as an argument | as an answer |
 | --- | --- | --- |
 | `str` | `guatiao_str` | `guatiao_string *out` (owned text) |
-| `bytes` / `bytearray` | `guatiao_bytes` / `guatiao_bytes_mut` | -- |
+| `bytes` / `bytearray` | `guatiao_bytes` / `guatiao_bytes_mut` (an object kind's only) | -- |
 | `bool`, `float` (F64), `kinds.I8`..`I64`, `U8`..`U64`, `USIZE`, `ISIZE`, `F32` | the scalar | the scalar |
 | `int` | refused: say its width | refused |
 | `Map`, `Ref` / `Value` / `Optional[Ref]` | `const guatiao_map *`, `const guatiao_value *` (null for `None`) | -- |
@@ -234,8 +234,11 @@ last (a Rust method answering `Result`).
 | `None` | -- | no answer |
 
 A kind class's annotations are read in its module: define it at module
-level. A method may not be named `has`, `close`, `kind`, `ctx`, `size` or
-start with `_`; a slot is found by position, so name it otherwise.
+level. A method may not be named `has`, `close`, `kind`, `ctx`, `size` (a
+remote's own) or start with `_`; a slot is found by position, so name it
+otherwise. A required method may follow an optional one. `Kind` refuses
+a `bytearray` (`BYTES_MUT`) argument on a kind that is not an object kind,
+as `#[guatiao::kind]` does.
 
 What crosses, each way:
 

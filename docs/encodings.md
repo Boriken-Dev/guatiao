@@ -532,8 +532,8 @@ a file beside the header (`include/<crate>.kinds.json`):
   (an object kind: its table has `destroy` right after the header), an
   optional `doc`, and `slots`.
 - **A slot**: `name` (its field in the table), `required` (a slot every
-  provider fills, not null: the required slots come first; any other is
-  optional, which a provider may leave null; the floor hash covers every
+  provider fills, not null; any other is optional, which a provider may
+  leave null; the two come in any order, and the floor hash covers every
   slot, required or not), `fallible` (it ends in `guatiao_provider_error
   *err`), `args` (after `ctx`, in order), `answer` (written through a
   pointer before `err`; absent when there is none), and an optional `doc`.
@@ -577,6 +577,20 @@ name, `Object<dynK>` or `()`; a fallible one is
 their description says them, beside the Rust trait declaring the same
 slots, that input and the hash: the derive and the library check
 themselves against it.
+
+**What no kind may declare** is refused by the library's reader
+(`guatiao_kind_document_read`, `guatiao_kind_floor_hash`, and a
+provider's carried document), as `#[guatiao::kind]` refuses to declare
+it: a slot named twice, an object kind's `destroy`, `bytes_mut` on a kind
+that is not an object kind. A describer reading declarations (Node's
+TypeScript reader, Go's `-document`, Dart's `describe`) has the library
+read each kind it writes, as do Go's `-description` and Dart's
+`guatiao:kind DOCUMENT` before they write code. A binding refuses for
+itself only a name its own code uses (a remote's method, a keyword), and
+the same rules where a kind is built with no description to read and
+without the library (Node's `kind()` and `kindsOf`, Python's `Kind`, Go's
+`-header`). The vectors' `refused` list holds one kind of each: `by` says
+whether every reader refuses it or which bindings do.
 
 A provider carries the same document in its descriptor
 (`guatiao_provider_info.kind_descriptions`, JSON text): the kinds it

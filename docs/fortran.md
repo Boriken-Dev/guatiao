@@ -52,7 +52,7 @@ function reference, so a place is assigned to a handle before it is used.
 A kind is the table its C header declares. In Fortran it is an abstract
 type extending `guatiao_impl`, with a deferred procedure for every slot
 the table must have and an ordinary one, answering
-`GUATIAO_ERR_UNSUPPORTED`, for each slot appended later, in a module of
+`GUATIAO_ERR_UNSUPPORTED`, for each optional slot, in a module of
 its own with a remote type calling another side's table and a `bind(c)`
 procedure per slot serving one. That module is written, not declared:
 `guatiao-kind` writes it from the kinds' description (the

@@ -28,7 +28,7 @@ application that carries it.
   instance from a configuration, call a provider through its table.
 - **Kinds and providers as classes** — `dart run guatiao:kind` writes,
   from the description a kind crate commits beside its C header, an
-  interface per kind and per appended slot and a remote class to call a
+  interface per kind and per optional slot and a remote class to call a
   table with; a provider is a class extending `Provider` that implements
   them, so the analyzer checks every method, and a `Library` serves it to
   any host in the process, Rust and C callers included. Nothing is
@@ -242,7 +242,7 @@ dart run guatiao:kind greeter_kind.kinds.json -o lib/greeter_kind.dart
 ```
 
 Each kind is then an interface of its required slots (`Greeter`), one per
-appended slot (`GreeterShout`), a remote class a caller holds
+optional slot (`GreeterShout`), a remote class a caller holds
 (`GreeterRemote`), and the kind itself as the interface's static `kind`:
 
 ```dart

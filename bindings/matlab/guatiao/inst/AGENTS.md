@@ -401,7 +401,7 @@ The description is a `Constant` property named `<Class>Kind` (two kinds
 a provider inherits must not share a property name).
 `guatiao.Kind.describe(name, floor_hash, slot, ..., 'Object', tf)`: the C
 name, the floor hash the header defines, a `guatiao.slot` per slot in the
-header's order (required ones first); an object kind's `destroy` is its
+header's order (required and optional in any order); an object kind's `destroy` is its
 remote's `close()`. `guatiao.slot(name, {argname, shape, ...}, 'Returns',
 shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
 `self.call(slotname, args...)`.
