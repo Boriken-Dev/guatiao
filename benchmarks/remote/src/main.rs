@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! guatiao-remote-bench serve URL [options]   a server of a provider made for measuring
-//! guatiao-remote-bench run URL [options]     five metrics against it, one JSON line
+//! guatiao-remote-bench run URL [options]     its metrics against it, one JSON line
 //! ```
 //!
 //! URL is `tcp://`, `tls://`, `quic://`, `local://`, `shm://` or, built with the
@@ -15,13 +15,16 @@
 //! the identity in this file, made when absent, and each pins it),
 //! `--mss N` (tcp, Unix: caps the segment size, as on a path without
 //! jumbo frames), `--spin MICROSECONDS` (how long a waiting thread polls before it
-//! sleeps), `--label TEXT`, `--seconds N`, `--out FILE` (appends the line).
+//! sleeps), `--label TEXT`, `--seconds N`, `--out FILE` (appends the line),
+//! `--big-rounds N` (rounds of the 4 MiB phase, 16 unless told), `--links N`
+//! (N more links for the sixth metric, none unless told).
 //!
 //! The metrics: a small call's p50 and p99; calls a second with 32
 //! threads calling at once; the throughput of a 4 MiB argument answered
 //! back; protocol bytes per small call (frames, counted at the link) and,
 //! for TCP on Linux, bytes on the wire from the kernel's own counters;
-//! process CPU per small call on each end.
+//! process CPU per small call on each end; and with `--links N`, calls a
+//! second over N more links at once, four threads calling on each.
 
 extern crate alloc;
 
@@ -123,6 +126,8 @@ struct Args {
     label: String,
     seconds: u64,
     out: Option<PathBuf>,
+    links: usize,
+    big_rounds: usize,
 }
 
 fn parse() -> Result<(String, Args), String> {
@@ -138,6 +143,8 @@ fn parse() -> Result<(String, Args), String> {
         label: String::new(),
         seconds: 3,
         out: None,
+        links: 0,
+        big_rounds: 16,
     };
     while let Some(flag) = it.next() {
         let v = it.next().ok_or(format!("{flag} needs a value"))?;
@@ -149,6 +156,14 @@ fn parse() -> Result<(String, Args), String> {
             "--label" => a.label = v,
             "--seconds" => a.seconds = v.parse().map_err(|_| "--seconds")?,
             "--out" => a.out = Some(v.into()),
+            "--links" => a.links = v.parse().map_err(|_| "--links")?,
+            "--big-rounds" => {
+                a.big_rounds = v
+                    .parse()
+                    .ok()
+                    .filter(|&n| n > 0)
+                    .ok_or("--big-rounds takes a count above 0")?;
+            }
             other => return Err(format!("`{other}` is not an option")),
         }
     }
@@ -492,6 +507,63 @@ fn pct(v: &mut [u64], p: f64) -> f64 {
     v[((v.len() - 1) as f64 * p).round() as usize] as f64 / 1000.0
 }
 
+/// Calls a second over `--links` more links to the same server at once,
+/// four threads calling on each: many busy connections on one listener.
+/// `None` when there are none.
+fn links_rate(scheme: &str, address: &str, a: &Args) -> Result<Option<f64>, String> {
+    if a.links == 0 {
+        return Ok(None);
+    }
+    let mut held = Vec::new();
+    let mut counters = Vec::new();
+    for _ in 0..a.links {
+        let source = RemoteSource::new(connector(scheme, address, a)?, options(scheme, a));
+        let mut registry = Registry::new("bench-host", "1.0");
+        registry
+            .add_source("bench", source.clone())
+            .map_err(|e| e.to_string())?;
+        let refreshed = registry.refresh();
+        if !refreshed.refused.is_empty() {
+            return Err(format!("{:?}", refreshed.refused));
+        }
+        let c = registry
+            .offers::<dyn Counter>()
+            .next()
+            .and_then(|o| o.shared())
+            .ok_or("no counter")?;
+        for _ in 0..200 {
+            c.count();
+        }
+        counters.push(c);
+        held.push((registry, source));
+    }
+    let deadline = Instant::now() + Duration::from_secs(a.seconds);
+    let done = Arc::new(Mutex::new(0u64));
+    let started = Instant::now();
+    let threads: Vec<_> = counters
+        .iter()
+        .flat_map(|c| (0..4).map(move |_| c.clone()))
+        .map(|c| {
+            let done = Arc::clone(&done);
+            std::thread::spawn(move || {
+                let mut k = 0;
+                while Instant::now() < deadline {
+                    c.count();
+                    k += 1;
+                }
+                *done.lock().unwrap() += k;
+            })
+        })
+        .collect();
+    for t in threads {
+        let _ = t.join();
+    }
+    let rate = *done.lock().unwrap() as f64 / started.elapsed().as_secs_f64();
+    drop(counters);
+    drop(held);
+    Ok(Some(rate))
+}
+
 fn run(a: &Args) -> Result<(), String> {
     let (scheme, address) = split(&a.url)?;
     let tally = Arc::new(Tally::default());
@@ -590,14 +662,17 @@ fn run(a: &Args) -> Result<(), String> {
     let big = "x".repeat(4 << 20);
     greeter.greet(&big).map_err(|e| e.message().to_string())?;
     let started = Instant::now();
-    let rounds = 16;
+    let rounds = a.big_rounds;
     for _ in 0..rounds {
         greeter.greet(&big).map_err(|e| e.message().to_string())?;
     }
     let mbps = (2 * big.len() * rounds) as f64 / started.elapsed().as_secs_f64() / 1e6;
 
+    // 6: calls a second over many links at once.
+    let links = links_rate(scheme, address, a)?;
+
     let line = format!(
-        "{{\"label\":{:?},\"url\":{:?},\"lat_p50_us\":{:.1},\"lat_p99_us\":{:.1},\"calls_per_s_32\":{:.0},\"mb_per_s_4mib\":{:.0},\"protocol_bytes_per_call\":{:.1},\"wire_bytes_per_call\":{},\"cpu_us_per_call\":{{\"client\":{:.2},\"server\":{:.2}}}}}",
+        "{{\"label\":{:?},\"url\":{:?},\"lat_p50_us\":{:.1},\"lat_p99_us\":{:.1},\"calls_per_s_32\":{:.0},\"mb_per_s_4mib\":{:.0},\"protocol_bytes_per_call\":{:.1},\"wire_bytes_per_call\":{},\"cpu_us_per_call\":{{\"client\":{:.2},\"server\":{:.2}}},\"big_rounds\":{},\"links\":{},\"calls_per_s_links\":{}}}",
         a.label,
         a.url,
         pct(&mut times, 0.5),
@@ -608,6 +683,9 @@ fn run(a: &Args) -> Result<(), String> {
         wire.map_or("null".to_string(), |w| format!("{w:.1}")),
         (cpu1 - cpu0) as f64 / n as f64 / 1000.0,
         (server1 - server0) as f64 / n as f64 / 1000.0,
+        a.big_rounds,
+        a.links,
+        links.map_or("null".to_string(), |r| format!("{r:.0}")),
     );
     println!("{line}");
     if let Some(out) = &a.out {
