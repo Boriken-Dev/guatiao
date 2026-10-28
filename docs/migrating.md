@@ -563,10 +563,32 @@ compiled with one of them changes as said:
 an object kind; the library's description reader now refuses
 `"type": "bytes_mut"` there too, and so does every binding that builds
 a kind (Node's `kind()` with `t.bytesMut`, Python's `Kind` with
-`BYTES_MUT` or a `bytearray` annotation, Go's glue, Dart's describer). A
+`BYTES_MUT` or a `bytearray` annotation, Go's glue, Dart's describer,
+Julia's `@kind` with `Lent{Vector{UInt8}}`, R's `kind()` and MATLAB's
+`guatiao.Kind.describe` with a lent `bytes`). A
 description written by hand with one makes its kind an object kind
 (`"object": true`), or passes the bytes as `bytes` and answers what the
 callee would have written.
+
+### A description declares only what a trait could
+
+The library's description reader, and every binding that builds a kind
+(Node's `kind()` and `kindsOf`, Python's `Kind`, Go's glue, Julia's
+`@kind`, R's `kind()`, MATLAB's and Octave's `guatiao.Kind.describe` and
+`guatiao.write_kinds`), now refuse three more things `#[guatiao::kind]`
+has always refused:
+
+- a slot that passes or answers an `object` without `"fallible": true`:
+  make the slot fallible (its table gains `guatiao_provider_error *err`
+  last), since the object's table is checked where it arrives;
+- a `list` passed `borrowed`: lend it (`"pass": "lent"`) or hand it over
+  (`"pass": "taken"`);
+- a slot named `header`, the table's first field: rename it.
+
+Node's TypeScript reader, Dart's `describe` and Go's `-document` refuse the
+same declarations through the library: mark such a method `@throws`,
+`@fallible` or fallible (no `//guatiao:infallible`), and pass a list
+`Lent<ListRef>`/`Taken<ListRef>` or marked `lent`/`taken`.
 
 ## Loader and handles
 

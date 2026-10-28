@@ -280,7 +280,10 @@ slots); on a method of the kind's interface `//guatiao:optional
 `//guatiao:infallible` (else fallible) and `//guatiao:lent`,
 `//guatiao:taken`, `//guatiao:nullable`, `//guatiao:mut` followed by
 argument names. The library reads every kind described, pinned hash or
-not, so `-document` needs it found. A `Ref`/`MapRef`/`ListRef` is borrowed (a
+not, so `-document` needs it found, and refuses what no trait declares
+(a list borrowed, an object on an `//guatiao:infallible` slot, a slot
+named `header`, bytes written in place on a kind with no `Close`); so does
+`-header` reading a C header. A `Ref`/`MapRef`/`ListRef` is borrowed (a
 list must be lent), `*guatiao.Value` a value handed over, a struct or map
 type a map, a slice a list, `any` a value (borrowed unless `taken`),
 `[]byte` bytes (`mut`: written in place), an object kind's interface an

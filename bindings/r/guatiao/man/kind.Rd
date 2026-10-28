@@ -86,7 +86,10 @@ arguments are \code{self} and the slot's own, dispatching on \code{self};
 and a remote class (\code{GreeterRemote}, extending the kind's class and
 \code{guatiao_remote}) with a method of each generic that calls the slot.
 A slot is found by position. A name two kinds of one package share must take
-the same arguments.
+the same arguments. It refuses what the kind attribute refuses to declare: a
+slot named \code{header}, a \code{"list"} argument (a list is lent or
+taken), \code{lent("bytes")} on a kind that is not an object kind, and an
+object passed or answered on a slot that is not fallible.
 
 \code{kinds_of(document)} declares, as \code{kind()} would, every kind of a
 description document (each object kind before the kinds naming it), in
@@ -98,9 +101,9 @@ the kind and the slot.
 Shapes: \code{"string"} (\code{guatiao_str}: a string), \code{"bytes"} (a raw
 vector), \code{"bool"}, \code{"int8"} to \code{"uint64"}, \code{"float"},
 \code{"double"}, \code{"size"}, \code{"intptr"} (numbers; see below for
-64-bit integers), \code{"value"}, \code{"map"}, \code{"list"} (borrowed:
-the caller passes a value, a view or R data; the provider receives a
-read-only view, valid for the call), \code{lent("map")} and the like (the
+64-bit integers), \code{"value"}, \code{"map"} (borrowed: the caller
+passes a value, a view or R data; the provider receives a read-only view,
+valid for the call), \code{"list"} (an answer only), \code{lent("map")} and the like (the
 caller's tree, writable for the call; what is added is built in the
 allocator it records), \code{taken("map")} and the like (handed over: a
 value passed is moved and holds absent afterwards, a view or R data is

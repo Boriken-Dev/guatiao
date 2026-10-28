@@ -351,7 +351,11 @@ header's `<table>_FLOOR_HASH`; the C name is the type's in lower case
 unless `name` says it. `@required` marks a slot every table fills,
 wherever it is declared, `@fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close` on
-its remote. Object kinds a slot names are declared before it.
+its remote. Object kinds a slot names are declared before it. `@kind`
+refuses, as `#[guatiao::kind]` and the library's reader do, a slot named
+`header`, a bare `ListRef` argument (a list is lent or taken),
+`Lent{Vector{UInt8}}` on a kind that is not an object kind, and an object
+passed or answered on a slot that is not `@fallible`.
 
 **From a description**: `Guatiao.kinds_of(document; into = Module(:Kinds),
 known = ())` declares every kind of a description document in `into`, as
@@ -362,9 +366,11 @@ its JSON text (read by the library, so no JSON package is needed), the
 types a slot may name that the document lacks. A slot's function is
 `getfield(into, :greet)`, reached through `Base.invokelatest` from code
 compiled before the call. `Guatiao.kind_declarations(document)` answers the
-`@kind` expressions instead. An unknown type, a borrowed list or a cycle
-is an `ArgumentError` naming the kind and slot; text that is not a
-description a `GuatiaoError` (`BadValue`) naming where.
+`@kind` expressions instead. An unknown type or a cycle is an
+`ArgumentError` naming the kind and slot; text that is not a description,
+or that declares what no kind may, a `GuatiaoError` (`BadValue`) naming
+where; plain data declaring what no kind may is refused as `@kind`
+refuses it.
 
 | shape | C | the caller passes | the provider receives / returns |
 | --- | --- | --- | --- |

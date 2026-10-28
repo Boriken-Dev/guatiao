@@ -394,7 +394,10 @@ description, which `bind` takes. `method(..., returns = NULL, required = FALSE, 
 FALSE)` lists a slot's arguments, named, in order; `required` marks a
 slot every table fills, wherever it is, `fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close()`
-on its remote.
+on its remote. Refused, as the kind attribute and the library's reader
+refuse them: a slot named `header`, a `"list"` argument (a list is lent
+or taken), `lent("bytes")` on a kind that is not an object kind, and an
+object passed or answered on a slot that is not `fallible`.
 
 `kinds_of(document, known = list(), class = .gt_camel, where = new.env())`
 declares every kind of a description document as `kind()` would (each
@@ -415,7 +418,7 @@ slot; text that is not a description is `BadValue` naming where.
 | `lent("bytes")` | `guatiao_bytes_mut` | a `byte_buffer(n)`, written in place | a buffer (`length`, `[`, `[<-`, `as.raw`), copied back when the method returns |
 | `"bool"`, `"int8"`..`"uint32"`, `"float"`, `"double"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
 | `"int64"`, `"uint64"`, `"size"`, `"intptr"` | the C scalar | an R integer, a whole double, an `integer64`, a `number` or a string spelling an integer, read exactly | as `int64` says (below) |
-| `"value"`, `"map"`, `"list"` | `const guatiao_value *` / `map *` / `list *` | a value, a view or R data | a read-only view, valid for the call |
+| `"value"`, `"map"` | `const guatiao_value *` / `map *` | a value, a view or R data | a read-only view, valid for the call |
 | `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent; a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value), what it answered freed |
 | `taken("value")`, `taken("map")`, `taken("list")` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or R data | a value the method owns (and closes, or the collector frees), moved into this binding's allocator on arrival (copied only where the caller built it elsewhere), so it may be kept past the caller's library; a null one refuses the call, and each is taken, and freed, even when another argument refuses it |
 | answer `"value"`, `"map"`, `"list"` | `guatiao_value/map/list *out` | a value, moved into this binding's allocator on arrival when the slot built it in its own | any R data or a value, built in the allocator the carrier names (`list()` is an empty map too) |
