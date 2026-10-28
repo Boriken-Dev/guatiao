@@ -769,6 +769,15 @@ frames; `--spin MICROSECONDS` is `LinkOptions::spin` on both ends;
 `local://` and `shm://` take a socket path or a pipe name. `run` ends the
 server when it is done.
 
+Two more options make the line longer. `--big-rounds N` sets the 4 MiB
+phase's rounds (16 unless told, about a tenth of a second on loopback: too
+short to resolve 20 % either way). `--links N` adds a sixth metric,
+`calls_per_s_links`: N more links to the same server, four threads calling
+`count` on each for `--seconds`, many busy connections on one listener
+(`null` without it). The line records `big_rounds` and `links`. A change
+to a listener or to large calls is compared with `--links 16 --big-rounds
+50` on both builds.
+
 Local and provisional: three runs each, medians, unless a row says
 otherwise. The host is an x86-64 Linux server, the VM a guest on it
 (virtio, MTU 9000); the FreeBSD VM (4 cores) and the macOS VM are guests
