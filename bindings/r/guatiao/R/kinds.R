@@ -74,6 +74,8 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
 .gt_check_slot <- function(kind, n, s, object) {
   at <- sprintf("%s.%s", kind, n)
   if (n == "header") stop(sprintf("%s: the table's first field is its header; name the slot otherwise", at), call. = FALSE)
+  twice <- names(s$args)[duplicated(names(s$args))]
+  if (length(twice)) stop(sprintf("%s: an argument names %s a second time", at, twice[[1L]]), call. = FALSE)
   for (a in names(s$args)) {
     shape <- s$args[[a]]
     where <- sprintf("%s(%s)", at, a)
@@ -110,6 +112,7 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
   for (s in slots) if (!inherits(s, "guatiao_slot")) stop("each slot is a method()", call. = FALSE)
   if (object && "close" %in% names(slots)) stop("close is an object kind's destroy slot", call. = FALSE)
   # A kind is declared here with no description to check, and without the library.
+  if (!length(slots)) stop(sprintf("%s: a kind needs at least one slot; an empty table serves nothing", name), call. = FALSE)
   for (n in names(slots)) .gt_check_slot(name, n, slots[[n]], isTRUE(object))
   spec <- new.env(parent = emptyenv())
   spec$name <- name

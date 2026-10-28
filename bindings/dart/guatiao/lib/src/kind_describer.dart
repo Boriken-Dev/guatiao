@@ -616,12 +616,6 @@ final class _Describer {
       if (slots.any((s) => s['name'] == slotName)) {
         refuse(m.at, '$where: two slots of ${d.className} are $slotName');
       }
-      final argNames = <String>{};
-      for (final (name, t) in m.params) {
-        if (!argNames.add(_snake(name, (what) => refuse(t.at, what)))) {
-          refuse(t.at, '$where: two arguments are $name');
-        }
-      }
       var fallibleMark = false, optionalMark = false, sensitiveMark = false;
       for (final a in m.marks) {
         if (a.argument != null) refuse(a.at, '@${a.name} takes no argument');

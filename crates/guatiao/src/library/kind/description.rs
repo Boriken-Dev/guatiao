@@ -467,16 +467,32 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
     })
 }
 
-/// A kind's `slots`, each name once and none `header`, an object kind's
-/// never `destroy`, `bytes_mut` on an object kind only, an object only on
-/// a fallible slot and a list never borrowed: what `#[guatiao::kind]`
-/// refuses to declare, checked here for a kind declared anywhere else.
-/// Required and optional slots come in any order.
+/// A kind's `slots`: at least one, each name once and none `header`, an
+/// object kind's never `destroy`, each argument named once, `bytes_mut` on
+/// an object kind only, an object only on a fallible slot and a list never
+/// borrowed: what `#[guatiao::kind]` refuses to declare, checked here for a
+/// kind declared anywhere else. Required and optional slots come in any
+/// order.
 fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, DescriptionError> {
+    let listed = list_at(map, at, "slots")?;
+    if listed.is_empty() {
+        return Err(DescriptionError::new(
+            under(at, "slots"),
+            "is empty: a kind needs at least one slot, and an empty table serves nothing",
+        ));
+    }
     let mut slots = Vec::new();
-    for (i, s) in list_at(map, at, "slots")?.iter().enumerate() {
+    for (i, s) in listed.iter().enumerate() {
         let here = format!("{}[{i}]", under(at, "slots"));
         let slot = slot(s, &here)?;
+        for (j, a) in slot.args.iter().enumerate() {
+            if slot.args[..j].iter().any(|b| b.name == a.name) {
+                return Err(DescriptionError::new(
+                    format!("{here}.args[{j}]"),
+                    format!("names `{}` a second time", a.name),
+                ));
+            }
+        }
         if let Some(j) = slot.args.iter().position(|a| a.ty == ArgType::BytesMut)
             && !object
         {
@@ -1032,13 +1048,63 @@ mod tests {
             slot(
                 "f",
                 true,
-                vec![object("lent"), object("taken")],
+                vec![object("lent"), named(object("taken"), "kept")],
                 Some("memo"),
             ),
-            slot("f", false, vec![list("lent"), list("taken")], None),
+            slot(
+                "f",
+                false,
+                vec![list("lent"), named(list("taken"), "kept")],
+                None,
+            ),
         ] {
             KindDescription::from_value(&kind(fine)).expect("a kind");
         }
+    }
+
+    /// A kind with no slot, an object kind's included, and a slot naming
+    /// one argument twice: what no trait declares either.
+    #[test]
+    fn an_empty_kind_and_an_argument_named_twice_are_refused() {
+        let kind = |object: bool, slots: Vec<Value>| {
+            map_of(vec![
+                ("name", text_value("k")),
+                ("floor_hash", Value::from(1u32)),
+                ("object", Value::from(object)),
+                ("slots", list_of(slots)),
+            ])
+        };
+        for object in [false, true] {
+            let e = KindDescription::from_value(&kind(object, vec![])).unwrap_err();
+            assert_eq!(e.at(), "slots", "{e}");
+            assert!(e.why().contains("an empty table serves nothing"), "{e}");
+        }
+        let slot = |name: &str, names: &[&str]| {
+            let args = names
+                .iter()
+                .map(|n| map_of(vec![("name", text_value(n)), ("type", text_value("u32"))]))
+                .collect();
+            map_of(vec![
+                ("name", text_value(name)),
+                ("required", Value::from(true)),
+                ("fallible", Value::from(false)),
+                ("args", list_of(args)),
+            ])
+        };
+        let e = KindDescription::from_value(&kind(false, vec![slot("add", &["n", "m", "n"])]))
+            .unwrap_err();
+        assert_eq!(e.at(), "slots[0].args[2]", "{e}");
+        assert!(e.why().contains("names `n` a second time"), "{e}");
+        // Two slots may each name an argument alike.
+        let two = vec![slot("add", &["n", "m"]), slot("sub", &["n"])];
+        KindDescription::from_value(&kind(false, two)).expect("a kind");
+    }
+
+    /// `arg` named `name` instead.
+    fn named(arg: Value, name: &str) -> Value {
+        let mut map = Map::try_from(arg).expect("an argument is a map");
+        map.set("name", name);
+        Value::from(map)
     }
 
     fn text_arg() -> Value {

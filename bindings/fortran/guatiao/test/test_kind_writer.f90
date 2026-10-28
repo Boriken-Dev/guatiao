@@ -56,7 +56,11 @@ contains
                  'the object kind far is not in this document')
     call refused(FALLIBLE // '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}]}]}]}', &
                  'k is a kind but no object kind')
-    call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "a", "type": "i8"}]}]}]}', 'two arguments are a')
+    call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "a", "type": "i8"}]}]}]}', 'names `a` a second time')
+    call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "A", "type": "i8"}]}]}]}', &
+                 'two arguments are A in Fortran, which ignores case')
+    call refused('{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": []}]}', &
+                 'an empty table serves nothing')
     call refused(HEAD // ']}, {"name": "f", "required": true, "fallible": false, "args": []}]}]}', 'names `f` a second time')
     call refused(HEAD // ']}, {"name": "close", "required": true, "fallible": false, "args": []}]}]}', &
                  'close names no method')

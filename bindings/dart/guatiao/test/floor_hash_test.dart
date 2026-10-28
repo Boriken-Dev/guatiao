@@ -41,7 +41,10 @@ void main() {
       'answer': {'type': 'text'},
     };
     expect(floorHashOf(false, [greet, shout]), 1283548087);
-    expect(floorHashOf(false, const []), isNot(floorHashOf(false, [shout])));
+    expect(
+      floorHashOf(false, [greet]),
+      isNot(floorHashOf(false, [greet, shout])),
+    );
   });
 
   test('slots that are not a description are refused, naming where', () {

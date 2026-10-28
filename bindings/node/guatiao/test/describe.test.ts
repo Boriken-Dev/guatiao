@@ -234,7 +234,7 @@ export interface Other {
         slot('read', [{ type: 'bytes_mut' }, { type: 'object', kind: 'sink_x', pass: 'lent' }], { type: 'text' }, true),
       ]),
     ).toBe(fnv1a('object;read(&mut[u8],&mutdynSinkX)->Result<String,ProviderError>'));
-    expect(floorHashOf(false, [])).toBe(fnv1a('provider'));
+    expect(() => floorHashOf(false, [])).toThrow(/`slots` is empty: .*an empty table serves nothing/);
   });
 
   it('gets the hash Rust gives the shared vectors', () => {

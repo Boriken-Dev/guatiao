@@ -1189,6 +1189,8 @@ export class KindImpl implements Kind<Methods, boolean> {
       if (names !== undefined && (names.length !== args.length || names.some((n) => typeof n !== 'string' || n === ''))) {
         throw new TypeError(`${name}.${methodName}: a name for each of its ${args.length} arguments, not ${JSON.stringify(names)}`);
       }
+      const twice = names?.find((n, i) => names.indexOf(n) < i);
+      if (twice !== undefined) throw new TypeError(`${name}.${methodName}: an argument names ${twice} a second time`);
       let answer: ShapeImpl | undefined;
       if (method.answer !== undefined) {
         const answerKind =
@@ -1227,6 +1229,7 @@ export class KindImpl implements Kind<Methods, boolean> {
       slots.push(slot);
       offset += WORD;
     }
+    if (slots.length === 0) throw new TypeError(`${name}: a kind needs at least one slot; an empty table serves nothing`);
     this.slots = slots;
     this.tableSize = offset;
     this.floor = offset;

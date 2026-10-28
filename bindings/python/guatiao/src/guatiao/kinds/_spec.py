@@ -127,14 +127,19 @@ class Kind:
         # A kind class's own method bodies: placeholders, never slots.
         self.stubs: dict[str, Any] = {}
         self._by_name = {m.name: m for m in self.methods}
+        # A kind is built here with no description to check, and without
+        # the library.
+        if not self.methods:
+            raise TypeError(f"`{name}`: a kind needs at least one slot; an empty table serves nothing")
         for m in self.methods:
             if m.name in RESERVED or m.name.startswith("_"):
                 raise TypeError(
                     f"`{m.name}` is a remote's own, which a method of that name would hide; "
                     f"name it otherwise (`{m.name}_`): a slot is found by position"
                 )
-            # A kind is built here with no description to check, and
-            # without the library.
+            twice = [n for i, n in enumerate(m.arg_names) if n in m.arg_names[:i]]
+            if twice:
+                raise TypeError(f"`{name}.{m.name}`: an argument names `{twice[0]}` a second time")
             if m.name == "header":
                 raise TypeError(f"`{name}.header`: the table's first field is its `header`; name the method otherwise")
             if not self.is_object and any(shape is BYTES_MUT for shape in m.args):

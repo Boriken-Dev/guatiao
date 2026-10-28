@@ -166,14 +166,16 @@ def kinds_of(document: Document, *, known: Iterable[Any] = ()) -> "dict[str, Kin
         methods = []
         for i, slot in enumerate(description.get("slots", [])):
             where = f"{name}.{slot.get('name', i)}"
+            args = slot.get("args", [])
             methods.append(
                 Method(
                     str(slot["name"]),
-                    [_arg(a, built, f"{where} argument {j}") for j, a in enumerate(slot.get("args", []))],
+                    [_arg(a, built, f"{where} argument {j}") for j, a in enumerate(args)],
                     _answer(slot.get("answer"), built, f"{where} answer"),
                     fallible=bool(slot.get("fallible")),
                     required=bool(slot.get("required")),
                     sensitive=bool(slot.get("sensitive")),
+                    arg_names=[str(a.get("name", f"arg{j}")) for j, a in enumerate(args)],
                 )
             )
         kind = Kind(

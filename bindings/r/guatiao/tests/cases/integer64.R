@@ -21,7 +21,7 @@ i64 <- function(t) bit64::as.integer64(t)
 case("without bit64, asking for an integer64 is an error naming the package", with_library({
   asks <- list(
     function() value_data(value(5L), numbers = "integer64"),
-    function() kind("never", floor_hash = 1, int64 = "integer64", where = globalenv()),
+    function() kind("never", floor_hash = 1, f = method(), int64 = "integer64", where = globalenv()),
     function() as.list(span(days = 1), int64 = "integer64"),
     function() as.list(exact_length(1), int64 = "integer64"))
   for (ask in asks) {

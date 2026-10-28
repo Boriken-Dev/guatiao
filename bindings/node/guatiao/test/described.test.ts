@@ -445,7 +445,7 @@ describe('a kind described again', () => {
     expect(describeKinds([made]).kinds[0]?.slots[0]?.name).toBe('greet_into');
     const odd = kind('odd', { floorHash: 6, methods: { parseHTTP: {} } });
     expect(() => describeKinds([odd])).toThrow(/odd.parseHTTP: its slot would be named parse_http/);
-    expect(() => describeKinds([made, kind('plain', { floorHash: 9, methods: {} })])).toThrow(/two different kinds are called plain/);
+    expect(() => describeKinds([made, kind('plain', { floorHash: 9, methods: { other: {} } })])).toThrow(/two different kinds are called plain/);
     class Short extends Kind {
       static readonly floorHash = 7;
       static readonly slots = { f: slot(t.str, t.u32).named('only') };
@@ -462,5 +462,14 @@ describe('a kind described again', () => {
     expect(() => kind('k', { floorHash: 1, methods: { open: { answer: Memo } } })).toThrow(/k\.open: an object answer crosses on a fallible slot only/);
     expect(() => kind('k', { floorHash: 1, methods: { fill: { args: [t.bytesMut] } } })).toThrow(/on an object kind only/);
     expect(() => kind('k', { floorHash: 1, methods: { open: { args: [t.lent(Memo)], answer: Memo, fallible: true } } })).not.toThrow();
+    expect(() => kind('k', { floorHash: 1, methods: {} })).toThrow(/k: a kind needs at least one slot; an empty table serves nothing/);
+    expect(() => kind('k', { floorHash: 1, object: true, methods: {} })).toThrow(/an empty table serves nothing/);
+    expect(() => kind('k', { floorHash: 1, methods: { add: { args: [t.u32, t.u32], argNames: ['n', 'n'] } } })).toThrow(
+      /k\.add: an argument names n a second time/,
+    );
+    const adding = { name: 'k', floor_hash: 1, slots: [{ name: 'add', args: [{ name: 'n', type: 'u32' }, { name: 'n', type: 'u32' }] }] };
+    expect(() => kindsOf({ kinds: [adding] } as never)).toThrow(
+      /an argument names n a second time/,
+    );
   });
 });

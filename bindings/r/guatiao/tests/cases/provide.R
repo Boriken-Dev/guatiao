@@ -70,6 +70,9 @@ case("kinds and providers declared in a script", with_examples({
   refused("bad.read(l): an object crosses on a fallible slot only", read = method(l = lent(Listener)))
   refused("bad.give(l): an object crosses on a fallible slot only", give = method(l = taken(Listener)))
   refused("bad.open answer: an object crosses on a fallible slot only", open = method(returns = Listener))
+  refused("bad: a kind needs at least one slot; an empty table serves nothing")
+  refused("an empty table serves nothing", object = TRUE)
+  refused("bad.add: an argument names n a second time", add = method(n = "uint32", n = "uint32", returns = "uint32"))
   Fine <- kind("fine", floor_hash = 1, hand_back = method(l = lent(Listener), returns = Listener, fallible = TRUE),
     class = "GtFineKind", where = globalenv())
   expect_true(inherits(Fine, "guatiao_kind"))

@@ -89,9 +89,19 @@ func readTable(header, name string) (*cTable, error) {
 	}
 	// A header is no description the library could read: this is checked
 	// here, as #[guatiao::kind] and the library's reader check it.
+	if len(t.slots) == 0 {
+		return nil, fmt.Errorf("%s: a kind needs at least one slot; an empty table serves nothing", name)
+	}
 	for _, s := range t.slots {
 		if s.name == "header" {
 			return nil, fmt.Errorf("%s.header: the table's first field is its header", name)
+		}
+		for i, prm := range s.params {
+			for _, before := range s.params[:i] {
+				if prm.name != "" && prm.name == before.name {
+					return nil, fmt.Errorf("%s.%s: a parameter names %s a second time", name, s.name, prm.name)
+				}
+			}
 		}
 		fallible := len(s.params) > 1 && s.params[len(s.params)-1].typ == "guatiao_provider_error *"
 		for _, prm := range s.params {

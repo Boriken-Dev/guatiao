@@ -5,12 +5,18 @@
 function check_slot(kind, s, object)
 % What #[guatiao::kind] and the library's description reader refuse to
 % declare, for a slot guatiao.Kind.describe is given: a slot named header,
-% a borrowed list, bytes written in place on a kind that is not an object
+% an argument named twice, a borrowed list, bytes written in place on a kind that is not an object
 % kind, and an object passed or answered on a slot that cannot fail (its
 % table is checked where it arrives).
   at = sprintf('%s.%s', kind, s.name);
   if strcmp(s.name, 'header')
     error('guatiao:BadValue', '%s: the table''s first field is its header; name the slot otherwise', at);
+  end
+  names = s.args(1:2:end);
+  for j = 2:numel(names)
+    if any(strcmp(names(1:j - 1), names{j}))
+      error('guatiao:BadValue', '%s: an argument names %s a second time', at, names{j});
+    end
   end
   trees = {'value', 'map', 'list', 'bytes'};
   for j = 2:2:numel(s.args)

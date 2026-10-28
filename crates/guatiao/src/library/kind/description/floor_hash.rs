@@ -145,9 +145,9 @@ mod tests {
     }
 
     #[test]
-    fn a_kind_with_no_slots_hashes_its_shape() {
-        let text = r#"{"object": true, "slots": []}"#;
-        assert_eq!(KindDescription::floor_hash_json(text), Ok(fnv1a("object")));
+    fn a_kind_with_no_slots_is_refused_before_it_is_hashed() {
+        let e = KindDescription::floor_hash_json(r#"{"object": true, "slots": []}"#).unwrap_err();
+        assert_eq!(e.at(), "slots", "{e}");
     }
 
     #[test]

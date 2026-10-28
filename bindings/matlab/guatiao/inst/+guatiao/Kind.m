@@ -63,6 +63,9 @@ classdef Kind < handle
       end
       % A kind is described here with no description to check, and
       % without the library.
+      if isempty(slots)
+        error('guatiao:BadValue', '%s: a kind needs at least one slot; an empty table serves nothing', name);
+      end
       for i = 1:numel(slots)
         guatiao.internal.check_slot(name, slots{i}, object);
       end

@@ -251,7 +251,7 @@ abstract interface class Store {
           '@falible is not a mark of a slot',
       '@FloorHash(-1) abstract interface class A {}':
           '"-" is not part of a kind declaration',
-      "@FloorHash('x') abstract interface class A {}":
+      "@FloorHash('x') abstract interface class A { void f(); }":
           '@FloorHash takes a 32-bit unsigned integer',
       'abstract interface class A {}\nabstract interface class A {}':
           'two kinds are A',
@@ -264,7 +264,10 @@ abstract interface class Store {
       'abstract interface class A { void greetInto(); void greet_into(); }':
           'no slot\'s name comes back',
       'abstract interface class A { void f(String a, String a); }':
-          'two arguments are a',
+          'slots[0].args[1]` names `a` a second time',
+      'abstract interface class A { void f(String fooBar, String foo_bar); }':
+          'names `foo_bar` a second time',
+      'abstract interface class A {}': 'an empty table serves nothing',
       "@KindName('a') @KindName('b') abstract interface class A {}":
           '@KindName is written twice',
       'abstract interface class A implements ObjectKind { void destroy(); }':
@@ -289,7 +292,7 @@ abstract interface class Store {
       'abstract interface class A { void f(@fallible String s); }':
           'an argument carries no annotation',
       'abstract interface class A {}\n@fallible': 'an annotation on nothing',
-      'abstract interface class Watcher {}\nabstract interface class WatcherKind {}':
+      'abstract interface class Watcher { void f(); }\nabstract interface class WatcherKind { void f(); }':
           'would not be written as Dart',
       'abstract interface class HTTPServer {}': 'capitals in a row',
     };
