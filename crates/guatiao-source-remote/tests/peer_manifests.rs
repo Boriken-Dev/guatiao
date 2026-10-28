@@ -122,13 +122,18 @@ fn empty_device(down: Arc<AtomicBool>) -> (u16, guatiao_source_remote::Server) {
     (port, server)
 }
 
-/// A port nothing listens on.
-fn nobody() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+/// A port nothing listens on, held by a socket bound to it and never
+/// listening until the test drops it. A connect there is refused; no other
+/// socket binds the port meanwhile, so a server another test starts never
+/// takes it, and no connection takes it as its own end, which would let a
+/// connect there reach itself.
+fn nobody() -> (u16, socket2::Socket) {
+    let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+    socket
+        .bind(&core::net::SocketAddr::from(([127, 0, 0, 1], 0)).into())
+        .unwrap();
+    let port = socket.local_addr().unwrap().as_socket().unwrap().port();
+    (port, socket)
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -316,7 +321,8 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
 fn a_peer_that_cannot_be_reached_is_reported_once_and_the_others_served() {
     let dir = scratch("gone");
     write(&dir, "near.guatiao.toml", &peer("near", device(), ""));
-    write(&dir, "far.guatiao.toml", &peer("far", nobody(), ""));
+    let (away, _held) = nobody();
+    write(&dir, "far.guatiao.toml", &peer("far", away, ""));
 
     let mut registry = Registry::new("host", "1.0");
     registry.add_source("peers", source(&dir)).unwrap();
@@ -649,7 +655,8 @@ fn a_replaced_peer_serves_on_while_its_successor_cannot_be_reached() {
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["lab/shapes"], "{refreshed:?}");
 
-    write(&dir, "lab.guatiao.toml", &peer("lab", nobody(), ""));
+    let (away, _held) = nobody();
+    write(&dir, "lab.guatiao.toml", &peer("lab", away, ""));
     let refreshed = registry.refresh();
     assert!(
         refreshed.loaded.is_empty() && refreshed.retired.is_empty(),
