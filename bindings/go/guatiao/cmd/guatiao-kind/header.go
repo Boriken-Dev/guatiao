@@ -87,6 +87,15 @@ func readTable(header, name string) (*cTable, error) {
 		t.object = true
 		t.slots = t.slots[1:]
 	}
+	// A header is no description the library could read: this is checked
+	// here, as #[guatiao::kind] and the library's reader check it.
+	for _, s := range t.slots {
+		for _, prm := range s.params {
+			if prm.typ == "guatiao_bytes_mut" && !t.object {
+				return nil, fmt.Errorf("%s.%s(%s): bytes written in place cross on an object kind only", name, s.name, prm.name)
+			}
+		}
+	}
 	return t, nil
 }
 

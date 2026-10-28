@@ -15,6 +15,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -84,6 +85,9 @@ func run(dir, from, out string, check bool) error {
 	tableOf := func(k *kindDecl) (*cTable, error) { return readTable(string(text), k.table) }
 	if strings.HasSuffix(from, ".json") {
 		doc, err := readDocument(text)
+		if err == nil {
+			err = checkDocument(text)
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", from, err)
 		}
@@ -461,6 +465,10 @@ var cgoScalars = map[string]string{
 
 var trees = map[string]string{"guatiao_value": "ValueClass", "guatiao_map": "MapClass", "guatiao_list": "ListClass"}
 
+// remoteMethods are guatiao.Remote's methods, which every <Kind>Remote
+// embeds: a slot's method of the same name would hide one.
+var remoteMethods = []string{"Begin", "Close", "Closed", "Has", "Kind", "Table"}
+
 func (p *pkgInfo) gt(f *ast.File) string {
 	if name := p.binding[f]; name != "" {
 		return name
@@ -510,6 +518,10 @@ func (p *pkgInfo) plan(k *kindDecl, t *cTable) (*kindPlan, error) {
 	}
 	for i, cs := range t.slots {
 		goName := camel(cs.name)
+		if slices.Contains(remoteMethods, goName) {
+			return nil, fmt.Errorf("%s: %s is a remote's own method (a <Kind>Remote embeds guatiao.Remote), "+
+				"so no slot's may be called it", where(cs.name), goName)
+		}
 		sp := &slotPlan{c: cs, index: i}
 		if m, ok := k.required[goName]; ok {
 			sp.method, sp.required = m, true

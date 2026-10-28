@@ -98,10 +98,6 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
     list(args = args, ret = .gt_ret_code(s$returns, sprintf("%s.%s", name, n)))
   })
   names(spec$codes) <- names(slots)
-  required <- vapply(slots, function(s) s$required, logical(1))
-  if (length(required) && any(required) && any(diff(as.integer(!required)) < 0L)) {
-    stop("required slots come first: they are the kind's original ones", call. = FALSE)
-  }
   spec$ptr <- NULL
   class(spec) <- "guatiao_kind"
 

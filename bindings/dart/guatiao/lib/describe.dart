@@ -29,12 +29,12 @@
 ///   I64 add(String name, U32 by);
 ///
 ///   /// Optional: tells `watcher` each count, for this call alone.
-///   @appended
+///   @optional
 ///   @fallible
 ///   void report(Lent<Watcher> watcher);
 ///
 ///   /// Optional: adds the counts handed over.
-///   @appended
+///   @optional
 ///   @fallible
 ///   U32 load(Taken<MapRef> counts);
 /// }
@@ -42,8 +42,8 @@
 ///
 /// Every `abstract interface class` of the file is a kind, named in
 /// snake_case unless [KindName] says; one implementing [ObjectKind] is an
-/// object kind. Its methods are the slots in table order, the required
-/// ones first; [appended] marks a slot added after them and [fallible] one
+/// object kind. Its methods are the slots in table order; [optional]
+/// marks one a provider may leave null, wherever it is, and [fallible] one
 /// that can refuse. `///` comments are the docs. The floor hash is the one
 /// `#[guatiao::kind]` gives the same slots, computed by the library, unless
 /// [FloorHash] pins one.
@@ -141,9 +141,8 @@ final class FloorHash {
 /// Marks a slot that can refuse (`fallible`).
 const Object fallible = _Mark('fallible');
 
-/// Marks an optional slot, after the kind's required ones: a provider may
-/// leave it null.
-const Object appended = _Mark('appended');
+/// Marks an optional slot: a provider may leave it null.
+const Object optional = _Mark('optional');
 
 final class _Mark {
   const _Mark(this.name);

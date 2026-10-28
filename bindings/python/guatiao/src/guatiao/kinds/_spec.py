@@ -14,7 +14,7 @@ from typing import Any, Sequence
 from .. import _abi
 from ..errors import Unsupported, check, raise_for_status
 from . import _serve
-from ._shapes import Scope, Shape, answer_shape
+from ._shapes import BYTES_MUT, Scope, Shape, answer_shape
 from ._table import FloorMismatch
 
 _WORD = ctypes.sizeof(ctypes.c_void_p)
@@ -120,9 +120,13 @@ class Kind:
         for m in self.methods:
             if m.name in RESERVED or m.name.startswith("_"):
                 raise TypeError(
-                    f"a method named `{m.name}` would hide the handle's own; "
+                    f"`{m.name}` is a remote's own, which a method of that name would hide; "
                     f"name it otherwise (`{m.name}_`): a slot is found by position"
                 )
+            # A kind is built here with no description to check, and
+            # without the library.
+            if not self.is_object and any(shape is BYTES_MUT for shape in m.args):
+                raise TypeError(f"`{name}.{m.name}`: bytes written in place cross on an object kind only")
         if struct is None:
             built: "list[tuple[str, Any]]" = [("header", _abi.KindHeader)]
             if self.is_object:

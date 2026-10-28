@@ -14,6 +14,7 @@ import 'kind_generator.dart'
 import 'kind_hash.dart'
     if (dart.library.js_interop) 'web/kind_hash_web.dart'
     show kindFloorHash;
+import 'status.dart' show BadValue;
 
 /// The document of the kinds [source] declares: every `abstract interface
 /// class`, in the order written, as `{"kinds": [...]}`. An
@@ -52,6 +53,26 @@ String describedText(Map<String, Object?> document) =>
 /// library (the module, on the web).
 int floorHashOf(bool object, List<Map<String, Object?>> slots) =>
     kindFloorHash(jsonEncode({'object': object, 'slots': slots}));
+
+/// Has the library read each kind of [document] (`guatiao_kind_floor_hash`
+/// reads one as its document reader does), so what no kind may declare, such
+/// as `bytes_mut` on a kind that is not an object kind, is refused before
+/// anything is written from it. Loads the library.
+///
+/// A [FormatException] names the kind and the place.
+void checkKinds(Map<String, Object?> document) {
+  final kinds = document['kinds'];
+  if (kinds is! List) {
+    throw const FormatException('a document is {"kinds": [...]}');
+  }
+  for (final (i, kind) in kinds.indexed) {
+    try {
+      kindFloorHash(jsonEncode(kind));
+    } on BadValue catch (e) {
+      throw FormatException('kinds[$i]: ${e.message}');
+    }
+  }
+}
 
 // ---- reading ---------------------------------------------------------------
 
@@ -571,7 +592,6 @@ final class _Describer {
       }
     }
     final slots = <Map<String, Object?>>[];
-    var appendedSeen = false;
     for (final m in d.members) {
       final where = '${d.className}.${m.name}';
       final slotName = _snake(m.name, (what) => refuse(m.at, what));
@@ -590,7 +610,7 @@ final class _Describer {
       if (reservedMemberNames.contains(m.name)) {
         refuse(
           m.at,
-          '$where: a remote answers ${m.name} itself, so no slot may be called it',
+          '$where: ${m.name} is a remote\'s own, so no slot may be called it',
         );
       }
       if (slots.any((s) => s['name'] == slotName)) {
@@ -601,39 +621,25 @@ final class _Describer {
         if (!argNames.add(_snake(name, (what) => refuse(t.at, what)))) {
           refuse(t.at, '$where: two arguments are $name');
         }
-        if (t.name == 'BytesMut' && !d.object) {
-          refuse(
-            t.at,
-            '$where($name): bytes written in place cross on an object kind only',
-          );
-        }
       }
-      var fallibleMark = false, appendedMark = false;
+      var fallibleMark = false, optionalMark = false;
       for (final a in m.marks) {
         if (a.argument != null) refuse(a.at, '@${a.name} takes no argument');
         switch (a.name) {
           case 'fallible':
             fallibleMark = true;
-          case 'appended':
-            appendedMark = true;
+          case 'optional':
+            optionalMark = true;
           default:
             refuse(
               a.at,
-              '@${a.name} is not a mark of a slot (@fallible, @appended)',
+              '@${a.name} is not a mark of a slot (@fallible, @optional)',
             );
         }
       }
-      if (appendedMark) {
-        appendedSeen = true;
-      } else if (appendedSeen) {
-        refuse(
-          m.at,
-          '$where is required, after an appended slot: the required slots come first',
-        );
-      }
       final slot = <String, Object?>{
         'name': slotName,
-        'required': !appendedMark,
+        'required': !optionalMark,
         'fallible': fallibleMark,
         'args': [
           for (final (name, t) in m.params) arg(name, t, '$where($name)'),
@@ -644,11 +650,16 @@ final class _Describer {
       if (m.doc != null) slot['doc'] = m.doc;
       slots.add(slot);
     }
-    final pinned = mark(d, 'FloorHash');
+    // The library reads the kind whether or not its hash is pinned: what no
+    // kind may declare is refused there.
     int floor;
-    if (pinned == null) {
+    try {
       floor = floorHashOf(d.object, slots);
-    } else {
+    } on BadValue catch (e) {
+      refuse(d.at, '${d.className}: ${e.message}');
+    }
+    final pinned = mark(d, 'FloorHash');
+    if (pinned != null) {
       final arg = pinned.argument;
       final n = arg == null || arg.kind != _T.number
           ? null

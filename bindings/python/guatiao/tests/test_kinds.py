@@ -185,6 +185,48 @@ def test_the_floor_hash_is_the_one_rust_gives_the_shared_vectors():
         assert _description.floor_hash_of(v["object"], v["slots"]) == v["floor_hash"], v["name"]
 
 
+def test_what_the_shared_vectors_refuse_is_refused_by_the_library_or_by_its_own_names():
+    path = native.REPO / "crates" / "guatiao-derive" / "tests" / "vectors" / "floor_hash.json"
+    refused = json.loads(path.read_text(encoding="utf-8"))["refused"]
+    ours = [v for v in refused if v["by"] == "every reader" or "python" in v["by"]]
+    assert len(ours) >= 2
+    for v in ours:
+        kind = {"name": v["name"], "floor_hash": 1, "object": v["object"], "slots": v["slots"]}
+        with pytest.raises(TypeError, match=v["why"]):
+            kinds.kinds_of({"kinds": [kind]})
+        if v["by"] == "every reader":
+            with pytest.raises(BadValue, match=v["why"]):
+                _description.floor_hash_of(v["object"], v["slots"])
+
+
+def test_an_optional_slot_may_come_between_required_ones():
+    class Between(KindProtocol, Protocol, kind="between"):
+        @kinds.required
+        @kinds.fallible
+        def first(self, name: str) -> kinds.MapAnswer: ...
+
+        def middle(self, name: str) -> str: ...
+
+        @kinds.required
+        def last(self, n: kinds.U32) -> kinds.U64: ...
+
+    path = native.REPO / "crates" / "guatiao-derive" / "tests" / "vectors" / "floor_hash.json"
+    vector = next(v for v in json.loads(path.read_text(encoding="utf-8"))["vectors"] if v["name"] == "between")
+    described = kinds.describe_kinds(Between)["kinds"][0]
+    assert (described["slots"], described["floor_hash"]) == (vector["slots"], vector["floor_hash"])
+
+
+def test_bytes_written_in_place_cross_on_an_object_kind_only():
+    with pytest.raises(TypeError, match="on an object kind only"):
+        Kind("k", floor_hash=1, methods=[Method("fill", [BYTES_MUT], USIZE)])
+    with pytest.raises(TypeError, match="on an object kind only"):
+
+        class Filler(KindProtocol, Protocol, kind="filler", floor_hash=7):
+            def fill(self, dst: bytearray) -> kinds.USIZE: ...
+
+    assert Kind("k", floor_hash=1, is_object=True, methods=[Method("fill", [BYTES_MUT], USIZE)]).is_object
+
+
 def test_a_kind_born_in_python_is_written_as_its_description():
     import tally_kinds
 
@@ -509,9 +551,11 @@ def test_a_call_refused_at_one_handed_over_tree_still_takes_the_others():
 # ---- a table over a Python object, called from Python through C pointers --
 
 
+# An object kind: ytes_mut crosses on one only.
 PROBE = Kind(
     "probe",
     floor_hash=12345,
+    is_object=True,
     methods=[
         Method("add", [I64, I64], I64, required=True),
         Method("flip", [BOOL], BOOL),

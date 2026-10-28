@@ -25,7 +25,9 @@ import (
 // fail) is said by a directive in the method's doc comment.
 //
 //	//guatiao:kind tally                  the kind (on the interface)
-//	//guatiao:appended Aller Knower       its appended slots, an interface each, in table order
+//	//guatiao:optional Aller Knower       optional slots, an interface each, in table order:
+//	                                      after the kind's methods (on the interface) or
+//	                                      before a method (on that method)
 //	//guatiao:floorhash 2688319391        the floor hash, when it is not to be computed
 //	//guatiao:infallible                  the slot cannot fail (on a method)
 //	//guatiao:lent watcher                these arguments are lent for the call
@@ -168,17 +170,18 @@ func snake(method, where string) (string, error) {
 	return name, nil
 }
 
-// describeKind is one kind as its interfaces say it.
+// describeKind is one kind as its interfaces say it: the kind's methods in
+// order, each optional slot where a //guatiao:optional names it.
 func (p *pkgInfo) describeKind(k *kindDecl) (outKind, error) {
 	where := p.at(p.ifaces[k.iface].pos) + ": " + k.iface
-	dirs, err := directives(k.doc, where, "kind", "appended", "floorhash")
+	dirs, err := directives(k.doc, where, "kind", "optional", "floorhash")
 	if err != nil {
 		return outKind{}, err
 	}
 	_, object := k.required["Close"]
 	d := outKind{Name: k.kind, Object: object, Doc: docText(k.doc), Slots: []outSlot{}}
 	add := func(m *goMethod, required bool, fallback *ast.CommentGroup) error {
-		s, err := p.describeSlot(m, required, fallback)
+		s, err := p.describeSlot(m, required, fallback, "optional")
 		if err != nil {
 			return err
 		}
@@ -187,59 +190,71 @@ func (p *pkgInfo) describeKind(k *kindDecl) (outKind, error) {
 				return fmt.Errorf("%s: two slots of %s are %s", p.at(m.pos), k.kind, s.Name)
 			}
 		}
-		switch m.name {
-		case "Destroy":
+		if m.name == "Destroy" {
 			return fmt.Errorf("%s: destroy is the slot an object kind's table starts with (its Close), and no other", p.at(m.pos))
-		case "Begin", "Has", "Kind", "Table", "Closed":
-			return fmt.Errorf("%s: a remote has %s of its own, so no slot's method may be called it", p.at(m.pos), m.name)
-		}
-		for _, a := range s.Args {
-			if a.Type == "bytes_mut" && !object {
-				return fmt.Errorf("%s: %s(%s): bytes written in place cross on an object kind only", p.at(m.pos), m.name, a.Name)
-			}
 		}
 		d.Slots = append(d.Slots, s)
 		return nil
 	}
+	// The slots of the interfaces an optional directive names, in order.
+	optional := func(names []string, where string) error {
+		for _, name := range names {
+			gi, ok := p.ifaces[name]
+			switch {
+			case !ok:
+				return fmt.Errorf("%s: //guatiao:optional names %s, which is no interface of the package", where, name)
+			case p.byIface[name] != nil:
+				return fmt.Errorf("%s: //guatiao:optional names %s, which is a kind of its own", where, name)
+			case len(gi.methods) != 1:
+				return fmt.Errorf("%s: %s, an optional slot, has one method, not %d", where, name, len(gi.methods))
+			}
+			m := gi.methods[0]
+			if _, err := directives(gi.doc, p.at(gi.pos)+": "+name+" (a directive of a slot goes on its method)"); err != nil {
+				return err
+			}
+			if _, clash := k.required[m.name]; clash {
+				return fmt.Errorf("%s: %s.%s is a method of %s already", p.at(m.pos), name, m.name, k.iface)
+			}
+			// The glue finds an optional slot's method by its name among the
+			// interfaces that are no kind: it must be the only one.
+			for _, other := range p.methods[m.name] {
+				if other != m && p.byIface[other.iface] == nil {
+					return fmt.Errorf("%s: %s and %s both have %s; an optional slot's method is declared once",
+						p.at(m.pos), name, other.iface, m.name)
+				}
+			}
+			if err := add(m, false, gi.doc); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for _, m := range k.order {
+		at := p.at(m.pos) + ": " + k.iface + "." + m.name
 		if object && m.name == "Close" {
-			if _, err := directives(m.doc, p.at(m.pos)+": "+k.iface+".Close"); err != nil {
+			if _, err := directives(m.doc, at); err != nil {
 				return d, err
 			}
 			continue
+		}
+		before, err := directives(m.doc, at, "optional", "infallible", "lent", "taken", "nullable", "mut")
+		if err != nil {
+			return d, err
+		}
+		if err := optional(before["optional"], at); err != nil {
+			return d, err
 		}
 		if err := add(m, true, nil); err != nil {
 			return d, err
 		}
 	}
-	for _, name := range dirs["appended"] {
-		gi, ok := p.ifaces[name]
-		switch {
-		case !ok:
-			return d, fmt.Errorf("%s: //guatiao:appended names %s, which is no interface of the package", where, name)
-		case p.byIface[name] != nil:
-			return d, fmt.Errorf("%s: //guatiao:appended names %s, which is a kind of its own", where, name)
-		case len(gi.methods) != 1:
-			return d, fmt.Errorf("%s: %s, an appended slot, has one method, not %d", where, name, len(gi.methods))
-		}
-		m := gi.methods[0]
-		if _, err := directives(gi.doc, p.at(gi.pos)+": "+name+" (a directive of a slot goes on its method)"); err != nil {
-			return d, err
-		}
-		if _, clash := k.required[m.name]; clash {
-			return d, fmt.Errorf("%s: %s.%s is a method of %s already", p.at(m.pos), name, m.name, k.iface)
-		}
-		// The glue finds an appended slot's method by its name among the
-		// interfaces that are no kind: it must be the only one.
-		for _, other := range p.methods[m.name] {
-			if other != m && p.byIface[other.iface] == nil {
-				return d, fmt.Errorf("%s: %s and %s both have %s; an appended slot's method is declared once",
-					p.at(m.pos), name, other.iface, m.name)
-			}
-		}
-		if err := add(m, false, gi.doc); err != nil {
-			return d, err
-		}
+	if err := optional(dirs["optional"], where); err != nil {
+		return d, err
+	}
+	// The library reads the kind whether or not its hash is pinned: what no
+	// kind may declare is refused there.
+	if d.FloorHash, err = floorHashOf(object, d.Slots); err != nil {
+		return d, fmt.Errorf("%s: %w", where, err)
 	}
 	if pinned, ok := dirs["floorhash"]; ok {
 		n, err := strconv.ParseUint(strings.Join(pinned, " "), 10, 32)
@@ -247,19 +262,17 @@ func (p *pkgInfo) describeKind(k *kindDecl) (outKind, error) {
 			return d, fmt.Errorf("%s: //guatiao:floorhash is a 32-bit unsigned integer, not %q", where, strings.Join(pinned, " "))
 		}
 		d.FloorHash = uint32(n)
-	} else if d.FloorHash, err = floorHashOf(object, d.Slots); err != nil {
-		return d, fmt.Errorf("%s: %w", where, err)
 	}
 	return d, nil
 }
 
-func (p *pkgInfo) describeSlot(m *goMethod, required bool, fallback *ast.CommentGroup) (outSlot, error) {
+func (p *pkgInfo) describeSlot(m *goMethod, required bool, fallback *ast.CommentGroup, also ...string) (outSlot, error) {
 	where := p.at(m.pos) + ": " + m.iface + "." + m.name
 	name, err := snake(m.name, where)
 	if err != nil {
 		return outSlot{}, err
 	}
-	dirs, err := directives(m.doc, where, "infallible", "lent", "taken", "nullable", "mut")
+	dirs, err := directives(m.doc, where, append([]string{"infallible", "lent", "taken", "nullable", "mut"}, also...)...)
 	if err != nil {
 		return outSlot{}, err
 	}

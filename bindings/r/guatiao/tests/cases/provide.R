@@ -59,7 +59,10 @@ case("kinds and providers declared in a script", with_examples({
   expect_error(kind("bad", floor_hash = 1, close = method(), object = TRUE, where = globalenv()))
   expect_error(kind("bad", floor_hash = 1, f = method(x = "nonesuch"), where = globalenv()))
   expect_error(kind("bad", floor_hash = 1, f = method(x = taken(Greeter)), where = globalenv()))
-  expect_error(kind("bad", floor_hash = 1, f = method(), g = method(required = TRUE), where = globalenv()))
+  # An optional slot may come between required ones, as in a trait.
+  Between <- kind("between", floor_hash = 9, f = method(required = TRUE), g = method(), h = method(required = TRUE),
+    where = globalenv())
+  expect_equal(unname(vapply(Between$slots, function(s) s$required, logical(1))), c(TRUE, FALSE, TRUE))
 }))
 
 case("a provider is checked when its library is made", with_examples({

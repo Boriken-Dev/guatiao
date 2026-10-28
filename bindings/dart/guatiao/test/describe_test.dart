@@ -14,7 +14,8 @@ import 'dart:io';
 
 import 'package:guatiao/describe.dart';
 import 'package:guatiao/src/kind_describer.dart'
-    show describedText, floorHashOf;
+    show checkKinds, describedText, floorHashOf;
+import 'package:guatiao/src/kind_generator.dart' show generateKinds;
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -50,6 +51,80 @@ void main() {
       _read(['examples', 'tally_kind', 'include', 'tally_kind.kinds.json']),
     );
   });
+
+  Map<String, Object?> vectorFile() =>
+      (jsonDecode(
+                _read([
+                  'crates',
+                  'guatiao-derive',
+                  'tests',
+                  'vectors',
+                  'floor_hash.json',
+                ]),
+              )
+              as Map)
+          .cast<String, Object?>();
+
+  test('an optional slot comes where it is declared, as in a trait', () {
+    final doc = _describe('''
+abstract interface class Between {
+  @fallible
+  MapAnswer first(String name);
+  @optional
+  String middle(String name);
+  U64 last(U32 n);
+}
+''');
+    final between = (vectorFile()['vectors'] as List).cast<Map>().singleWhere(
+      (v) => v['name'] == 'between',
+    );
+    final kind = (doc['kinds'] as List).single as Map;
+    expect(jsonEncode(kind['slots']), jsonEncode(between['slots']));
+    expect(kind['floor_hash'], between['floor_hash']);
+  });
+
+  test(
+    'what the shared vectors refuse, the library or the generator refuses',
+    () {
+      final refused = (vectorFile()['refused'] as List).cast<Map>();
+      var ran = 0;
+      for (final v in refused) {
+        final by = v['by'];
+        if (by != 'every reader' && !(by is List && by.contains('dart'))) {
+          continue;
+        }
+        final document = <String, Object?>{
+          'kinds': [
+            {
+              'name': v['name'],
+              'floor_hash': 1,
+              'object': v['object'],
+              'slots': v['slots'],
+            },
+          ],
+        };
+        final says = throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains(v['why'] as String),
+          ),
+        );
+        if (by == 'every reader') {
+          expect(() => checkKinds(document), says, reason: v['name'] as String);
+        } else {
+          checkKinds(document);
+          expect(
+            () => generateKinds(document),
+            says,
+            reason: v['name'] as String,
+          );
+        }
+        ran++;
+      }
+      expect(ran, greaterThanOrEqualTo(2));
+    },
+  );
 
   test('the floor hash is the one Rust gives the shared vectors', () {
     final file =
@@ -173,8 +248,6 @@ abstract interface class Store {
       'abstract interface class A { void parseHTTP(); }': 'capitals in a row',
       'abstract interface class A { @falible void f(); }':
           '@falible is not a mark of a slot',
-      'abstract interface class A { @appended void f(); void g(); }':
-          'the required slots come first',
       '@FloorHash(-1) abstract interface class A {}':
           '"-" is not part of a kind declaration',
       "@FloorHash('x') abstract interface class A {}":
@@ -197,8 +270,10 @@ abstract interface class Store {
           'destroy is the slot',
       'abstract interface class A { void f(BytesMut b); }':
           'on an object kind only',
+      '@FloorHash(7) abstract interface class A { void f(BytesMut b); }':
+          'on an object kind only',
       'abstract interface class A { void close(); }':
-          'a remote answers close itself',
+          'close is a remote\'s own',
       'abstract interface class A { void _hidden(); }':
           'no slot\'s name comes back',
       'abstract interface class Ref {}': 'one of the marks',

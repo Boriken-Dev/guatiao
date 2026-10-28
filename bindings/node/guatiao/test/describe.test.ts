@@ -87,11 +87,12 @@ type Count = k.u64;
 /** What takes text. */
 export interface Sink extends ObjectKind {
   put(text: string): void;
+  fill(b: BytesMut): u32;
 }
 /** Every shape. */
 export interface Shapes {
   scalars(a: i8, b: i16, c: i32, d: i64, e: isize, f: u8, g: u16, h: u32, i: u64, j: usize, l: f32, m: f64, n: boolean): void;
-  bytes(a: Uint8Array, b: BytesMut): u32;
+  bytes(a: Uint8Array): u32;
   trees(a: Ref, b: Ref | null, c: MapRef, d: Borrowed<MapRef>): void;
   taken(a: Taken<Ref>, b: Taken<MapRef>, c: Taken<ListRef>): void;
   lent(a: Lent<Ref>, b: Lent<MapRef>, c: Lent<ListRef>): void;
@@ -118,7 +119,7 @@ export interface Shapes {
     const shapes = document.kinds.find((kind) => kind.name === 'shapes');
     expect(shapes?.slots).toEqual([
       slotOf('scalars', scalars.map((type, i) => a('abcdefghijlmn'[i]!, type))),
-      slotOf('bytes', [a('a', 'bytes'), a('b', 'bytes_mut')], 'u32'),
+      slotOf('bytes', [a('a', 'bytes')], 'u32'),
       slotOf('trees', [
         tree('a', 'value', 'borrowed'),
         tree('b', 'value', 'borrowed', { nullable: true }),
@@ -142,6 +143,7 @@ export interface Shapes {
       slotOf('fails', [], 'f64', { required: false }),
     ]);
     expect(document.kinds.map((kind) => kind.name)).toEqual(['sink', 'shapes']);
+    expect(document.kinds[0]?.slots[1]).toEqual(slotOf('fill', [a('b', 'bytes_mut')], 'u32'));
     expect(shapes?.doc).toBe('Every shape.');
     // What it describes is what the runtime loads.
     expect(Object.keys(kindsOf(document))).toEqual(['sink', 'shapes']);
@@ -241,6 +243,37 @@ export interface Other {
     for (const v of vectors) expect([v.name, floorHashOf(v.object, v.slots)]).toEqual([v.name, v.floor_hash]);
   });
 
+  it('is refused as the shared vectors say: by the library, or by its own names', () => {
+    const file = path.join(REPO, 'crates', 'guatiao-derive', 'tests', 'vectors', 'floor_hash.json');
+    const { refused } = JSON.parse(readText(file)) as {
+      refused: { name: string; object: boolean; slots: KindsDocument['kinds'][number]['slots']; why: string; by: string | string[] }[];
+    };
+    const ours = refused.filter((v) => v.by === 'every reader' || v.by.includes('node'));
+    expect(ours.length).toBeGreaterThanOrEqual(2);
+    for (const v of ours) {
+      const kind = { name: v.name, floor_hash: 1, object: v.object, slots: v.slots };
+      expect(() => kindsOf({ kinds: [kind] }), v.name).toThrow(v.why);
+      if (v.by === 'every reader') expect(() => floorHashOf(v.object, v.slots), v.name).toThrow(v.why);
+    }
+  });
+
+  it('puts an optional slot anywhere, as a trait does', async () => {
+    const document = await describeText(`${HEAD}
+export interface Between {
+  /** @throws */
+  first(name: string): MapAnswer;
+  middle?(name: string): string;
+  last(n: u32): u64;
+}
+`);
+    const file = path.join(REPO, 'crates', 'guatiao-derive', 'tests', 'vectors', 'floor_hash.json');
+    const { vectors } = JSON.parse(readText(file)) as { vectors: { name: string; slots: unknown; floor_hash: number }[] };
+    const between = vectors.find((v) => v.name === 'between')!;
+    expect(document.kinds[0]?.slots).toEqual(between.slots);
+    expect(document.kinds[0]?.floor_hash).toBe(between.floor_hash);
+    expect(kindsOf(document).between).toBeDefined();
+  });
+
   it('reaches the object kinds its slots name, in another file too', async () => {
     const document = await describeText(
       `${HEAD}
@@ -272,7 +305,8 @@ export interface Near {
       refusal('export interface A { f(): Uint8Array }', /not bytes/),
       refusal('export interface A { f(x: MapAnswer): void }', /is what a slot answers/),
       refusal('export interface A { f(x: ObjectKind): void }', /ObjectKind is what an interface extends/),
-      refusal('export interface A { a?(): void; b(): void }', /b is required and follows a, which is not/),
+      refusal('export interface A { f(b: BytesMut): void }', /A: .*slots\[0\]\.args\[0\]\.type.*on an object kind only/),
+      refusal('/** @floorHash 7 */\nexport interface A { f(b: BytesMut): void }', /on an object kind only/),
       refusal('export interface A { x: string }', /a kind's slots are methods/),
       refusal('export interface A { f(x?: string): void }', /argument 0 is a plain, required parameter/),
       refusal('export interface A { parseHTTP(): void }', /write the method as parseHttp/),

@@ -12,7 +12,7 @@ import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 // Greets by name.
 //
 //guatiao:kind greeter
-//guatiao:appended Shouter Starter IntoGreeter FromGreeter Checker
+//guatiao:optional Shouter Starter IntoGreeter FromGreeter Checker
 type Greeter interface {
 	// `{"greeting": "..."}`, or why not.
 	Greet(name string) (map[string]any, error)

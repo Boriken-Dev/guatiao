@@ -17,13 +17,13 @@ abstract interface class Greeter {
 
   /// Optional: a provider that leaves it out has the proxy run this
   /// body instead.
-  @appended
+  @optional
   String shout(String name);
 
   /// Optional: a conversation the caller then drives, told to the
   /// listener the caller handed in. A greeter that leaves it out, or
   /// one that holds no conversations, answers the default.
-  @appended
+  @optional
   @fallible
   Conversation start(Taken<Listener> listener);
 
@@ -31,7 +31,7 @@ abstract interface class Greeter {
   /// this call alone. It stays on the caller's side: nothing is
   /// allocated to pass it and nothing is destroyed after. A greeter
   /// leaving it out greets through `greet`.
-  @appended
+  @optional
   @fallible
   void greetInto(String name, Lent<Listener> listener);
 
@@ -40,7 +40,7 @@ abstract interface class Greeter {
   /// whatever it answers, and may keep it; nothing is copied to pass
   /// it. A greeter leaving it out greets the name
   /// through `greet`.
-  @appended
+  @optional
   @fallible
   MapAnswer greetFrom(Taken<MapRef> config);
 
@@ -49,7 +49,7 @@ abstract interface class Greeter {
   /// it leaves out and adds what follows from it. Answers whether it can
   /// be greeted. A greeter leaving it out changes
   /// nothing.
-  @appended
+  @optional
   @fallible
   bool check(Lent<MapRef> config);
 }

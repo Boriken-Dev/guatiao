@@ -84,7 +84,7 @@ export class RemoteSlot {
     readonly name: string,
     /** Its index in the kind: what a CALL names. */
     readonly index: number,
-    /** One of the kind's original slots, which every table carries. */
+    /** A slot every table fills, not null. */
     readonly required: boolean,
     /** It can refuse. */
     readonly fallible: boolean,

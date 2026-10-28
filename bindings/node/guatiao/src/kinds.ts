@@ -1179,6 +1179,10 @@ export class KindImpl implements Kind<Methods, boolean> {
         if (!(shape instanceof ShapeImpl) || shape.cArg === undefined) {
           throw new TypeError(`${name}.${methodName}: argument ${i} (${String(shape)}) is not an argument shape`);
         }
+        // A kind is made here with no description to check, and without the library.
+        if (shape instanceof BytesMutShape && !this.isObject) {
+          throw new TypeError(`${name}.${methodName}: argument ${i}, bytes written in place, crosses on an object kind only`);
+        }
         return shape;
       });
       const names = method.argNames;

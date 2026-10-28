@@ -21,7 +21,7 @@ import 'package:guatiao/kinds.dart';
 
 /// Greets by name.
 ///
-/// The `greeter` kind: what a provider of it implements, and each appended slot an interface of its own ([GreeterShout], [GreeterStart], [GreeterGreetInto], [GreeterGreetFrom], [GreeterCheck]).
+/// The `greeter` kind: what a provider of it implements, and each optional slot an interface of its own ([GreeterShout], [GreeterStart], [GreeterGreetInto], [GreeterGreetFrom], [GreeterCheck]).
 abstract interface class Greeter {
   /// The kind: what a provider lists and a host binds with.
   static final GreeterKind kind = GreeterKind._();

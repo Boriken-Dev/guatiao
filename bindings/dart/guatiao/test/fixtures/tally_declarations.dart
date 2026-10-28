@@ -27,25 +27,25 @@ abstract interface class Tally {
   I64 total(String name);
 
   /// Optional: every count, as `{name: count}`.
-  @appended
+  @optional
   MapAnswer all();
 
   /// Optional: whether `name` has a count.
-  @appended
+  @optional
   bool known(String name);
 
   /// Optional: the sum of the bytes, modulo 2^32.
-  @appended
+  @optional
   U32 checksum(Uint8List data);
 
   /// Optional: tells `watcher` each count, for this call alone.
-  @appended
+  @optional
   @fallible
   void report(Lent<Watcher> watcher);
 
   /// Optional: adds the counts of `counts` (`{name: count}`), which the
   /// tally owns from the call on; answers how many names it held.
-  @appended
+  @optional
   @fallible
   U32 load(Taken<MapRef> counts);
 }

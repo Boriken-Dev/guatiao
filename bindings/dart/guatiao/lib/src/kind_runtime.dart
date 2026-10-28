@@ -37,7 +37,7 @@ final class KindSlot {
   /// The slot's field in the C table (`greet_into`).
   final String name;
 
-  /// A slot every table carries: the kind's original ones.
+  /// A slot every table fills, not null.
   final bool required;
 
   /// It ends in `guatiao_provider_error *err`.

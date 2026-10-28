@@ -15,7 +15,7 @@ function s = slot(name, args, varargin)
 % 'map', 'list', 'bytes' or an object kind's class; guatiao.taken(...) of
 % 'value', 'map', 'list' or an object kind's class. Options: 'Returns' (a
 % shape that is not 'bytes', or an object kind's class; default none),
-% 'Required' (the kind's original slots, which come first), 'Fallible'
+% 'Required' (a slot every table fills, wherever it is), 'Fallible'
 % (the slot ends in guatiao_provider_error *err).
   if nargin < 2
     args = {};

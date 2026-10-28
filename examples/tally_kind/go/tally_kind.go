@@ -27,7 +27,7 @@ type Watcher interface {
 // Counts by name.
 //
 //guatiao:kind tally
-//guatiao:appended AllCounter Knower Checksummer Reporter Loader
+//guatiao:optional AllCounter Knower Checksummer Reporter Loader
 type Tally interface {
 	// Adds `by` to the count under `name`: the new count, or why not.
 	Add(name string, by uint32) (int64, error)

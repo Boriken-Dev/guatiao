@@ -70,8 +70,9 @@ end
 
 function kind_refusals()
   expect_error(@() guatiao.Kind.describe('bad', 1, guatiao.slot('close', {}), 'Object', true), 'guatiao:BadValue');
-  expect_error(@() guatiao.Kind.describe('bad', 1, guatiao.slot('f', {}), guatiao.slot('g', {}, 'Required', true)), ...
-               'guatiao:BadValue');
+  % An optional slot may come before a required one, as in a trait.
+  d = guatiao.Kind.describe('fine', 1, guatiao.slot('f', {}), guatiao.slot('g', {}, 'Required', true));
+  expect_equal(cellfun(@(s) s.required, d.slots), [false true]);
   expect_error(@() guatiao.Kind.describe('bad', 1, guatiao.slot('f', {}), guatiao.slot('f', {})), 'guatiao:BadValue');
   expect_error(@() guatiao.slot('f', {'x'}), 'guatiao:BadValue');
   expect_error(@() guatiao.slot('not a name', {}), 'guatiao:BadValue');

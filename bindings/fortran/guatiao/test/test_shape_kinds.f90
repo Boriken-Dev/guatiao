@@ -226,7 +226,7 @@ program test_shape_kinds
     call text_bytes_and_flags()
     call trees_borrowed_lent_and_taken()
     call objects_handed_lent_and_answered()
-    call appended_slots()
+    call optional_slots()
   end if
   call reg%close()
   call finish('shape_kinds')
@@ -320,20 +320,21 @@ contains
     call made%fill(buf, n, error)
     call check(n == 3 .and. all(buf == [1_int8, 2_int8, 3_int8, 0_int8, 0_int8]), 'fill: bytes written in place')
     call made%last(text, error)
-    call check(.not. allocated(error), 'last: an appended slot of an object kind')
+    call check(.not. allocated(error), 'last: an optional slot of an object kind')
     if (allocated(text)) call check_text(text, 'hello', 'last: answers what it was told')
     call made%close()
   end subroutine
 
-  subroutine appended_slots()
+  ! `echo` stands between required slots, `quiet` after them.
+  subroutine optional_slots()
     character(:), allocatable :: text
     call check(g%has('echo') .and. .not. g%has('quiet') .and. .not. g%has('nothing'), &
-               'has: the appended slots served, and no others')
+               'has: the optional slots served, and no others')
     call g%echo('ab', text, error)
-    call check(.not. allocated(error), 'echo: an appended slot served')
+    call check(.not. allocated(error), 'echo: an optional slot served')
     if (allocated(text)) call check_text(text, 'abab', 'echo: and its answer')
     call g%quiet('x', error)
-    call check(allocated(error), 'quiet: an appended slot nobody serves refuses')
+    call check(allocated(error), 'quiet: an optional slot nobody serves refuses')
     if (allocated(error)) call check(error%status == GUATIAO_ERR_UNSUPPORTED, 'quiet: as unsupported')
   end subroutine
 

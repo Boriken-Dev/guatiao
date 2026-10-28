@@ -4,7 +4,8 @@
 
 /// `dart run guatiao:kind DOCUMENT -o FILE [--import KIND=URI]... [--check]`
 /// writes the Dart for a document of kinds, the `<crate>.kinds.json` a kind
-/// crate commits beside its C header; `--import` names an object kind a slot
+/// crate commits beside its C header, each kind read by the guatiao library
+/// first; `--import` names an object kind a slot
 /// takes or answers that another document describes, with the library
 /// written for that document.
 ///
@@ -126,11 +127,13 @@ void main(List<String> argv) {
         exit(2);
       }
       target = out;
-      final document = jsonDecode(File(args.single).readAsStringSync());
+      final document = (jsonDecode(File(args.single).readAsStringSync()) as Map)
+          .cast<String, Object?>();
       final here = _segments(target)..removeLast();
       final root = _packageOf(target);
+      checkKinds(document);
       text = generateKinds(
-        (document as Map).cast<String, Object?>(),
+        document,
         source: _relative(here, args.single),
         command: [
           'dart run guatiao:kind ${_relative(root, args.single)}',
