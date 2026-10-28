@@ -33,6 +33,13 @@ pub mod transport;
 #[cfg(feature = "tcp")]
 pub use coqui_net_acl as acl;
 
+/// `m`'s guard, taken even when a thread panicked holding it: what a
+/// mutex here guards stays consistent between statements, and a link must
+/// still be ended after a panic.
+pub(crate) fn lock<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub use client::RemoteSource;
 pub use link::{Link, LinkError, LinkOptions};
 pub use protocol::Trust;

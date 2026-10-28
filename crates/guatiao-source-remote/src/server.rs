@@ -16,7 +16,7 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use guatiao::library::kind::{
     Answer, Arg, Caller, DescribedRemote, KindDescription, SlotDescription,
@@ -28,12 +28,9 @@ use guatiao_bridge::Kinds;
 use guatiao_libffi::Libffi;
 
 use crate::link::{Handler, Inner, Link, LinkError, LinkOptions, Proxies, Setup, Table};
+use crate::lock;
 use crate::protocol::catalog::{Catalog, LibraryEntry, ProviderEntry, TableEntry};
 use crate::transport::Connection;
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 /// A library's tables held for a link, by id.
 type HeldTables = Vec<(u64, Arc<dyn Table>)>;

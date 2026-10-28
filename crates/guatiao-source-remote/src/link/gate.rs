@@ -21,14 +21,11 @@ use alloc::sync::Arc;
 use core::panic::AssertUnwindSafe;
 use std::io;
 use std::panic::catch_unwind;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::Mutex;
 
 use super::buffers::Buffers;
+use crate::lock;
 use crate::transport::FrameWrite;
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 pub(crate) struct Gate {
     state: Mutex<State>,

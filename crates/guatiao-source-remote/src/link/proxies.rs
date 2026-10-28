@@ -23,11 +23,8 @@ use guatiao::library::kind::{
 use guatiao_libffi::Libffi;
 
 use super::Inner;
+use crate::lock;
 use crate::protocol::Target;
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 /// One handle on a peer's object.
 struct Record {

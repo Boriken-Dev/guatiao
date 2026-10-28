@@ -57,6 +57,7 @@ use guatiao::{Alloc, Status, Value};
 use guatiao_bridge::Kinds;
 use guatiao_libffi::Libffi;
 
+use crate::lock;
 use crate::protocol::args::ObjectRef;
 use crate::protocol::{
     self, Decoded, Frame, HANDSHAKE_MAX_FRAME, ProtocolError, Target, Trust, decode_answer,
@@ -67,10 +68,6 @@ use gate::{Gate, Unsent};
 use handshake::Offer;
 use pool::{Permits, Pool};
 use waiting::Waiting;
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 fn gone(why: &str) -> ProviderError {
     ProviderError::new(Status::GUATIAO_ERR_GONE, why)

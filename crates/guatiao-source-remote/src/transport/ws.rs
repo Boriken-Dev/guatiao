@@ -15,7 +15,7 @@ use core::net::SocketAddr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream};
 use std::sync::{Mutex, TryLockError};
 
 use tungstenite::protocol::{Role, WebSocketConfig};
@@ -477,20 +477,7 @@ impl WsConnect {
 impl Connect for WsConnect {
     fn connect(&self) -> io::Result<Connection> {
         let address = self.address()?;
-        let mut last = io::Error::new(io::ErrorKind::NotFound, "no address to connect to");
-        let mut stream = None;
-        for addr in address.to_socket_addrs()? {
-            match TcpStream::connect_timeout(&addr, self.timeout) {
-                Ok(s) => {
-                    stream = Some((s, addr));
-                    break;
-                }
-                Err(e) => last = e,
-            }
-        }
-        let Some((stream, addr)) = stream else {
-            return Err(last);
-        };
+        let (stream, addr) = super::tcp::dial(&address, self.timeout)?;
         let socket = shared(stream)?;
         #[cfg(feature = "tls")]
         let socket = match (&self.tls, socket.raw) {
@@ -580,11 +567,10 @@ impl WsListen {
     /// protocol, as a browser offers it, and requires none.
     #[cfg(feature = "tls")]
     pub fn bind_tls(address: &str, config: &TlsConfig) -> io::Result<WsListen> {
-        let addr = address
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no address to bind"))?;
-        WsListen::from_listener_tls(TcpListener::bind(addr)?, config)
+        WsListen::from_listener_tls(
+            TcpListener::bind(super::tcp::bind_address(address)?)?,
+            config,
+        )
     }
 
     /// A listener the caller bound itself, for `wss://`.

@@ -26,13 +26,14 @@ use core::time::Duration;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::os::fd::AsRawFd;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::Mutex;
 use std::time::Instant;
 
 use super::verbs::{
     Completion, Device, IBV_WC_RECV_RDMA_WITH_IMM, IBV_WC_WR_FLUSH_ERR, Queue, Region, readable,
 };
 use super::{RING, RdmaPort};
+use crate::lock;
 use crate::transport::{Connection, FrameRead, FrameWrite};
 
 /// The largest single write: a frame larger than this goes in parts the
@@ -138,10 +139,6 @@ struct Shared {
     peer: Record,
     sends: Mutex<Sends>,
     gone: AtomicBool,
-}
-
-fn lock(m: &Mutex<Sends>) -> MutexGuard<'_, Sends> {
-    m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl Shared {

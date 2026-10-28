@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use guatiao::library::Registry;
 use guatiao::{Alloc, Map, Value};
-use guatiao_source_remote::config::{Security, security_of, token_in};
+use guatiao_source_remote::config::{Security, options_of, security_of};
 use guatiao_source_remote::{Kinds, LinkOptions, Server, Trust};
 
 #[cfg(any(feature = "tcp", feature = "local"))]
@@ -254,22 +254,28 @@ fn registry(a: &Args) -> Result<(Registry, Kinds), String> {
     Ok((registry, kinds))
 }
 
+/// `path` as a configuration's text.
+fn path_text(path: &std::path::Path) -> String {
+    path.display().to_string()
+}
+
+/// The link options the flags name, read as a source's configuration
+/// reads its `key_file`, `token_file`, `max_calls` and `max_frame`.
 fn options(a: &Args, trust: Trust) -> Result<LinkOptions, String> {
-    let mut options = LinkOptions::new(trust);
+    let mut map = Map::new();
     if let Some(path) = &a.key_file {
-        let key = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        options = options.key(&key);
+        map.set("key_file", path_text(path).as_str());
     }
     if let Some(path) = &a.token_file {
-        options = options.token(&token_in(path).map_err(|e| e.message().to_string())?);
+        map.set("token_file", path_text(path).as_str());
     }
     if let Some(n) = a.max_calls {
-        options = options.max_calls(n);
+        map.set("max_calls", n as u64);
     }
     if let Some(n) = a.max_frame {
-        options = options.max_frame(n);
+        map.set("max_frame", n as u64);
     }
-    Ok(options)
+    options_of(&map, trust).map_err(|e| e.message().to_string())
 }
 
 /// The pairing commands: list the waiting clients, or accept one.
@@ -847,7 +853,8 @@ fn secure_config(
     ),
     String,
 > {
-    use guatiao_source_remote::transport::tls::{Identity, PeerId, TlsConfig};
+    use guatiao_source_remote::config::{policy_of, tls_config_of};
+    use guatiao_source_remote::transport::tls::{Identity, PeerId, Policy, TlsConfig};
     let mutual = match server.options().trust() {
         Trust::Secure => true,
         Trust::ServerTls => false,
@@ -861,13 +868,6 @@ fn secure_config(
         return Err("server TLS asks clients for no certificate: leave out --pin".to_string());
     }
     let mut config = match (&a.state_dir, &a.identity) {
-        (Some(dir), None) => TlsConfig::open(dir).map_err(|e| e.to_string())?,
-        (None, Some(path)) => TlsConfig::new(Identity::open_or_create(path).map_err(|e| {
-            let under = core::error::Error::source(&e)
-                .map(|u| format!(": {u}"))
-                .unwrap_or_default();
-            format!("{}: {e}{under}", path.display())
-        })?),
         (Some(_), Some(_)) => {
             return Err("name --state-dir or --identity, not both".to_string());
         }
@@ -880,6 +880,18 @@ fn secure_config(
                 "{scheme}:// needs an identity: --state-dir DIR or --identity PATH"
             ));
         }
+        // Read as a source's configuration reads `state_dir` or
+        // `identity_file`.
+        (dir, file) => {
+            let mut map = Map::new();
+            if let Some(dir) = dir {
+                map.set("state_dir", path_text(dir).as_str());
+            }
+            if let Some(file) = file {
+                map.set("identity_file", path_text(file).as_str());
+            }
+            tls_config_of(&map, Security::MutualTls).map_err(|e| e.message().to_string())?
+        }
     };
     let pins = a
         .pins
@@ -891,9 +903,9 @@ fn secure_config(
         .collect::<Result<Vec<_>, _>>()?;
     config = config.pins(pins);
     let mut policy = match &a.policy {
-        Some(path) => guatiao_source_remote::config::policy_of(&document(path)?)
+        Some(path) => policy_of(&document(path)?)
             .map_err(|e| format!("{}: {}", path.display(), e.message()))?,
-        None => guatiao_source_remote::transport::tls::Policy::strict(),
+        None => Policy::strict(),
     };
     if let Some(acl) = named_acl(a)? {
         if policy.acl.is_some() {
