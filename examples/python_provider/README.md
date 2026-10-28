@@ -75,8 +75,11 @@ python examples/python_host/host.py target/debug \
 
 **On Windows**, a host that is not Python finds the interpreter through
 `PATH`: put the directory holding `python3.dll` there first (`py -3 -c
-"import sys; print(sys.base_prefix)"` prints it). `PYTHONPATH` takes
-`;` between entries.
+"import sys; print(sys.base_prefix)"` prints it), and have the host
+search `PATH` for what the bridge imports: the Rust host with
+`GREETER_HOST_IMPORT_SEARCH=path`, the other example hosts set their
+registry's import search to `path` before adding the bridge.
+`PYTHONPATH` takes `;` between entries.
 
 ## What it shows
 

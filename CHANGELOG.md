@@ -1445,6 +1445,26 @@ write now.
   as one the server does not trust, and is told so in the same words,
   which name the list too.
 
+- **On Windows, what a loaded file imports is found beside it, beside the
+  host and in the system directory, and no longer in the current
+  directory or on `PATH`.** A stray DLL there could answer a plugin's
+  import before the copy shipped beside it, and a host that verified a
+  plugin file could not keep its imports to places it trusts. Every file
+  a registry opens (`load_file`, a scan, a watched directory,
+  `add_source_file`) is opened with `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, what Python's `ctypes` loads a library
+  by path with. A host whose files import from elsewhere, such as
+  the Python bridge's `python3.dll`, names it:
+  `Registry::set_import_search(ImportSearch::Path)` (C
+  `guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_PATH)`,
+  read back with `guatiao_registry_import_search`; Python
+  `set_import_search(ImportSearch.PATH)`, Dart and Node `importSearch`,
+  Go `SetImportSearch`, Julia `set_import_search!`, R, MATLAB, Octave,
+  Fortran, C++ and Lua `set_import_search`, and
+  `guatiao-remote-server --import-search path`), which also searches the
+  current directory and `PATH` for an import the default leaves missing.
+  Linux and macOS are unchanged.
+
 - **TypeScript: `guatiao-remote` refuses plain data as the `guatiao`
   package does.** A string holding a lone surrogate, as an argument or an
   answer, is a `TypeError` (it was sent with U+FFFD in its place), and so
@@ -1930,11 +1950,13 @@ write now.
   a held item is found through a hash of its structure; which items are
   kept, and their order, is unchanged.
 
-- **On Windows a library's own directory is searched for what it imports.**
-  A plugin linking `guatiao.dll` shipped beside it, in a directory of its
-  own, failed to load: Windows looked beside the host and on `PATH` only.
-  A load that fails is now tried again with the library's directory in
-  place of the host's, `PATH` still searched.
+- **On Windows a library's own directory is searched for what it imports,
+  and a source file's too.** A plugin linking `guatiao.dll` shipped beside
+  it, in a directory of its own, failed to load: Windows looked beside the
+  host and on `PATH` only, and a source file added with
+  `add_source_file` likewise. A refused load's reason now carries the
+  system's own words ("The specified module could not be found. (os
+  error 126)"), not only "LoadLibraryExW failed".
 
 - **CPython served by `guatiao-source-py` inside a Node host frees what a call
   drops, on Linux.** koffi runs each call on a stack of its own, which

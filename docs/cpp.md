@@ -70,6 +70,7 @@ values and channels; `validate`, `redact` and `merge` act on schemas.
 ```cpp
 guatiao::registry reg("my-host", "1.0");
 reg.watch_dir("/opt/plugins", guatiao::rules({"kind=greeter"}));
+reg.set_import_search(guatiao::import_search::path);  // Windows: the bridge's python3.dll is on PATH
 reg.add_source_file(bridge, guatiao::make(guatiao::item::map({{"dirs", guatiao::item::list({"py"})}})));
 guatiao::value changed = reg.refresh();       // {"loaded", "retired", "skipped", "refused"}
 
@@ -189,8 +190,9 @@ or inline function is merged with the host's or another library's.
 scan it and call it. A host carrying the library itself calls
 `reg.register_library<greeters>("name")` instead. On Windows the library
 imports `guatiao.dll`, found already loaded in the process, beside the
-host's executable, on `PATH`, or beside the library itself: a load that
-fails is tried again with the library's own directory searched.
+library itself, beside the host's executable or in the system directory,
+and on `PATH` only when the host sets `import_search::path`
+([where a library's imports are found](index.md#where-a-librarys-imports-are-found)).
 
 ## What C++ cannot do that Rust can
 

@@ -399,7 +399,8 @@ R, MATLAB, Octave, Fortran, C++, Python, Dart or Node suites.
 The `guatiao-source-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
 (or `GUATIAO_PY_BRIDGE`); on Windows the directory holding `python3.dll`
-must be on `PATH` for a host that is not Python:
+must be on `PATH` for a host that is not Python, and that host sets its
+registry's import search to `path` before adding the bridge:
 
 ```bash
 PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-source-py/Cargo.toml

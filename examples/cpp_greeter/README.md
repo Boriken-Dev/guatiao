@@ -32,7 +32,8 @@ GREETER_HOST_PATH=build/cpp_greeter cargo run -p greeter_host
 
 and the Python one, `python examples/python_host/host.py build/cpp_greeter`.
 The library links the guatiao library the CMake package found; on Windows
-a host finds `guatiao.dll` as it finds any DLL's dependency (beside the
-host's executable, on `PATH`, or already loaded). Unlike a library whose
+a host finds `guatiao.dll` already loaded, beside the library, beside the
+host's executable or in the system directory (on `PATH` only when the host
+sets its import search to `path`). Unlike a library whose
 language keeps a runtime of its own, a C++ library agrees to be unmapped
 once nothing it served is alive.
