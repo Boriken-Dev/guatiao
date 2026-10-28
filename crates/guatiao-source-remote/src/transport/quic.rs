@@ -553,18 +553,33 @@ pub(super) trait Over: Sized + 'static {
     type Conn: Send + Sync;
     /// The stream the writer writes.
     type Stream: Send;
+    /// The stream the reader reads.
+    type Recv: Send + 'static;
+    /// A server's handshake, run on the serving thread's first read.
+    type Pending: Handshake<Self> + 'static;
     /// What the connection runs on: waited on as a dropped connection's
     /// close leaves.
     type Ends: Send + Sync;
     /// The connection in the words of its loss.
     const NOUN: &'static str;
+    /// The stream in the words of its reset.
+    const STREAM: &'static str;
     /// The code this side closes a clean end with.
     const CLEAN: u32;
     /// Whether a peer's close code is a clean end.
     fn clean(code: VarInt) -> bool;
     fn quic(conn: &Self::Conn) -> &quinn::Connection;
     fn stream(stream: &mut Self::Stream) -> &mut SendStream;
+    fn recv(stream: &mut Self::Recv) -> &mut RecvStream;
     fn idle(ends: &Self::Ends) -> impl Future<Output = ()> + '_;
+    /// The datagrams beside the link's stream.
+    fn datagrams(shared: &Arc<Shared<Self>>) -> Arc<dyn Datagrams>;
+}
+
+/// A server's handshake, run on the serving thread's first read under the
+/// bound the link set: the stream to read once it is through.
+pub(super) trait Handshake<O: Over>: Send {
+    fn run(self, shared: &Shared<O>, bound: Option<Duration>) -> io::Result<O::Recv>;
 }
 
 /// A link over QUIC itself.
@@ -573,8 +588,11 @@ pub(super) struct Quic;
 impl Over for Quic {
     type Conn = quinn::Connection;
     type Stream = SendStream;
+    type Recv = RecvStream;
+    type Pending = Pending;
     type Ends = quinn::Endpoint;
     const NOUN: &'static str = "QUIC connection";
+    const STREAM: &'static str = "QUIC stream";
     const CLEAN: u32 = CLEAN;
 
     fn clean(code: VarInt) -> bool {
@@ -589,8 +607,18 @@ impl Over for Quic {
         stream
     }
 
+    fn recv(stream: &mut RecvStream) -> &mut RecvStream {
+        stream
+    }
+
     fn idle(ends: &quinn::Endpoint) -> impl Future<Output = ()> + '_ {
         ends.wait_idle()
+    }
+
+    fn datagrams(shared: &Arc<Shared<Quic>>) -> Arc<dyn Datagrams> {
+        Arc::new(QuicDatagrams {
+            shared: Arc::clone(shared),
+        })
     }
 }
 
@@ -784,7 +812,7 @@ pub(super) fn trusted(acl: Acl) -> io::Result<TlsConfig> {
     Ok(config.policy(policy))
 }
 /// A server's handshake, run on the serving thread's first read.
-struct Pending {
+pub(super) struct Pending {
     incoming: Incoming,
     listener: Arc<Listener>,
     source: SocketAddr,
@@ -812,7 +840,9 @@ impl Pending {
         };
         for_quinn(tls)
     }
+}
 
+impl Handshake<Quic> for Pending {
     fn run(self, shared: &Shared<Quic>, bound: Option<Duration>) -> io::Result<RecvStream> {
         if shared.ending.ended() {
             self.incoming.refuse();
@@ -869,21 +899,21 @@ impl Pending {
 }
 
 /// The reading half.
-struct QuicRead {
-    shared: Arc<Shared<Quic>>,
-    pending: Option<Pending>,
-    recv: Option<RecvStream>,
+struct LinkRead<O: Over> {
+    shared: Arc<Shared<O>>,
+    pending: Option<O::Pending>,
+    recv: Option<O::Recv>,
     /// The bound the link set on a read; the first bounds the handshake.
     timeout: Cell<Option<Duration>>,
 }
 
-impl Read for QuicRead {
+impl<O: Over> Read for LinkRead<O> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if let Some(pending) = self.pending.take() {
             self.recv = Some(pending.run(&self.shared, self.timeout.get())?);
         }
         let recv = self.recv.as_mut().ok_or(io::ErrorKind::NotConnected)?;
-        let reading = recv.read(buf);
+        let reading = O::recv(recv).read(buf);
         match wait_at_most(self.shared.handle(), self.timeout.get(), reading)? {
             Ok(Some(n)) => {
                 self.shared.heard.store(true, Ordering::Release);
@@ -893,7 +923,7 @@ impl Read for QuicRead {
             Err(quinn::ReadError::ConnectionLost(e)) => self.shared.lost(&e),
             Err(quinn::ReadError::Reset(code)) => Err(io::Error::new(
                 io::ErrorKind::ConnectionReset,
-                format!("the peer reset the link's QUIC stream (code {code})"),
+                format!("the peer reset the link's {} (code {code})", O::STREAM),
             )),
             Err(e) => Err(io::Error::other(e.to_string())),
         }
@@ -902,12 +932,12 @@ impl Read for QuicRead {
 
 /// The frames of the reading half, the peer the handshake proved and the
 /// datagrams beside them.
-struct QuicFrames {
-    frames: StreamReader<QuicRead>,
-    shared: Arc<Shared<Quic>>,
+struct LinkFrames<O: Over> {
+    frames: StreamReader<LinkRead<O>>,
+    shared: Arc<Shared<O>>,
 }
 
-impl FrameRead for QuicFrames {
+impl<O: Over> FrameRead for LinkFrames<O> {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
         self.frames.read_frame(buf, max)
     }
@@ -934,22 +964,20 @@ impl FrameRead for QuicFrames {
     }
 
     fn datagrams(&self) -> Option<Arc<dyn Datagrams>> {
-        Some(Arc::new(QuicDatagrams {
-            shared: Arc::clone(&self.shared),
-        }))
+        Some(O::datagrams(&self.shared))
     }
 }
 
 /// The writing half.
-struct QuicWrite {
-    shared: Arc<Shared<Quic>>,
+struct LinkWrite<O: Over> {
+    shared: Arc<Shared<O>>,
     timeout: Option<Duration>,
 }
 
-impl QuicWrite {
+impl<O: Over> LinkWrite<O> {
     fn send(&self, parts: &[&[u8]]) -> io::Result<()> {
         let mut send = lock(&self.shared.send);
-        let stream = send.as_mut().ok_or(io::ErrorKind::NotConnected)?;
+        let stream = O::stream(send.as_mut().ok_or(io::ErrorKind::NotConnected)?);
         let writing = async move {
             for part in parts {
                 stream.write_all(part).await?;
@@ -966,7 +994,7 @@ impl QuicWrite {
     }
 }
 
-impl Write for QuicWrite {
+impl<O: Over> Write for LinkWrite<O> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.send(&[bytes])?;
         Ok(bytes.len())
@@ -1038,41 +1066,43 @@ impl Datagrams for QuicDatagrams {
     }
 }
 
-fn connection(
-    shared: Shared<Quic>,
-    pending: Option<Pending>,
-    recv: Option<RecvStream>,
+/// A link's connection over `shared`: a server's with its handshake
+/// `pending`, a client's with the stream it opened.
+pub(super) fn connection<O: Over>(
+    shared: Shared<O>,
+    pending: Option<O::Pending>,
+    recv: Option<O::Recv>,
     peer: String,
 ) -> Connection {
     let shared = Arc::new(shared);
     let closing = Arc::clone(&shared);
     let shutting = Arc::clone(&shared);
     let reader = StreamReader::with_timeout(
-        QuicRead {
+        LinkRead {
             shared: Arc::clone(&shared),
             pending,
             recv,
             timeout: Cell::new(None),
         },
-        |r: &QuicRead, t| {
+        |r: &LinkRead<O>, t| {
             r.timeout.set(t);
             Ok(())
         },
     );
     Connection {
-        reader: Box::new(QuicFrames {
+        reader: Box::new(LinkFrames {
             frames: reader,
             shared: Arc::clone(&shared),
         }),
         writer: Box::new(
             StreamWriter::with_shutdown(
-                QuicWrite {
+                LinkWrite {
                     shared,
                     timeout: None,
                 },
                 move || shutting.close(),
             )
-            .bounded_by(|w: &mut QuicWrite, t| {
+            .bounded_by(|w: &mut LinkWrite<O>, t| {
                 w.timeout = t;
                 Ok(())
             }),
@@ -1392,7 +1422,7 @@ impl Dial {
         let opening = conn.open_bi();
         let (send, recv) = wait_at_most(handle, Some(timeout), opening)?
             .map_err(|e| gone(&e, Quic::NOUN, Some(&self.me)))?;
-        let shared = Shared::new(
+        let shared = Shared::<Quic>::new(
             self.proves,
             Some(self.me.clone()),
             endpoint,
@@ -1513,7 +1543,7 @@ impl QuicListen {
                 Ok(accepted) => accepted,
                 Err(refused) => return Ok(Accepted::Refused(refused)),
             };
-        let shared = Shared::new(
+        let shared = Shared::<Quic>::new(
             self.listener.config.proves_peers(),
             None,
             self.endpoint.clone(),
