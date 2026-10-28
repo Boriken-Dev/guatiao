@@ -14,6 +14,7 @@ program test_kind_writer
   call setup()
   call committed_modules_are_current()
   call refusals()
+  call optional_before_required()
   call finish('kind_writer')
 
 contains
@@ -57,9 +58,6 @@ contains
     call refused(HEAD // ']}, {"name": "close", "required": true, "fallible": false, "args": []}]}]}', &
                  'close names no method')
     call refused(HEAD // '], "answer": {"type": "bytes"}}]}]}', 'which no answer is')
-    call refused('{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
-                 '{"name": "f", "required": false, "fallible": false, "args": []}, ' // &
-                 '{"name": "g", "required": true, "fallible": false, "args": []}]}]}', 'the required slots come first')
     call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "A", "type": "i8"}]}]}]}', 'which ignores case')
     call refused(HEAD // ']}, {"name": "kind", "required": true, "fallible": false, "args": []}]}]}', &
                  'two things in the module would be named k_kind')
@@ -67,6 +65,18 @@ contains
                  '{"name": "k", "required": true, "fallible": false, "args": []}]}]}', 'k names no method')
     call refused('{"kinds": [', 'not a value')
     call refused('{"kinds": 3}', 'kinds')
+  end subroutine
+
+  ! An optional slot may come before a required one, as in a trait.
+  subroutine optional_before_required()
+    character(:), allocatable :: text, msg
+    integer :: st
+    msg = ''
+    call guatiao_kinds_source('{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [' // &
+                              '{"name": "f", "required": false, "fallible": false, "args": []}, ' // &
+                              '{"name": "g", "required": true, "fallible": false, "args": []}]}]}', &
+                              'k_kinds', 'k.kinds.json', text, st, msg)
+    call check(st == GUATIAO_OK .and. index(text, 'module k_kinds') > 0, 'an optional slot first is written: ' // msg)
   end subroutine
 
   subroutine refused(document, says)

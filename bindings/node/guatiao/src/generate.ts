@@ -5,7 +5,7 @@
 /**
  * What `guatiao-kind` writes for a document of kinds: a JavaScript module
  * that loads them, and its `.d.ts`, which declares each kind as an
- * interface (what a provider implements, its appended slots optional), a
+ * interface (what a provider implements, its optional slots marked `?`), a
  * `<Kind>Remote` interface (what a caller holds), and a value of the
  * kind's own name, so `implements Greeter` and `static kinds = [Greeter]`
  * name the same import.

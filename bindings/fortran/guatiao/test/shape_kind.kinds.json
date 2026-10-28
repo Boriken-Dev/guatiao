@@ -47,7 +47,7 @@
     },
     {
       "name": "shapes",
-      "floor_hash": 3379227314,
+      "floor_hash": 1249696788,
       "object": false,
       "doc": "Every shape a slot can take or answer.",
       "slots": [
@@ -128,6 +128,21 @@
             "type": "bool"
           },
           "doc": "Not `on`."
+        },
+        {
+          "name": "echo",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "s",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "Optional: `s` twice."
         },
         {
           "name": "split",
@@ -296,21 +311,6 @@
             "kind": "note"
           },
           "doc": "A note of its own."
-        },
-        {
-          "name": "echo",
-          "required": false,
-          "fallible": false,
-          "args": [
-            {
-              "name": "s",
-              "type": "str"
-            }
-          ],
-          "answer": {
-            "type": "text"
-          },
-          "doc": "Optional: `s` twice."
         },
         {
           "name": "quiet",

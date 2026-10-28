@@ -94,7 +94,7 @@ final class RemoteSlot {
   /// Its index in the kind: what a CALL names.
   final int index;
 
-  /// One of the kind's original slots, which every table carries.
+  /// A slot every table fills, not null.
   final bool required;
 
   /// It can refuse.

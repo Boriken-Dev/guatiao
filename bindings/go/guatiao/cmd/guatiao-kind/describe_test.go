@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -82,7 +84,7 @@ type Ear interface {
 //
 //guatiao:kind probe
 //guatiao:floorhash 42
-//guatiao:appended Filler
+//guatiao:optional Filler
 type Probe interface {
 	// Reads ` + "`v`" + `, which may be null.
 	//
@@ -159,17 +161,17 @@ func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 		"a borrowed list view":       {"//guatiao:lent config ear", "//guatiao:lent ear", "a list is not borrowed"},
 		"a borrowed list":            {"\t//guatiao:taken items\n", "", "a list is not borrowed: mark it taken"},
 		"capitals in a row":          {"Fill(config", "FillIO(config", "capitals in a row"},
-		"an appended non-interface":  {"//guatiao:appended Filler", "//guatiao:appended Filer", "Filer, which is no interface"},
-		"an appended kind":           {"//guatiao:appended Filler", "//guatiao:appended Ear", "a kind of its own"},
+		"an optional non-interface":  {"//guatiao:optional Filler", "//guatiao:optional Filer", "Filer, which is no interface"},
+		"an optional kind":           {"//guatiao:optional Filler", "//guatiao:optional Ear", "a kind of its own"},
 		"another package's type":     {"items []string", "items time.Duration", "another package's type"},
 		"no error last":              {"Heard(what string) error", "Heard(what string)", "returns an error last"},
 		"a taken view":               {"//guatiao:nullable v\n\t//guatiao:taken items", "//guatiao:taken v items", "a view is borrowed"},
 		"a lent string":              {"//guatiao:infallible\n\tHeard", "//guatiao:lent what\n\tHeard", "cannot be marked lent"},
 		"a provider kind passed":     {"ear Ear) (*", "ear Probe) (*", "no object kind"},
 		"a floor hash not a number":  {"//guatiao:floorhash 42", "//guatiao:floorhash x", "32-bit unsigned integer"},
-		"an appended slot twice":     {"//guatiao:appended Filler", "//guatiao:appended Filler Filler", "two slots of probe are fill"},
-		"an appended kind method":    {"\tFill(config", "\tRead(config", "Filler.Read is a method of Probe already"},
-		"an appended destroy":        {"// Hears.\n//\n//guatiao:kind ear", "type Closer interface{ Close() error }\n\n// Hears.\n//\n//guatiao:kind ear\n//guatiao:appended Closer", "Closer.Close is a method of Ear already"},
+		"an optional slot twice":     {"//guatiao:optional Filler", "//guatiao:optional Filler Filler", "two slots of probe are fill"},
+		"an optional kind method":    {"\tFill(config", "\tRead(config", "Filler.Read is a method of Probe already"},
+		"an optional destroy":        {"// Hears.\n//\n//guatiao:kind ear", "type Closer interface{ Close() error }\n\n// Hears.\n//\n//guatiao:kind ear\n//guatiao:optional Closer", "Closer.Close is a method of Ear already"},
 		"a method declared twice":    {"// Fills in place.", "type Other interface{ Fill(config guatiao.ListRef, ear Ear) (bool, error) }\n\n// Fills in place.", "Filler and Other both have Fill"},
 		"a kind named twice":         {"//guatiao:kind probe", "//guatiao:kind ear", "both the kind ear"},
 		"a slot directive misplaced": {"// Fills in place.", "// Fills in place.\n//\n//guatiao:infallible", "a directive of a slot goes on its method"},
@@ -178,7 +180,7 @@ func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 		"an underscore in a method":  {"Fill(config", "Fill_it(config", "no slot's name in CamelCase"},
 		"an empty mark":              {"//guatiao:lent config ear", "//guatiao:lent", "names what it marks"},
 		"a destroy slot":             {"\tHeard(what string) error\n", "\tHeard(what string) error\n\tDestroy() error\n", "destroy is the slot"},
-		"a remote's own method":      {"Fill(config", "Has(config", "a remote has Has of its own"},
+		"a remote's own method":      {"Fill(config", "Has(config", "Has is a remote's own method"},
 		"bytes_mut on a provider": {"//guatiao:taken items\n\tRead(v guatiao.Ref, items []string, ear Ear)",
 			"//guatiao:taken items\n\t//guatiao:mut buf\n\tRead(v guatiao.Ref, items []string, ear Ear, buf []byte)",
 			"on an object kind only"},
@@ -196,5 +198,124 @@ func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, "probe.kinds.json")); err == nil {
 			t.Errorf("%s: a document was written for kinds that were refused", name)
 		}
+	}
+}
+
+// An optional slot comes where a //guatiao:optional puts it: before the
+// method whose doc comment names it, as a trait declares it between two
+// required methods.
+func TestPutsAnOptionalSlotBetweenRequiredOnes(t *testing.T) {
+	var file struct {
+		Vectors []struct {
+			Name      string          `json:"name"`
+			Slots     json.RawMessage `json:"slots"`
+			FloorHash uint32          `json:"floor_hash"`
+		} `json:"vectors"`
+	}
+	if err := json.Unmarshal(repoFile(t, "crates", "guatiao-derive", "tests", "vectors", "floor_hash.json"), &file); err != nil {
+		t.Fatal(err)
+	}
+	src := `package probe
+
+//guatiao:kind between
+type Between interface {
+	First(name string) (map[string]any, error)
+	//guatiao:optional Middle
+	//guatiao:infallible
+	Last(n uint32) (uint64, error)
+}
+
+type Middle interface {
+	//guatiao:infallible
+	Middle(name string) (string, error)
+}
+`
+	dir := pkg(t, src, "")
+	if err := runBorn(dir, "between.kinds.json", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Kinds []struct {
+			Slots     json.RawMessage `json:"slots"`
+			FloorHash uint32          `json:"floor_hash"`
+		} `json:"kinds"`
+	}
+	text, err := os.ReadFile(filepath.Join(dir, "between.kinds.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(text, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range file.Vectors {
+		if v.Name != "between" {
+			continue
+		}
+		var got, want any
+		_ = json.Unmarshal(doc.Kinds[0].Slots, &got)
+		_ = json.Unmarshal(v.Slots, &want)
+		if !reflect.DeepEqual(got, want) || doc.Kinds[0].FloorHash != v.FloorHash {
+			t.Fatalf("described:\n%s", text)
+		}
+		return
+	}
+	t.Fatal("no between vector")
+}
+
+// What the shared vectors refuse, the glue refuses: through the library
+// for a description, by guatiao.Remote's names for a slot.
+func TestTheGlueRefusesWhatTheSharedVectorsRefuse(t *testing.T) {
+	var file struct {
+		Refused []struct {
+			Name   string          `json:"name"`
+			Object bool            `json:"object"`
+			Slots  json.RawMessage `json:"slots"`
+			Why    string          `json:"why"`
+			By     any             `json:"by"`
+		} `json:"refused"`
+	}
+	if err := json.Unmarshal(repoFile(t, "crates", "guatiao-derive", "tests", "vectors", "floor_hash.json"), &file); err != nil {
+		t.Fatal(err)
+	}
+	// The remote's own names are said in Go's spelling.
+	why := map[string]string{"a remote's own": "a remote's own method"}
+	ran := 0
+	for _, v := range file.Refused {
+		by, _ := v.By.([]any)
+		if v.By != "every reader" && !slices.Contains(by, any("go")) {
+			continue
+		}
+		doc := `{"kinds": [{"name": "` + v.Name + `", "floor_hash": 1, "object": ` + strconv.FormatBool(v.Object) +
+			`, "slots": ` + string(v.Slots) + `}]}`
+		src := "package probe\n\n//guatiao:kind " + v.Name + "\ntype K interface {\n\tHas(name string) (bool, error)\n}\n"
+		dir := pkg(t, src, "")
+		if err := os.WriteFile(filepath.Join(dir, "k.kinds.json"), []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		says := v.Why
+		if w, ok := why[says]; ok {
+			says = w
+		}
+		if err := run(dir, "k.kinds.json", "guatiao_kinds", false); err == nil || !strings.Contains(err.Error(), says) {
+			t.Errorf("%s: %v", v.Name, err)
+		}
+		ran++
+	}
+	if ran < 2 {
+		t.Fatalf("%d refusals", ran)
+	}
+}
+
+// A header is no description: bytes written in place on a table with no
+// destroy are refused where it is read.
+func TestAHeaderTableWithBytesMutAndNoDestroyIsRefused(t *testing.T) {
+	hdr := "typedef struct w_vtable {\n  guatiao_kind_header header;\n" +
+		"  guatiao_status (*fill)(void *ctx, guatiao_bytes_mut dst, int64_t *out);\n} w_vtable;\n#define w_vtable_FLOOR_HASH 1\n"
+	if _, err := readTable(hdr, "w_vtable"); err == nil || !strings.Contains(err.Error(), "on an object kind only") {
+		t.Fatalf("%v", err)
+	}
+	object := strings.Replace(hdr, "header;\n", "header;\n  void (*destroy)(void *ctx);\n", 1)
+	if _, err := readTable(object, "w_vtable"); err != nil {
+		t.Fatal(err)
 	}
 }

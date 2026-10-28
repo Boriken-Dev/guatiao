@@ -4,7 +4,7 @@
 
 // Package greeterkind holds the kinds of include/greeter_kind.h, for Go:
 // an interface per kind, holding the slots every table has, and an
-// interface per slot appended after them. guatiao-kind reads the kinds'
+// interface per optional slot. guatiao-kind reads the kinds'
 // description (include/greeter_kind.kinds.json) and these interfaces and
 // writes the rest (guatiao_kinds.go, .h, .c): a
 // descriptor per kind (GreeterKind), a remote implementing every

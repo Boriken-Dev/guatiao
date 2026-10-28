@@ -24,20 +24,23 @@
 // interfaces are read into the document, which is written there (from the
 // package's directory), and the glue from it. What a Go type cannot say is
 // said by a directive in a doc comment: on the kind's interface
-// //guatiao:appended (the interfaces of its appended slots, in table
-// order) and //guatiao:floorhash; on a method //guatiao:infallible,
+// //guatiao:optional (the interfaces of optional slots that follow its
+// methods, in table order) and //guatiao:floorhash; on a method
+// //guatiao:optional (those that come before it), //guatiao:infallible,
 // //guatiao:lent, //guatiao:taken, //guatiao:nullable and //guatiao:mut,
 // each naming arguments:
 //
 //	//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -document ../include/tally_kind.kinds.json
 //
-// A kind's floor hash, unless //guatiao:floorhash pins it, is computed by
-// the guatiao library, so -document needs it found as the package finds
-// it (GUATIAO_LIBRARY).
+// The guatiao library reads every kind -document describes or
+// -description is given, refusing what no kind may declare, and computes a
+// described kind's floor hash unless //guatiao:floorhash pins it: both need
+// it found as the package finds it (GUATIAO_LIBRARY).
 //
 // A kind's interface holds its required slots, an object kind's its
-// Close (the destroy slot) too; each other slot is a method of an
-// interface of its own in the package. A slot's Go method is its C name
+// Close (the destroy slot) too; each optional slot is a method of an
+// interface of its own in the package. No slot's method is named as one of
+// guatiao.Remote's (Begin, Close, Closed, Has, Kind, Table). A slot's Go method is its C name
 // in CamelCase (greet_into is GreetInto) and returns an error last. It
 // writes guatiao_kinds.go, guatiao_kinds.h and guatiao_kinds.c beside the
 // package's sources; -check writes nothing and fails when they are not

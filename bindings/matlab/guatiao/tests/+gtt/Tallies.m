@@ -4,7 +4,7 @@
 
 classdef Tallies < tallykind.Tally
 % A tally served from M, its kind class written from the tally kinds'
-% description: every slot, required and appended.
+% description: every slot, required and optional.
   properties
     Names = {}
     Counts = []

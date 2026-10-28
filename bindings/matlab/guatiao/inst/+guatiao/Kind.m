@@ -36,9 +36,9 @@ classdef Kind < handle
   methods (Static)
     function d = describe(name, floor_hash, varargin)
     % A kind's description: its C name, the floor hash its header defines,
-    % then a guatiao.slot per slot in the header's order (required ones
-    % first). Option 'Object', true for an object kind, whose destroy slot
-    % is the remote's close().
+    % then a guatiao.slot per slot in the header's order, required and
+    % optional in any order. Option 'Object', true for an object kind,
+    % whose destroy slot is the remote's close().
       object = false;
       slots = {};
       i = 1;
@@ -60,10 +60,6 @@ classdef Kind < handle
       end
       if object && any(strcmp(names, 'close'))
         error('guatiao:BadValue', 'close is an object kind''s destroy slot');
-      end
-      required = cellfun(@(s) s.required, slots);
-      if any(diff(double(~required)) < 0)
-        error('guatiao:BadValue', 'required slots come first: they are the kind''s original ones');
       end
       d = struct('name', name, 'floor_hash', double(floor_hash), 'object', object, 'slots', {slots});
     end

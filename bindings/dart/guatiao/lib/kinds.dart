@@ -6,7 +6,7 @@
 ///
 /// A kind is never declared by hand: `dart run guatiao:kind` writes, from
 /// the description a kind crate commits beside its C header, an abstract
-/// interface class per kind (its required slots) and per appended slot,
+/// interface class per kind (its required slots) and per optional slot,
 /// a `<Kind>Remote` a caller holds, and a [Kind] reached as the
 /// interface's static `kind`. A provider is a class extending [Provider]
 /// and implementing the interfaces of what it serves; a [Library] offers

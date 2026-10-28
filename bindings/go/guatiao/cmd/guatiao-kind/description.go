@@ -7,6 +7,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 )
 
 // The kinds document a kind crate commits beside its header
@@ -55,6 +57,24 @@ func readDocument(text []byte) (*kindsDocument, error) {
 		return nil, fmt.Errorf(`a kinds document is {"kinds": [...]}`)
 	}
 	return &doc, nil
+}
+
+// checkDocument has the guatiao library read each kind of a document
+// (guatiao.KindFloorHash reads one as the library's document reader does),
+// so what no kind may declare is refused before any glue is written.
+func checkDocument(text []byte) error {
+	var doc struct {
+		Kinds []json.RawMessage `json:"kinds"`
+	}
+	if err := json.Unmarshal(text, &doc); err != nil {
+		return fmt.Errorf("not a kinds document: %w", err)
+	}
+	for i, kind := range doc.Kinds {
+		if _, err := guatiao.KindFloorHash(kind); err != nil {
+			return fmt.Errorf("kinds[%d]: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // describedTable is the table of the kind named kind, as a kind header

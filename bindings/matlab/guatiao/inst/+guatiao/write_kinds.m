@@ -277,7 +277,6 @@ function text = kind_file(k, classes, objects, pkg, source)
   entries = {};
   methods = {};
   slot_names = {};
-  appended = false;
   for i = 1:numel(slots)
     s = slots{i};
     where = sprintf('%s.%s', k.name, s.name);
@@ -288,11 +287,6 @@ function text = kind_file(k, classes, objects, pkg, source)
       error('guatiao:BadValue', '%s: two slots are %s', where, s.name);
     end
     slot_names{end + 1} = s.name; %#ok<AGROW>
-    if ~s.required
-      appended = true;
-    elseif appended
-      error('guatiao:BadValue', '%s: a required slot after an appended one: the required slots come first', where);
-    end
     args = items(field(s, 'args', []));
     names = cell(1, numel(args));
     pairs = cell(1, numel(args));

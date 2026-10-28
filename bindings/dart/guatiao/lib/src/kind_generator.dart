@@ -538,7 +538,7 @@ final class _Generator {
     claim('${n}Kind', kindName);
     final methods = <String>{};
     final required = <String>[];
-    final appended = <String>[];
+    final optionalSlots = <String>[];
     final remote = <String>[];
     final kindCase = <String>[];
     final typeCase = <String>[];
@@ -553,7 +553,7 @@ final class _Generator {
       final m = memberNameOf(slotName);
       if (_reserved.contains(m) || _keywords.contains(m) || !methods.add(m)) {
         throw FormatException(
-          '$where: $m is taken in Dart (a remote member, a keyword, or '
+          '$where: $m is taken in Dart (a remote\'s own, a keyword, or '
           'another slot)',
         );
       }
@@ -601,7 +601,7 @@ final class _Generator {
           ..add('  $calleeSig');
       } else {
         claim(iface, where);
-        appended
+        optionalSlots
           ..addAll(
             doc(slot['doc'], '', [
               '`$slotName` of the `$kindName` kind: an optional slot, which a provider may leave null.',
@@ -701,7 +701,7 @@ final class _Generator {
     return [
       ...doc(kind['doc'], '', [
         'The `$kindName` kind: what ${object ? 'an object of it' : 'a provider of it'} '
-            'implements${optional.isEmpty ? '.' : ', and each appended slot an interface of its own (${optional.map((o) => '[$o]').join(', ')}).'}',
+            'implements${optional.isEmpty ? '.' : ', and each optional slot an interface of its own (${optional.map((o) => '[$o]').join(', ')}).'}',
       ]),
       'abstract interface class $n {',
       '  /// The kind: what a provider lists and a host binds with.',
@@ -710,7 +710,7 @@ final class _Generator {
       ...required,
       '}',
       '',
-      ...appended,
+      ...optionalSlots,
       '/// A caller\'s handle on a `$kindName` ${object ? 'object' : 'table'}: a method per slot.',
       'final class ${n}Remote extends KindRemote',
       '    implements ${[n, ...optional].join(', ')} {',
@@ -775,7 +775,7 @@ final class _Generator {
 
 /// The Dart for [document], a decoded kinds description: per kind an
 /// abstract interface class of its required slots with the kind as its
-/// static `kind`, one per appended slot, a `<Kind>Remote` a caller holds,
+/// static `kind`, one per optional slot, a `<Kind>Remote` a caller holds,
 /// and the `<Kind>Kind` that calls and serves a table. [FormatException]
 /// for a document it cannot write.
 ///

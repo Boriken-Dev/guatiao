@@ -70,8 +70,6 @@ function refusals()
     sprintf(slot, '{"name": "self", "type": "i8"}, {"name": "self_", "type": "i8"}', ''), 'two arguments are self_'
     sprintf(slot, '{"name": "b", "type": "bytes_mut"}', ''), 'on an object kind only'
     sprintf(slot, '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}', ''), 'no object kind'
-    [strrep(sprintf(slot, '', ''), '"required": true', '"required": false') ', ' ...
-     strrep(sprintf(slot, '', ''), '"f"', '"g"')], 'the required slots come first'
     [sprintf(slot, '', '') ', ' sprintf(slot, '', '')], 'two slots are f'
   };
   for i = 1:size(cases, 1)
@@ -91,6 +89,20 @@ function refusals()
   e = expect_error(@() guatiao.write_kinds(doc, dir), 'guatiao:BadValue', 'no package folder');
   expect_true(~isempty(strfind(e.message, 'no package folder')), e.message);
   expect_true(~exist(fullfile(dir, '+k'), 'dir'), 'a refusal writes nothing');
+  % An optional slot may come between required ones, as in a trait.
+  fid = fopen(fullfile(dir, 'between.json'), 'w');
+  fprintf(fid, '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, "slots": [%s, %s, %s]}]}', ...
+    sprintf(slot, '', ''), ...
+    strrep(strrep(sprintf(slot, '', ''), '"required": true', '"required": false'), '"f"', '"g"'), ...
+    strrep(sprintf(slot, '', ''), '"f"', '"h"'));
+  fclose(fid);
+  guatiao.write_kinds(fullfile(dir, 'between.json'), fullfile(dir, '+k'));
+  expect_true(exist(fullfile(dir, '+k', 'K.m'), 'file') == 2, 'the kind class is written');
+  addpath(dir);
+  restore = onCleanup(@() rmpath(dir));
+  d = k.K.KKind;
+  expect_equal(cellfun(@(s) s.name, d.slots, 'UniformOutput', false), {'f', 'g', 'h'});
+  expect_equal(cellfun(@(s) s.required, d.slots), [true false true]);
 end
 
 function stale()

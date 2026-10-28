@@ -19,7 +19,7 @@
 import path from 'node:path';
 
 import { SIZE, Status, Tag, VALUE } from './abi.js';
-import { raiseForStatus } from './errors.js';
+import { BadValue, raiseForStatus } from './errors.js';
 import type { KindDescription, KindsDocument, TypeDescription } from './kinds.js';
 import { methodName, slotName } from './kinds.js';
 import * as n from './native.js';
@@ -365,19 +365,21 @@ class Reader {
     const object = this.isObjectKind(decl);
     const slots = decl.members.map((member) => this.slot(member, label, object));
     const seen = new Set<string>();
-    let optional: string | undefined;
     for (const slot of slots) {
       if (seen.has(slot.name)) this.refuse(decl, `${label}: two slots are ${slot.name}`);
       seen.add(slot.name);
-      if (!slot.required) optional ??= slot.name;
-      else if (optional !== undefined) {
-        this.refuse(decl, `${label}: ${slot.name} is required and follows ${optional}, which is not: the required slots come first (an optional one is appended later)`);
-      }
+    }
+    // The library reads the kind whether or not its hash is pinned: what no
+    // kind may declare is refused there.
+    let floorHash: number;
+    try {
+      floorHash = floorHashOf(object, slots);
+    } catch (error) {
+      if (!(error instanceof BadValue)) throw error;
+      return this.refuse(decl, `${label}: ${error.message}`);
     }
     const pinned = this.tag(decl, 'floorHash');
-    let floorHash: number;
-    if (pinned === undefined) floorHash = floorHashOf(object, slots);
-    else {
+    if (pinned !== undefined) {
       floorHash = Number(pinned);
       if (!/^\d+$/.test(pinned) || floorHash > 0xffffffff) this.refuse(decl, `${label}: @floorHash is a 32-bit unsigned integer, not ${pinned}`);
     }

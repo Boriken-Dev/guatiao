@@ -125,7 +125,7 @@ int _serve_WatcherChangedBody(Pointer<Void> ctx, guatiao_str name, int total) {
 
 /// Counts by name.
 ///
-/// The `tally` kind: what a provider of it implements, and each appended slot an interface of its own ([TallyAll], [TallyKnown], [TallyChecksum], [TallyReport], [TallyLoad]).
+/// The `tally` kind: what a provider of it implements, and each optional slot an interface of its own ([TallyAll], [TallyKnown], [TallyChecksum], [TallyReport], [TallyLoad]).
 abstract interface class Tally {
   /// The kind: what a provider lists and a host binds with.
   static final TallyKind kind = TallyKind._();
