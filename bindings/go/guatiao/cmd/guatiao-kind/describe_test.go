@@ -159,7 +159,7 @@ func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 		"an unknown directive":       {"//guatiao:infallible", "//guatiao:infalible", "is not one of"},
 		"a mark on no argument":      {"//guatiao:lent config ear", "//guatiao:lent config ear cup", "//guatiao:lent cup: no argument has that name"},
 		"a borrowed list view":       {"//guatiao:lent config ear", "//guatiao:lent ear", "a list is not borrowed"},
-		"a borrowed list":            {"\t//guatiao:taken items\n", "", "a list is not borrowed: mark it taken"},
+		"a borrowed list":            {"\t//guatiao:taken items\n", "", "args[1].pass` is borrowed: a list is not borrowed"},
 		"capitals in a row":          {"Fill(config", "FillIO(config", "capitals in a row"},
 		"an optional non-interface":  {"//guatiao:optional Filler", "//guatiao:optional Filer", "Filer, which is no interface"},
 		"an optional kind":           {"//guatiao:optional Filler", "//guatiao:optional Ear", "a kind of its own"},
@@ -267,11 +267,12 @@ type Middle interface {
 func TestTheGlueRefusesWhatTheSharedVectorsRefuse(t *testing.T) {
 	var file struct {
 		Refused []struct {
-			Name   string          `json:"name"`
-			Object bool            `json:"object"`
-			Slots  json.RawMessage `json:"slots"`
-			Why    string          `json:"why"`
-			By     any             `json:"by"`
+			Name   string            `json:"name"`
+			Object bool              `json:"object"`
+			Slots  json.RawMessage   `json:"slots"`
+			With   []json.RawMessage `json:"with"`
+			Why    string            `json:"why"`
+			By     any               `json:"by"`
 		} `json:"refused"`
 	}
 	if err := json.Unmarshal(repoFile(t, "crates", "guatiao-derive", "tests", "vectors", "floor_hash.json"), &file); err != nil {
@@ -286,7 +287,11 @@ func TestTheGlueRefusesWhatTheSharedVectorsRefuse(t *testing.T) {
 			continue
 		}
 		doc := `{"kinds": [{"name": "` + v.Name + `", "floor_hash": 1, "object": ` + strconv.FormatBool(v.Object) +
-			`, "slots": ` + string(v.Slots) + `}]}`
+			`, "slots": ` + string(v.Slots) + `}`
+		for _, k := range v.With {
+			doc += ", " + string(k)
+		}
+		doc += "]}"
 		src := "package probe\n\n//guatiao:kind " + v.Name + "\ntype K interface {\n\tHas(name string) (bool, error)\n}\n"
 		dir := pkg(t, src, "")
 		if err := os.WriteFile(filepath.Join(dir, "k.kinds.json"), []byte(doc), 0o644); err != nil {
@@ -301,8 +306,32 @@ func TestTheGlueRefusesWhatTheSharedVectorsRefuse(t *testing.T) {
 		}
 		ran++
 	}
-	if ran < 2 {
+	if ran < 6 {
 		t.Fatalf("%d refusals", ran)
+	}
+}
+
+// A header is no description: what no trait declares is refused where the
+// table is read, and the same table that can fail is read.
+func TestAHeaderTableNoTraitDeclaresIsRefused(t *testing.T) {
+	table := func(slot string) string {
+		return "typedef struct w_vtable {\n  guatiao_kind_header header;\n" + slot +
+			"\n} w_vtable;\n#define w_vtable_FLOOR_HASH 1\n"
+	}
+	for slot, says := range map[string]string{
+		"  guatiao_status (*header)(void *ctx);":                                          "the table's first field",
+		"  guatiao_status (*sum)(void *ctx, const guatiao_list *items, int64_t *out);":    "a list is not borrowed",
+		"  guatiao_status (*read)(void *ctx, const guatiao_object *memo, uint64_t *out);": "on a fallible slot only",
+		"  guatiao_status (*give)(void *ctx, guatiao_object memo);":                       "on a fallible slot only",
+		"  guatiao_status (*open)(void *ctx, guatiao_object *out);":                       "on a fallible slot only",
+	} {
+		if _, err := readTable(table(slot), "w_vtable"); err == nil || !strings.Contains(err.Error(), says) {
+			t.Errorf("%s: %v", slot, err)
+		}
+	}
+	fine := "  guatiao_status (*open)(void *ctx, const guatiao_object *memo, guatiao_object *out, guatiao_provider_error *err);"
+	if _, err := readTable(table(fine), "w_vtable"); err != nil {
+		t.Fatal(err)
 	}
 }
 

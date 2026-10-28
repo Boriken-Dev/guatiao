@@ -90,9 +90,19 @@ func readTable(header, name string) (*cTable, error) {
 	// A header is no description the library could read: this is checked
 	// here, as #[guatiao::kind] and the library's reader check it.
 	for _, s := range t.slots {
+		if s.name == "header" {
+			return nil, fmt.Errorf("%s.header: the table's first field is its header", name)
+		}
+		fallible := len(s.params) > 1 && s.params[len(s.params)-1].typ == "guatiao_provider_error *"
 		for _, prm := range s.params {
-			if prm.typ == "guatiao_bytes_mut" && !t.object {
+			switch {
+			case prm.typ == "guatiao_bytes_mut" && !t.object:
 				return nil, fmt.Errorf("%s.%s(%s): bytes written in place cross on an object kind only", name, s.name, prm.name)
+			case prm.typ == "const guatiao_list *":
+				return nil, fmt.Errorf("%s.%s(%s): a list is not borrowed, but taken or lent", name, s.name, prm.name)
+			case !fallible && strings.HasPrefix(strings.TrimPrefix(prm.typ, "const "), "guatiao_object"):
+				// Its table is checked where it arrives, which only a fallible slot can refuse.
+				return nil, fmt.Errorf("%s.%s(%s): an object crosses on a fallible slot only", name, s.name, prm.name)
 			}
 		}
 	}

@@ -101,6 +101,7 @@ abstract interface class Between {
               'object': v['object'],
               'slots': v['slots'],
             },
+            ...(v['with'] as List? ?? const []),
           ],
         };
         final says = throwsA(
@@ -122,7 +123,7 @@ abstract interface class Between {
         }
         ran++;
       }
-      expect(ran, greaterThanOrEqualTo(2));
+      expect(ran, greaterThanOrEqualTo(6));
     },
   );
 
@@ -272,6 +273,12 @@ abstract interface class Store {
           'on an object kind only',
       '@FloorHash(7) abstract interface class A { void f(BytesMut b); }':
           'on an object kind only',
+      'abstract interface class A { void header(); }':
+          'the table\'s first field',
+      'abstract interface class A { void f(Lent<B> b); }\nabstract interface class B implements ObjectKind {}':
+          'on a fallible slot only',
+      'abstract interface class A { B f(); }\nabstract interface class B implements ObjectKind {}':
+          'on a fallible slot only',
       'abstract interface class A { void close(); }':
           'close is a remote\'s own',
       'abstract interface class A { void _hidden(); }':

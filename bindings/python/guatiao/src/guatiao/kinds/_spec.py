@@ -14,7 +14,7 @@ from typing import Any, Sequence
 from .. import _abi
 from ..errors import Unsupported, check, raise_for_status
 from . import _serve
-from ._shapes import BYTES_MUT, Scope, Shape, answer_shape
+from ._shapes import BYTES_MUT, Scope, Shape, _ObjectShape, answer_shape
 from ._table import FloorMismatch
 
 _WORD = ctypes.sizeof(ctypes.c_void_p)
@@ -125,8 +125,20 @@ class Kind:
                 )
             # A kind is built here with no description to check, and
             # without the library.
+            if m.name == "header":
+                raise TypeError(f"`{name}.header`: the table's first field is its `header`; name the method otherwise")
             if not self.is_object and any(shape is BYTES_MUT for shape in m.args):
                 raise TypeError(f"`{name}.{m.name}`: bytes written in place cross on an object kind only")
+            # An object's table is checked where it arrives, which only a
+            # fallible slot can refuse.
+            if not m.fallible:
+                objects = [i for i, shape in enumerate(m.args) if isinstance(shape, _ObjectShape)]
+                if objects:
+                    raise TypeError(
+                        f"`{name}.{m.name}`: argument {objects[0]}, an object, crosses on a fallible slot only"
+                    )
+                if isinstance(m.returns, _ObjectShape):
+                    raise TypeError(f"`{name}.{m.name}`: an object answer crosses on a fallible slot only")
         if struct is None:
             built: "list[tuple[str, Any]]" = [("header", _abi.KindHeader)]
             if self.is_object:

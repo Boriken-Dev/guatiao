@@ -682,10 +682,8 @@ contains
     select case (t%type)
     case ('str', 'bytes', 'bytes_mut')
       return
-    case ('map')
+    case ('map', 'list')
       return
-    case ('list')
-      if (t%pass == 'borrowed') why = where // ': a list is not borrowed'
     case ('value')
       if (t%pass /= 'borrowed') why = where // ': a value ' // t%pass // &
         ' has no Fortran form yet: pass a map or a list, or borrow the value'

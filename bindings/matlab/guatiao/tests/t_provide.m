@@ -74,6 +74,24 @@ function kind_refusals()
   d = guatiao.Kind.describe('fine', 1, guatiao.slot('f', {}), guatiao.slot('g', {}, 'Required', true));
   expect_equal(cellfun(@(s) s.required, d.slots), [false true]);
   expect_error(@() guatiao.Kind.describe('bad', 1, guatiao.slot('f', {}), guatiao.slot('f', {})), 'guatiao:BadValue');
+  % What no trait declares, refused with no description to check and no library.
+  memo = 'greeterkind.Listener';
+  refused = {
+    {guatiao.slot('header', {})}, 'bad.header: the table''s first field'
+    {guatiao.slot('sum', {'items', 'list'}, 'Returns', 'int64')}, 'bad.sum(items): a list is not borrowed'
+    {guatiao.slot('fill', {'dst', guatiao.lent('bytes')})}, 'bad.fill(dst): bytes written in place cross on an object kind only'
+    {guatiao.slot('read', {'l', guatiao.lent(memo)})}, 'bad.read(l): an object crosses on a fallible slot only'
+    {guatiao.slot('give', {'l', guatiao.taken(memo)})}, 'bad.give(l): an object crosses on a fallible slot only'
+    {guatiao.slot('open', {}, 'Returns', memo)}, 'bad.open answer: an object crosses on a fallible slot only'
+  };
+  for i = 1:size(refused, 1)
+    e = expect_error(@() guatiao.Kind.describe('bad', 1, refused{i, 1}{:}), 'guatiao:BadValue', refused{i, 2});
+    expect_true(~isempty(strfind(e.message, refused{i, 2})), sprintf('%s: %s', refused{i, 2}, e.message));
+  end
+  d = guatiao.Kind.describe('fine', 1, guatiao.slot('fill', {'dst', guatiao.lent('bytes')}), 'Object', true);
+  expect_equal(d.object, true);
+  d = guatiao.Kind.describe('fine', 1, guatiao.slot('open', {'l', guatiao.lent(memo)}, 'Returns', memo, 'Fallible', true));
+  expect_equal(d.slots{1}.fallible, true);
   expect_error(@() guatiao.slot('f', {'x'}), 'guatiao:BadValue');
   expect_error(@() guatiao.slot('not a name', {}), 'guatiao:BadValue');
   e = guatiao.internal.kinds('of', 'gtt.Pair');

@@ -100,7 +100,7 @@ case("a kind loaded from its description is the kind kind() declares", with_exam
     slots = list(list(name = "x", required = TRUE, fallible = FALSE,
       args = list(list(name = "a", type = "list", pass = "borrowed")))))))
   e <- expect_error(kinds_of(borrowed_list))
-  expect_true(grepl("k.x(a): a list cannot be passed borrowed", conditionMessage(e), fixed = TRUE))
+  expect_true(grepl("k.x(a): a list is not borrowed", conditionMessage(e), fixed = TRUE))
 }))
 
 case("a host binds a kind from what the library carries", with_examples({

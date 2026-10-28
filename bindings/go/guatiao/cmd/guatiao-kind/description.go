@@ -147,9 +147,6 @@ func cArg(a argDescription, where string) (string, error) {
 	}
 	switch a.Pass {
 	case "borrowed":
-		if a.Type == "list" {
-			return "", fmt.Errorf("%s(%s): a list cannot be passed borrowed", where, a.Name)
-		}
 		return "const " + tree + " *", nil
 	case "taken", "lent":
 		return tree + " *", nil

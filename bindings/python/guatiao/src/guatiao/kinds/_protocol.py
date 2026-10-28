@@ -149,7 +149,7 @@ def _shape(annotation: Any, *, answer: bool, where: str) -> Any:
         if _is_kind_class(base):
             raise TypeError(f"{where}: an object is handed over or lent: Taken[{base.__name__}] or Lent[{base.__name__}]")
         if base is List:
-            raise TypeError(f"{where}: a list is never borrowed: Lent[List] or Taken[List]")
+            raise TypeError(f"{where}: a list is not borrowed: Lent[List] or Taken[List]")
     if base is bool:
         return shapes.BOOL
     if base is float:

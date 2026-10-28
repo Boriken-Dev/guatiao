@@ -74,10 +74,7 @@ function described_arg(a, types, where)
     end
     haskey(DESCRIBED_TREES, ty) || throw(ArgumentError("$where: $(repr(ty)) is no argument type"))
     tree = DESCRIBED_TREES[ty]
-    if pass == "borrowed"
-        ty == "list" && throw(ArgumentError("$where: a list cannot be passed borrowed"))
-        return tree
-    end
+    pass == "borrowed" && return tree
     pass in ("taken", "lent") || throw(ArgumentError("$where: a $ty is passed borrowed, taken or lent, not $(repr(pass))"))
     return Expr(:curly, pass == "taken" ? :Taken : :Lent, tree)
 end

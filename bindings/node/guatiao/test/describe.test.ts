@@ -96,6 +96,7 @@ export interface Shapes {
   trees(a: Ref, b: Ref | null, c: MapRef, d: Borrowed<MapRef>): void;
   taken(a: Taken<Ref>, b: Taken<MapRef>, c: Taken<ListRef>): void;
   lent(a: Lent<Ref>, b: Lent<MapRef>, c: Lent<ListRef>): void;
+  /** @throws */
   objects(a: Taken<Sink>, b: Lent<Sink>): Sink;
   aliased(a: Count, b: k.i8): k.u8;
   text(): string;
@@ -133,6 +134,7 @@ export interface Shapes {
           { name: 'a', type: 'object', kind: 'sink', pass: 'taken' },
           { name: 'b', type: 'object', kind: 'sink', pass: 'lent' },
         ]),
+        fallible: true,
         answer: { type: 'object', kind: 'sink' },
       },
       slotOf('aliased', [a('a', 'u64'), a('b', 'i8')], 'u8'),
@@ -160,6 +162,7 @@ export interface Sink extends ObjectKind {
   put(data: BytesMut): u32;
 }
 export interface Shipped {
+  /** @throws */
   every(a: Ref | null, b: MapRef, c: Taken<ListRef>, d: Lent<Sink>, e: i64): MapAnswer;
 }
 `,
@@ -246,13 +249,20 @@ export interface Other {
   it('is refused as the shared vectors say: by the library, or by its own names', () => {
     const file = path.join(REPO, 'crates', 'guatiao-derive', 'tests', 'vectors', 'floor_hash.json');
     const { refused } = JSON.parse(readText(file)) as {
-      refused: { name: string; object: boolean; slots: KindsDocument['kinds'][number]['slots']; why: string; by: string | string[] }[];
+      refused: {
+        name: string;
+        object: boolean;
+        slots: KindsDocument['kinds'][number]['slots'];
+        with?: KindsDocument['kinds'];
+        why: string;
+        by: string | string[];
+      }[];
     };
     const ours = refused.filter((v) => v.by === 'every reader' || v.by.includes('node'));
-    expect(ours.length).toBeGreaterThanOrEqual(2);
+    expect(ours.length).toBeGreaterThanOrEqual(6);
     for (const v of ours) {
       const kind = { name: v.name, floor_hash: 1, object: v.object, slots: v.slots };
-      expect(() => kindsOf({ kinds: [kind] }), v.name).toThrow(v.why);
+      expect(() => kindsOf({ kinds: [kind, ...(v.with ?? [])] }), v.name).toThrow(v.why);
       if (v.by === 'every reader') expect(() => floorHashOf(v.object, v.slots), v.name).toThrow(v.why);
     }
   });
@@ -279,6 +289,7 @@ export interface Between {
       `${HEAD}
 import type { Far } from './far.ts';
 export interface Near {
+  /** @throws */
   use(far: Lent<Far>): Far;
 }
 `,
@@ -300,7 +311,13 @@ export interface Near {
       refusal('export interface A { f(x: MapRef | null): void }', /only a borrowed value \(`Ref \| null`\) may be null/),
       refusal('export interface L extends ObjectKind { g(): void }\nexport interface A { f(x: L): void }', /an object is passed as Taken<L> or Lent<L>/),
       refusal('export interface N { g(): void }\nexport interface A { f(x: Lent<N>): void }', /N is not a tree \(Ref, MapRef, ListRef\) or an object kind/),
-      refusal('export interface A { f(x: ListRef): void }', /a list is passed Taken or Lent/),
+      refusal('export interface A { f(x: ListRef): void }', /A: .*slots\[0\]\.args\[0\]\.pass.*a list is not borrowed/),
+      refusal('export interface A { header(): void }', /A: .*slots\[0\].*the table's first field/),
+      refusal(
+        'export interface L extends ObjectKind { g(): void }\nexport interface A { f(x: Lent<L>): void }',
+        /A: .*slots\[0\]\.args\[0\]\.type.*on a fallible slot only/,
+      ),
+      refusal('export interface L extends ObjectKind { g(): void }\nexport interface A { f(): L }', /A: .*slots\[0\]\.answer\.type.*on a fallible slot only/),
       refusal('export interface A { f(): MapRef }', /a slot answers MapAnswer, ListAnswer or ValueAnswer/),
       refusal('export interface A { f(): Uint8Array }', /not bytes/),
       refusal('export interface A { f(x: MapAnswer): void }', /is what a slot answers/),

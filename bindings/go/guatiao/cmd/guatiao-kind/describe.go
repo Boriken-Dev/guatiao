@@ -375,9 +375,6 @@ func (p *pkgInfo) describeArg(gp goParam, mark, gt string) (outType, error) {
 			}
 			t.Nullable = true
 		case "":
-			if t.Type == "list" {
-				return t, fmt.Errorf("a list is not borrowed: mark it lent, or take a Go type it decodes into, marked taken")
-			}
 		default:
 			return t, fmt.Errorf("a view is borrowed, or lent or nullable; a tree handed over is a *%s.Value or a Go type it decodes into", gt)
 		}
@@ -403,8 +400,6 @@ func (p *pkgInfo) describeArg(gp goParam, mark, gt string) (outType, error) {
 	t.Type, t.Pass = tree, "borrowed"
 	if mark == "taken" {
 		t.Pass = "taken"
-	} else if tree == "list" {
-		return t, fmt.Errorf("a list is not borrowed: mark it taken")
 	}
 	return t, only("taken")
 }

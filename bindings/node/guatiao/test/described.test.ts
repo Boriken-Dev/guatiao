@@ -66,7 +66,7 @@ describe('a kind loaded from its description', () => {
     expect(() => kindsOf({ name: 'k' } as never)).toThrow(/\{ kinds: \[\.\.\.\] \}/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'u128' }] }]))).toThrow(/k\.x argument 0: u128/);
     expect(() => kindsOf(one([{ name: 'x', answer: { type: 'str' } }]))).toThrow(/k\.x answer: an answer cannot be str/);
-    expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'list' }] }]))).toThrow(/a list cannot be passed borrowed/);
+    expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'list' }] }]))).toThrow(/a list is not borrowed/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'object', kind: 'nowhere', pass: 'lent' }] }]))).toThrow(
       /no kind nowhere/,
     );
@@ -164,7 +164,7 @@ const TREES: KindsDocument = {
       name: 'forest',
       floor_hash: 6,
       object: false,
-      slots: [{ name: 'root', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'node' } }],
+      slots: [{ name: 'root', required: true, fallible: true, args: [], answer: { type: 'object', kind: 'node' } }],
     },
     {
       name: 'node',
@@ -182,7 +182,7 @@ const TREES: KindsDocument = {
         {
           name: 'size_of',
           required: false,
-          fallible: false,
+          fallible: true,
           args: [{ name: 'other', type: 'object', kind: 'node', pass: 'lent' }],
           answer: { type: 'u32' },
         },
@@ -232,8 +232,8 @@ describe('a kind that names itself through its slots', () => {
   it('or names one that names it back', () => {
     const cycle: KindsDocument = {
       kinds: [
-        { name: 'ping', floor_hash: 1, object: true, slots: [{ name: 'pong', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'pong' } }] },
-        { name: 'pong', floor_hash: 2, object: true, slots: [{ name: 'ping', required: true, fallible: false, args: [], answer: { type: 'object', kind: 'ping' } }] },
+        { name: 'ping', floor_hash: 1, object: true, slots: [{ name: 'pong', required: true, fallible: true, args: [], answer: { type: 'object', kind: 'pong' } }] },
+        { name: 'pong', floor_hash: 2, object: true, slots: [{ name: 'ping', required: true, fallible: true, args: [], answer: { type: 'object', kind: 'ping' } }] },
       ],
     };
     const loaded = kindsOf(cycle);
@@ -258,7 +258,7 @@ class Echo extends Kind {
   static readonly slots = {
     echo: slot(t.str).returns(t.text).required().fallible(),
     tell: slot(t.str, t.lent(Note)).fallible(),
-    open: slot().returns(Note),
+    open: slot().returns(Note).fallible(),
   };
 }
 
@@ -344,7 +344,7 @@ describe('a kind defined as a class', () => {
       methods: {
         echo: { args: [t.str], answer: t.text, required: true, fallible: true },
         tell: { args: [t.str, t.lent(Note)], fallible: true },
-        open: { answer: Note },
+        open: { answer: Note, fallible: true },
       },
     });
     using reg = new Registry('classes', '0.1');
@@ -373,7 +373,7 @@ class Relay extends Kind {
   static readonly slots = {
     echo: slot(t.str).returns(t.text).required().fallible(),
     tellAll: slot(t.str, t.lent(Memo), t.taken(t.map), t.bytes).fallible(),
-    open: slot().returns(Memo),
+    open: slot().returns(Memo).fallible(),
   };
 }
 
@@ -403,7 +403,7 @@ describe('a kind described again', () => {
               { name: 'arg3', type: 'bytes' },
             ],
           },
-          { name: 'open', required: false, fallible: false, args: [], answer: { type: 'object', kind: 'memo' } },
+          { name: 'open', required: false, fallible: true, args: [], answer: { type: 'object', kind: 'memo' } },
         ],
       },
       {
@@ -451,5 +451,16 @@ describe('a kind described again', () => {
       static readonly slots = { f: slot(t.str, t.u32).named('only') };
     }
     expect(() => describeKinds([Short])).toThrow(/short\.f: a name for each of its 2 arguments, not \["only"\]/);
+  });
+
+  it('refuses what no trait declares, with no description to check and no library', () => {
+    expect(() => kind('k', { floorHash: 1, methods: { header: {} } })).toThrow(/k\.header: the table's first field/);
+    expect(() => kind('k', { floorHash: 1, methods: { read: { args: [t.str, t.lent(Memo)] } } })).toThrow(
+      /k\.read: argument 1, an object, crosses on a fallible slot only/,
+    );
+    expect(() => kind('k', { floorHash: 1, methods: { give: { args: [t.taken(Memo)] } } })).toThrow(/on a fallible slot only/);
+    expect(() => kind('k', { floorHash: 1, methods: { open: { answer: Memo } } })).toThrow(/k\.open: an object answer crosses on a fallible slot only/);
+    expect(() => kind('k', { floorHash: 1, methods: { fill: { args: [t.bytesMut] } } })).toThrow(/on an object kind only/);
+    expect(() => kind('k', { floorHash: 1, methods: { open: { args: [t.lent(Memo)], answer: Memo, fallible: true } } })).not.toThrow();
   });
 });

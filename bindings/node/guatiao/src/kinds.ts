@@ -1204,6 +1204,15 @@ export class KindImpl implements Kind<Methods, boolean> {
           throw new TypeError(`${name}.${methodName}: ${String(method.answer)} cannot be an answer`);
         }
       }
+      if (methodName === 'header') {
+        throw new TypeError(`${name}.header: the table's first field is its header; name the slot otherwise`);
+      }
+      // An object's table is checked where it arrives, which only a fallible slot can refuse.
+      if (method.fallible !== true) {
+        const object = args.findIndex((a) => a instanceof ObjectShape);
+        if (object >= 0) throw new TypeError(`${name}.${methodName}: argument ${object}, an object, crosses on a fallible slot only`);
+        if (answer instanceof ObjectShape) throw new TypeError(`${name}.${methodName}: an object answer crosses on a fallible slot only`);
+      }
       const cTypes = ['void *', ...args.map((a) => a.cArg!), ...(answer ? ['void *'] : []), ...(method.fallible ? ['void *'] : [])];
       const slot: ResolvedSlot = {
         name: methodName,
@@ -1439,6 +1448,7 @@ function shapeOf(
       if (pass === 'taken') return taken(tree as typeof t.map);
       if (pass === 'lent') return lent(tree as typeof t.map);
       if (pass === 'borrowed' && type !== 'list') return tree;
+      if (pass === 'borrowed') throw new TypeError(`${where}: a list is not borrowed, but taken or lent`);
       throw new TypeError(`${where}: a ${type} cannot be passed ${String(pass)}`);
     }
     case 'object': {

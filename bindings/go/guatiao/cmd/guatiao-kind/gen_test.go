@@ -165,7 +165,7 @@ func TestRefusesADescriptionItCannotRead(t *testing.T) {
 	cases := map[string]struct{ from, to, says string }{
 		"no kinds":          {`{"kinds": [`, `{"kindz": [`, "a kinds document is"},
 		"an unknown type":   {`"type": "i64"`, `"type": "u128"`, "an answer cannot be"},
-		"a borrowed list":   {`"type": "map", "pass": "taken"`, `"type": "list", "pass": "borrowed"`, "a list cannot be passed borrowed"},
+		"a borrowed list":   {`"type": "map", "pass": "taken"`, `"type": "list", "pass": "borrowed"`, "a list is not borrowed"},
 		"a kind not in it":  {`"name": "ear"`, `"name": "lug"`, "describes no kind ear"},
 		"a pass it ignores": {`"pass": "lent"`, `"pass": "kept"`, "borrowed, taken or lent"},
 	}

@@ -59,6 +59,20 @@ case("kinds and providers declared in a script", with_examples({
   expect_error(kind("bad", floor_hash = 1, close = method(), object = TRUE, where = globalenv()))
   expect_error(kind("bad", floor_hash = 1, f = method(x = "nonesuch"), where = globalenv()))
   expect_error(kind("bad", floor_hash = 1, f = method(x = taken(Greeter)), where = globalenv()))
+  # What no trait declares, refused with no description to check and no library.
+  refused <- function(says, ..., object = FALSE) {
+    e <- expect_error(kind("bad", floor_hash = 1, ..., object = object, where = globalenv()))
+    expect_true(grepl(says, conditionMessage(e), fixed = TRUE))
+  }
+  refused("bad.header: the table's first field", header = method())
+  refused("bad.sum(items): a list is not borrowed", sum = method(items = "list", returns = "int64"))
+  refused("bad.fill(dst): bytes written in place cross on an object kind only", fill = method(dst = lent("bytes")))
+  refused("bad.read(l): an object crosses on a fallible slot only", read = method(l = lent(Listener)))
+  refused("bad.give(l): an object crosses on a fallible slot only", give = method(l = taken(Listener)))
+  refused("bad.open answer: an object crosses on a fallible slot only", open = method(returns = Listener))
+  Fine <- kind("fine", floor_hash = 1, hand_back = method(l = lent(Listener), returns = Listener, fallible = TRUE),
+    class = "GtFineKind", where = globalenv())
+  expect_true(inherits(Fine, "guatiao_kind"))
   # An optional slot may come between required ones, as in a trait.
   Between <- kind("between", floor_hash = 9, f = method(required = TRUE), g = method(), h = method(required = TRUE),
     where = globalenv())

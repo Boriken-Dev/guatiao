@@ -115,7 +115,7 @@ def _arg(arg: Mapping[str, Any], kinds: Mapping[str, Kind], where: str) -> shape
         tree = _TREES[ty]
         if how == "borrowed":
             if ty == "list":
-                raise TypeError(f"{where}: a list cannot be passed borrowed")
+                raise TypeError(f"{where}: a list is not borrowed, but taken or lent")
             return tree
         if how == "taken":
             return shapes.taken(tree)
