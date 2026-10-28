@@ -355,10 +355,10 @@ pub(crate) fn open_source_file(
     path: &std::path::Path,
     host: Host,
     config: &Value,
+    search: crate::library::registry::ImportSearch,
 ) -> Result<Arc<SourceCell>, SourceFileError> {
     // SAFETY: naming a file is choosing to run it.
-    let library = unsafe { libloading::Library::new(path) }
-        .map_err(|e| SourceFileError::Open(e.to_string()))?;
+    let library = unsafe { super::image::map(path, search) }.map_err(SourceFileError::Open)?;
     // SAFETY: the symbol is absent, which is an answer, or has the
     // signature this crate defines for it.
     let entry = match unsafe { library.get::<SourceFn>(SOURCE_SYMBOL) } {

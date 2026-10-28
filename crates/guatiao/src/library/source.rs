@@ -290,7 +290,8 @@ impl Registry {
         }
         let host = self.host();
         let config = Value::from(config.clone());
-        let cell = open_source_file(path, host, &config).map_err(|e| match e {
+        let search = self.import_search();
+        let cell = open_source_file(path, host, &config, search).map_err(|e| match e {
             SourceFileError::Open(reason) => SourceError::Open {
                 path: path.to_path_buf(),
                 reason,

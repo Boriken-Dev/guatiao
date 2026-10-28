@@ -1315,6 +1315,11 @@ reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
 reg.set_priority(id, 10) / reg.priority(id)
+reg.set_import_search(ImportSearch::Path)  // Windows: what files opened from now on import may
+                                           // also come from the current directory and PATH
+                                           // (default Library: beside the file, beside the host,
+                                           // System32, AddDllDirectory dirs); ignored elsewhere
+reg.import_search()                        // ImportSearch
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
 reg.providers_of("acme_net_pve")           // every loaded version of one id (>1 only under %id@%version)
 reg.all() / reg.all_ranked()               // everything, load order / best first
@@ -2046,6 +2051,23 @@ passed over — "ssh → openssh (also: putty)".
 
 In C: `guatiao_registry_set_priority`, `_priority`, `_best`; and every
 provider map carries its `priority`.
+
+### Where a loaded file's imports are found
+
+On Windows a file the registry opens is opened by its path, and what it
+imports is looked for beside it, beside the host's executable, in
+System32 and in `AddDllDirectory` directories (`ImportSearch::Library`,
+the default): never the current directory or `PATH`. `ImportSearch::Path`
+opens a file the default leaves an import missing for again with
+Windows' standard search from its directory (current directory and
+`PATH` included), as a non-Python host adding the Python bridge
+(`python3.dll`) needs. A module already loaded answers an import of its
+name under either. A refusal's reason carries the system's words and,
+under the default, where it did not look. Elsewhere the setting is
+ignored: on Linux the file's `RUNPATH` (`$ORIGIN`) and `LD_LIBRARY_PATH`
+decide. In C: `guatiao_registry_set_import_search(reg,
+GUATIAO_IMPORT_SEARCH_LIBRARY | GUATIAO_IMPORT_SEARCH_PATH)` (any other
+value `BAD_VALUE`), `guatiao_registry_import_search(reg)`.
 
 ### Can it actually run here?
 

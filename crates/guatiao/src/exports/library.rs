@@ -56,8 +56,8 @@ use std::path::Path;
 use super::{guard, guard_with, out};
 use crate::library::ProviderError;
 use crate::library::{
-    EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Refreshed, Registry,
-    ScanRules, SearchPath, Served, Skipped, SourceError, SourceInfo, UnloadError, WhyNot,
+    EntryFn, HostInfo, ImportSearch, LibraryInfo, LoadReport, Loading, Order, Provider, Refreshed,
+    Registry, ScanRules, SearchPath, Served, Skipped, SourceError, SourceInfo, UnloadError, WhyNot,
     scan_dir_rules, scan_path,
 };
 use crate::schema::read::SchemaRef;
@@ -1591,6 +1591,70 @@ pub unsafe extern "C" fn guatiao_registry_priority(reg: *const HostRegistry, id:
             return 0;
         };
         registry.priority(id)
+    })
+}
+
+/// [`guatiao_registry_set_import_search`]: a file's imports are found
+/// beside it, beside the host's executable, in the system directory and
+/// in the directories the process added, and not in the current
+/// directory or on `PATH`. The default.
+pub const GUATIAO_IMPORT_SEARCH_LIBRARY: u32 = 0;
+/// [`guatiao_registry_set_import_search`]: the directories of
+/// `GUATIAO_IMPORT_SEARCH_LIBRARY` first; a file they leave an import
+/// missing for is opened again with Windows' standard search from its own
+/// directory, which reaches the current directory and `PATH`.
+pub const GUATIAO_IMPORT_SEARCH_PATH: u32 = 1;
+
+/// Sets where the loader finds the libraries a file this registry opens
+/// from now on imports: `guatiao_registry_load_file`, a scan, a watched
+/// directory and `guatiao_registry_add_source_file`.
+/// `GUATIAO_IMPORT_SEARCH_LIBRARY` (the default) or
+/// `GUATIAO_IMPORT_SEARCH_PATH`; any other value is
+/// `GUATIAO_ERR_BAD_VALUE` and changes nothing.
+///
+/// **Windows only**: elsewhere there is no per-load search, and on Linux
+/// a library's own `RUNPATH` (`$ORIGIN` for its directory) and
+/// `LD_LIBRARY_PATH` decide whatever this says. A library the process
+/// already loaded answers an import of its name under either search.
+///
+/// # Safety
+///
+/// `reg` is a live handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_set_import_search(
+    reg: *mut HostRegistry,
+    search: u32,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let search = match search {
+            GUATIAO_IMPORT_SEARCH_LIBRARY => ImportSearch::Library,
+            GUATIAO_IMPORT_SEARCH_PATH => ImportSearch::Path,
+            _ => return Status::GUATIAO_ERR_BAD_VALUE,
+        };
+        registry.inner.set_import_search(search);
+        Status::GUATIAO_OK
+    })
+}
+
+/// Where a file this registry opens has its imports found:
+/// `GUATIAO_IMPORT_SEARCH_LIBRARY` or `GUATIAO_IMPORT_SEARCH_PATH`, and
+/// the default, `GUATIAO_IMPORT_SEARCH_LIBRARY`, for a null handle.
+///
+/// # Safety
+///
+/// `reg` is a live handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_import_search(reg: *const HostRegistry) -> u32 {
+    guard_with(GUATIAO_IMPORT_SEARCH_LIBRARY, || {
+        // SAFETY: the caller's contract.
+        match unsafe { HostRegistry::get(reg) }.map(|r| r.inner.import_search()) {
+            Some(ImportSearch::Path) => GUATIAO_IMPORT_SEARCH_PATH,
+            Some(ImportSearch::Library) | None => GUATIAO_IMPORT_SEARCH_LIBRARY,
+        }
     })
 }
 

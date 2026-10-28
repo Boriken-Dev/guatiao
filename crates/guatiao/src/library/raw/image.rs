@@ -865,9 +865,13 @@ pub(crate) enum Opened {
 /// Mapping a library runs its static initialisers, which may do anything.
 /// The caller is responsible for only naming files it is willing to run.
 #[cfg(feature = "load")]
-pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, libloading::Error> {
+pub(crate) unsafe fn open(
+    path: &std::path::Path,
+    host: Host,
+    search: crate::library::registry::ImportSearch,
+) -> Result<Opened, String> {
     // SAFETY: the caller's side of the contract, stated above.
-    let library = unsafe { map(path)? };
+    let library = unsafe { map(path, search)? };
 
     // SAFETY: the symbol either is absent, which is an answer, or has the
     // signature this crate defines for it.
@@ -903,33 +907,86 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     }
 }
 
-/// Maps `path`. Windows looks for what a library imports beside the host,
-/// on `PATH` and among what is loaded, never beside the library itself: a
-/// load that fails is tried again with the library's own directory in place
-/// of the host's, `PATH` still searched, so a plugin shipped beside the
-/// `guatiao.dll` it links is found.
+/// Maps `path`, its imports found as `search` says, or answers why not in
+/// the loader's own words.
 ///
 /// # Safety
 ///
 /// As [`open`].
-#[cfg(feature = "load")]
-unsafe fn map(path: &std::path::Path) -> Result<libloading::Library, libloading::Error> {
+#[cfg(all(feature = "load", windows))]
+pub(crate) unsafe fn map(
+    path: &std::path::Path,
+    search: crate::library::registry::ImportSearch,
+) -> Result<libloading::Library, String> {
+    use crate::library::registry::ImportSearch;
+    use libloading::os::windows::{
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
+        LOAD_WITH_ALTERED_SEARCH_PATH, Library,
+    };
+    /// What Windows answers for a module it did not find: the file, or
+    /// something it imports.
+    const ERROR_MOD_NOT_FOUND: i32 = 126;
+
+    // Both flags want a fully qualified path.
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     // SAFETY: forwarded.
-    let first = unsafe { libloading::Library::new(path) };
-    #[cfg(windows)]
-    if first.is_err()
-        && let Ok(absolute) = std::path::absolute(path)
-    {
-        use libloading::os::windows::{LOAD_WITH_ALTERED_SEARCH_PATH, Library};
-        // SAFETY: forwarded: the same file, its own directory searched for
-        // what it imports (the flag wants an absolute path).
-        if let Ok(library) =
-            unsafe { Library::load_with_flags(&absolute, LOAD_WITH_ALTERED_SEARCH_PATH) }
-        {
-            return Ok(library.into());
-        }
+    let first = unsafe {
+        Library::load_with_flags(
+            &absolute,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
+    };
+    let not_found = |e: &libloading::Error| {
+        core::error::Error::source(e)
+            .and_then(|s| s.downcast_ref::<std::io::Error>())
+            .and_then(std::io::Error::raw_os_error)
+            == Some(ERROR_MOD_NOT_FOUND)
+    };
+    let error = match first {
+        Ok(library) => return Ok(library.into()),
+        Err(e) => e,
+    };
+    if search == ImportSearch::Path && not_found(&error) {
+        // A missing module stops the load before any initialiser runs, so
+        // opening the file again runs nothing twice.
+        // SAFETY: forwarded.
+        return unsafe { Library::load_with_flags(&absolute, LOAD_WITH_ALTERED_SEARCH_PATH) }
+            .map(Into::into)
+            .map_err(|e| loader_words(&e));
     }
-    first
+    let mut reason = loader_words(&error);
+    if not_found(&error) && absolute.is_file() {
+        reason.push_str(
+            "; a library it imports is not beside it, beside the host or in the system \
+             directory (the current directory and PATH are searched only under the \
+             import search `path`)",
+        );
+    }
+    Err(reason)
+}
+
+/// Maps `path`; unix has no per-load search, so `search` changes nothing.
+///
+/// # Safety
+///
+/// As [`open`].
+#[cfg(all(feature = "load", not(windows)))]
+pub(crate) unsafe fn map(
+    path: &std::path::Path,
+    _search: crate::library::registry::ImportSearch,
+) -> Result<libloading::Library, String> {
+    // SAFETY: forwarded.
+    unsafe { libloading::Library::new(path) }.map_err(|e| loader_words(&e))
+}
+
+/// The loader's message with the system's own words beneath it, which
+/// `libloading` keeps as the error's source.
+#[cfg(feature = "load")]
+fn loader_words(e: &libloading::Error) -> String {
+    match core::error::Error::source(e) {
+        Some(cause) => format!("{e}: {cause}"),
+        None => e.to_string(),
+    }
 }
 
 /// What a library the host LINKS came to: its describe function's answer,
@@ -1114,10 +1171,11 @@ impl crate::library::registry::Registry {
 pub(crate) fn open_library(
     path: &std::path::Path,
     host: Host,
-) -> Result<Opened, libloading::Error> {
+    search: crate::library::registry::ImportSearch,
+) -> Result<Opened, String> {
     // SAFETY: naming a file is choosing to run it, which is the contract
     // stated on `Registry::load_file` and on `open` below.
-    unsafe { open(path, host) }
+    unsafe { open(path, host, search) }
 }
 
 #[cfg(test)]

@@ -98,6 +98,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  /* ---- where a file's imports are found ------------------------------ */
+
+  CHECK(guatiao_registry_import_search(reg) == GUATIAO_IMPORT_SEARCH_LIBRARY,
+        "the import search is not the library's by default");
+  CHECK(guatiao_registry_set_import_search(reg, 2) == GUATIAO_ERR_BAD_VALUE,
+        "an unknown import search was taken");
+  CHECK(guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_PATH) == GUATIAO_OK &&
+            guatiao_registry_import_search(reg) == GUATIAO_IMPORT_SEARCH_PATH,
+        "the import search did not become `path`");
+  CHECK(guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_LIBRARY) == GUATIAO_OK,
+        "the import search did not go back to the library's");
+
   /* ---- load a real library ------------------------------------------ */
 
   st = guatiao_registry_load_file(reg, s(argv[1]), &alloc, &answer);

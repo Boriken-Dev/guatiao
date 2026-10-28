@@ -110,6 +110,12 @@ derived_greeter = { path = "../../examples/derived_greeter" }
 # A source written in Rust and exported with `source!`.
 source_library = { path = "../../examples/source_library" }
 
+# Runs each case in a process of its own, so it has its own `main`.
+[[test]]
+name = "import_search"
+harness = false
+required-features = ["load"]
+
 # docs.rs documents every feature.
 [package.metadata.docs.rs]
 all-features = true
