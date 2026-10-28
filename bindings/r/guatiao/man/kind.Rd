@@ -54,7 +54,7 @@ or a value holding it.}
 document may name though the document does not describe them.}
 \item{returns}{The answer's shape: \code{NULL} for none, a shape name, or an
 object kind.}
-\item{required}{A slot every table fills: the kind's original ones, first.}
+\item{required}{A slot every table fills, wherever it is.}
 \item{fallible}{A slot that ends in \code{guatiao_provider_error *err}.}
 \item{shape}{\code{"value"}, \code{"map"}, \code{"list"}, \code{"bytes"} (lent
 only) or an object kind.}
@@ -126,7 +126,7 @@ A 64-bit answer (\code{"int64"}, \code{"uint64"}, \code{"size"},
 and an answer out of range is refused naming the slot.
 
 A remote's call signals a \code{guatiao_error} with the provider's status
-and words; a slot appended after the table was built is \code{Unsupported}
+and words; an optional slot the table leaves null is \code{Unsupported}
 (\code{has_slot} says whether a table has it). A remote from a registry is
 valid while the registry is open and the library loaded; one from an
 instance until the instance is closed. An object remote this side owns is

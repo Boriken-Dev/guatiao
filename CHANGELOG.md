@@ -341,7 +341,7 @@ write now.
 - **Dart: a kind born in Dart is written as its description.**
   `package:guatiao/describe.dart` holds the marks a kind is declared with
   as abstract interface classes (`U32`, `Lent<MapRef>`, `Taken<Listener>`,
-  `MapAnswer`, `implements ObjectKind`, `@fallible`, `@appended`), and
+  `MapAnswer`, `implements ObjectKind`, `@fallible`, `@optional`), and
   `dart run guatiao:kind describe FILE.dart -o DOCUMENT` reads them into
   the description document, from which `dart run guatiao:kind` writes the
   classes as from any other. The greeter kinds declared this way describe
@@ -352,8 +352,8 @@ write now.
   interfaces, with no description or header behind them, into the
   description document and writes the glue from it. Doc comments carry
   the docs, and `//guatiao:` directives say what a Go type cannot: the
-  appended slots' interfaces, a slot that cannot fail, an argument lent,
-  handed over, nullable or written in place. The floor hash is the one
+  optional slots' interfaces and where they stand, a slot that cannot
+  fail, an argument lent, handed over, nullable or written in place. The floor hash is the one
   `#[guatiao::kind]` gives the same required slots unless
   `//guatiao:floorhash` pins one. `examples/tally_kind/go` describes byte
   for byte as the TypeScript declaration of the same kinds.
@@ -462,7 +462,7 @@ write now.
   writes the kinds' document beside the module. The types come from
   `guatiao/kinds`: `u32`, `i64` and the other scalars, `Taken<MapRef>`
   and `Lent<MapRef>` for how a tree crosses, `extends ObjectKind` for an
-  object kind; a method with `?` is an appended slot, `@throws` marks a
+  object kind; a method with `?` is an optional slot, `@throws` marks a
   slot that can refuse, doc comments become the description's, and
   anything a table cannot hold is refused with its file, line and column.
   A floor hash not given is the one the same required slots get from
@@ -697,8 +697,8 @@ write now.
   `kindsOf(document)` and `kindOf(description)` load kinds from their
   description. The package installs `guatiao-kind`, which writes a module
   from a description: each kind a value in JavaScript and, under the same
-  name in its `.d.ts`, an interface (required slots as methods, appended
-  ones optional) and a `<Kind>Remote`, so `class Hello extends Provider
+  name in its `.d.ts`, an interface (required slots as methods, the
+  others optional) and a `<Kind>Remote`, so `class Hello extends Provider
   implements Greeter` is checked by `tsc --strict` with nothing declared
   by hand; `--check` fails on a stale module. A kind defined in
   JavaScript, with no header behind it, is a class extending `Kind` whose
@@ -709,7 +709,7 @@ write now.
   plain JavaScript.
 - **Dart: kinds and providers as classes.** `dart run guatiao:kind` writes
   a kind description's Dart: an abstract interface class per kind and per
-  appended slot, a `<Kind>Remote`, and the kind as the interface's static
+  optional slot, a `<Kind>Remote`, and the kind as the interface's static
   `kind`, so `reg.bind(key, Greeter.kind)` calls a table through a class
   and `class Hello extends Provider implements Greeter` is checked by the
   analyzer. `Library` and `Offer` serve providers written in Dart to any
@@ -1469,6 +1469,25 @@ write now.
   2688319391. Rebuild its providers, and take the hash a C table or a
   binding's kind declaration writes from the regenerated header or
   document.
+- **A kind's required and optional slots come in any order, and the
+  library refuses what no kind may declare.** `#[guatiao::kind]` takes a
+  required method after one with a default body, and so do Node's
+  TypeScript reader, Dart's `describe` (`@optional` marks an optional
+  slot), Go's `-document` (`//guatiao:optional` on the kind's interface
+  puts optional slots after its methods, on one of its methods before
+  it), MATLAB's and Octave's `guatiao.Kind.describe` and
+  `guatiao.write_kinds`, R's `kind()` and Fortran's `guatiao-kind`. The
+  library's description reader (`guatiao_kind_document_read`,
+  `guatiao_kind_floor_hash`, a provider's carried document) refuses
+  `bytes_mut` on a kind that is not an object kind, as the kind attribute
+  does, and every describer reaches it: Node's TypeScript reader, Go's
+  `-document` and Dart's `describe` have it read each kind even when the
+  hash is pinned, and Go's `-description` and Dart's `guatiao:kind
+  DOCUMENT` before they write code; Node's `kind()` and `kindsOf`,
+  Python's `Kind` and Go's `-header`, which build a kind with no
+  description to read, refuse it themselves. Go's glue refuses a slot
+  named as one of `guatiao.Remote`'s methods from a description or a
+  header too, not only from its own interfaces.
 - **A kinds document is `{"kinds": [...]}`.** No writer puts `"format": 1`
   in it any more (the derive, guatiao-bridge, guatiao-source-remote, and
   the Node, Python, Dart and Go describers), and every reader tells a

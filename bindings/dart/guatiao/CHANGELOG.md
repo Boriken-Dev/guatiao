@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A kind born in Dart** (`package:guatiao/describe.dart`): abstract
   interface classes spelled with its marks (`U32`, `Lent<MapRef>`,
   `Taken<Listener>`, `MapAnswer`, `implements ObjectKind`, `@fallible`,
-  `@appended`) are read by `dart run guatiao:kind describe FILE.dart -o
+  `@optional`) are read by `dart run guatiao:kind describe FILE.dart -o
   DOCUMENT` (or `describeDeclarations`) into the description document,
   with the floor hash `#[guatiao::kind]` gives the same slots, computed by
   the library (`guatiao_kind_floor_hash`); `dart run guatiao:kind DOCUMENT

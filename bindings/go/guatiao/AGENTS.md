@@ -271,27 +271,33 @@ when the glue is not what it would write.
 <file>` reads the interfaces into the description, writes it there (from
 the package's directory; `-check` compares it instead), and the glue from
 it. Directives in doc comments say what a Go type cannot: on the kind's
-interface `//guatiao:appended <Iface>...` (the appended slots, an
-interface of one method each, in table order) and `//guatiao:floorhash
-<n>` (else computed by the library, `guatiao.KindFloorHash`, as
-`#[guatiao::kind]` computes it for the same slots, so `-document` needs
-the library found); on a method `//guatiao:infallible` (else fallible) and
-`//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable`, `//guatiao:mut`
-followed by argument names. A `Ref`/`MapRef`/`ListRef` is borrowed (a
+interface `//guatiao:optional <Iface>...` (optional slots, an interface
+of one method each, in table order after the kind's methods) and
+`//guatiao:floorhash <n>` (else computed by the library,
+`guatiao.KindFloorHash`, as `#[guatiao::kind]` computes it for the same
+slots); on a method of the kind's interface `//guatiao:optional
+<Iface>...` (optional slots before it); on any slot's method
+`//guatiao:infallible` (else fallible) and `//guatiao:lent`,
+`//guatiao:taken`, `//guatiao:nullable`, `//guatiao:mut` followed by
+argument names. The library reads every kind described, pinned hash or
+not, so `-document` needs it found. A `Ref`/`MapRef`/`ListRef` is borrowed (a
 list must be lent), `*guatiao.Value` a value handed over, a struct or map
 type a map, a slice a list, `any` a value (borrowed unless `taken`),
 `[]byte` bytes (`mut`: written in place), an object kind's interface an
 object handed over unless `lent`; answered, a struct or map is a map. A
 kind's name is its marker's, a slot's its method's in snake_case
-(capitals in a row are refused), docs its doc comments, an appended
+(capitals in a row are refused), docs its doc comments, an optional
 slot's falling back to its interface's; the document lists the kinds in
 the order the package declares them (files by name). Types from another
 package are refused, object kinds of another package included, as are
-two kinds of one name, two slots of one name, an appended slot's
-method declared in a second interface, a slot named `destroy` or a method
-named as one of the remote's own (`Begin`, `Has`, `Kind`, `Table`,
-`Closed`), and `mut` bytes on a provider kind (object kinds only). A
-refusal writes nothing.
+two kinds of one name, two slots of one name, an optional slot's
+method declared in a second interface, a slot named `destroy`, and what
+the library refuses (`mut` bytes on a provider kind: object kinds only).
+With `-document`, `-description` or `-header` alike, a slot whose method
+would be named as one of the remote's own (`Begin`, `Close`, `Closed`,
+`Has`, `Kind`, `Table`) is refused, and so is a header table with
+`guatiao_bytes_mut` and no `destroy`; `-description` has the library read
+the document first (`GUATIAO_LIBRARY`). A refusal writes nothing.
 
 | C | a method takes / returns |
 | --- | --- |

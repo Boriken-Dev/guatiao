@@ -59,7 +59,7 @@ In a checkout, `bindings/go/go.work` builds the three together.
 
 A kind is the table its C header declares. In Go it is an interface
 holding the slots every table has, marked with the kind's name and its C
-table; each slot appended later is an interface of its own, as
+table; each optional slot is an interface of its own, as
 `io.WriterTo` stands beside `io.Writer`. An object kind's interface has
 `Close() error`, its `destroy` slot.
 
@@ -120,10 +120,13 @@ out (`//guatiao:kind tally`).
 -document <file>` reads the interfaces into one, writes it there, and
 writes the glue from it. A Go type says most of what a description
 holds; a directive in a doc comment says the rest. On the kind's
-interface, `//guatiao:appended` names the interfaces of its appended
-slots in table order, and `//guatiao:floorhash N` pins a hash, which is
+interface, `//guatiao:optional` names the interfaces of optional slots
+that follow its methods, in table order; on one of its methods, those
+that come before that method, as a trait declares an optional method
+between two required ones. `//guatiao:floorhash N` pins a hash, which is
 otherwise computed by the library as Rust would compute it for the same
-slots (so the command needs it found, `GUATIAO_LIBRARY`).
+slots; the library reads every kind either way, refusing what no kind may
+declare (so the command needs it found, `GUATIAO_LIBRARY`).
 On a method, `//guatiao:infallible` says the slot cannot fail, and
 `//guatiao:lent`, `//guatiao:taken`, `//guatiao:nullable` and
 `//guatiao:mut` name the arguments lent for the call, handed over, a
@@ -136,7 +139,7 @@ of the same kinds does:
 // Counts by name.
 //
 //guatiao:kind tally
-//guatiao:appended AllCounter Knower Checksummer Reporter Loader
+//guatiao:optional AllCounter Knower Checksummer Reporter Loader
 type Tally interface {
 	// Adds `by` to the count under `name`: the new count, or why not.
 	Add(name string, by uint32) (int64, error)

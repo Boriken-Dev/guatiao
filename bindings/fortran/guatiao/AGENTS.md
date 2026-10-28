@@ -477,15 +477,17 @@ document's name without `.kinds.json` plus `s` (`greeter_kinds`);
 every kind of the document, each named as the description names it
 (non-alphanumerics as `_`): the public `<kind>`, `<kind>_remote`,
 `<kind>_kind()`, `<KIND>_FLOOR_HASH`, and for a provider kind
-`<kind>_serving(impl, <appended slot>=.true., ...)`, `<kind>_bind(reg,
+`<kind>_serving(impl, <optional slot>=.true., ...)`, `<kind>_bind(reg,
 key, g, stat, errmsg)` and `<kind>_bind_instance(inst, g, stat,
 errmsg)`; each remote has `has(slot)`, an object kind's remote `close()`.
 A slot method's arguments are named as the description names them, plus
 `_in` where the module already uses the name (`listener_in`), then
 `answer`, then `error`. Not carried, and refused naming the slot: a
 `value` lent or handed over (borrow it, or pass a map or a list), more
-than 12 appended slots on a provider kind, a slot named `r`, `has`,
-`close`, `destroy` or `impl`. The rest of this section is what the
+than 12 optional slots on a provider kind, a slot named `r`, `has`,
+`close`, `destroy` or `impl`, and what the library refuses as it reads
+the document (`bytes_mut` on a provider kind). Optional and required
+slots come in any order. The rest of this section is what the
 written module does.
 
 A module per document: a

@@ -348,8 +348,8 @@ slot (new functions of the calling module: a name Base exports, such as
 calls the slot. Slots are listed in the header's order and found by
 position, so a function's Julia name is free; `floor_hash` is the
 header's `<table>_FLOOR_HASH`; the C name is the type's in lower case
-unless `name` says it. `@required` marks a slot every table fills (the
-kind's original ones), `@fallible` a slot ending in
+unless `name` says it. `@required` marks a slot every table fills,
+wherever it is declared, `@fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close` on
 its remote. Object kinds a slot names are declared before it.
 

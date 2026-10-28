@@ -179,7 +179,7 @@ import type { MapAnswer, i64, u32 } from 'guatiao/kinds';
 export interface Tally {
   /** Adds `by` to the count under `name`. @throws */
   add(name: string, by: u32): i64;
-  /** Every count: an appended slot. */
+  /** Every count: an optional slot. */
   all?(): MapAnswer;
 }
 ```
