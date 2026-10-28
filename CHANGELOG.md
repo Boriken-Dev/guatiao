@@ -1494,6 +1494,18 @@ write now.
   description to read, refuse it themselves. Go's glue refuses a slot
   named as one of `guatiao.Remote`'s methods from a description or a
   header too, not only from its own interfaces.
+- **The library's reader refuses the rest of what the kind attribute
+  refuses.** A description passing or answering an `object` on a slot
+  that is not `fallible`, passing a `list` `borrowed`, or naming a slot
+  `header` is refused where it says so, by `guatiao_kind_document_read`,
+  `guatiao_kind_floor_hash` and a provider's carried document, and so
+  through every describer; Node's `kind()` and `kindsOf`, Python's
+  `Kind`, Go's `-header`, Julia's `@kind`, R's `kind()`, MATLAB's and
+  Octave's `guatiao.Kind.describe` and `guatiao.write_kinds`, which build
+  a kind without the library, refuse them themselves, and Julia's, R's
+  and MATLAB's declarations now refuse `bytes_mut` on a kind that is not
+  an object kind too. The kind attribute words an object on a slot that
+  cannot fail, and a `&List` argument, as refusals of their own.
 - **A kinds document is `{"kinds": [...]}`.** No writer puts `"format": 1`
   in it any more (the derive, guatiao-bridge, guatiao-source-remote, and
   the Node, Python, Dart and Go describers), and every reader tells a

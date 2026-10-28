@@ -236,9 +236,12 @@ last (a Rust method answering `Result`).
 A kind class's annotations are read in its module: define it at module
 level. A method may not be named `has`, `close`, `kind`, `ctx`, `size` (a
 remote's own) or start with `_`; a slot is found by position, so name it
-otherwise. A required method may follow an optional one. `Kind` refuses
-a `bytearray` (`BYTES_MUT`) argument on a kind that is not an object kind,
-as `#[guatiao::kind]` does.
+otherwise. A required method may follow an optional one. `Kind` refuses,
+as `#[guatiao::kind]` and the library's reader do, a method named
+`header`, a `bytearray` (`BYTES_MUT`) argument on a kind that is not an
+object kind, and an object passed or answered on a method that is not
+`fallible` (`TypeError`); a list argument is `Lent[List]` or
+`Taken[List]`, never borrowed.
 
 What crosses, each way:
 

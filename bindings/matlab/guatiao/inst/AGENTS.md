@@ -377,7 +377,8 @@ the class below, named in PascalCase (`session_backend` is
 slot names given by the folder's package (`+a/+b` is `a.b`). It reads the
 document with `jsondecode`; a document it cannot write a class from
 (a borrowed list, an object kind not in it, a slot named like a method of
-`guatiao.Kind`, an unknown type) raises `guatiao:BadValue` naming the
+`guatiao.Kind` or named `header`, an object on a slot that is not
+fallible, an unknown type) raises `guatiao:BadValue` naming the
 slot. A kind with no description is written by hand, the same way:
 
 ```matlab
@@ -404,7 +405,11 @@ name, the floor hash the header defines, a `guatiao.slot` per slot in the
 header's order (required and optional in any order); an object kind's `destroy` is its
 remote's `close()`. `guatiao.slot(name, {argname, shape, ...}, 'Returns',
 shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
-`self.call(slotname, args...)`.
+`self.call(slotname, args...)`. `describe` refuses, as the kind attribute
+and the library's reader do, a slot named `header`, a `'list'` argument
+(a list is lent or taken), `guatiao.lent('bytes')` on a kind that is not
+an object kind, and an object passed or answered on a slot that is not
+`'Fallible'` (`guatiao:BadValue` naming the slot).
 
 | shape | C | the caller passes | the provider receives / returns |
 | --- | --- | --- | --- |
@@ -412,7 +417,7 @@ shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
 | `'bytes'` | `guatiao_bytes` | `uint8` | `uint8` (a copy) |
 | `guatiao.lent('bytes')` | `guatiao_bytes_mut` | a `guatiao.Buffer(n)`, written in place | a `guatiao.Buffer` (`Data`), copied back when the method returns |
 | `'bool'`, `'int8'`..`'uint64'`, `'float'`, `'double'`, `'size'`, `'intptr'` | the C scalar | a number or logical that fits (`int64`/`uint64` exactly) | a double, or `int64`/`uint64` past 2^53; logical for `bool` |
-| `'value'`, `'map'`, `'list'` | `const guatiao_value *` / `map *` / `list *` | a value, a view or MATLAB data | a read-only `guatiao.Value`, valid for the call |
+| `'value'`, `'map'` | `const guatiao_value *` / `map *` | a value, a view or MATLAB data | a read-only `guatiao.Value`, valid for the call |
 | `guatiao.lent('value'/'map'/'list')` | the same without `const`, lent | a value or view, changed in place | a writable `guatiao.Value`, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent; a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value), what it answered freed |
 | `guatiao.taken('value'/'map'/'list')` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or MATLAB data | a `guatiao.Value` the method owns, moved into this binding's allocator on arrival (copied only where the caller built it elsewhere), so it may be kept past the caller's library; a null one refuses the call, and each is taken, and freed, even when another argument refuses it |
 | answer `'value'`, `'map'`, `'list'` | `guatiao_value/map/list *out` | a `guatiao.Value`, moved into this binding's allocator on arrival when the slot built it in its own | MATLAB data or a value, built in the allocator the carrier names (`[]`, `{}` and `struct()` the empty container) |
