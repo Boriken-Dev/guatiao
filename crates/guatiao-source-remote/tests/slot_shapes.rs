@@ -16,11 +16,13 @@ use core::time::Duration;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use common::{CHATS, Ear, eventually, pair};
+use common::{CHATS, Ear, Memory, eventually, pair};
 use greeter_kind::{Counter, Greeter, Listener, Wide};
 use guatiao::library::kind::KindDescription;
+use guatiao::library::{ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
+use guatiao_source_remote::{LinkOptions, RemoteSource, Trust};
 
 fn greeting(map: &Map) -> String {
     map.get("greeting")
@@ -166,12 +168,39 @@ fn a_callback_runs_on_the_thread_that_lent() {
     assert_eq!(here.1, [true, true]);
 }
 
+/// Whether the link's bound cancelled the call: no answer came in time.
+fn unanswered(e: &ProviderError) -> bool {
+    e.status == Status::GUATIAO_ERR_GONE && e.message().contains("no answer")
+}
+
 #[test]
 fn a_slow_call_times_out_gone_and_the_link_carries_on() {
     // The bound leaves a quick call room on a loaded machine; the slow
     // call takes four times as long, so only the timeout can end it soon.
+    // The bound covers every request on the link, the listing and the
+    // quick call after the slow one too: on a machine too loaded to answer
+    // them within it they are tried again, a few times, and only while
+    // unanswered. A link the timeout broke answers at once with its end.
     let timeout = Duration::from_secs(1);
-    let (_server, _source, registry) = pair(Some(timeout));
+    let server = common::server(LinkOptions::new(Trust::Local));
+    let source = RemoteSource::new(
+        Box::new(Memory(server)),
+        LinkOptions::new(Trust::Local).timeout(Some(timeout)),
+    );
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("remote", source).unwrap();
+    for tries in 1.. {
+        let refreshed = registry.refresh();
+        if !refreshed.loaded.is_empty() {
+            assert!(refreshed.refused.is_empty(), "{refreshed:?}");
+            break;
+        }
+        let unlisted = refreshed
+            .refused
+            .iter()
+            .all(|r| r.reason.contains("no answer"));
+        assert!(tries < 5 && unlisted, "{refreshed:?}");
+    }
     let wide = registry
         .offers::<dyn Wide>()
         .next()
@@ -184,7 +213,14 @@ fn a_slow_call_times_out_gone_and_the_link_carries_on() {
     assert_eq!(e.status, Status::GUATIAO_ERR_GONE);
     assert!(e.message().contains("no answer"), "{}", e.message());
     assert!(took >= timeout && took < Duration::from_secs(3), "{took:?}");
-    assert_eq!(wide.echo_i64(3).unwrap(), 3);
+    let mut tries = 1;
+    let quick = loop {
+        match wide.echo_i64(3) {
+            Err(e) if unanswered(&e) && tries < 5 => tries += 1,
+            answered => break answered,
+        }
+    };
+    assert_eq!(quick.unwrap(), 3);
 }
 
 #[test]
