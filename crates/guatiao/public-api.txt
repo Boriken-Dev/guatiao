@@ -37,6 +37,8 @@ pub mod guatiao::exports::library
 pub struct guatiao::exports::library::HostRegistry
 impl core::fmt::Debug for guatiao::exports::library::HostRegistry
 pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao::exports::library::GUATIAO_IMPORT_SEARCH_LIBRARY: u32
+pub const guatiao::exports::library::GUATIAO_IMPORT_SEARCH_PATH: u32
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_add_source(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_add_source_file(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_available(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -44,6 +46,7 @@ pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Forma
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_collect(*mut guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_free(*mut guatiao::exports::library::HostRegistry)
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_host(*mut guatiao::exports::library::HostRegistry) -> *const guatiao::library::desc::HostInfo<'static>
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_import_search(*const guatiao::exports::library::HostRegistry) -> u32
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_keyed_by(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_kind_descriptions(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_libraries(*const guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -67,6 +70,7 @@ pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Forma
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_scan_dir(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, bool, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_scan_dir_rules(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, bool, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_scan_path(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, bool, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_set_import_search(*mut guatiao::exports::library::HostRegistry, u32) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_set_priority(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, i32) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_unload(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_unload_unchecked(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
@@ -1233,6 +1237,22 @@ pub type guatiao::library::raw::DestroyFn = fn(*mut core::ffi::c_void, *mut core
 pub type guatiao::library::raw::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
 pub type guatiao::library::raw::SourceFn = fn(*const guatiao::library::desc::HostInfo<'static>, *const guatiao::value::value::Value, *mut *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 pub mod guatiao::library::registry
+pub enum guatiao::library::registry::ImportSearch
+pub guatiao::library::registry::ImportSearch::Library
+pub guatiao::library::registry::ImportSearch::Path
+impl core::clone::Clone for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::registry::ImportSearch
+impl core::cmp::PartialEq for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::default() -> Self
+impl core::fmt::Debug for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::registry::ImportSearch
+impl core::marker::StructuralPartialEq for guatiao::library::registry::ImportSearch
 #[non_exhaustive] pub enum guatiao::library::registry::LoadError
 pub guatiao::library::registry::LoadError::Duplicate
 pub guatiao::library::registry::LoadError::Duplicate::first: std::path::PathBuf
@@ -1363,6 +1383,7 @@ pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::V
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
+pub fn guatiao::library::registry::Registry::import_search(&self) -> guatiao::library::registry::ImportSearch
 pub fn guatiao::library::registry::Registry::key_template(&self) -> &guatiao::library::key::KeyTemplate
 pub fn guatiao::library::registry::Registry::keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::libraries_keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
@@ -1380,6 +1401,7 @@ pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl c
 pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::register_local<'a, L: core::convert::Into<guatiao::library::raw::LocalLibrary<'a>>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::set_import_search(&mut self, guatiao::library::registry::ImportSearch)
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
 pub fn guatiao::library::registry::Registry::with_alloc(&str, &str, core::option::Option<guatiao::value::alloc::Alloc>) -> guatiao::library::registry::Registry
@@ -1601,6 +1623,22 @@ pub trait guatiao::library::source::Source: core::marker::Send + core::marker::S
 pub fn guatiao::library::source::Source::close(&self, &str, &str)
 pub fn guatiao::library::source::Source::list(&self, guatiao::library::raw::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::Candidate>, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::source::Source::open(&self, guatiao::library::raw::Host, &str) -> core::result::Result<guatiao::library::raw::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
+pub enum guatiao::library::ImportSearch
+pub guatiao::library::ImportSearch::Library
+pub guatiao::library::ImportSearch::Path
+impl core::clone::Clone for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::registry::ImportSearch
+impl core::cmp::PartialEq for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::default() -> Self
+impl core::fmt::Debug for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::registry::ImportSearch
+pub fn guatiao::library::registry::ImportSearch::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::registry::ImportSearch
+impl core::marker::StructuralPartialEq for guatiao::library::registry::ImportSearch
 #[non_exhaustive] pub enum guatiao::library::InstantiateError
 pub guatiao::library::InstantiateError::Invalid(guatiao::schema::ValidationError)
 pub guatiao::library::InstantiateError::Refused(guatiao::library::kind::ProviderError)
@@ -2307,6 +2345,7 @@ pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::V
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
+pub fn guatiao::library::registry::Registry::import_search(&self) -> guatiao::library::registry::ImportSearch
 pub fn guatiao::library::registry::Registry::key_template(&self) -> &guatiao::library::key::KeyTemplate
 pub fn guatiao::library::registry::Registry::keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::libraries_keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
@@ -2324,6 +2363,7 @@ pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl c
 pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::register_local<'a, L: core::convert::Into<guatiao::library::raw::LocalLibrary<'a>>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::set_import_search(&mut self, guatiao::library::registry::ImportSearch)
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
 pub fn guatiao::library::registry::Registry::with_alloc(&str, &str, core::option::Option<guatiao::value::alloc::Alloc>) -> guatiao::library::registry::Registry

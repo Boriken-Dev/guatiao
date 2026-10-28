@@ -41,6 +41,43 @@ use crate::value::alloc::Alloc;
 use crate::value::status::Status;
 use crate::value::types::Text;
 
+/// Where the platform's loader looks for the libraries a loaded file
+/// imports: on Windows, the DLLs a plugin links, such as `guatiao.dll` or
+/// a runtime it ships beside itself.
+///
+/// The file itself is always opened by the path the host named; this
+/// decides only where its imports are found. A library the process has
+/// already loaded answers an import of its name wherever it came from,
+/// under either search.
+///
+/// **Only Windows has a per-load choice; elsewhere this is ignored.** On
+/// Linux and FreeBSD `dlopen` finds a library's imports on
+/// `LD_LIBRARY_PATH`, in the directories its own `RUNPATH` names
+/// (`$ORIGIN` is its directory) and in the system's, never in its own
+/// directory unless the `RUNPATH` says so: a plugin built with
+/// `-Wl,-rpath,$ORIGIN` finds what it ships beside itself, as
+/// [`Library`](ImportSearch::Library) has it on Windows; on macOS, an
+/// import named `@rpath/...` and a run path of `@loader_path` do the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ImportSearch {
+    /// The library's own directory, the host's executable's directory,
+    /// the system directory and the directories the process added
+    /// (`AddDllDirectory`), and nothing else: not the current directory,
+    /// not `PATH`. Windows' `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+    /// LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, what Python's `ctypes` loads a
+    /// library by path with.
+    #[default]
+    Library,
+    /// [`Library`](ImportSearch::Library)'s directories first; a file
+    /// they leave an import missing for is opened again with Windows'
+    /// standard search from its own directory: the system directories,
+    /// the current directory and `PATH` (not the host's directory or the
+    /// added ones, which the first search covered). For a library whose
+    /// imports live elsewhere, such as a Python bridge importing
+    /// `python3.dll` from the Python installation.
+    Path,
+}
+
 /// Why a file could not be loaded.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -716,6 +753,8 @@ pub struct Registry {
     /// is the HOST's opinion. Absent means 0, so an unranked provider
     /// sorts below any raised one and alongside every other unranked one.
     priorities: BTreeMap<String, i32>,
+    /// Where a file this registry opens has its imports found.
+    import_search: ImportSearch,
     /// What the services read. This is the strong handle; the block holds
     /// a weak one, so dropping the registry is what makes it `GONE`.
     shared: Arc<Shared>,
@@ -752,6 +791,7 @@ impl Registry {
             providers: Vec::new(),
             by_key: BTreeMap::new(),
             priorities: BTreeMap::new(),
+            import_search: ImportSearch::default(),
             shared: Arc::new(Shared::default()),
             block: None,
             leaving: Vec::new(),
@@ -853,6 +893,20 @@ impl Registry {
     /// What this host ranked that id. Zero unless it said otherwise.
     pub fn priority(&self, id: &str) -> i32 {
         self.priorities.get(id).copied().unwrap_or(0)
+    }
+
+    /// Where every file this registry opens from now on has its imports
+    /// found: [`load_file`](Registry::load_file), a scan, a watched
+    /// directory and [`add_source_file`](Registry::add_source_file).
+    /// [`ImportSearch::Library`] unless the host says otherwise; what is
+    /// already open stays as it was opened.
+    pub fn set_import_search(&mut self, search: ImportSearch) {
+        self.import_search = search;
+    }
+
+    /// Where a file this registry opens has its imports found.
+    pub fn import_search(&self) -> ImportSearch {
+        self.import_search
     }
 
     /// Every provider serving one kind, best first.
@@ -1014,10 +1068,13 @@ impl Registry {
         // locked: the host it reads is the leaked block, and what the
         // block answers is the last published snapshot.
         let host = self.host();
-        let opened = super::raw::open_library(path, host).map_err(|e| LoadError::Open {
-            path: path.to_path_buf(),
-            reason: e.to_string(),
-        })?;
+        let opened =
+            super::raw::open_library(path, host, self.import_search).map_err(|reason| {
+                LoadError::Open {
+                    path: path.to_path_buf(),
+                    reason,
+                }
+            })?;
         self.absorb(path, source, opened)
     }
 

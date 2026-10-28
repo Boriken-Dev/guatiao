@@ -130,6 +130,22 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_WIRE_INVALID 4
 
 /*
+ [`guatiao_registry_set_import_search`]: a file's imports are found
+ beside it, beside the host's executable, in the system directory and
+ in the directories the process added, and not in the current
+ directory or on `PATH`. The default.
+ */
+#define GUATIAO_IMPORT_SEARCH_LIBRARY 0
+
+/*
+ [`guatiao_registry_set_import_search`]: the directories of
+ `GUATIAO_IMPORT_SEARCH_LIBRARY` first; a file they leave an import
+ missing for is opened again with Windows' standard search from its own
+ directory, which reaches the current directory and `PATH`.
+ */
+#define GUATIAO_IMPORT_SEARCH_PATH 1
+
+/*
  Shallow: top-level keys replace, nested maps are not recursed into.
  */
 #define GUATIAO_MERGE_SIMPLE 1
@@ -2401,6 +2417,36 @@ guatiao_status guatiao_registry_set_priority(struct guatiao_registry *reg,
  `reg` is a live handle and `id` is readable for this call.
  */
 int32_t guatiao_registry_priority(const struct guatiao_registry *reg, struct guatiao_str id);
+
+/*
+ Sets where the loader finds the libraries a file this registry opens
+ from now on imports: `guatiao_registry_load_file`, a scan, a watched
+ directory and `guatiao_registry_add_source_file`.
+ `GUATIAO_IMPORT_SEARCH_LIBRARY` (the default) or
+ `GUATIAO_IMPORT_SEARCH_PATH`; any other value is
+ `GUATIAO_ERR_BAD_VALUE` and changes nothing.
+
+ **Windows only**: elsewhere there is no per-load search, and on Linux
+ a library's own `RUNPATH` (`$ORIGIN` for its directory) and
+ `LD_LIBRARY_PATH` decide whatever this says. A library the process
+ already loaded answers an import of its name under either search.
+
+ # Safety
+
+ `reg` is a live handle.
+ */
+guatiao_status guatiao_registry_set_import_search(struct guatiao_registry *reg, uint32_t search);
+
+/*
+ Where a file this registry opens has its imports found:
+ `GUATIAO_IMPORT_SEARCH_LIBRARY` or `GUATIAO_IMPORT_SEARCH_PATH`, and
+ the default, `GUATIAO_IMPORT_SEARCH_LIBRARY`, for a null handle.
+
+ # Safety
+
+ `reg` is a live handle.
+ */
+uint32_t guatiao_registry_import_search(const struct guatiao_registry *reg);
 
 /*
  The best provider serving `kind` that can actually run here, as a map.
