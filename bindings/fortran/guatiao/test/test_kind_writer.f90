@@ -46,12 +46,15 @@ contains
   subroutine refusals()
     character(*), parameter :: HEAD = '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, ' // &
                                       '"slots": [{"name": "f", "required": true, "fallible": false, "args": ['
-    call refused(HEAD // '{"name": "l", "type": "list", "pass": "borrowed"}]}]}]}', 'k.f(l): a list is not borrowed')
+    character(*), parameter :: FALLIBLE = '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, ' // &
+                                          '"slots": [{"name": "f", "required": true, "fallible": true, "args": ['
+    call refused(HEAD // '{"name": "l", "type": "list", "pass": "borrowed"}]}]}]}', 'a list is not borrowed')
+    call refused(HEAD // '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}]}]}]}', 'on a fallible slot only')
     call refused(HEAD // '{"name": "b", "type": "bytes_mut"}]}]}]}', 'on an object kind only')
     call refused(HEAD // '{"name": "v", "type": "value", "pass": "lent"}]}]}]}', 'has no Fortran form yet')
-    call refused(HEAD // '{"name": "o", "type": "object", "kind": "far", "pass": "lent"}]}]}]}', &
+    call refused(FALLIBLE // '{"name": "o", "type": "object", "kind": "far", "pass": "lent"}]}]}]}', &
                  'the object kind far is not in this document')
-    call refused(HEAD // '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}]}]}]}', &
+    call refused(FALLIBLE // '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}]}]}]}', &
                  'k is a kind but no object kind')
     call refused(HEAD // '{"name": "a", "type": "i8"}, {"name": "a", "type": "i8"}]}]}]}', 'two arguments are a')
     call refused(HEAD // ']}, {"name": "f", "required": true, "fallible": false, "args": []}]}]}', 'names `f` a second time')

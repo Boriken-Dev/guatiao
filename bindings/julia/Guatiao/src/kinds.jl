@@ -860,7 +860,7 @@ function read_shape(ex, answer::Bool, where)
     haskey(SCALAR_NAMES, ex) && return (:scalar, :borrow, SCALAR_NAMES[ex])
     ex === :ValueRef && return (:value, :borrow, nothing)
     ex === :MapRef && return (:map, :borrow, nothing)
-    ex === :ListRef && error("$where: a list is never borrowed: Lent{ListRef} or Taken{ListRef}")
+    ex === :ListRef && error("$where: a list is not borrowed: Lent{ListRef} or Taken{ListRef}")
     error("$where: $(ex) is no shape a slot can carry; an object is Taken{K} or Lent{K}")
 end
 
@@ -923,7 +923,17 @@ macro kind(name::Symbol, args...)
             push!(argnames, a.args[1])
             push!(shapes, read_shape(a.args[2], false, "$where($(a.args[1]))"))
         end
-        push!(slots, (fname = fname, argnames = argnames, shapes = shapes, answer = read_shape(ans, true, "$where answer"),
+        answer = read_shape(ans, true, "$where answer")
+        # A kind is declared here with no description to check, and without the library.
+        fname === :header && error("$where: the table's first field is its header; name the slot otherwise")
+        for (j, sh) in enumerate(shapes)
+            sh[1] === :bytes_mut && !object && error("$where($(argnames[j])): bytes written in place cross on an object kind only")
+            # An object's table is checked where it arrives, which only a fallible slot can refuse.
+            sh[1] === :object && !fallible && error("$where($(argnames[j])): an object crosses on a fallible slot only")
+        end
+        answer !== nothing && answer[1] === :object && !fallible &&
+            error("$where answer: an object crosses on a fallible slot only")
+        push!(slots, (fname = fname, argnames = argnames, shapes = shapes, answer = answer,
             fallible = fallible, required = required))
     end
 

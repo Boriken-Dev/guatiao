@@ -157,7 +157,7 @@ def test_a_description_that_is_not_one_is_refused_naming_where():
         kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "u128"}]}]))
     with pytest.raises(TypeError, match="answer cannot be 'str'"):
         kinds.kinds_of(one([{"name": "x", "answer": {"type": "str"}}]))
-    with pytest.raises(TypeError, match="list cannot be passed borrowed"):
+    with pytest.raises(TypeError, match="a list is not borrowed"):
         kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "list", "pass": "borrowed"}]}]))
     loop = {
         "name": "node",
@@ -189,11 +189,11 @@ def test_what_the_shared_vectors_refuse_is_refused_by_the_library_or_by_its_own_
     path = native.REPO / "crates" / "guatiao-derive" / "tests" / "vectors" / "floor_hash.json"
     refused = json.loads(path.read_text(encoding="utf-8"))["refused"]
     ours = [v for v in refused if v["by"] == "every reader" or "python" in v["by"]]
-    assert len(ours) >= 2
+    assert len(ours) >= 6
     for v in ours:
         kind = {"name": v["name"], "floor_hash": 1, "object": v["object"], "slots": v["slots"]}
         with pytest.raises(TypeError, match=v["why"]):
-            kinds.kinds_of({"kinds": [kind]})
+            kinds.kinds_of({"kinds": [kind, *v.get("with", [])]})
         if v["by"] == "every reader":
             with pytest.raises(BadValue, match=v["why"]):
                 _description.floor_hash_of(v["object"], v["slots"])
@@ -225,6 +225,30 @@ def test_bytes_written_in_place_cross_on_an_object_kind_only():
             def fill(self, dst: bytearray) -> kinds.USIZE: ...
 
     assert Kind("k", floor_hash=1, is_object=True, methods=[Method("fill", [BYTES_MUT], USIZE)]).is_object
+
+
+def test_what_no_trait_declares_is_refused_with_no_description_and_no_library():
+    memo = Kind("memo", floor_hash=1, is_object=True, methods=[Method("count", [], USIZE)])
+    with pytest.raises(TypeError, match="the table's first field"):
+        Kind("k", floor_hash=1, methods=[Method("header", [], USIZE)])
+    with pytest.raises(TypeError, match="argument 1, an object, crosses on a fallible slot only"):
+        Kind("k", floor_hash=1, methods=[Method("read", [STR, lent(memo)])])
+    with pytest.raises(TypeError, match="on a fallible slot only"):
+        Kind("k", floor_hash=1, methods=[Method("give", [taken(memo)])])
+    with pytest.raises(TypeError, match="an object answer crosses on a fallible slot only"):
+        Kind("k", floor_hash=1, methods=[Method("open", [], memo)])
+    with pytest.raises(TypeError, match="on a fallible slot only"):
+
+        class Opener(KindProtocol, Protocol, kind="opener", floor_hash=7):
+            def open(self) -> Listener: ...
+
+    with pytest.raises(TypeError, match="a list is not borrowed"):
+
+        class Summer(KindProtocol, Protocol, kind="summer", floor_hash=7):
+            def sum(self, items: List) -> kinds.I64: ...
+
+    fine = Kind("k", floor_hash=1, methods=[Method("open", [lent(memo)], memo, fallible=True)])
+    assert fine.method("open").fallible
 
 
 def test_a_kind_born_in_python_is_written_as_its_description():
@@ -736,7 +760,7 @@ def test_a_kind_class_refuses_what_has_no_shape_when_it_is_written() -> None:
         class Bare(KindProtocol, Protocol, kind="bare", floor_hash=1):
             def take(self, listener: Listener) -> None: ...
 
-    with pytest.raises(TypeError, match="never borrowed"):
+    with pytest.raises(TypeError, match="a list is not borrowed"):
 
         class Borrowed(KindProtocol, Protocol, kind="borrowed", floor_hash=1):
             def take(self, items: List) -> None: ...

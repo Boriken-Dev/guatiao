@@ -283,6 +283,10 @@ function text = kind_file(k, classes, objects, pkg, source)
     if ~is_name(s.name) || any(strcmp(s.name, reserved))
       error('guatiao:BadValue', '%s: %s names no method a kind class may have', where, s.name);
     end
+    % What no trait declares: this reads JSON without the library's reader.
+    if strcmp(s.name, 'header')
+      error('guatiao:BadValue', '%s: the table''s first field is its header', where);
+    end
     if any(strcmp(slot_names, s.name))
       error('guatiao:BadValue', '%s: two slots are %s', where, s.name);
     end
@@ -298,6 +302,9 @@ function text = kind_file(k, classes, objects, pkg, source)
       end
       shape = shape_of(args{j}, classes, objects, pkg, sprintf('%s(%s)', where, names{j}));
       pairs{j} = [quoted(names{j}) ', ' shape];
+      if strcmp(args{j}.type, 'object') && ~s.fallible
+        error('guatiao:BadValue', '%s(%s): an object crosses on a fallible slot only', where, names{j});
+      end
       if strcmp(args{j}.type, 'bytes_mut')
         if ~object
           error('guatiao:BadValue', '%s(%s): bytes written in place cross on an object kind only', where, names{j});
@@ -310,6 +317,9 @@ function text = kind_file(k, classes, objects, pkg, source)
       end
     end
     answer = answer_of(field(s, 'answer', []), classes, objects, pkg, where);
+    if ~isempty(field(s, 'answer', [])) && strcmp(s.answer.type, 'object') && ~s.fallible
+      error('guatiao:BadValue', '%s answer: an object crosses on a fallible slot only', where);
+    end
     entry = sprintf('      guatiao.slot(%s, {%s}', quoted(s.name), strjoin(pairs, ', '));
     if ~isempty(answer)
       entry = [entry ', ' quoted('Returns') ', ' answer];

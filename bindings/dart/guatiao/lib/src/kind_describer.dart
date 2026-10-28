@@ -714,7 +714,7 @@ final class _Describer {
       case 'BytesMut':
         plain();
         return out..['type'] = 'bytes_mut';
-      case 'Ref' || 'MapRef':
+      case 'Ref' || 'MapRef' || 'ListRef':
         if (t.args.isNotEmpty || (t.nullable && t.name != 'Ref')) {
           refuse(t.at, '$where: only a Ref may be null');
         }
@@ -722,11 +722,6 @@ final class _Describer {
         out['pass'] = 'borrowed';
         if (t.nullable) out['nullable'] = true;
         return out;
-      case 'ListRef':
-        refuse(
-          t.at,
-          '$where: a list is not borrowed: Lent<ListRef> or Taken<ListRef>',
-        );
       case 'Lent' || 'Taken':
         final pass = t.name == 'Lent' ? 'lent' : 'taken';
         if (t.args.length != 1 ||

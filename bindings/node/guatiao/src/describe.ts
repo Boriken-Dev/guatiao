@@ -260,7 +260,6 @@ class Reader {
   tree(tag: string, node: Node, pass: 'borrowed' | 'taken' | 'lent', position: 'arg' | 'answer', where: string): TypeDescription {
     const type = tag.slice('tree_'.length);
     if (position === 'answer') return this.refuse(node, `${where}: a slot answers MapAnswer, ListAnswer or ValueAnswer`);
-    if (type === 'list' && pass === 'borrowed') return this.refuse(node, `${where}: a list is passed Taken or Lent`);
     return { type, pass };
   }
 

@@ -60,6 +60,9 @@ function refusals()
   mkdir(dir);
   cleanup = onCleanup(@() rmdir(dir, 's'));
   slot = '{"name": "f", "required": true, "fallible": false, "args": [%s]%s}';
+  % An object kind after k: the document's closing brackets end it.
+  memo = [']}, {"name": "memo", "floor_hash": 2, "object": true, "slots": [' ...
+          '{"name": "count", "required": true, "fallible": false, "args": []}'];
   cases = {
     sprintf(slot, '{"name": "l", "type": "list", "pass": "borrowed"}', ''), 'a list is not borrowed'
     sprintf(slot, '{"name": "o", "type": "object", "kind": "far", "pass": "lent"}', ''), 'not in this document'
@@ -71,6 +74,9 @@ function refusals()
     sprintf(slot, '{"name": "b", "type": "bytes_mut"}', ''), 'on an object kind only'
     sprintf(slot, '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}', ''), 'no object kind'
     [sprintf(slot, '', '') ', ' sprintf(slot, '', '')], 'two slots are f'
+    strrep(sprintf(slot, '', ''), '"f"', '"header"'), 'the table''s first field'
+    [sprintf(slot, '{"name": "o", "type": "object", "kind": "memo", "pass": "lent"}', '') memo], 'k.f(o): an object crosses on a fallible slot only'
+    [sprintf(slot, '', ', "answer": {"type": "object", "kind": "memo"}') memo], 'k.f answer: an object crosses on a fallible slot only'
   };
   for i = 1:size(cases, 1)
     path = fullfile(dir, 'k.kinds.json');

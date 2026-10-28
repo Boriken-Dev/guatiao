@@ -71,6 +71,9 @@ same_spec(a, b) = (a.name, a.floor_hash, a.object, a.size, a.floor) == (b.name, 
                      (y.name, y.fallible, y.required, y.answer === nothing, [(s.kind, s.mode) for s in y.args]),
         zip(a.slots, b.slots))
 
+"What a refusal says, through the LoadError a macro's error arrives in."
+refusal(e) = sprint(showerror, e isa LoadError ? e.error : e)
+
 @testset "a kind loaded from its description is the kind @kind declares" begin
     loaded = Guatiao.kinds_of(read(DOCUMENT, String))
     @test sort(collect(keys(loaded))) == ["conversation", "counter", "greeter", "listener", "wide"]
@@ -84,8 +87,27 @@ same_spec(a, b) = (a.name, a.floor_hash, a.object, a.size, a.floor) == (b.name, 
     bad = Dict("kinds" => [Dict("name" => "k", "floor_hash" => 1, "object" => false,
         "slots" => [Dict("name" => "x", "required" => true, "fallible" => false,
                          "args" => [Dict("name" => "a", "type" => "list", "pass" => "borrowed")])])])
+    # Plain data is declared as @kind declares it, and refused as @kind refuses it.
     e = try Guatiao.kinds_of(bad) catch e; e end
-    @test e isa ArgumentError && occursin("k.x(a): a list cannot be passed borrowed", e.msg)
+    @test occursin("K.x(a): a list is not borrowed", refusal(e))
+end
+
+@testset "@kind refuses what no trait declares, with no description and no library" begin
+    declare(slots; object = false) = try
+        macroexpand(@__MODULE__, :(@kind K floor_hash = 1 object = $object $slots))
+        nothing
+    catch e
+        refusal(e)
+    end
+    @test occursin("K.header: the table's first field", declare(:(begin header()::Nothing end)))
+    @test occursin("K.sum(items): a list is not borrowed", declare(:(begin sum(items::ListRef)::Int64 end)))
+    @test occursin("K.fill(dst): bytes written in place cross on an object kind only",
+        declare(:(begin fill(dst::Lent{Vector{UInt8}})::UInt end)))
+    @test declare(:(begin fill(dst::Lent{Vector{UInt8}})::UInt end); object = true) === nothing
+    @test occursin("K.read(l): an object crosses on a fallible slot only", declare(:(begin read(l::Lent{Listener})::Nothing end)))
+    @test occursin("K.give(l): an object crosses on a fallible slot only", declare(:(begin give(l::Taken{Listener})::Nothing end)))
+    @test occursin("K.open answer: an object crosses on a fallible slot only", declare(:(begin open()::Listener end)))
+    @test declare(:(begin @fallible open(l::Lent{Listener})::Listener end)) === nothing
 end
 
 @testset "a host binds a kind from what the library carries" begin

@@ -61,6 +61,11 @@ classdef Kind < handle
       if object && any(strcmp(names, 'close'))
         error('guatiao:BadValue', 'close is an object kind''s destroy slot');
       end
+      % A kind is described here with no description to check, and
+      % without the library.
+      for i = 1:numel(slots)
+        guatiao.internal.check_slot(name, slots{i}, object);
+      end
       d = struct('name', name, 'floor_hash', double(floor_hash), 'object', object, 'slots', {slots});
     end
   end

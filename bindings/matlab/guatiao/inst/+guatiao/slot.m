@@ -8,10 +8,10 @@ function s = slot(name, args, varargin)
 %
 %   guatiao.slot('greet', {'name', 'string'}, 'Returns', 'map', 'Required', true, 'Fallible', true)
 %   guatiao.slot('read', {'dst', guatiao.lent('bytes')}, 'Returns', 'int64')
-%   guatiao.slot('start', {'listener', guatiao.taken('greeterkind.Listener')}, 'Returns', 'greeterkind.Conversation')
+%   guatiao.slot('start', {'listener', guatiao.taken('greeterkind.Listener')}, 'Returns', 'greeterkind.Conversation', 'Fallible', true)
 %
 % Shapes: 'string', 'bytes', 'bool', 'int8' .. 'uint64', 'float', 'double',
-% 'size', 'intptr', 'value', 'map', 'list'; guatiao.lent(...) of 'value',
+% 'size', 'intptr', 'value', 'map'; guatiao.lent(...) of 'value',
 % 'map', 'list', 'bytes' or an object kind's class; guatiao.taken(...) of
 % 'value', 'map', 'list' or an object kind's class. Options: 'Returns' (a
 % shape that is not 'bytes', or an object kind's class; default none),

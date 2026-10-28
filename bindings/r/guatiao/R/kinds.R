@@ -67,6 +67,32 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
   list(code = unname(code), kind = NULL)
 }
 
+# What #[guatiao::kind] and the library's description reader refuse to
+# declare: a slot named header, a borrowed list, bytes written in place on
+# a kind that is not an object kind, and an object passed or answered on a
+# slot that cannot fail (its table is checked where it arrives).
+.gt_check_slot <- function(kind, n, s, object) {
+  at <- sprintf("%s.%s", kind, n)
+  if (n == "header") stop(sprintf("%s: the table's first field is its header; name the slot otherwise", at), call. = FALSE)
+  for (a in names(s$args)) {
+    shape <- s$args[[a]]
+    where <- sprintf("%s(%s)", at, a)
+    wrapped <- inherits(shape, c("guatiao_lent", "guatiao_taken"))
+    if (identical(shape, "list")) {
+      stop(sprintf("%s: a list is not borrowed: lent(\"list\") or taken(\"list\")", where), call. = FALSE)
+    }
+    if (wrapped && identical(shape$shape, "bytes") && !object) {
+      stop(sprintf("%s: bytes written in place cross on an object kind only", where), call. = FALSE)
+    }
+    if (wrapped && .gt_is_kind(shape$shape) && !s$fallible) {
+      stop(sprintf("%s: an object crosses on a fallible slot only", where), call. = FALSE)
+    }
+  }
+  if (.gt_is_kind(s$returns) && !s$fallible) {
+    stop(sprintf("%s answer: an object crosses on a fallible slot only", at), call. = FALSE)
+  }
+}
+
 .gt_camel <- function(name) {
   parts <- strsplit(name, "[_-]")[[1L]]
   paste0(toupper(substring(parts, 1, 1)), substring(parts, 2), collapse = "")
@@ -83,6 +109,8 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
   }
   for (s in slots) if (!inherits(s, "guatiao_slot")) stop("each slot is a method()", call. = FALSE)
   if (object && "close" %in% names(slots)) stop("close is an object kind's destroy slot", call. = FALSE)
+  # A kind is declared here with no description to check, and without the library.
+  for (n in names(slots)) .gt_check_slot(name, n, slots[[n]], isTRUE(object))
   spec <- new.env(parent = emptyenv())
   spec$name <- name
   spec$floor_hash <- as.numeric(floor_hash)
@@ -153,10 +181,7 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
   if (is.null(ty) || !ty %in% c("value", "map", "list")) {
     stop(sprintf("%s: %s is no argument type", where, deparse(ty)), call. = FALSE)
   }
-  if (pass == "borrowed") {
-    if (ty == "list") stop(sprintf("%s: a list cannot be passed borrowed", where), call. = FALSE)
-    return(ty)
-  }
+  if (pass == "borrowed") return(ty)
   if (pass == "taken") return(taken(ty))
   if (pass == "lent") return(lent(ty))
   stop(sprintf("%s: a %s is passed borrowed, taken or lent", where, ty), call. = FALSE)
