@@ -145,6 +145,8 @@ quinn = { version = "0.11.12", default-features = false, features = ["runtime-to
 tokio = { version = "1.47", default-features = false, features = ["rt-multi-thread", "time", "net"] }
 # A test certificate authority and the server certificates it issues.
 rcgen = "0.14"
+# A port held bound and never listening: a peer nobody can reach.
+socket2 = "0.6"
 
 [lints]
 workspace = true
