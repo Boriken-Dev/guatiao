@@ -26,6 +26,9 @@ use guatiao::library::Registry;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 /// Every slot of a example greeter's providers, through the kinds' traits.
 fn calls_every_slot(registry: &Registry, module: &str, checked_by: &str) {
     let hello = greeter(registry, &format!("{module}_hello"));
@@ -395,23 +398,6 @@ fn a_go_guest_runs_under_an_operations_limit_that_covers_its_start() {
     );
 }
 
-fn find_compiler() -> Option<std::path::PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = std::path::PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if std::process::Command::new(&path)
-            .arg("--version")
-            .output()
-            .is_ok()
-        {
-            return Some(path);
-        }
-    }
-    None
-}
-
 #[test]
 fn a_c_host_calls_the_wasm_greeters() {
     let Some((rust, go)) = both() else {
@@ -421,7 +407,7 @@ fn a_c_host_calls_the_wasm_greeters() {
         println!("skipped: this crate's file is not built beside the tests");
         return;
     };
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler");
         return;
     };
@@ -437,7 +423,7 @@ fn a_c_host_calls_the_wasm_greeters() {
     } else {
         "wasm_c_host"
     });
-    let mut compile = std::process::Command::new(&cc);
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

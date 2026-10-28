@@ -30,36 +30,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// The C compilers worth trying, in order.
-///
-/// clang first, and not by taste: on the machine this was written for it
-/// works from a plain shell with no environment setup, while `cl.exe` is
-/// not on `PATH` and needs a `vcvarsall` dance first.
-fn find_compiler() -> Option<(PathBuf, Kind)> {
-    let candidates: [(&str, Kind); 4] = [
-        ("clang", Kind::Posix),
-        (r"C:\Program Files\LLVM\bin\clang.exe", Kind::Posix),
-        ("cc", Kind::Posix),
-        ("gcc", Kind::Posix),
-    ];
-    for (name, kind) in candidates {
-        let path = PathBuf::from(name);
-        // A bare name is looked up on PATH by the OS; an absolute path we
-        // check ourselves so a missing install is not an exec failure.
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some((path, kind));
-        }
-    }
-    None
-}
-
-#[derive(Clone, Copy)]
-enum Kind {
-    Posix,
-}
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 #[test]
 fn the_c_consumer_reads_a_literal_tree_with_nothing_linked() {
@@ -72,7 +44,7 @@ fn the_c_consumer_reads_a_literal_tree_with_nothing_linked() {
         source.display()
     );
 
-    let Some((cc, kind)) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM \
              install path, cc and gcc). The C consumer is what proves the \
@@ -91,8 +63,7 @@ fn the_c_consumer_reads_a_literal_tree_with_nothing_linked() {
         "guatiao_c_consumer"
     });
 
-    let Kind::Posix = kind;
-    let compile = Command::new(&cc)
+    let compile = c_compiler::command(&cc)
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
         .arg(&include)

@@ -19,6 +19,9 @@ use guatiao::schema::SchemaRef;
 use guatiao::{Map, TryAsRef, Value};
 use guatiao_intake::{FormRef, PROVIDER_FORM_KEY, check, is_visible};
 
+#[path = "../../../crates/guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 /// Where cargo put a shared library: beside this test binary (`deps/`) or
 /// one up (`target/debug`).
 fn shared_library(stem: &str) -> Option<PathBuf> {
@@ -104,26 +107,11 @@ fn a_provider_s_form_is_read_back_from_its_meta_and_checked() {
     assert!(hello.meta().is_none(), "no form, no meta");
 }
 
-/// The C compilers worth trying, in order.
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if Command::new(&path)
-            .arg("--version")
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            return Some(path);
-        }
-    }
-    None
-}
-
 #[test]
 fn a_c_host_reads_a_provider_s_form_and_checks_it() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source = manifest.join("tests/c/provider_form.c");
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM install path, cc and gcc)."
         );
@@ -145,7 +133,7 @@ fn a_c_host_reads_a_provider_s_form_and_checks_it() {
     });
 
     let crates = manifest.join("../../crates");
-    let mut compile = Command::new(&cc);
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

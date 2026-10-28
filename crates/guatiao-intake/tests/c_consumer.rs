@@ -17,20 +17,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-/// The C compilers worth trying, in order.
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if Command::new(&path)
-            .arg("--version")
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            return Some(path);
-        }
-    }
-    None
-}
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
 
 /// The directory holding a built shared library, and that library.
 ///
@@ -168,7 +156,7 @@ fn a_c_program_checks_lays_out_and_evaluates_a_form() {
         source.display()
     );
 
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!(
             "skipped: no C compiler found (tried clang, the default LLVM install path, cc and gcc)."
         );
@@ -193,7 +181,7 @@ fn a_c_program_checks_lays_out_and_evaluates_a_form() {
         "guatiao_intake_consumer"
     });
 
-    let mut compile = Command::new(&cc);
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

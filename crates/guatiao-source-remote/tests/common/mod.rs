@@ -11,6 +11,9 @@ extern crate alloc;
 
 pub mod procs;
 
+#[path = "../../../guatiao/tests/support/c_compiler.rs"]
+pub mod c_compiler;
+
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicIsize, AtomicU64, Ordering};
 use core::time::Duration;

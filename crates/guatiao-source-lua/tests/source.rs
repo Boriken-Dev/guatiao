@@ -27,6 +27,9 @@ use guatiao_bridge::BridgeSource;
 use guatiao_libffi::Libffi;
 use guatiao_source_lua::LuaEngine;
 
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -494,30 +497,13 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if std::process::Command::new(&path)
-            .arg("--version")
-            .output()
-            .is_ok()
-        {
-            return Some(path);
-        }
-    }
-    None
-}
-
 #[test]
 fn a_c_host_calls_the_lua_greeter() {
     let Some(file) = source_file() else {
         println!("skipped: this crate's file is not built beside the tests");
         return;
     };
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler");
         return;
     };
@@ -532,7 +518,7 @@ fn a_c_host_calls_the_lua_greeter() {
     } else {
         "lua_c_host"
     });
-    let mut compile = std::process::Command::new(&cc);
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

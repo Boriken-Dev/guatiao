@@ -17,9 +17,11 @@ extern crate alloc;
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use std::path::PathBuf;
-use std::process::Command;
 
 use guatiao_source_lua::mlua::prelude::*;
+
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
 
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -33,24 +35,11 @@ fn library_name(base: &str) -> String {
     )
 }
 
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 /// The greeter written in C, built into this test's directory.
 fn c_greeter() -> Option<PathBuf> {
-    let cc = find_compiler()?;
+    let cc = c_compiler::find()?;
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(library_name("c_greeter"));
-    let mut build = Command::new(cc);
+    let mut build = c_compiler::command(&cc);
     build.args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]);
     if !cfg!(windows) {
         build.arg("-fPIC");

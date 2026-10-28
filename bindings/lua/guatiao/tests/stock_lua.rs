@@ -18,6 +18,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "../../../../crates/guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
@@ -62,23 +65,10 @@ fn module_dir(test: &str) -> Option<PathBuf> {
     Some(dir)
 }
 
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 fn c_greeter() -> Option<PathBuf> {
-    let cc = find_compiler()?;
+    let cc = c_compiler::find()?;
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(library_name("c_greeter"));
-    let mut build = Command::new(cc);
+    let mut build = c_compiler::command(&cc);
     build.args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]);
     if !cfg!(windows) {
         build.arg("-fPIC");

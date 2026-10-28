@@ -26,6 +26,9 @@ use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 use guatiao_libffi::Libffi;
 
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 /// A kind as `#[guatiao::kind]` describes it.
 fn described(json: &str) -> Arc<KindDescription> {
     let value = guatiao_serde::text::json::from_str(
@@ -475,43 +478,6 @@ fn a_compiled_provider_is_called_from_its_description() {
     ));
 }
 
-/// The C compilers worth trying, in order (as `c_library.rs`).
-fn find_compiler() -> Option<std::path::PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = std::path::PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if std::process::Command::new(&path)
-            .arg("--version")
-            .output()
-            .is_ok()
-        {
-            return Some(path);
-        }
-    }
-    None
-}
-
-/// `--target=<arch>-pc-windows-msvc` for a clang on Windows MSVC, nothing
-/// otherwise: clang builds for its own host by default, and an x64 test
-/// running emulated on ARM64 cannot load the ARM64 library that makes.
-fn clang_target(compiler: &std::path::Path) -> Vec<String> {
-    let clang = compiler.file_stem().is_some_and(|stem| {
-        stem.to_string_lossy()
-            .to_ascii_lowercase()
-            .starts_with("clang")
-    });
-    if !(cfg!(all(windows, target_env = "msvc")) && clang) {
-        return Vec::new();
-    }
-    let arch = match std::env::consts::ARCH {
-        "x86" => "i686",
-        arch => arch,
-    };
-    vec![format!("--target={arch}-pc-windows-msvc")]
-}
-
 type DriveGreet = unsafe extern "C" fn(
     *const core::ffi::c_void,
     *mut core::ffi::c_void,
@@ -531,7 +497,7 @@ type DriveWide = unsafe extern "C" fn(*const core::ffi::c_void, *mut core::ffi::
 
 #[test]
 fn a_c_host_calls_a_table_built_at_run_time() {
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found; this is the test that a C host can call the table");
         return;
     };
@@ -541,8 +507,7 @@ fn a_c_host_calls_a_table_built_at_run_time() {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
-    let compiled = std::process::Command::new(&cc)
-        .args(clang_target(&cc))
+    let compiled = c_compiler::command(&cc)
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
         .args(if cfg!(windows) {
             &[][..]

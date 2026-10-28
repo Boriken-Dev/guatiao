@@ -11,8 +11,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-#[path = "support/clang_target.rs"]
-mod clang_target;
+#[path = "support/c_compiler.rs"]
+mod c_compiler;
 
 use greeter_kind::Greeter;
 use guatiao::library::{Registry, SourceError};
@@ -105,22 +105,9 @@ fn a_source_refusing_its_configuration_is_a_refusal_in_its_words() {
     assert_eq!(message, "`greetings` is missing or not a map");
 }
 
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 #[test]
 fn a_c_host_adds_a_source_written_in_rust() {
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found");
         return;
     };
@@ -135,8 +122,7 @@ fn a_c_host_adds_a_source_written_in_rust() {
     } else {
         "guatiao_source_host"
     });
-    let mut compile = Command::new(&cc);
-    compile.args(clang_target::args(&cc));
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")

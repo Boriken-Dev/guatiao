@@ -16,6 +16,9 @@ use guatiao::library::Registry;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map};
 
+#[path = "../../guatiao/tests/support/c_compiler.rs"]
+mod c_compiler;
+
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -92,26 +95,13 @@ fn a_rust_host_serves_python_libraries() {
     let _ = TryAsRef::<str>::try_as_ref(&guatiao::Value::from("unused"));
 }
 
-fn find_compiler() -> Option<PathBuf> {
-    for name in ["clang", r"C:\Program Files\LLVM\bin\clang.exe", "cc", "gcc"] {
-        let path = PathBuf::from(name);
-        if path.is_absolute() && !path.exists() {
-            continue;
-        }
-        if Command::new(&path).arg("--version").output().is_ok() {
-            return Some(path);
-        }
-    }
-    None
-}
-
 #[test]
 fn a_c_host_serves_python_libraries() {
     let Some(bridge) = bridge() else {
         println!("skipped: the bridge is not built beside this test; `cargo build` first");
         return;
     };
-    let Some(cc) = find_compiler() else {
+    let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler");
         return;
     };
@@ -135,7 +125,7 @@ fn a_c_host_serves_python_libraries() {
     } else {
         "c_host"
     });
-    let mut compile = Command::new(&cc);
+    let mut compile = c_compiler::command(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         .arg("-I")
