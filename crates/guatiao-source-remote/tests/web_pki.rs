@@ -284,7 +284,7 @@ fn a_chained_identity_is_presented_whole_on_every_transport() {
     )
     .unwrap();
     let client_id = Identity::generate().unwrap();
-    let mut policy = guatiao_source_remote::transport::tls::Policy::strict();
+    let mut policy = guatiao_source_remote::transport::tls::Policy::modern();
     policy.acl = Some(only(&client_id, None));
     let server = TlsConfig::open(&state).unwrap().policy(policy);
     assert_eq!(server.identity().intermediates_der().len(), 1);
@@ -319,7 +319,7 @@ fn a_server_tls_listener_admits_no_client_by_a_fingerprint_rule() {
     let issued = ca.issue(&["localhost"], false);
     let someone = Identity::generate().unwrap();
     for (then, admitted) in [(None, false), (Some("any"), true)] {
-        let mut policy = guatiao_source_remote::transport::tls::Policy::strict();
+        let mut policy = guatiao_source_remote::transport::tls::Policy::modern();
         policy.acl = Some(only(&someone, then));
         let config = TlsConfig::new(issued.clone()).server_tls().policy(policy);
         for over in every() {

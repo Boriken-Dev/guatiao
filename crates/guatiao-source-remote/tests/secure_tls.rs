@@ -267,7 +267,7 @@ fn acl(rules: Vec<Rule>) -> Acl {
 #[test]
 fn the_access_control_list_closes_a_denied_source_before_the_handshake() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![Rule::new(
         Action::Permit,
         "10.0.0.0/8".parse().unwrap(),
@@ -318,7 +318,7 @@ fn a_fingerprint_rule_refuses_a_trusted_peer_once_the_handshake_names_it() {
     let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
     // Any spelling of a fingerprint names it.
     deny.fingerprint = Some(denied.fingerprint().to_base32_grouped());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![
         deny,
         Rule::new(Action::Permit, "127.0.0.0/8".parse().unwrap()),
@@ -353,7 +353,7 @@ fn a_list_permitting_one_fingerprint_admits_it_alone() {
     // Deferred for every address, then decided by the fingerprint.
     let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
     only.fingerprint = Some(one.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![only]));
     let server = TlsConfig::new(server_id.clone())
         .pins([one.fingerprint(), other.fingerprint()])
@@ -378,7 +378,7 @@ fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
     // Every source is deferred to the fingerprint rule.
     let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
     only.fingerprint = Some(admitted.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![only]));
     let server = TlsConfig::open(&dir).unwrap().policy(policy);
     let address = listen(&server, secure_server());
@@ -402,7 +402,7 @@ fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
 #[test]
 fn a_client_has_no_access_control_list() {
     let id = Identity::generate().unwrap();
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(Vec::new()));
     let client = TlsConfig::new(id.clone())
         .pins([id.fingerprint()])
@@ -474,7 +474,7 @@ fn a_peer_removed_from_the_store_cannot_link_again() {
 #[test]
 fn resumption_kept_by_the_policy_lets_a_removed_peer_link_again() {
     let dir = scratch("resumed");
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.allow_resumption = true;
     let server = TlsConfig::open(&dir).unwrap().policy(policy.clone());
     assert!(
@@ -661,7 +661,7 @@ fn a_server_says_why_it_refuses_a_client() {
     // A list refusing it by its fingerprint, from any address.
     let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
     deny.fingerprint = Some(stranger.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(Acl {
         rules: vec![deny],
         default: Action::Permit,
@@ -690,7 +690,7 @@ fn a_policy_allowing_tls_1_2_holds_for_a_connection_the_list_defers() {
     let client_id = Identity::generate().unwrap();
     let mut named = Rule::new(Action::Permit, "any".parse().unwrap());
     named.fingerprint = Some(client_id.fingerprint().canonical());
-    let mut policy = Policy::compatible();
+    let mut policy = Policy::intermediate();
     policy.acl = Some(acl(vec![named]));
     let server = TlsConfig::open(&dir).unwrap().policy(policy);
     coqui_peer_tls::TrustStoreExt::accept_certificate(
@@ -699,7 +699,7 @@ fn a_policy_allowing_tls_1_2_holds_for_a_connection_the_list_defers() {
     )
     .unwrap();
     let address = listen(&server, secure_server());
-    let mut only_1_2 = Policy::compatible();
+    let mut only_1_2 = Policy::intermediate();
     only_1_2.tls_versions = vec![coqui_peer_tls::TlsVersion::V1_2];
     let client = TlsConfig::new(client_id)
         .pins([server.fingerprint()])
@@ -716,7 +716,7 @@ fn a_policy_allowing_tls_1_2_holds_for_a_connection_the_list_defers() {
 #[test]
 fn a_client_refused_by_address_at_its_hello_says_so() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![Rule::new(
         Action::Permit,
         "10.0.0.0/8".parse().unwrap(),
@@ -1004,7 +1004,7 @@ fn a_configuration_map_reaches_the_secure_level() {
     pins.push(server.fingerprint().to_base32_grouped().as_str());
     config.set("pins", pins);
     let mut policy = guatiao::Map::new();
-    policy.set("profile", "strict");
+    policy.set("profile", "modern");
     policy.set("check_validity", true);
     config.set("policy", policy);
     let source = RemoteSource::from_config(&config).unwrap();
@@ -1025,7 +1025,7 @@ fn a_configuration_map_reaches_the_secure_level() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A host sees every setting looser than strict that its own
+/// A host sees every setting looser than the modern policy that its own
 /// configuration and its peer manifests name, by peer, as the server
 /// binary prints its own.
 #[test]
@@ -1044,7 +1044,7 @@ fn a_host_sees_the_settings_its_configuration_weakens() {
     assert!(source.weakened().is_empty(), "{:?}", source.weakened());
 
     let mut policy = guatiao::Map::new();
-    policy.set("profile", "strict");
+    policy.set("profile", "modern");
     policy.set("allow_resumption", true);
     config.set("policy", policy.clone());
     let source = RemoteSource::from_config(&config).unwrap();
@@ -1071,7 +1071,7 @@ fn a_host_sees_the_settings_its_configuration_weakens() {
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
              security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\npins = [\"{pin}\"]\n\
-             [policy]\nprofile = \"strict\"\nallow_resumption = true\n"
+             [policy]\nprofile = \"modern\"\nallow_resumption = true\n"
         ),
     )
     .unwrap();
@@ -1090,6 +1090,42 @@ fn a_host_sees_the_settings_its_configuration_weakens() {
     assert_eq!(weakened[0].0, "lab");
     assert_eq!(weakened[0].1.setting, "allow_resumption");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// TLS 1.3 only is the default here, as `TlsConfig::new` holds a side to,
+/// although coqui-peer-tls's own default allows TLS 1.2 too: a `policy`
+/// map naming no `profile` starts from `modern`, and TLS 1.2 is listed
+/// among the settings a policy weakens.
+#[test]
+fn a_policy_naming_no_profile_is_tls_1_3_only_and_tls_1_2_is_a_weakening() {
+    use guatiao_source_remote::config::policy_of;
+    let mut unnamed = guatiao::Map::new();
+    unnamed.set("allow_resumption", true);
+    let policy = policy_of(&guatiao::Value::from(unnamed)).unwrap();
+    assert_eq!(policy.name, "modern");
+    assert_eq!(policy.tls_versions, Policy::modern().tls_versions);
+    assert!(policy.allow_resumption, "the fields named are kept");
+
+    let mut named = guatiao::Map::new();
+    named.set("profile", "intermediate");
+    let intermediate = policy_of(&guatiao::Value::from(named)).unwrap();
+    assert_eq!(
+        intermediate.tls_versions,
+        Policy::intermediate().tls_versions
+    );
+
+    let config = TlsConfig::new(Identity::generate().unwrap());
+    assert!(config.weakened().is_empty(), "{:?}", config.weakened());
+    let weakened = config.policy(intermediate).weakened();
+    assert_eq!(weakened.len(), 1, "{weakened:?}");
+    assert_eq!(weakened[0].setting, "tls_versions");
+
+    // The presets' former names are refused.
+    for old in ["strict", "compatible"] {
+        let mut named = guatiao::Map::new();
+        named.set("profile", old);
+        assert!(policy_of(&guatiao::Value::from(named)).is_err(), "{old}");
+    }
 }
 
 /// A manifest's identity file made by the first refresh leaves the peer
@@ -1160,7 +1196,7 @@ fn a_peer_manifest_names_a_secure_peer() {
         peers.join("lab.guatiao.toml"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://{address}\"\n\
-             identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n\n[policy]\nprofile = \"strict\"\n",
+             identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n\n[policy]\nprofile = \"modern\"\n",
             server.fingerprint()
         ),
     )

@@ -74,7 +74,7 @@ struct Peer {
     /// Counts links across every peer of a source, so no stamp repeats
     /// within it.
     generations: Arc<AtomicU64>,
-    /// The settings of its TLS policy looser than strict.
+    /// The settings of its TLS policy looser than the modern one.
     #[cfg(feature = "tls")]
     weakened: Vec<crate::transport::tls::Weakening>,
 }
@@ -784,13 +784,14 @@ impl RemoteSource {
         }
     }
 
-    /// Every setting looser than strict in the TLS policy a configuration
-    /// or a peer manifest names, by peer: its name, or empty for the one
-    /// peer of a `connect` or `child` configuration. What a host shows or
-    /// logs, as `guatiao-remote-server` prints its own. Described peers
-    /// are those the last refresh found. Empty when every peer is held to
-    /// the strict policy, and for a source made by [`RemoteSource::new`],
-    /// whose `TlsConfig::weakened` its host holds already.
+    /// Every setting looser than the modern policy (TLS 1.3 only) in the
+    /// TLS policy a configuration or a peer manifest names, by peer: its
+    /// name, or empty for the one peer of a `connect` or `child`
+    /// configuration. What a host shows or logs, as
+    /// `guatiao-remote-server` prints its own. Described peers are those
+    /// the last refresh found. Empty when every peer is held to the modern
+    /// policy, and for a source made by [`RemoteSource::new`], whose
+    /// `TlsConfig::weakened` its host holds already.
     #[cfg(feature = "tls")]
     pub fn weakened(&self) -> Vec<(String, crate::transport::tls::Weakening)> {
         let each = |name: &str, peer: &Peer| {

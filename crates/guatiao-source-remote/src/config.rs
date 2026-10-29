@@ -17,7 +17,7 @@
 //! | `identity_file` | TLS: the identity file instead (made when absent) |
 //! | `pins` | TLS: the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
 //! | `roots` | TLS: also trust a server whose certificate an authority issued for the host dialled: `"platform"` (the operating system's, feature `platform-roots`) or a CA bundle's path (PEM) |
-//! | `policy` | TLS: the TLS policy, a map in coqui-peer-tls's text form (default strict) |
+//! | `policy` | TLS: the TLS policy, a map in coqui-peer-tls's text form (default modern, TLS 1.3 only) |
 //! | `timeout_ms` | how long a call waits; `0` waits as long as the link lives |
 //! | `max_frame`, `max_calls` | the link's bounds |
 //! | `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above are then every peer's unless its manifest names them |
@@ -237,19 +237,33 @@ pub fn acl_of(value: &guatiao::Value) -> Result<coqui_net_acl::Acl, ProviderErro
 }
 
 /// Reads a TLS policy from a value in coqui-peer-tls's text form, version
-/// 1: `profile` (`strict`, the default, `compatible`, `legacy`) and any
-/// field over it (`tls_versions`, `cipher_suites`, `kx_groups`,
-/// `pin_digests`, `check_validity`, `allow_chain_when_pinned`,
-/// `allow_resumption`, the waiting caps, `acl`).
+/// 1: `profile` (`modern`, TLS 1.3 only and the default here, as
+/// [`TlsConfig::new`](crate::transport::tls::TlsConfig::new) is;
+/// `intermediate`, TLS 1.2 and 1.3; `legacy`) and any field over it
+/// (`tls_versions`, `cipher_suites`, `kx_groups`, `cipher_profiles`,
+/// `crypto`, `pin_digests`, `check_validity`, `allow_chain_when_pinned`,
+/// `allow_resumption`, `require_ems`, the waiting caps, `acl`).
 #[cfg(feature = "tls")]
 pub fn policy_of(value: &guatiao::Value) -> Result<crate::transport::tls::Policy, ProviderError> {
+    // coqui-peer-tls starts a document naming no profile from its own
+    // default (intermediate); this one starts it from modern.
+    let modern;
+    let value = match TryAsRef::<Map>::try_as_ref(value) {
+        Some(map) if !map.contains_key("profile") => {
+            let mut named = map.clone();
+            named.set("profile", "modern");
+            modern = guatiao::Value::from(named);
+            &modern
+        }
+        _ => value,
+    };
     guatiao_serde::adapt::from_value(value).map_err(|e| refused(format!("not a TLS policy: {e}")))
 }
 
-/// Every setting looser than strict in the TLS policy a configuration
-/// names (its access control list's default included), when its link runs
-/// TLS; empty under the strict policy, and at no security, where no TLS
-/// policy applies.
+/// Every setting looser than the modern policy in the TLS policy a
+/// configuration names (TLS 1.2 among them, its access control list's
+/// default included), when its link runs TLS; empty under the modern
+/// policy, and at no security, where no TLS policy applies.
 #[cfg(feature = "tls")]
 pub(crate) fn weakened_in(map: &Map) -> Vec<crate::transport::tls::Weakening> {
     let scheme = match text(map, "connect") {
@@ -258,7 +272,10 @@ pub(crate) fn weakened_in(map: &Map) -> Vec<crate::transport::tls::Weakening> {
     };
     match (security_in(map, scheme), map.get("policy")) {
         (Ok(Security::None) | Err(_), _) | (_, None) => Vec::new(),
-        (Ok(_), Some(policy)) => policy_of(policy).map_or_else(|_| Vec::new(), |p| p.weakened()),
+        (Ok(_), Some(policy)) => policy_of(policy).map_or_else(
+            |_| Vec::new(),
+            |p| p.weakened_against(&crate::transport::tls::Policy::modern()),
+        ),
     }
 }
 

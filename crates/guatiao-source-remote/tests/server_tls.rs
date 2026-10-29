@@ -286,7 +286,7 @@ fn a_server_tls_server_refuses_a_client_asking_mutual_tls() {
 }
 
 #[test]
-fn server_tls_is_listed_as_weaker_than_strict() {
+fn server_tls_is_listed_as_weaker_than_modern() {
     let config = TlsConfig::new(Identity::generate().unwrap()).server_tls();
     assert!(!config.is_mutual());
     assert!(
