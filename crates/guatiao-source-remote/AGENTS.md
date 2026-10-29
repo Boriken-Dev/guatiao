@@ -9,12 +9,13 @@ listed by `tests/unsafe_stays_in_exports.rs`. Depends on `guatiao`
 (`load`), `guatiao-libffi` (the kind tables' mechanism: libffi built from
 C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`,
 `toml`). The network features depend on coqui-net-acl, coqui-peer and
-coqui-peer-tls, each at `=0.0.0-alpha.0`.
+coqui-peer-tls: coqui-net-acl at `=0.0.0-alpha.0`, coqui-peer and coqui-peer-tls at
+`=0.0.0-alpha.1`.
 
 | feature | adds |
 | --- | --- |
 | `tcp` | TCP with no TLS: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`), admission by access control list (`coqui-net-acl`, re-exported as `acl`) |
-| `tls` | `tcp` and `transport::tls`: TLS over TCP (1.3, and 1.2 where the policy allows), mutual TLS or server TLS (`coqui-peer`, `coqui-peer-tls` with `tls12`, `rustls` with ring); with `ws`, `wss://` |
+| `tls` | `tcp` and `transport::tls`: TLS over TCP (1.3, and 1.2 where the policy allows), mutual TLS or server TLS (`coqui-peer`, `coqui-peer-tls`, `rustls` with ring); with `ws`, `wss://` |
 | `platform-roots` | `tls` and coqui-peer-tls's `platform-roots` (rustls-platform-verifier): `Roots::platform()`, `roots = "platform"`, a server verified by the operating system's authorities and verifier |
 | `quic` | `tls` and `transport::quic`: QUIC, at mutual TLS or no security, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
@@ -31,7 +32,7 @@ RemoteSource::from_config(&Map) -> Result<RemoteSource, ProviderError>  // as th
 impl Source for RemoteSource                       // registry.add_source(name, source)
 source.link() -> Result<Arc<Link>, ProviderError> // connects unless connected; NOT_FOUND for described peers
 source.disconnect(); source.objects_out() -> usize  // every peer's
-source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured policy's settings looser than strict, by peer name ("" for one peer); described peers after a refresh
+source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured policy's settings looser than modern (TLS 1.3 only), by peer name ("" for one peer); described peers after a refresh
 ```
 
 - **Peers described by manifests** (`dirs`, `manifests` in the
@@ -222,9 +223,11 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   `Policy::admits_anonymous`); at mutual TLS coqui-peer-tls decides it as
   the client presents its certificate, before pins or the store (TLS
   through the handshake's addresses, QUIC and WebTransport through a
-  verifier made per connection by `Trust::client_cert_verifier_for`). A
-  listener whose list names something that is not a SHA-256 fingerprint
-  is refused as it is made.
+  configuration built per connection by coqui-peer-tls's
+  `ServerConfigs::for_connection`, which shares the listener's sessions
+  and keeps the refusal for the server's words). A listener whose list
+  names something that is not a SHA-256 fingerprint is refused as it is
+  made.
 - **Server TLS** (`TlsConfig::server_tls`): a server presents its
   certificate and asks for none (coqui-peer-tls's configuration without
   client authentication, listed by `weakened()` as `client_auth`); a
@@ -263,10 +266,11 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`NameMismatch`), an authority the roots do not hold (`NotTrusted`).
   A mutual-TLS listener given roots and no pins or store is refused:
   roots verify only a server this side dials.
-  Strict policy by default (TLS 1.3); `compatible` and `legacy` add
-  TLS 1.2 (coqui-peer-tls's `tls12`), which QUIC and WebTransport never
-  run (a policy allowing only 1.2 is refused there); a client's policy
-  may hold no `acl`. ALPN `guatiao-remote` is required at both
+  The modern policy by default (TLS 1.3 only), in `TlsConfig::new` and
+  in a `policy` map naming no `profile` (coqui-peer-tls's own default is
+  `intermediate`); `intermediate` and `legacy` add TLS 1.2, which QUIC
+  and WebTransport never run (a policy allowing only 1.2 is refused
+  there); a client's policy may hold no `acl`. ALPN `guatiao-remote` is required at both
   ends. `TlsConnect::connect` runs the handshake within its timeout; a
   listener's runs on the serving thread's first read, bounded as a whole
   by the read timeout the link sets (its handshake timeout). The reader
