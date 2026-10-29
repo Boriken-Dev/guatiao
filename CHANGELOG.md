@@ -40,7 +40,7 @@ write now.
   `datagram_echo` example is a server that sends each one back.
 - **guatiao-source-remote: a host sees the TLS settings its own
   configuration weakens.** `RemoteSource::weakened()` (feature `tls`)
-  lists every setting looser than strict in the `policy` a source file's
+  lists every setting looser than modern in the `policy` a source file's
   configuration or a peer manifest names, by peer, as
   `guatiao-remote-server` prints its own when it starts; a library prints
   nothing, so showing or logging them is the host's.
@@ -171,8 +171,9 @@ write now.
   client it does not know as waiting, with the address it came from, once
   the client has proved its key, and `guatiao-remote-server --state-dir
   DIR --waiting` / `--accept FINGERPRINT` pair it. coqui-peer-tls's TLS
-  policy, strict by default, is part of the configuration (`policy`, in
-  its text form), and every setting looser than strict is listed. TLS
+  policy, modern (TLS 1.3 only) by default, is part of the
+  configuration (`policy`, in its text form), and every setting looser
+  than modern is listed. TLS
   session resumption is off unless the policy's `allow_resumption` keeps
   it, so a peer removed from the store is refused at its next link. A
   refusal names why (a certificate not pinned, not accepted by the trust
@@ -1423,10 +1424,11 @@ write now.
   fingerprint is decided as the client presents its certificate, before
   the pins or the trust store, on `tls://`, `wss://`, `quic://` and
   WebTransport alike; a QUIC or WebTransport listener verifies each
-  client through a verifier coqui-peer-tls makes for that connection's
-  addresses. A policy may allow TLS 1.2 (`compatible`, `legacy`, or
-  `tls_versions`): `tls://` and `wss://` run it, QUIC and WebTransport run
-  TLS 1.3 alone. Every refusal coqui-peer-tls makes has its own words (an
+  client through a configuration coqui-peer-tls builds for that
+  connection's addresses. A policy may allow TLS 1.2 (`intermediate`,
+  `legacy`, or `tls_versions`): `tls://` and `wss://` run it, QUIC and
+  WebTransport run TLS 1.3 alone. Every refusal coqui-peer-tls makes has
+  its own words (an
   address or a fingerprint the list denies, by `rule N` or `its default`;
   not pinned; not accepted; a chain; not trusted or the wrong name by the
   roots; an unusable CA bundle), and a client told `access_denied` hears
@@ -1436,14 +1438,28 @@ write now.
   refused naming the file, when a client's configuration is built over it.
 
 - **guatiao-source-remote takes coqui-net-acl, coqui-peer and
-  coqui-peer-tls from crates.io**, each at `=0.0.0-alpha.0`, so the crate
-  can be published. Over them, an identity file holding a chain is read
+  coqui-peer-tls from crates.io**, coqui-net-acl at `=0.0.0-alpha.0` and
+  the other two at `=0.0.0-alpha.1`, so the crate can be published. Over
+  them, an identity file holding a chain is read
   by `Identity::read` and `open_or_create` too, and a TLS listener whose
   policy names an access control list gives coqui-peer-tls the
   connection's local address as well as its source. A client the list
   refuses by its certificate's fingerprint now hears `certificate_unknown`,
   as one the server does not trust, and is told so in the same words,
   which name the list too.
+
+- **guatiao-source-remote: the TLS policy's presets are coqui-peer-tls
+  `0.0.0-alpha.1`'s.** `strict` is now `modern` (TLS 1.3 only) and
+  `compatible` is `intermediate` (TLS 1.2 and 1.3), in Rust
+  (`Policy::modern()`, `Policy::intermediate()`) and in a `policy` map or
+  `--policy` file (`profile = "modern"`); the old names are refused.
+  guatiao keeps TLS 1.3 only as its default, although coqui-peer-tls's
+  own is now `intermediate`: `TlsConfig::new` holds a side to `modern`,
+  and so does a `policy` map naming no `profile`. `weakened()` still
+  lists every setting looser than TLS 1.3 only, TLS 1.2 among them, and
+  the server prints them as "weaker than modern". A policy may name
+  `cipher_profiles`, `crypto` (`ring`) and `require_ems`. coqui-peer-tls's
+  `tls12` feature is gone (TLS 1.2 is always built, the policy chooses).
 
 - **On Windows, what a loaded file imports is found beside it, beside the
   host and in the system directory, and no longer in the current

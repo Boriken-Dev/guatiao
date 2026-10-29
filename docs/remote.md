@@ -46,7 +46,7 @@ configuration map:
 | `identity_file` | TLS: the identity file instead of `state_dir` (made when absent) |
 | `pins` | TLS: a list of the fingerprints (`sha256:<hex>`) of the servers trusted; without any, the trust store's accepted peers |
 | `roots` | TLS: also trust a server whose certificate an authority issued for the host dialled ([A server by its authority](#a-server-by-its-authority)): `"platform"`, the operating system's, or a CA bundle's path |
-| `policy` | TLS: the TLS policy, a map (below, [Mutual TLS](#mutual-tls)); strict when absent |
+| `policy` | TLS: the TLS policy, a map (below, [Mutual TLS](#mutual-tls)); modern (TLS 1.3 only) when absent |
 | `timeout_ms` | how long a call waits for its answer; `0` waits as long as the link lives (default 30 000) |
 | `max_frame`, `max_calls` | the link's bounds (defaults 64 MiB and 64) |
 | `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above then apply to every peer whose manifest does not name them |
@@ -482,7 +482,7 @@ every client. Nothing listens on a network unless told where.
   trust store, or `roots`) and a `key` or `token` (or `key_file`,
   `token_file`), and no identity; a server needs
   its identity and a key or token (`--key-file`, `--token-file`), and
-  lists "client_auth = none" among the settings weaker than strict. A
+  lists "client_auth = none" among the settings weaker than modern. A
   server's token is required at mutual TLS as well; with no TLS the
   server refuses `--token-file`, a token adding nothing to the key's
   proof there. In Rust,
@@ -600,7 +600,7 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
 - **Whom a side trusts.** Fixed pins (`pins`, `--pin`), or, when none are
   given, the peers a trust store has accepted. Every certificate must
   prove its key in the handshake, be inside its validity dates and come
-  without a chain (under the strict policy).
+  without a chain (under the modern policy).
 - **Pairing.** A server with a store records a client it does not know
   as *waiting*, with the address it came from, once the client has proved
   it holds its key (a stolen certificate leaves no entry), and refuses
@@ -650,24 +650,27 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   server's `--policy` file. It starts from a `profile` and overrides any
   field; unknown keys are refused:
 
-  | key | strict (the default) |
+  | key | modern (the default) |
   | --- | --- |
-  | `profile` | `strict`; `compatible` and `legacy` add TLS 1.2 (and SHA-1 pins); QUIC and WebTransport run TLS 1.3 alone, so a policy allowing only 1.2 is refused there |
+  | `profile` | `modern`, the default here although coqui-peer-tls's own is `intermediate`; `intermediate` adds TLS 1.2, `legacy` TLS 1.2, SHA-1 pins and TLS 1.2 without the extended master secret; QUIC and WebTransport run TLS 1.3 alone, so a policy allowing only 1.2 is refused there |
   | `tls_versions` | `["1.3"]` |
-  | `cipher_suites`, `kx_groups` | all ring has for those versions; IANA names narrow them |
+  | `cipher_suites`, `kx_groups` | all the cipher profiles give for those versions; IANA names narrow them |
+  | `cipher_profiles` | `["mozilla"]`: Mozilla's intermediate guideline |
+  | `crypto` | `"ring"`, the one provider this crate builds coqui-peer-tls with |
   | `pin_digests` | `["sha256", "sha384", "sha512"]` |
   | `check_validity` | `true` |
   | `allow_chain_when_pinned` | `false` |
   | `allow_resumption` | `false`: a resumed session skips the certificate check, so a removed peer could come back on one |
+  | `require_ems` | `true`: a TLS 1.2 session uses the extended master secret |
   | `waiting_per_source`, `waiting_total`, `waiting_rerecord_secs` | `16`, `1000`, `60` |
   | `acl` | none (the server's access control list, above) |
 
-  Every setting looser than strict is listed by `TlsConfig::weakened()`,
-  and the server prints each when it starts. A host's own are listed by
-  `RemoteSource::weakened()`: each setting its configuration or a peer
-  manifest names looser than strict, by peer (a manifest's after a
-  refresh has read it), for the host to show or log; nothing is printed
-  for it.
+  Every setting looser than modern (TLS 1.2 among them) is listed by
+  `TlsConfig::weakened()`, and the server prints each when it starts. A
+  host's own are listed by `RemoteSource::weakened()`: each setting its
+  configuration or a peer manifest names looser than modern, by peer (a
+  manifest's after a refresh has read it), for the host to show or log;
+  nothing is printed for it.
 - **From C, Python or any language** mutual TLS is the source file's
   configuration keys above. A peer in another language speaks the
   same protocol inside TLS 1.3 with the same files: OpenSSL presents the
@@ -720,7 +723,7 @@ roots = "platform"          # or a CA bundle: roots = "lab-ca.pem"
 - With `pins` (or a trust store) as well, a pinned certificate is taken
   whatever it names, and any other is checked against the roots. A
   pinned certificate the server presents with its chain is refused
-  under the strict policy, as on every pinned link, unless the policy
+  under the modern policy, as on every pinned link, unless the policy
   says `allow_chain_when_pinned`.
 - The client dials by the host in `connect`, on every transport: a
   certificate for `device.example.net` is refused when the client dials
