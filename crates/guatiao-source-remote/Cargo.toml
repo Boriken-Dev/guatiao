@@ -95,9 +95,9 @@ getrandom = { version = "0.3", optional = true }
 # Admission by ordered permit/deny rules, before anything is read.
 coqui-net-acl = { version = "=0.0.0-alpha.0", optional = true, features = ["serde"] }
 # Peer ids, the trust store and the sans-IO handshake driver.
-coqui-peer = { version = "=0.0.0-alpha.0", optional = true }
+coqui-peer = { version = "=0.0.0-alpha.1", optional = true }
 # Mutual TLS: identities, pinned and stored trust, the TLS policy.
-coqui-peer-tls = { version = "=0.0.0-alpha.0", optional = true, features = ["generate", "serde", "acl", "tls12"] }
+coqui-peer-tls = { version = "=0.0.0-alpha.1", optional = true, features = ["generate", "serde", "acl"] }
 # The TLS state the link's threads share; coqui-peer-tls's version.
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
 # QUIC (the `quic` feature): quinn with rustls on ring, and the runtime
@@ -137,8 +137,8 @@ greeter_kind = { path = "../../examples/greeter_kind" }
 serde_json = "1"
 # The secure level's tests: a client that presents a certificate it holds
 # no key for, written against rustls itself.
-coqui-peer = "=0.0.0-alpha.0"
-coqui-peer-tls = { version = "=0.0.0-alpha.0", features = ["generate"] }
+coqui-peer = "=0.0.0-alpha.1"
+coqui-peer-tls = { version = "=0.0.0-alpha.1", features = ["generate"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 # The QUIC tests' own clients (an impostor, a server agreeing no protocol).
 quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-ring"] }

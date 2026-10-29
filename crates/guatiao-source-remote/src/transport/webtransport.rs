@@ -33,18 +33,16 @@ use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
 use coqui_net_acl::Acl;
-use coqui_peer_tls::{Identity, PeerId, Trust};
+use coqui_peer_tls::{ConnectionConfig, Identity, PeerId, ServerConfigs};
 use quinn::{Incoming, VarInt};
-use rustls::ServerConfig;
 use rustls::client::danger::ServerCertVerifier;
 use wtransport::endpoint::endpoint_side::Client;
 use wtransport::endpoint::{IncomingSessionFuture, SessionRequest};
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 use super::quic::{
-    CLEAN, Handshake, Kept, Over, REFUSED, Rt, Shared, Watched, accept_incoming, checked,
-    connection, fingerprint, for_connection, for_quinn, left, serving, transport_config, trusted,
-    wait_at_most,
+    CLEAN, Handshake, Over, REFUSED, Rt, Shared, Watched, accept_incoming, connection, fingerprint,
+    for_connection, left, serving, transport_config, trusted, wait_at_most,
 };
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{
@@ -126,21 +124,17 @@ impl Over for Wt {
     }
 }
 
-/// A certificate a listener presents, and the TLS configuration that
-/// presents it to a connection that asks no certificate or checks none.
+/// A certificate a listener presents, and what each connection's TLS
+/// configuration presenting it is built from.
 struct Presented {
     identity: Identity,
-    tls: Arc<ServerConfig>,
+    configs: ServerConfigs,
 }
 
 impl Presented {
     fn of(config: &TlsConfig, identity: Identity) -> io::Result<Presented> {
-        // Without the list, as `quic://`'s listener (see `for_connection`).
-        let tls = config
-            .listing_nobody()
-            .presenting(identity.clone())
-            .server_naming(H3)?;
-        Ok(Presented { identity, tls })
+        let configs = config.server_configs(&identity, H3)?;
+        Ok(Presented { identity, configs })
     }
 
     /// A certificate made now, valid for two periods of `every`, a margin
@@ -180,9 +174,9 @@ impl Certs {
 struct Listener {
     /// Its identity, whom it trusts and the policy, its list included.
     config: TlsConfig,
-    /// At mutual TLS checking certificates: whom each connection's own
-    /// configuration verifies its client by.
-    trust: Option<Trust>,
+    /// Whether a connection's client presents a certificate it proves:
+    /// false at server TLS and at no security.
+    proves: bool,
     certs: Mutex<Certs>,
 }
 
@@ -225,30 +219,14 @@ impl Listener {
         Ok(())
     }
 
-    /// The server configuration for one connection: the certificate
-    /// presented now, and at mutual TLS a client verifier made for the
-    /// connection's addresses.
+    /// The server configuration for one connection, presenting the
+    /// certificate presented now, and the refusal its handshake ends with.
     fn config(
         &self,
         source: SocketAddr,
         local: SocketAddr,
-        refusal: &Kept,
-    ) -> io::Result<Arc<quinn::ServerConfig>> {
-        let presented = self.current()?;
-        let tls = match &self.trust {
-            Some(trust) => for_connection(
-                &self.config,
-                &presented.identity,
-                &presented.tls,
-                trust,
-                H3,
-                source,
-                local,
-                refusal,
-            )?,
-            None => Arc::clone(&presented.tls),
-        };
-        for_quinn(tls)
+    ) -> io::Result<(Arc<quinn::ServerConfig>, ConnectionConfig)> {
+        for_connection(&self.current()?.configs, source, local)
     }
 }
 
@@ -267,8 +245,7 @@ impl Handshake<Wt> for Pending {
         bound: Option<Duration>,
     ) -> io::Result<wtransport::RecvStream> {
         let until = bound.map(|b| Instant::now() + b);
-        let refusal = Kept::default();
-        let config = self.listener.config(self.source, self.local, &refusal)?;
+        let (config, tls) = self.listener.config(self.source, self.local)?;
         let handle = shared.rt.handle();
         // quinn spawns the connection's driver on the runtime it is called
         // inside.
@@ -279,14 +256,12 @@ impl Handshake<Wt> for Pending {
         .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         let session = IncomingSessionFuture::with_quic_connecting(connecting);
         let request: SessionRequest =
-            wait_at_most(handle, left(until)?, session)?.map_err(|e| {
-                match refusal.get().copied() {
-                    Some(refused) => untrusted_by_server(Some(refused), &e),
-                    None => io::Error::new(
-                        io::ErrorKind::ConnectionAborted,
-                        format!("the client's WebTransport handshake did not finish: {e}"),
-                    ),
-                }
+            wait_at_most(handle, left(until)?, session)?.map_err(|e| match tls.refusal() {
+                Some(refused) => untrusted_by_server(Some(refused), &e),
+                None => io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    format!("the client's WebTransport handshake did not finish: {e}"),
+                ),
             })?;
         let accepting = request.accept();
         let conn = wait_at_most(handle, left(until)?, accepting)?
@@ -297,7 +272,7 @@ impl Handshake<Wt> for Pending {
         };
         // At server TLS the client presents no certificate, and at no
         // security the one it presents proves nothing.
-        let peer = if self.listener.trust.is_some() {
+        let peer = if self.listener.proves {
             Some(fingerprint(conn.quic_connection()).map_err(refuse)?)
         } else {
             None
@@ -587,19 +562,15 @@ impl WtListen {
 
     /// A UDP socket the caller bound itself, as `config` says.
     pub fn from_socket(socket: UdpSocket, config: &TlsConfig) -> io::Result<WtListen> {
-        checked(config, H3)?;
-        let trust = if config.is_mutual() && config.proves_peers() {
-            Some(config.client_trust()?)
-        } else {
-            None
-        };
+        // Built here, so a policy coqui-peer-tls refuses fails the bind,
+        // not each client.
         let presented = Presented::of(config, config.identity().clone())?;
-        let (endpoint, rt) = serving(socket, Arc::clone(&presented.tls))?;
+        let (endpoint, rt) = serving(socket, &presented.configs)?;
         Ok(WtListen {
             endpoint,
             listener: Arc::new(Listener {
                 config: config.clone(),
-                trust,
+                proves: config.is_mutual() && config.proves_peers(),
                 certs: Mutex::new(Certs::new(Arc::new(presented), None)),
             }),
             rt,
@@ -659,7 +630,7 @@ impl WtListen {
                 Err(refused) => return Ok(Accepted::Refused(refused)),
             };
         let shared = Shared::<Wt>::new(
-            self.listener.trust.is_some(),
+            self.listener.proves,
             None,
             Ends::Server(self.endpoint.clone()),
             Arc::clone(&self.rt),

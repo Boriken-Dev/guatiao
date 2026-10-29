@@ -18,13 +18,15 @@
 //! threads wait on it by polling under its handle and parking, so a thread
 //! that is itself inside another runtime can still call.
 //!
-//! quinn runs each handshake on its runtime's threads, where coqui-peer-tls
-//! cannot learn a connection's addresses. So a listener decides its access
-//! control list by address itself as it accepts, and at mutual TLS accepts
-//! each connection with a TLS configuration of its own, whose client
-//! verifier coqui-peer-tls made for that connection's addresses: it records
-//! a waiting client with the address it came from, and refuses a
-//! fingerprint the list denies before the store sees it.
+//! A listener decides its access control list by address itself as it
+//! accepts, refusing a peer it denies before any handshake, then accepts
+//! each connection with a TLS configuration coqui-peer-tls built for that
+//! connection's addresses (`ServerConfigs`), since quinn runs the handshake
+//! on its runtime's threads: it records a waiting client with the address
+//! it came from, refuses a fingerprint the list denies before the store
+//! sees it, keeps the refusal for the server's words, and shares the
+//! listener's sessions, so a policy keeping resumption resumes across
+//! connections.
 
 #![forbid(unsafe_code)]
 
@@ -44,12 +46,11 @@ use std::thread::{self, Thread};
 use std::time::Instant;
 
 use coqui_net_acl::Acl;
-use coqui_peer_tls::{Identity, PeerId, Refusal, Trust};
+use coqui_peer_tls::{ConnectionConfig, PeerId, Refusal, ServerConfigs};
 use quinn::crypto::rustls::{HandshakeData, QuicClientConfig, QuicServerConfig};
 use quinn::{ConnectionError, Incoming, RecvStream, SendStream, TransportErrorCode, VarInt};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
     AlertDescription, ClientConfig, DigitallySignedStruct, DistinguishedName, ServerConfig,
     SignatureScheme,
@@ -238,73 +239,21 @@ pub(super) fn transport_config() -> quinn::TransportConfig {
     t
 }
 
-/// The first refusal a connection's verifier returned, for the words.
-pub(super) type Kept = Arc<OnceLock<Refusal>>;
-
-fn keep(kept: &Kept, e: &rustls::Error) {
-    if let Some(r) = Refusal::from_rustls(e) {
-        let _ = kept.set(r);
-    }
-}
-
-/// A connection's client verifier, keeping its first refusal for the
-/// server's words: quinn reports a failed handshake by its alert, never by
-/// the rustls error that names the refusal.
-#[derive(Debug)]
-pub(super) struct Keeping {
-    pub(super) inner: Arc<dyn ClientCertVerifier>,
-    pub(super) refusal: Kept,
-}
-
-impl Keeping {
-    fn run<T>(&self, call: impl FnOnce() -> Result<T, rustls::Error>) -> Result<T, rustls::Error> {
-        let out = call();
-        if let Err(e) = &out {
-            keep(&self.refusal, e);
-        }
-        out
-    }
-}
-
-/// The server configuration for one connection from `source` to `local`,
-/// presenting `identity` under `config`'s policy: its client verified by
-/// `trust` through a verifier coqui-peer-tls made for those addresses (the
-/// list deciding the client's fingerprint before the trust store sees it,
-/// a stranger recorded as waiting under `source`), the refusal kept in
-/// `refusal`. The configuration itself is built under the policy without
-/// its list, whose address rules would read a scope quinn's threads do not
-/// have: the listener decided them as it accepted. It keeps `base`'s
-/// sessions (the listener's own configuration, built under the same
-/// policy), so a policy keeping resumption resumes across connections.
-#[allow(clippy::too_many_arguments)]
+/// The TLS configuration of one connection from `source` to `local`, built
+/// from the listener's `configs`: its client verified for those addresses
+/// (the list deciding the client's fingerprint before the trust store sees
+/// it, a stranger recorded as waiting under `source`), the session state
+/// shared with every other connection, and the refusal the handshake ends
+/// with kept, since quinn reports a failed handshake only by its alert.
 pub(super) fn for_connection(
-    config: &TlsConfig,
-    identity: &Identity,
-    base: &ServerConfig,
-    trust: &Trust,
-    alpn: &[u8],
+    configs: &ServerConfigs,
     source: SocketAddr,
     local: SocketAddr,
-    refusal: &Kept,
-) -> io::Result<Arc<ServerConfig>> {
-    let verifier = trust
-        .client_cert_verifier_for(config.tls_policy(), source, local)
+) -> io::Result<(Arc<quinn::ServerConfig>, ConnectionConfig)> {
+    let tls = configs
+        .for_connection(source, local)
         .map_err(|e| unbuilt(&e))?;
-    let keeping = Arc::new(Keeping {
-        inner: verifier,
-        refusal: Arc::clone(refusal),
-    });
-    let built = coqui_peer_tls::server_config_with_verifier(
-        identity,
-        keeping,
-        &[alpn],
-        config.listing_nobody().tls_policy(),
-    )
-    .map_err(|e| unbuilt(&e))?;
-    let mut tls = built.config;
-    tls.session_storage = Arc::clone(&base.session_storage);
-    tls.ticketer = Arc::clone(&base.ticketer);
-    Ok(Arc::new(tls))
+    Ok((for_quinn(tls.config())?, tls))
 }
 
 /// Whether a listener of `config` admits a client from `source`, at
@@ -324,72 +273,6 @@ pub(super) fn admits(
             !acl.rules.iter().any(|r| r.destination.is_some())
                 && config.admits(source, bound).is_ok()
         }
-    }
-}
-
-/// What a listener checks its configuration with as it binds: coqui-peer-
-/// tls refuses a policy (its list naming something that is not a SHA-256
-/// fingerprint among it) when it builds a configuration under it, and a
-/// listener building one per connection would refuse only its clients.
-pub(super) fn checked(config: &TlsConfig, alpn: &[u8]) -> io::Result<()> {
-    config.server_naming(alpn).map(drop)
-}
-
-impl ClientCertVerifier for Keeping {
-    fn offer_client_auth(&self) -> bool {
-        self.inner.offer_client_auth()
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        self.inner.client_auth_mandatory()
-    }
-
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        self.inner.root_hint_subjects()
-    }
-
-    fn verify_client_cert(
-        &self,
-        certificate: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        now: UnixTime,
-    ) -> Result<ClientCertVerified, rustls::Error> {
-        self.run(|| {
-            self.inner
-                .verify_client_cert(certificate, intermediates, now)
-        })
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        certificate: &CertificateDer<'_>,
-        signed: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        self.run(|| {
-            self.inner
-                .verify_tls12_signature(message, certificate, signed)
-        })
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        certificate: &CertificateDer<'_>,
-        signed: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        self.run(|| {
-            self.inner
-                .verify_tls13_signature(message, certificate, signed)
-        })
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.inner.supported_verify_schemes()
-    }
-
-    fn requires_raw_public_keys(&self) -> bool {
-        self.inner.requires_raw_public_keys()
     }
 }
 
@@ -784,12 +667,16 @@ pub(super) fn for_quinn(tls: Arc<ServerConfig>) -> io::Result<Arc<quinn::ServerC
     Ok(Arc::new(config))
 }
 
-/// An endpoint serving on `socket` with `tls`, and the runtime it runs on.
+/// An endpoint serving on `socket`, and the runtime it runs on. quinn's
+/// endpoint takes a server configuration of its own, one of `configs`';
+/// every connection is accepted with one built for its addresses
+/// (`accept_with`), so this one runs no handshake.
 pub(super) fn serving(
     socket: UdpSocket,
-    tls: Arc<ServerConfig>,
+    configs: &ServerConfigs,
 ) -> io::Result<(quinn::Endpoint, Arc<Rt>)> {
-    let server = Arc::unwrap_or_clone(for_quinn(tls)?);
+    let bound = socket.local_addr()?;
+    let server = Arc::unwrap_or_clone(for_connection(configs, bound, bound)?.0);
     let rt = Rt::new()?;
     let endpoint = {
         let _inside = rt.handle().enter();
@@ -819,29 +706,6 @@ pub(super) struct Pending {
     local: SocketAddr,
 }
 
-impl Pending {
-    /// This connection's own server configuration: at mutual TLS one made
-    /// for its addresses; else the listener's, which asks no certificate
-    /// or checks none.
-    fn config(&self, refusal: &Kept) -> io::Result<Arc<quinn::ServerConfig>> {
-        let listener = &self.listener;
-        let tls = match &listener.trust {
-            Some(trust) => for_connection(
-                &listener.config,
-                listener.config.identity(),
-                &listener.tls,
-                trust,
-                ALPN,
-                self.source,
-                self.local,
-                refusal,
-            )?,
-            None => Arc::clone(&listener.tls),
-        };
-        for_quinn(tls)
-    }
-}
-
 impl Handshake<Quic> for Pending {
     fn run(self, shared: &Shared<Quic>, bound: Option<Duration>) -> io::Result<RecvStream> {
         if shared.ending.ended() {
@@ -849,8 +713,7 @@ impl Handshake<Quic> for Pending {
             return Err(ended_in_handshake());
         }
         let until = bound.map(|b| Instant::now() + b);
-        let refusal = Kept::default();
-        let config = self.config(&refusal)?;
+        let (config, tls) = for_connection(&self.listener.configs, self.source, self.local)?;
         // quinn spawns the connection's driver on the runtime it is called
         // inside.
         let connecting = {
@@ -861,7 +724,7 @@ impl Handshake<Quic> for Pending {
         let handshake = shared.ending.or_ended(connecting);
         let conn = wait_at_most(shared.handle(), left(until)?, handshake)?
             .ok_or_else(ended_in_handshake)?
-            .map_err(|e| match (refusal.get().copied(), alert(&e)) {
+            .map_err(|e| match (tls.refusal(), alert(&e)) {
                 (None, None) => io::Error::new(
                     io::ErrorKind::ConnectionAborted,
                     format!("the client's QUIC handshake did not finish: {e}"),
@@ -1461,13 +1324,8 @@ impl Connect for QuicConnect {
 struct Listener {
     /// Its identity, whom it trusts and the policy, its list included.
     config: TlsConfig,
-    /// Its own TLS configuration, under the policy without the list (see
-    /// [`for_connection`]): what a connection at server TLS, which asks no
-    /// certificate, or at no security, which checks none, takes as it is.
-    tls: Arc<ServerConfig>,
-    /// At mutual TLS checking certificates: whom each connection's own
-    /// configuration verifies its client by.
-    trust: Option<Trust>,
+    /// What each connection's own TLS configuration is built from.
+    configs: ServerConfigs,
 }
 
 /// A listener at the secure level over QUIC. It admits peers by the
@@ -1511,20 +1369,15 @@ impl QuicListen {
 
     /// A UDP socket the caller bound itself, as `config` says.
     pub fn from_socket(socket: UdpSocket, config: &TlsConfig) -> io::Result<QuicListen> {
-        checked(config, ALPN)?;
-        let tls = config.listing_nobody().server()?;
-        let trust = if config.is_mutual() && config.proves_peers() {
-            Some(config.client_trust()?)
-        } else {
-            None
-        };
-        let (endpoint, rt) = serving(socket, Arc::clone(&tls))?;
+        // Built here, so a policy coqui-peer-tls refuses fails the bind,
+        // not each client.
+        let configs = config.server_configs(config.identity(), ALPN)?;
+        let (endpoint, rt) = serving(socket, &configs)?;
         Ok(QuicListen {
             endpoint,
             listener: Arc::new(Listener {
                 config: config.clone(),
-                tls,
-                trust,
+                configs,
             }),
             rt,
         })

@@ -209,7 +209,7 @@ fn a_fingerprint_the_list_denies_is_refused_in_the_handshake() {
     let mut acl = Acl::default();
     acl.push(deny);
     acl.push(Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap()));
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl);
     let server = TlsConfig::new(server_id.clone())
         .pins([client_id.fingerprint()])
@@ -245,7 +245,7 @@ fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
     only.fingerprint = Some(admitted.fingerprint().canonical());
     let mut acl = Acl::default();
     acl.push(only);
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl);
     let server = TlsConfig::open(&dir).unwrap().policy(policy);
     let at = spawn(

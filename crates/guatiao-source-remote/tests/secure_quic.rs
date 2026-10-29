@@ -326,7 +326,7 @@ fn acl(rules: Vec<Rule>) -> Acl {
 #[test]
 fn the_access_control_list_refuses_a_denied_source_before_the_handshake() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![Rule::new(
         Action::Permit,
         "10.0.0.0/8".parse().unwrap(),
@@ -352,7 +352,7 @@ fn a_fingerprint_rule_refuses_a_trusted_peer_once_the_handshake_names_it() {
     );
     let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
     deny.fingerprint = Some(denied.fingerprint().to_base32_grouped());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![
         deny,
         Rule::new(Action::Permit, "127.0.0.0/8".parse().unwrap()),
@@ -386,7 +386,7 @@ fn a_list_permitting_one_fingerprint_admits_it_alone() {
     );
     let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
     only.fingerprint = Some(one.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![only]));
     let server = TlsConfig::new(server_id.clone())
         .pins([one.fingerprint(), other.fingerprint()])
@@ -411,7 +411,7 @@ fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
     // Every source is deferred to the fingerprint rule.
     let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
     only.fingerprint = Some(admitted.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![only]));
     let server = TlsConfig::open(&dir).unwrap().policy(policy);
     let address = listen(&server, secure_server());
@@ -435,7 +435,7 @@ fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
 #[test]
 fn a_client_has_no_access_control_list() {
     let id = Identity::generate().unwrap();
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(Vec::new()));
     let client = TlsConfig::new(id.clone())
         .pins([id.fingerprint()])
@@ -496,7 +496,7 @@ fn a_peer_removed_from_the_store_cannot_link_again() {
 #[test]
 fn resumption_kept_by_the_policy_lets_a_removed_peer_link_again() {
     let dir = scratch("resumed");
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.allow_resumption = true;
     let server = TlsConfig::open(&dir).unwrap().policy(policy.clone());
     let client_id = Identity::generate().unwrap();
@@ -694,7 +694,7 @@ fn a_server_says_why_it_refuses_a_client() {
     // A list refusing it by its fingerprint, from any address.
     let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
     deny.fingerprint = Some(stranger.fingerprint().canonical());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(Acl {
         rules: vec![deny],
         default: Action::Permit,
@@ -719,7 +719,7 @@ fn a_server_says_why_it_refuses_a_client() {
 #[test]
 fn a_client_refused_by_address_at_its_hello_says_so() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let mut policy = Policy::strict();
+    let mut policy = Policy::modern();
     policy.acl = Some(acl(vec![Rule::new(
         Action::Permit,
         "10.0.0.0/8".parse().unwrap(),
@@ -727,17 +727,13 @@ fn a_client_refused_by_address_at_its_hello_says_so() {
     let trust =
         coqui_peer_tls::Trust::Pinned(coqui_peer_tls::Pins::fixed([client_id.fingerprint()]));
     let at: SocketAddr = "127.0.0.1:1".parse().unwrap();
-    let config = coqui_peer_tls::server_config_for(
-        &server_id,
-        &trust,
-        &[b"guatiao-remote"],
-        &policy,
-        at,
-        at,
-    )
-    .unwrap()
-    .config;
-    let address = raw_server(config);
+    let config =
+        coqui_peer_tls::ServerConfigs::new(&server_id, &trust, &[b"guatiao-remote"], &policy)
+            .unwrap()
+            .for_connection(at, at)
+            .unwrap()
+            .config();
+    let address = raw_server(Arc::unwrap_or_clone(config));
     let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
     let e = QuicConnect::new(&address, &client)
         .unwrap()

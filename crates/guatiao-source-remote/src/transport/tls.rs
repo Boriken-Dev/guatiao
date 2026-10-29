@@ -38,6 +38,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use coqui_peer::DriveError;
+#[cfg(feature = "quic")]
+use coqui_peer_tls::ServerConfigs;
 use coqui_peer_tls::{PeerError, Pins, Refusal, TlsHandshake, Trust};
 use rustls::pki_types::ServerName;
 use rustls::{AlertDescription, ClientConfig, ServerConfig};
@@ -242,34 +244,6 @@ pub(crate) fn untrusted_by_server(
     )
 }
 
-/// The link's socket under a server's handshake. coqui-peer bounds a
-/// handshake's reads through `ReadTimeout`, which it implements for an
-/// owned `TcpStream` only; this socket is shared with the closer, which may
-/// end it from another thread, so the handshake reads it by reference.
-struct Handshaking<'a>(&'a TcpStream);
-
-impl Read for Handshaking<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-impl Write for Handshaking<'_> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl coqui_peer::ReadTimeout for Handshaking<'_> {
-    fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.0.set_read_timeout(timeout)
-    }
-}
-
 /// A handshake's failure as the words a person can act on: `refusal`
 /// names a coqui-peer-tls error, the others are the transport's or the
 /// deadline's.
@@ -338,14 +312,15 @@ impl core::fmt::Debug for TlsConfig {
 }
 
 impl TlsConfig {
-    /// Presenting `identity`, under the strict policy, trusting no one yet.
+    /// Presenting `identity`, under the modern policy (TLS 1.3 only),
+    /// trusting no one yet.
     pub fn new(identity: Identity) -> TlsConfig {
         TlsConfig {
             identity,
             pins: Vec::new(),
             store: None,
             roots: None,
-            policy: Policy::strict(),
+            policy: Policy::modern(),
             checks_nobody: false,
             mutual: true,
         }
@@ -438,7 +413,7 @@ impl TlsConfig {
         self.roots.is_some() && !self.checks_nobody
     }
 
-    /// Held to `policy` rather than the strict one.
+    /// Held to `policy` rather than the modern one.
     pub fn policy(mut self, policy: Policy) -> TlsConfig {
         self.policy = policy;
         self
@@ -447,31 +422,6 @@ impl TlsConfig {
     /// The identity this side presents.
     pub fn identity(&self) -> &Identity {
         &self.identity
-    }
-
-    /// The same configuration presenting `identity` instead: a WebTransport
-    /// listener rotating short-lived certificates.
-    #[cfg(feature = "webtransport")]
-    pub(crate) fn presenting(&self, identity: Identity) -> TlsConfig {
-        TlsConfig {
-            identity,
-            ..self.clone()
-        }
-    }
-
-    /// The same configuration under its policy without the access control
-    /// list: quinn runs rustls on its own threads, where coqui-peer-tls
-    /// cannot learn a connection's addresses, so a QUIC listener decides
-    /// them as it accepts, and a verifier made for the connection decides
-    /// the fingerprint.
-    #[cfg(feature = "quic")]
-    pub(crate) fn listing_nobody(&self) -> TlsConfig {
-        let mut policy = self.policy.clone();
-        policy.acl = None;
-        TlsConfig {
-            policy,
-            ..self.clone()
-        }
     }
 
     /// This side's fingerprint: what a peer pins or accepts.
@@ -490,18 +440,20 @@ impl TlsConfig {
         &self.policy
     }
 
-    /// Every setting of the policy looser than strict, its access control
-    /// list's default included; empty under the strict policy.
+    /// Every setting of the policy looser than the modern one (TLS 1.2
+    /// among them), its access control list's default included, and at
+    /// server TLS `client_auth`; empty under the modern policy at mutual
+    /// TLS.
     pub fn weakened(&self) -> Vec<Weakening> {
-        if self.mutual {
-            return self.policy.weakened();
+        let mut weakened = self.policy.weakened_against(&Policy::modern());
+        if !self.mutual {
+            weakened.push(Weakening {
+                setting: coqui_peer_tls::CLIENT_AUTH_SETTING.to_string(),
+                value: "none".to_string(),
+                strict: "certificate".to_string(),
+            });
         }
-        coqui_peer_tls::server_config_without_client_auth_with(
-            &self.identity,
-            &[ALPN],
-            &self.policy,
-        )
-        .map_or_else(|_| self.policy.weakened(), |built| built.weakened)
+        weakened
     }
 
     /// This side in a refusal's words: its fingerprint, or that it
@@ -603,6 +555,27 @@ impl TlsConfig {
         }
         .map_err(|e| unbuilt(&e))?;
         Ok(Arc::new(built.config))
+    }
+
+    /// The server configurations of a listener presenting `identity` and
+    /// naming `alpn`, one built for each connection's addresses: at mutual
+    /// TLS verifying the client by [`client_trust`](TlsConfig::client_trust),
+    /// at server TLS asking it for no certificate. All of them share the
+    /// listener's session state, decide the policy's access control list
+    /// from the connection's addresses and keep the refusal the handshake
+    /// ended with.
+    #[cfg(feature = "quic")]
+    pub(crate) fn server_configs(
+        &self,
+        identity: &Identity,
+        alpn: &[u8],
+    ) -> io::Result<ServerConfigs> {
+        if self.mutual {
+            ServerConfigs::new(identity, &self.client_trust()?, &[alpn], &self.policy)
+        } else {
+            ServerConfigs::without_client_auth(identity, &[alpn], &self.policy)
+        }
+        .map_err(|e| unbuilt(&e))
     }
 
     /// Whether a listener of this configuration admits a client from
@@ -807,18 +780,20 @@ impl Pending {
         let handshake = TlsHandshake::server(self.config, Some(self.source))
             .map_err(|e| invalid(words(&e)))?
             .with_local(self.local);
-        // The bound the link set on a read bounds the whole handshake.
+        // The bound the link set on a read bounds the whole handshake, its
+        // writes included. The socket is shared with the closer, which may
+        // end it from another thread, so the handshake runs on it by
+        // reference.
         let bound = core.socket.read_timeout()?;
-        core.socket.set_write_timeout(bound)?;
-        let mut io = Handshaking(&core.socket);
+        let mut io = &core.socket;
         let completed = match bound {
             Some(bound) => {
                 coqui_peer::complete_stream_until(handshake, &mut io, Instant::now() + bound)
             }
             None => coqui_peer::complete_stream(handshake, &mut io),
         };
+        // The bounded driver clears both timeouts; the link's read bound stays.
         core.socket.set_read_timeout(bound)?;
-        core.socket.set_write_timeout(None)?;
         let completed = completed
             .map_err(|e| handshake_failed(e, |e| untrusted_by_server(e.refusal(), words(e))))?;
         // A mutual handshake names the client; at server TLS there is none.
@@ -1177,11 +1152,11 @@ impl TlsConnect {
         let name = server_name(host, self.by_roots)?;
         let handshake = TlsHandshake::client_named(Arc::clone(&self.config), name.clone())
             .map_err(|e| invalid(words(&e)))?;
-        socket.set_write_timeout(Some(self.timeout))?;
+        // Every read and write of the handshake waits at most what is left
+        // of the timeout; the driver clears both timeouts as it returns.
         let until = Instant::now() + self.timeout;
         let established = coqui_peer::drive_stream_until(handshake, &mut socket, until)
             .map_err(|e| handshake_failed(e, |e| self.refusal(e, addr, &name)))?;
-        socket.set_write_timeout(None)?;
         if self.alpn {
             check_alpn(&established.session)?;
         }
@@ -1440,7 +1415,7 @@ mod tests {
         let listening = |fingerprint: String| {
             let mut rule = Rule::new(Action::Permit, "any".parse().unwrap());
             rule.fingerprint = Some(fingerprint);
-            let mut policy = Policy::strict();
+            let mut policy = Policy::modern();
             policy.acl = Some(Acl {
                 rules: vec![rule],
                 default: Action::Deny,

@@ -65,7 +65,8 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --pin FINGERPRINT     TLS: trust this client (repeatable); with any, the
                         trust store no longer decides
   --policy PATH         TLS: the TLS policy, a TOML or JSON file (default
-                        strict); its [acl] is the access control list
+                        modern, TLS 1.3 only); its [acl] is the access
+                        control list
   --waiting             list the clients waiting in --state-dir, then exit
   --accept FINGERPRINT  accept a waiting client in --state-dir, then exit
   --rdma-device NAME    the RDMA device rdma:// goes through (default: the first)
@@ -920,7 +921,7 @@ fn secure_config(
     let mut policy = match &a.policy {
         Some(path) => policy_of(&document(path)?)
             .map_err(|e| format!("{}: {}", path.display(), e.message()))?,
-        None => Policy::strict(),
+        None => Policy::modern(),
     };
     if let Some(acl) = named_acl(a)? {
         if policy.acl.is_some() {
@@ -957,7 +958,7 @@ fn secure_config(
 }
 
 /// The line a secure server starts with, then each setting of its policy
-/// looser than strict.
+/// looser than the modern one.
 #[cfg(feature = "tls")]
 fn say_serving(
     url: &str,
@@ -971,7 +972,7 @@ fn say_serving(
     );
     for w in config.weakened() {
         eprintln!(
-            "guatiao-remote-server: weaker than strict: {} = {} (strict: {})",
+            "guatiao-remote-server: weaker than modern: {} = {} (modern: {})",
             w.setting, w.value, w.strict
         );
     }
@@ -1042,7 +1043,7 @@ fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
         );
         for w in config.weakened() {
             eprintln!(
-                "guatiao-remote-server: weaker than strict: {} = {} (strict: {})",
+                "guatiao-remote-server: weaker than modern: {} = {} (modern: {})",
                 w.setting, w.value, w.strict
             );
         }
