@@ -494,6 +494,37 @@ change's split had moved `Reader::slice` out of the readers' loops;
 `#[inline]` on it brought the bytes walk from 8.17 to 7.39 in a direct
 comparison, and stays.
 
+## A move overwrites what it leaves (`wipe-moves*.json`)
+
+Before and after a move of a tree between two allocators overwrites the
+block it leaves before that block's allocator frees it, whatever the
+target (`into_alloc`, `into_local`, `make_local_in` and a kind's answer
+moving into its carrier), and a copy keeps a node that lives in the
+wiping allocator there. Local and provisional, as above: five
+alternating runs of six rounds each on Windows ARM64 (high priority),
+pooled. Microseconds per call, median.
+
+| metric | before | after | change |
+| --- | --- | --- | --- |
+| `into_local_foreign` | 0.9824 | 1.3031 | +32.6% |
+| `clone_map` | 0.9569 | 1.0265 | +7.3% |
+| `call_map_copied` | 0.3548 | 0.3737 | +5.4% |
+| `into_local_local` (no move) | 0.0674 | 0.0674 | +0.1% |
+| `call_map` (built in the carrier) | 0.1775 | 0.1639 | -7.7% |
+| `call_scalar` | 0.0021 | 0.0021 | +0.0% |
+
+**`into_local_foreign`, +32.6%, is the price of the promise**: moving a
+tree out of another allocator now overwrites every byte the original
+holds (each text, number, bytes and key, a volatile store per byte and
+a fence) before freeing it, where it was freed as it was. The work grows
+with the bytes moved, not with the calls; a tree already local
+(`into_local_local`) does no more than before. `clone_map` and
+`call_map_copied` copy a tree and ask, for each node, whether its source
+lives in the wiping allocator; within the run-to-run spread of this
+machine (`call_map`, whose code did not change, moved -7.7%). Nothing
+on the wire, JSON or kind-call paths that do not move a tree changed
+beyond that spread.
+
 ## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
 
 A document to a binding's plain objects and back, three ways: through a
