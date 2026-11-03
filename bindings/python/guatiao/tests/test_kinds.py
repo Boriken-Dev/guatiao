@@ -777,3 +777,88 @@ def test_a_kind_class_refuses_what_has_no_shape_when_it_is_written() -> None:
     assert Fine.kind.methods[0].args[0] is not None
     with pytest.raises(TypeError):
         kind_of(3)
+
+
+# ---- a slot named `close` ---------------------------------------------------
+
+
+def _session_document() -> dict:
+    """An object kind whose last slot is `close`, and a provider kind
+    answering one, hashed by the library as `#[guatiao::kind]` hashes them."""
+    send = {"name": "send", "required": True, "fallible": True, "args": [{"name": "what", "type": "str"}]}
+    close = {"name": "close", "required": True, "fallible": True, "args": []}
+    session_slots = [send, close]
+    open_ = {
+        "name": "open",
+        "required": True,
+        "fallible": True,
+        "args": [],
+        "answer": {"type": "object", "kind": "session"},
+    }
+    return {
+        "kinds": [
+            {"name": "opener", "floor_hash": _description.floor_hash_of(False, [open_]), "object": False, "slots": [open_]},
+            {
+                "name": "session",
+                "floor_hash": _description.floor_hash_of(True, session_slots),
+                "object": True,
+                "slots": session_slots,
+            },
+        ]
+    }
+
+
+def test_a_slot_named_close_is_written_served_and_called_with_no_rename():
+    written = kinds.generate(json.dumps(_session_document()))
+    assert "    def close(self) -> None: ..." in written
+    module: dict = {"__name__": "session_kinds"}
+    exec(compile(written, "session_kinds.py", "exec"), module)
+    Session, Opener = module["Session"], module["Opener"]
+    assert [m.name for m in Session.kind.methods] == ["send", "close"]
+
+    said: "list[str]" = []
+
+    class Line(Session):  # type: ignore[misc, valid-type]
+        def send(self, what: str) -> None:
+            said.append(what)
+
+        def close(self) -> None:
+            said.append("<closed>")
+
+    class Dialer(Opener):  # type: ignore[misc, valid-type]
+        def open(self) -> Line:
+            return Line()
+
+    raw = _serve.serve(Opener.kind, Dialer())
+    try:
+        opener = Opener.kind.bind(raw.table, raw.size, raw.ctx)
+        before = kinds.live_objects()
+        session = opener.open()
+        assert isinstance(session, kinds.Object)
+        assert kinds.live_objects() == before + 1
+        session.send("hi")
+        # The slot, not the object's own end: it is still alive after.
+        session.close()
+        assert said == ["hi", "<closed>"]
+        assert kinds.live_objects() == before + 1
+        session.send("still here")
+        session.destroy()
+        assert kinds.live_objects() == before
+        with pytest.raises(ValueError):
+            session.send("gone")
+        # Leaving a `with` block destroys it, slot or no slot.
+        with opener.open() as again:
+            again.close()
+        assert said[-1] == "<closed>" and kinds.live_objects() == before
+    finally:
+        _serve.release(raw.ctx)
+
+
+def test_an_object_whose_kind_has_no_close_slot_closes_by_destroying(reg):
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
+    before = kinds.live_objects()
+    conversation = greeter.start(Ear())
+    assert kinds.live_objects() == before + 1
+    conversation.close()
+    assert kinds.live_objects() == before
+    conversation.destroy()
