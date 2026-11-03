@@ -38,6 +38,9 @@ abstract interface class DartVault {
 
   /// Lent a map, and changes nothing.
   void touch(MapRef map);
+
+  /// Handed a value, which it frees.
+  void keep(Value value);
 }
 
 /// A caller's handle on a `dart_vault` table: a method per slot.
@@ -132,6 +135,21 @@ final class DartVaultRemote extends KindRemote implements DartVault {
       c.close();
     }
   }
+
+  /// Handed a value, which it frees.
+  @override
+  void keep(Object? value) {
+    final c = CallScope();
+    try {
+      final value$ = c.takeValue(value);
+      final status = slot(5)
+          .cast<NativeFunction<_DartVaultKeepC>>()
+          .asFunction<_DartVaultKeepD>()(ctx, value$);
+      c.check(status, null, 'keep');
+    } finally {
+      c.close();
+    }
+  }
 }
 
 /// The `dart_vault` kind as data: its slots, and the glue that calls and serves them.
@@ -139,7 +157,7 @@ final class DartVaultKind extends Kind<DartVaultRemote> {
   DartVaultKind._()
     : super(
         name: 'dart_vault',
-        floorHash: 3971779361,
+        floorHash: 1835814789,
         isObject: false,
         slots: const [
           KindSlot('read', required: true, fallible: true, sensitive: true),
@@ -147,6 +165,7 @@ final class DartVaultKind extends Kind<DartVaultRemote> {
           KindSlot('pin', required: true, sensitive: true),
           KindSlot('label', required: true),
           KindSlot('touch', required: true),
+          KindSlot('keep', required: true),
         ],
       );
 
@@ -166,6 +185,7 @@ final class DartVaultKind extends Kind<DartVaultRemote> {
     2 => target is DartVault,
     3 => target is DartVault,
     4 => target is DartVault,
+    5 => target is DartVault,
     _ => false,
   };
 
@@ -176,6 +196,7 @@ final class DartVaultKind extends Kind<DartVaultRemote> {
     2 => <T>[] is List<DartVault>,
     3 => <T>[] is List<DartVault>,
     4 => <T>[] is List<DartVault>,
+    5 => <T>[] is List<DartVault>,
     _ => false,
   };
 
@@ -186,6 +207,7 @@ final class DartVaultKind extends Kind<DartVaultRemote> {
     2 => _serve_DartVaultPin.cast(),
     3 => _serve_DartVaultLabel.cast(),
     4 => _serve_DartVaultTouch.cast(),
+    5 => _serve_DartVaultKeep.cast(),
     _ => throw RangeError.index(index, slots),
   };
 }
@@ -224,6 +246,9 @@ typedef _DartVaultLabelC =
 typedef _DartVaultLabelD = int Function(Pointer<Void>, Pointer<guatiao_string>);
 typedef _DartVaultTouchC = Uint32 Function(Pointer<Void>, Pointer<guatiao_map>);
 typedef _DartVaultTouchD = int Function(Pointer<Void>, Pointer<guatiao_map>);
+typedef _DartVaultKeepC =
+    Uint32 Function(Pointer<Void>, Pointer<guatiao_value>);
+typedef _DartVaultKeepD = int Function(Pointer<Void>, Pointer<guatiao_value>);
 
 final Pointer<NativeFunction<_DartVaultReadC>> _serve_DartVaultRead =
     Pointer.fromFunction<_DartVaultReadC>(_serve_DartVaultReadBody, 100);
@@ -309,6 +334,22 @@ int _serve_DartVaultTouchBody(Pointer<Void> ctx, Pointer<guatiao_map> map) {
     final map$ = s.lentMap(map);
     s.running();
     target.touch(map$);
+  } on Object catch (e) {
+    s.fail(e);
+  }
+  return s.close();
+}
+
+final Pointer<NativeFunction<_DartVaultKeepC>> _serve_DartVaultKeep =
+    Pointer.fromFunction<_DartVaultKeepC>(_serve_DartVaultKeepBody, 100);
+
+int _serve_DartVaultKeepBody(Pointer<Void> ctx, Pointer<guatiao_value> value) {
+  final s = ServeScope('dart_vault.keep', null);
+  try {
+    final value$ = s.takenValue(value);
+    final target = s.held<DartVault>(ctx);
+    s.running();
+    target.keep(value$);
   } on Object catch (e) {
     s.fail(e);
   }

@@ -2,7 +2,7 @@
   "kinds": [
     {
       "name": "dart_vault",
-      "floor_hash": 3971779361,
+      "floor_hash": 1835814789,
       "object": false,
       "doc": "A store of secrets.",
       "slots": [
@@ -66,6 +66,19 @@
             }
           ],
           "doc": "Lent a map, and changes nothing."
+        },
+        {
+          "name": "keep",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "value",
+              "type": "value",
+              "pass": "taken"
+            }
+          ],
+          "doc": "Handed a value, which it frees."
         }
       ]
     }

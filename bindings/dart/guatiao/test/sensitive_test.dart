@@ -77,6 +77,9 @@ final class Keeper implements DartVault {
 
   @override
   void touch(MapRef map) {}
+
+  @override
+  void keep(Value value) => value.close();
 }
 
 /// The bytes a [ref] holds, read through its view and compared there.
@@ -211,6 +214,33 @@ void main() {
       expect(every.isSensitive, isTrue);
     });
 
+    test('refuses to hand over or lend a value inside its reveal', () {
+      final secret = Value.sensitive(_secret);
+      addTearDown(secret.close);
+      expect(
+        () => secret.reveal((bytes) {
+          vault.keep(secret);
+          return bytes[0];
+        }),
+        throwsStateError,
+      );
+      expect(_holds(secret, _secret), isTrue);
+      final plain = Value({'user': 'alice'});
+      addTearDown(plain.close);
+      plain.asMap()['token'] = secret;
+      expect(
+        () => plain.asMap()['token']!.reveal((bytes) {
+          vault.touch(plain.asMap());
+          return bytes[0];
+        }),
+        throwsStateError,
+      );
+      expect(_holds(plain.asMap()['token']!, _secret), isTrue);
+      expect(plain.isSensitive, isTrue);
+      vault.keep(secret);
+      expect(secret.isAbsent, isTrue);
+    });
+
     test('leaves a secret in a lent map in the wiping allocator', () {
       final plain = Value({'user': 'alice'});
       addTearDown(plain.close);
@@ -262,7 +292,7 @@ void main() {
     final slots = ((committed['kinds']! as List).first as Map)['slots'] as List;
     expect(
       [for (final s in slots) (s as Map)['sensitive'] == true],
-      [true, true, true, false, false],
+      [true, true, true, false, false, false],
     );
     final unmarked = declarations.replaceAll('  @sensitive\n', '');
     final plain = describeDeclarations(unmarked);

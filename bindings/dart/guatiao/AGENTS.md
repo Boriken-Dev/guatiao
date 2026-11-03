@@ -739,8 +739,8 @@ other.wipe();                                          // any Value: overwritten
 - `Ref.reveal<R>(R Function(RevealedBytes bytes) use)`: a read-only
   `List<int>` over a string's, number's or bytes' own memory (native, or
   the module's on the web), which throws `StateError` once `use` returns;
-  while `use` runs, `close()`, `wipe()` and every change to the value
-  throw `StateError`. `StateError` for any other node.
+  while `use` runs, `close()`, `wipe()`, handing the value to a kind's
+  slot, lending it to one and every change to it throw `StateError`. `StateError` for any other node.
 - `Ref.isSensitive`; `toString` of a `Value` holding anything in the
   wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites
   every byte a tree holds, in any allocator, and frees it.
