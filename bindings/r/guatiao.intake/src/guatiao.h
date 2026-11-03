@@ -2311,6 +2311,46 @@ guatiao_status guatiao_registry_providers(const struct guatiao_registry *reg,
                                           struct guatiao_value *out);
 
 /*
+ Every provider of every loaded library, best first, as a list of maps
+ holding everything a settings screen shows about one: **no provider
+ is built to answer**, and no `create` slot is called.
+
+ Each map has what [`guatiao_registry_providers`] writes (`key`, `id`,
+ `display_name`, `version`, `library`, `kinds`, `from`, `source`,
+ `priority`, `has_config`, `vtable_size`), and:
+
+ - `available`: whether it can run here, asked now through its
+   `available` slot, never cached; `reason`, its words, only when it
+   cannot.
+ - `config`: a copy of its configuration schema; absent when it takes
+   none.
+ - `meta`: a copy of its `meta` map, where its form is, under `"form"`
+   (`GUATIAO_INTAKE_PROVIDER_FORM_KEY`); absent when it declares none.
+   `guatiao_intake_provider_form` answers that form, or the one the
+   schema implies when there is none.
+ - `library_key` and `library_version`: the library that offered it.
+ - `digest`: `"sha256:"` and 64 lowercase hex digits, of the file that
+   library was mapped from, read the first time any call asks and kept;
+   absent for a library from no file (registered, or served by a
+   source). `digest_error`, the reason, when reading the file failed.
+
+ A library's own instance (a provider with no `create`) was made by its
+ entry point when it loaded, and calling `available` calls into it;
+ nothing here makes another.
+
+ The caller owns the list, frees it with `guatiao_value_free`, and may
+ keep it past every library. `GUATIAO_ERR_ALLOC` when `alloc` is null
+ or incomplete.
+
+ # Safety
+
+ As [`guatiao_registry_libraries`].
+ */
+guatiao_status guatiao_registry_catalog(const struct guatiao_registry *reg,
+                                        const struct guatiao_alloc *alloc,
+                                        struct guatiao_value *out);
+
+/*
  One provider by the key this registry filed it under, as a map.
 
  `GUATIAO_ERR_NOT_FOUND` when nothing answers to that key.

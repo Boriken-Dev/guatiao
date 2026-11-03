@@ -1053,6 +1053,12 @@ fn registry_cases() -> Vec<(&'static str, fn())> {
                 guatiao_registry_providers(reg(), Str::new(""), a(), out)
             });
         }),
+        ("guatiao_registry_catalog", || {
+            // SAFETY: as above.
+            leaves_absent("catalog", NULL, |out| unsafe {
+                guatiao_registry_catalog(reg(), a(), out)
+            });
+        }),
         ("guatiao_registry_provider", || {
             // SAFETY: as above.
             leaves_absent("provider", NULL, |out| unsafe {

@@ -556,9 +556,86 @@ pub struct Loaded {
     /// Its say in being unmapped, or `None` for a library that declares
     /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
     unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
+    /// The file it was mapped from, opened just before the mapping, or
+    /// `None` for a library that came from no file.
+    file: Option<LibraryFile>,
+}
+
+/// A library file, held open from just before it was mapped so that its
+/// digest is of that file and not of whatever its path names later.
+#[derive(Debug)]
+struct LibraryFile(std::sync::Mutex<Digested>);
+
+/// The held file and its digest once read.
+#[derive(Debug)]
+struct Digested {
+    file: std::fs::File,
+    digest: Option<String>,
+}
+
+impl LibraryFile {
+    fn new(file: std::fs::File) -> LibraryFile {
+        LibraryFile(std::sync::Mutex::new(Digested { file, digest: None }))
+    }
+
+    /// `sha256:` and 64 lowercase hex digits, read once and then kept.
+    fn digest(&self) -> Result<String, std::io::Error> {
+        use core::fmt::Write as _;
+        use sha2::Digest as _;
+        use std::io::{Read as _, Seek as _};
+
+        // A poisoned lock guards nothing broken: every read seeks first.
+        let mut held = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(done) = &held.digest {
+            return Ok(done.clone());
+        }
+        let file = &mut held.file;
+        file.seek(std::io::SeekFrom::Start(0))?;
+        let mut hasher = sha2::Sha256::new();
+        let mut buf = alloc::vec![0u8; 64 * 1024];
+        loop {
+            match file.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => hasher.update(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        let mut text = String::with_capacity(7 + 64);
+        text.push_str("sha256:");
+        for byte in hasher.finalize() {
+            // Writing to a `String` cannot fail.
+            let _ = write!(text, "{byte:02x}");
+        }
+        held.digest = Some(text.clone());
+        Ok(text)
+    }
 }
 
 impl Loaded {
+    /// The SHA-256 of the file this library was mapped from, as `sha256:`
+    /// and 64 lowercase hex digits, or `None` for a library that came from
+    /// no file this registry could open: one the host registered, or one a
+    /// source served.
+    ///
+    /// Read the first time a host asks, and kept: never at load, so a host
+    /// that does not ask pays nothing. It is read from the file this
+    /// registry opened just before mapping it and has held open since, so
+    /// a file replaced at the same path afterwards does not change it.
+    /// What it says is what was loaded, not whether it should have been: a
+    /// host that pins libraries by digest checks the bytes before loading.
+    ///
+    /// # Errors
+    ///
+    /// The I/O error reading the file failed with. Nothing is kept, so a
+    /// later call reads again.
+    pub fn digest(&self) -> Result<Option<String>, std::io::Error> {
+        self.file.as_ref().map(LibraryFile::digest).transpose()
+    }
+
     /// Everything a library [`KeyTemplate`] can name.
     fn fields(&self) -> KeyFields<'_> {
         KeyFields::library(&self.id, &self.version).with_source(&self.source)
@@ -1068,6 +1145,9 @@ impl Registry {
         // locked: the host it reads is the leaked block, and what the
         // block answers is the last published snapshot.
         let host = self.host();
+        // Opened before the mapping and held, for `Loaded::digest`. A file
+        // that cannot be opened here is the loader's to report.
+        let file = std::fs::File::open(path).ok().map(LibraryFile::new);
         let opened =
             super::raw::open_library(path, host, self.import_search).map_err(|reason| {
                 LoadError::Open {
@@ -1075,7 +1155,7 @@ impl Registry {
                     reason,
                 }
             })?;
-        self.absorb(path, source, opened)
+        self.absorb_file(path, source, opened, file)
     }
 
     /// Registers a library the host **links** rather than loads: its
@@ -1149,6 +1229,18 @@ impl Registry {
         path: &Path,
         source: &str,
         opened: Opened,
+    ) -> Result<Loading<'_>, LoadError> {
+        self.absorb_file(path, source, opened, None)
+    }
+
+    /// [`absorb`](Registry::absorb) for a library mapped from `file`, kept
+    /// with its record when it is loaded.
+    fn absorb_file(
+        &mut self,
+        path: &Path,
+        source: &str,
+        opened: Opened,
+        file: Option<LibraryFile>,
     ) -> Result<Loading<'_>, LoadError> {
         let (lib, mut origin) = match opened {
             Opened::NoEntrySymbol => return Ok(Loading::Skipped(Skipped::NoEntrySymbol)),
@@ -1282,6 +1374,7 @@ impl Registry {
             origin,
             lease,
             unload,
+            file,
         });
         self.publish();
         Ok(Loading::Loaded(self.loaded.last().expect("just pushed")))
@@ -1569,6 +1662,15 @@ impl Registry {
     /// Every library loaded so far.
     pub fn loaded(&self) -> &[Loaded] {
         &self.loaded
+    }
+
+    /// The library that offered `provider`: its key, version and
+    /// [`digest`](Loaded::digest). `None` for a provider this registry
+    /// does not hold.
+    pub fn library_of(&self, provider: &Provider) -> Option<&Loaded> {
+        // By path, as `absorb` recorded it on every provider it took: one
+        // per registered library.
+        self.loaded.iter().find(|l| l.path == provider.from)
     }
 
     /// Every provider, of every kind.
