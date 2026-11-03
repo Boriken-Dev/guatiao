@@ -41,7 +41,7 @@ impl Engine for Toy {
     type Library = u64;                         // the engine's key for an open library
     const THREADS: ThreadModel = ThreadModel::Pinned;
     const MANIFESTS: ManifestFormat = ManifestFormat {
-        serves: "toy",                          // type = "toy" in greeters.guatiao.toml
+        serves: "toy",                          // type = "toy" in greeters.guatiao.cfg
         id_key: "module",                       // module = "greeters": the library's id
         code_extensions: &["toy"],              // what a stamp follows
         skip_dirs: &[],
@@ -99,8 +99,9 @@ the runtime goes.
 
 ## Manifests and stamps
 
-A library is a manifest, a small TOML file named `<name>.guatiao.toml`
-beside its code ([the format](encodings.md#a-library-manifest)):
+A library is a manifest, a small file named `<name>.guatiao.cfg` beside
+its code, TOML unless a `#!json` or `#!yaml` first line says otherwise
+([the format](encodings.md#a-library-manifest)):
 
 ```toml
 type = "toy"                     # the format's `serves`: the source that reads it

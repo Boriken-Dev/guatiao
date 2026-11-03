@@ -4,9 +4,11 @@
 
 //! Manifests: what a library is, read without running it.
 //!
-//! A manifest is a TOML file named `<anything>.guatiao.toml` ([`SUFFIX`])
-//! beside or above the library's code, its `type` naming the source that
-//! serves it:
+//! A manifest is a file named `<anything>.guatiao.cfg` ([`SUFFIX`]) beside
+//! or above the library's code, its `type` naming the source that serves
+//! it. A `#!toml`, `#!json` or `#!yaml` first line names the format and is
+//! removed; a manifest with no such line is TOML
+//! ([`document`](crate::document)):
 //!
 //! ```toml
 //! type = "python"              # the source that serves it: a format's `serves`
@@ -26,13 +28,13 @@
 
 use std::path::{Path, PathBuf};
 
+use guatiao::Map;
 use guatiao::value::convert::TryAsRef;
-use guatiao::{Alloc, Map};
 
 use crate::config::text_list;
 
 /// What every manifest's file name ends with.
-pub const SUFFIX: &str = ".guatiao.toml";
+pub const SUFFIX: &str = ".guatiao.cfg";
 
 /// The `type`s guatiao's own sources serve: each the name its
 /// `guatiao::source!` declares. A `remote` manifest describes a peer, not
@@ -281,15 +283,8 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
         Err(e) => return broken(format!("{}", modified(path)), e.to_string()),
     };
     let file_stamp = content_stamp(&bytes);
-    let text = match core::str::from_utf8(&bytes) {
-        Ok(text) => text,
-        Err(_) => return broken(file_stamp, "not UTF-8".to_string()),
-    };
-    let value = match guatiao_serde::text::toml::from_str(
-        text,
-        Alloc::rust(),
-        guatiao_serde::Presentation::new(),
-    ) {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let value = match crate::document::parse(name, &bytes) {
         Ok(value) => value,
         Err(e) => return broken(file_stamp, e.to_string()),
     };
@@ -405,12 +400,12 @@ mod tests {
         let dir = scratch("read");
         std::fs::create_dir_all(dir.join("lib")).unwrap();
         std::fs::write(
-            dir.join("lib").join("one.guatiao.toml"),
+            dir.join("lib").join("one.guatiao.cfg"),
             "type = \"python\"\nmodule = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\n",
         )
         .unwrap();
         std::fs::write(dir.join("lib").join("one.py"), "x = 1\n").unwrap();
-        std::fs::write(dir.join("broken.guatiao.toml"), "id = \n").unwrap();
+        std::fs::write(dir.join("broken.guatiao.cfg"), "id = \n").unwrap();
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 2);
@@ -427,7 +422,7 @@ mod tests {
 
         std::thread::sleep(core::time::Duration::from_millis(20));
         std::fs::write(dir.join("lib").join("one.py"), "x = 2\n").unwrap();
-        let Some(Found::Library(again)) = read(&PY, &dir.join("lib").join("one.guatiao.toml"))
+        let Some(Found::Library(again)) = read(&PY, &dir.join("lib").join("one.guatiao.cfg"))
         else {
             panic!("still a library");
         };
@@ -442,7 +437,7 @@ mod tests {
     #[test]
     fn a_field_of_the_wrong_kind_is_named() {
         let dir = scratch("wrong");
-        let path = dir.join("w.guatiao.toml");
+        let path = dir.join("w.guatiao.cfg");
         std::fs::write(
             &path,
             "type = \"python\"\nmodule = \"w\"\nkinds = \"greeter\"\n",
@@ -459,35 +454,29 @@ mod tests {
     fn another_sources_manifest_is_passed_over_and_a_missing_or_unknown_type_is_named() {
         let dir = scratch("types");
         let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+        write("mine.guatiao.cfg", "type = \"python\"\nmodule = \"mine\"\n");
         write(
-            "mine.guatiao.toml",
-            "type = \"python\"\nmodule = \"mine\"\n",
-        );
-        write(
-            "theirs.guatiao.toml",
+            "theirs.guatiao.cfg",
             "type = \"lua\"\nmodule = \"theirs\"\n",
         );
-        write("untyped.guatiao.toml", "module = \"untyped\"\n");
-        write("numbered.guatiao.toml", "type = 3\nmodule = \"numbered\"\n");
-        write(
-            "typo.guatiao.toml",
-            "type = \"pyhton\"\nmodule = \"typo\"\n",
-        );
+        write("untyped.guatiao.cfg", "module = \"untyped\"\n");
+        write("numbered.guatiao.cfg", "type = 3\nmodule = \"numbered\"\n");
+        write("typo.guatiao.cfg", "type = \"pyhton\"\nmodule = \"typo\"\n");
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 4, "{found:?}");
         assert!(found.iter().any(|f| f.id() == "mine"));
         assert!(!found.iter().any(|f| f.id().contains("theirs")));
-        for file in ["untyped.guatiao.toml", "numbered.guatiao.toml"] {
+        for file in ["untyped.guatiao.cfg", "numbered.guatiao.cfg"] {
             let why = broken_why(&found, file);
             assert!(why.contains("`type` is missing or not text"), "{why}");
             assert!(why.contains("python, js, lua, wasm, rhai"), "{why}");
         }
-        let why = broken_why(&found, "typo.guatiao.toml");
+        let why = broken_why(&found, "typo.guatiao.cfg");
         assert!(why.contains("`type` names none of the sources"), "{why}");
 
-        assert!(read(&PY, &dir.join("theirs.guatiao.toml")).is_none());
-        let named = find(&PY, &[], &[dir.join("theirs.guatiao.toml")]);
+        assert!(read(&PY, &dir.join("theirs.guatiao.cfg")).is_none());
+        let named = find(&PY, &[], &[dir.join("theirs.guatiao.cfg")]);
         assert!(
             named.is_empty(),
             "a file named in `manifests` too: {named:?}"
@@ -505,22 +494,90 @@ mod tests {
         };
         let dir = scratch("own");
         std::fs::write(
-            dir.join("t.guatiao.toml"),
+            dir.join("t.guatiao.cfg"),
             "type = \"toy\"\nmodule = \"t\"\n",
         )
         .unwrap();
-        std::fs::write(dir.join("u.guatiao.toml"), "module = \"u\"\n").unwrap();
+        std::fs::write(dir.join("u.guatiao.cfg"), "module = \"u\"\n").unwrap();
         let found = find(&TOY, core::slice::from_ref(&dir), &[]);
         assert!(
             found
                 .iter()
                 .any(|f| matches!(f, Found::Library(m) if m.id() == "t"))
         );
-        let why = broken_why(&found, "u.guatiao.toml");
+        let why = broken_why(&found, "u.guatiao.cfg");
         assert!(
             why.contains("python, js, lua, wasm, rhai, remote, toy"),
             "{why}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    const TOML: &str = "type = \"python\"\nmodule = \"m\"\nkinds = [\"greeter\", \"tally\"]\n";
+    const JSON: &str =
+        "{\"type\": \"python\", \"module\": \"m\", \"kinds\": [\"greeter\", \"tally\"]}\n";
+    const YAML: &str = "type: python\nmodule: m\nkinds:\n  - greeter\n  - tally\n";
+
+    #[test]
+    fn a_manifest_names_its_format_on_its_first_line_or_is_toml() {
+        let dir = scratch("formats");
+        let cases = [
+            ("bare", TOML.to_string()),
+            ("toml", format!("#!toml\n{TOML}")),
+            ("json", format!("#!json\n{JSON}")),
+            ("yaml", format!("#!yaml\n{YAML}")),
+            ("shebang", format!("#!/usr/bin/env yaml\n{YAML}")),
+            ("bom", format!("\u{feff}#!json\n{JSON}")),
+        ];
+        for (name, text) in &cases {
+            let path = dir.join(format!("{name}{SUFFIX}"));
+            std::fs::write(&path, text).unwrap();
+            let Some(Found::Library(m)) = read(&PY, &path) else {
+                panic!("{name} is not a library");
+            };
+            assert_eq!(m.id(), "m", "{name}");
+            assert_eq!(m.kinds(), ["greeter", "tally"], "{name}");
+        }
+        let found = find(&PY, core::slice::from_ref(&dir), &[]);
+        assert_eq!(found.len(), cases.len(), "{found:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_manifest_with_the_old_suffix_is_not_found() {
+        let dir = scratch("old");
+        std::fs::write(dir.join("old.guatiao.toml"), TOML).unwrap();
+        assert!(find(&PY, core::slice::from_ref(&dir), &[]).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unknown_format_line_is_broken_and_names_the_file() {
+        let dir = scratch("unknown");
+        let path = dir.join(format!("odd{SUFFIX}"));
+        std::fs::write(&path, format!("#!ini\n{TOML}")).unwrap();
+        let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
+            panic!("not broken");
+        };
+        assert!(why.contains(&format!("odd{SUFFIX}")), "{why}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_syntax_error_names_the_file_and_the_position_and_quotes_nothing() {
+        let dir = scratch("syntax");
+        let path = dir.join(format!("bad{SUFFIX}"));
+        std::fs::write(
+            &path,
+            "#!json\n{\"type\": \"python\",\n \"secret-value\" 7}\n",
+        )
+        .unwrap();
+        let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
+            panic!("not broken");
+        };
+        assert!(why.contains(&format!("bad{SUFFIX}")), "{why}");
+        assert!(why.contains("3"), "the line: {why}");
+        assert!(!why.contains("secret-value"), "{why}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

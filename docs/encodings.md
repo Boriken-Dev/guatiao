@@ -613,8 +613,10 @@ and Dart and `kind_descriptions` in Python.
 
 A library one of guatiao's sources serves (a Python module, a JavaScript
 package, a Lua module, a Rhai script, a WebAssembly module) is described
-by a manifest the source reads without running anything: a TOML file
-named `<name>.guatiao.toml` beside or above the library's code.
+by a manifest the source reads without running anything: a file named
+`<name>.guatiao.cfg` beside or above the library's code. A first line
+`#!toml`, `#!json` or `#!yaml` names its format and is not part of the
+document; a manifest with no such line is TOML. The examples below are TOML.
 
 ```toml
 type = "python"              # the source that serves it

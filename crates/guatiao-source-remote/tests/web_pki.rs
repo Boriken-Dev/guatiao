@@ -616,7 +616,7 @@ fn a_peer_manifest_names_its_bundle_beside_it() {
     Authority::new("another authority").bundle(&dir);
     let port = listen(Over::Tcp, &ca.issue(&["localhost"], false));
     std::fs::write(
-        dir.join("lab.guatiao.toml"),
+        dir.join("lab.guatiao.cfg"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://localhost:{port}\"\nsecurity = \"server-tls\"\nroots = \"roots.pem\"\n"
         ),

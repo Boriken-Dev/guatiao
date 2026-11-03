@@ -1067,7 +1067,7 @@ fn a_host_sees_the_settings_its_configuration_weakens() {
     let peers = dir.join("peers");
     std::fs::create_dir_all(&peers).unwrap();
     std::fs::write(
-        peers.join("lab.guatiao.toml"),
+        peers.join("lab.guatiao.cfg"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
              security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\npins = [\"{pin}\"]\n\
@@ -1135,7 +1135,7 @@ fn an_identity_file_the_first_refresh_makes_leaves_the_peer_as_it_was() {
     let dir = scratch("identity_made");
     let pin = format!("sha256:{}", "0".repeat(64));
     std::fs::write(
-        dir.join("lab.guatiao.toml"),
+        dir.join("lab.guatiao.cfg"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
              security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\npins = [\"{pin}\"]\n"
@@ -1193,7 +1193,7 @@ fn a_peer_manifest_names_a_secure_peer() {
         .accept_key(&coqui_peer_tls::certificate_key(client.certificate_der()).unwrap())
         .unwrap();
     std::fs::write(
-        peers.join("lab.guatiao.toml"),
+        peers.join("lab.guatiao.cfg"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://{address}\"\n\
              identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n\n[policy]\nprofile = \"modern\"\n",

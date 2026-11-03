@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! wasmtime as a guatiao-bridge engine: a library is a WebAssembly module
-//! speaking guatiao ABI 1, its manifest a `*.guatiao.toml` of type `wasm`, each
+//! speaking guatiao ABI 1, its manifest a `*.guatiao.cfg` of type `wasm`, each
 //! opened library an instance in a store of its own, called on the
 //! caller's thread behind that library's lock.
 

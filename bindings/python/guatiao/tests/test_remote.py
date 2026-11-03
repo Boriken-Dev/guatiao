@@ -105,23 +105,23 @@ def test_peers_described_by_manifests_are_served_under_their_names(reg, tmp_path
     peers = tmp_path / "peers"
     peers.mkdir()
     for name, port in zip(("dev-a", "dev-b"), devices):
-        (peers / f"{name}.guatiao.toml").write_text(
+        (peers / f"{name}.guatiao.cfg").write_text(
             f'type = "remote"\nname = "{name}"\nconnect = "tcp://127.0.0.1:{port}"\n'
             f'security = "none"\nkey_file = "../link.key"\n'
         )
-    (peers / "inline.guatiao.toml").write_text(
+    (peers / "inline.guatiao.cfg").write_text(
         'type = "remote"\nname = "inline"\nconnect = "tcp://127.0.0.1:1"\nsecurity = "none"\nkey = "here"\n'
     )
     reg.add_source_file(_REMOTE, {"dirs": [str(peers)]})
     changed = reg.refresh()
     assert sorted(s["key"] for s in changed["loaded"]) == ["dev-a/derived_greeter", "dev-b/derived_greeter"], changed
     [refused] = changed["refused"]
-    assert refused["id"].endswith("inline.guatiao.toml") and "`key` is a secret" in refused["why"], refused
+    assert refused["id"].endswith("inline.guatiao.cfg") and "`key` is a secret" in refused["why"], refused
 
     for name in ("dev-a", "dev-b"):
         greeter = reg.bind(f"{name}/derived_greeter_hello", Greeter)
         assert greeter.greet(name).to_python() == {"greeting": f"hello, {name}"}
     assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
 
-    (peers / "dev-b.guatiao.toml").unlink()
+    (peers / "dev-b.guatiao.cfg").unlink()
     assert [s["key"] for s in reg.refresh()["retired"]] == ["dev-b/derived_greeter"]

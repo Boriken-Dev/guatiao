@@ -197,12 +197,12 @@ fn greet(registry: &Registry, peer: &str) -> String {
 #[test]
 fn identical_devices_are_one_registry_s_under_their_names() {
     let dir = scratch("two");
-    write(&dir, "a.guatiao.toml", &peer("lab-a", device(), ""));
+    write(&dir, "a.guatiao.cfg", &peer("lab-a", device(), ""));
     // b holds a key of its own, which its manifest names over the
     // source's.
     write(
         &dir,
-        "b.guatiao.toml",
+        "b.guatiao.cfg",
         &peer(
             "lab-b",
             device_with("b's own key", Arc::default()),
@@ -212,7 +212,7 @@ fn identical_devices_are_one_registry_s_under_their_names() {
     write(&dir, "b.key", "b's own key");
     write(
         &dir,
-        "greeters.guatiao.toml",
+        "greeters.guatiao.cfg",
         "type = \"python\"\nmodule = \"greeters\"\n",
     );
 
@@ -232,7 +232,7 @@ fn identical_devices_are_one_registry_s_under_their_names() {
     assert_eq!(greet(&registry, "lab-b"), "hello, lab-b");
     assert!(registry.refresh().is_empty(), "nothing changed");
 
-    std::fs::remove_file(dir.join("b.guatiao.toml")).unwrap();
+    std::fs::remove_file(dir.join("b.guatiao.cfg")).unwrap();
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.retired), ["lab-b/shapes"], "{refreshed:?}");
     assert!(refreshed.loaded.is_empty());
@@ -241,7 +241,7 @@ fn identical_devices_are_one_registry_s_under_their_names() {
     // new link, and the old one retired.
     write(
         &dir,
-        "a.guatiao.toml",
+        "a.guatiao.cfg",
         &peer("lab-a", device(), "timeout_ms = 5000\n"),
     );
     let refreshed = registry.refresh();
@@ -254,32 +254,32 @@ fn identical_devices_are_one_registry_s_under_their_names() {
 #[test]
 fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     let dir = scratch("words");
-    write(&dir, "good.guatiao.toml", &peer("good", device(), ""));
+    write(&dir, "good.guatiao.cfg", &peer("good", device(), ""));
     write(
         &dir,
-        "inline.guatiao.toml",
+        "inline.guatiao.cfg",
         &peer("inline", device(), "key = \"right here\"\n"),
     );
     write(
         &dir,
-        "inline_token.guatiao.toml",
+        "inline_token.guatiao.cfg",
         &peer("inline_token", device(), "token = \"right here\"\n"),
     );
     write(
         &dir,
-        "secure.guatiao.toml",
+        "secure.guatiao.cfg",
         "type = \"remote\"\nname = \"far\"\nconnect = \"tcp://192.0.2.1:7000\"\n",
     );
     write(
         &dir,
-        "typo.guatiao.toml",
+        "typo.guatiao.cfg",
         &peer("typo", device(), "keyfile = \"link.key\"\n"),
     );
-    write(&dir, "twice.guatiao.toml", &peer("good", device(), ""));
-    write(&dir, "slash.guatiao.toml", &peer("lab/a", device(), ""));
+    write(&dir, "twice.guatiao.cfg", &peer("good", device(), ""));
+    write(&dir, "slash.guatiao.cfg", &peer("lab/a", device(), ""));
     write(
         &dir,
-        "nameless.guatiao.toml",
+        "nameless.guatiao.cfg",
         "type = \"remote\"\nconnect = \"tcp://127.0.0.1:1\"\n",
     );
 
@@ -287,14 +287,14 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
     registry.add_source("peers", source(&dir)).unwrap();
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["good/shapes"], "{refreshed:?}");
-    assert!(why(&refreshed, "inline.guatiao.toml").contains("`key` is a secret"));
-    let token = why(&refreshed, "inline_token.guatiao.toml");
+    assert!(why(&refreshed, "inline.guatiao.cfg").contains("`key` is a secret"));
+    let token = why(&refreshed, "inline_token.guatiao.cfg");
     assert!(
         token.contains("`token` is a secret") && token.contains("`token_file`"),
         "{token}"
     );
     // The secure level runs over `tls://` alone, in a build that has it.
-    let secure = why(&refreshed, "secure.guatiao.toml");
+    let secure = why(&refreshed, "secure.guatiao.cfg");
     if cfg!(feature = "tls") {
         assert!(secure.contains("names this side's identity"), "{secure}");
     } else {
@@ -304,14 +304,14 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
         );
     }
     assert!(
-        why(&refreshed, "typo.guatiao.toml").contains("`keyfile` is not a key of a peer manifest")
+        why(&refreshed, "typo.guatiao.cfg").contains("`keyfile` is not a key of a peer manifest")
     );
     assert!(
-        why(&refreshed, "twice.guatiao.toml")
+        why(&refreshed, "twice.guatiao.cfg")
             .contains("a peer named `good` is already described by")
     );
-    assert!(why(&refreshed, "slash.guatiao.toml").contains("`name` holds a `/`"));
-    assert!(why(&refreshed, "nameless.guatiao.toml").contains("`name` is missing"));
+    assert!(why(&refreshed, "slash.guatiao.cfg").contains("`name` holds a `/`"));
+    assert!(why(&refreshed, "nameless.guatiao.cfg").contains("`name` is missing"));
     assert_eq!(refreshed.refused.len(), 7, "{refreshed:?}");
     assert!(registry.refresh().is_empty(), "each reported once");
     let _ = std::fs::remove_dir_all(&dir);
@@ -320,15 +320,15 @@ fn a_manifest_that_describes_no_peer_is_reported_in_its_own_words() {
 #[test]
 fn a_peer_that_cannot_be_reached_is_reported_once_and_the_others_served() {
     let dir = scratch("gone");
-    write(&dir, "near.guatiao.toml", &peer("near", device(), ""));
+    write(&dir, "near.guatiao.cfg", &peer("near", device(), ""));
     let (away, _held) = nobody();
-    write(&dir, "far.guatiao.toml", &peer("far", away, ""));
+    write(&dir, "far.guatiao.cfg", &peer("far", away, ""));
 
     let mut registry = Registry::new("host", "1.0");
     registry.add_source("peers", source(&dir)).unwrap();
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["near/shapes"], "{refreshed:?}");
-    let far = why(&refreshed, "far.guatiao.toml");
+    let far = why(&refreshed, "far.guatiao.cfg");
     assert!(far.contains("the peer `far`"), "{far}");
     assert!(far.contains("could not be reached"), "{far}");
     assert!(
@@ -338,7 +338,7 @@ fn a_peer_that_cannot_be_reached_is_reported_once_and_the_others_served() {
     assert_eq!(greet(&registry, "near"), "hello, near");
 
     // It comes up where its manifest now says: a new peer.
-    write(&dir, "far.guatiao.toml", &peer("far", device(), ""));
+    write(&dir, "far.guatiao.cfg", &peer("far", device(), ""));
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["far/shapes"], "{refreshed:?}");
     assert!(refreshed.refused.is_empty());
@@ -375,14 +375,14 @@ fn an_empty_token_file_is_refused_and_so_is_a_token_beside_one() {
     write(&dir, "empty.token", "\u{feff}\r\n");
     write(
         &dir,
-        "lab.guatiao.toml",
+        "lab.guatiao.cfg",
         &peer("lab", device(), "token_file = \"empty.token\"\n"),
     );
     let mut registry = Registry::new("host", "1.0");
     registry.add_source("peers", source(&dir)).unwrap();
     let refreshed = registry.refresh();
     assert!(refreshed.loaded.is_empty(), "{refreshed:?}");
-    let lab = why(&refreshed, "lab.guatiao.toml");
+    let lab = why(&refreshed, "lab.guatiao.cfg");
     assert!(
         lab.contains("`token_file`") && lab.contains("the token is empty"),
         "{lab}"
@@ -467,7 +467,7 @@ fn a_key_no_manifest_has_is_refused_by_name() {
     let dir = scratch("unknown_key");
     write(
         &dir,
-        "odd.guatiao.toml",
+        "odd.guatiao.cfg",
         "type = \"remote\"\nname = \"odd\"\nconnect = \"tcp://127.0.0.1:1\"\ntrust = \"trusted\"\n",
     );
     let mut dirs = List::new();
@@ -545,7 +545,7 @@ fn a_peer_that_goes_away_keeps_its_libraries_until_it_is_back() {
     let down = Arc::new(AtomicBool::new(false));
     write(
         &dir,
-        "flaky.guatiao.toml",
+        "flaky.guatiao.cfg",
         &peer("flaky", device_with(KEY, Arc::clone(&down)), ""),
     );
     let source = source(&dir);
@@ -567,7 +567,7 @@ fn a_peer_that_goes_away_keeps_its_libraries_until_it_is_back() {
         refreshed.loaded.is_empty() && refreshed.retired.is_empty(),
         "{refreshed:?}"
     );
-    assert!(why(&refreshed, "flaky.guatiao.toml").contains("the peer `flaky`"));
+    assert!(why(&refreshed, "flaky.guatiao.cfg").contains("the peer `flaky`"));
     assert_eq!(
         greeter.greet("anyone").unwrap_err().status,
         Status::GUATIAO_ERR_GONE
@@ -591,12 +591,12 @@ fn a_peer_that_goes_away_keeps_its_libraries_until_it_is_back() {
 #[test]
 fn peers_slow_to_refuse_are_listed_at_once() {
     let dir = scratch("slow");
-    write(&dir, "near.guatiao.toml", &peer("near", device(), ""));
+    write(&dir, "near.guatiao.cfg", &peer("near", device(), ""));
     for i in 0..6 {
         let port = slow_to_refuse(Duration::from_secs(1));
         write(
             &dir,
-            &format!("slow{i}.guatiao.toml"),
+            &format!("slow{i}.guatiao.cfg"),
             &peer(&format!("slow{i}"), port, ""),
         );
     }
@@ -649,26 +649,26 @@ fn disconnecting_never_waits_for_a_connection_under_way() {
 #[test]
 fn a_replaced_peer_serves_on_while_its_successor_cannot_be_reached() {
     let dir = scratch("successor");
-    write(&dir, "lab.guatiao.toml", &peer("lab", device(), ""));
+    write(&dir, "lab.guatiao.cfg", &peer("lab", device(), ""));
     let mut registry = Registry::new("host", "1.0");
     registry.add_source("peers", source(&dir)).unwrap();
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.loaded), ["lab/shapes"], "{refreshed:?}");
 
     let (away, _held) = nobody();
-    write(&dir, "lab.guatiao.toml", &peer("lab", away, ""));
+    write(&dir, "lab.guatiao.cfg", &peer("lab", away, ""));
     let refreshed = registry.refresh();
     assert!(
         refreshed.loaded.is_empty() && refreshed.retired.is_empty(),
         "{refreshed:?}"
     );
-    assert!(why(&refreshed, "lab.guatiao.toml").contains("could not be reached"));
+    assert!(why(&refreshed, "lab.guatiao.cfg").contains("could not be reached"));
     assert_eq!(greet(&registry, "lab"), "hello, lab");
     assert!(registry.refresh().is_empty(), "reported once");
 
     write(
         &dir,
-        "lab.guatiao.toml",
+        "lab.guatiao.cfg",
         &peer("lab", device(), "timeout_ms = 5000\n"),
     );
     let refreshed = registry.refresh();
@@ -684,7 +684,7 @@ fn a_replaced_peer_serves_on_while_its_successor_cannot_be_reached() {
 #[test]
 fn a_successor_that_listed_once_never_brings_back_the_peer_it_replaced() {
     let dir = scratch("listed-once");
-    write(&dir, "lab.guatiao.toml", &peer("lab", device(), ""));
+    write(&dir, "lab.guatiao.cfg", &peer("lab", device(), ""));
     let mut registry = Registry::new("host", "1.0");
     registry.add_source("peers", source(&dir)).unwrap();
     assert_eq!(keys(&registry.refresh().loaded), ["lab/shapes"]);
@@ -697,7 +697,7 @@ fn a_successor_that_listed_once_never_brings_back_the_peer_it_replaced() {
 
     let down = Arc::new(AtomicBool::new(false));
     let (port, empty) = empty_device(Arc::clone(&down));
-    write(&dir, "lab.guatiao.toml", &peer("lab", port, ""));
+    write(&dir, "lab.guatiao.cfg", &peer("lab", port, ""));
     let refreshed = registry.refresh();
     assert_eq!(keys(&refreshed.retired), ["lab/shapes"], "{refreshed:?}");
     assert!(refreshed.loaded.is_empty());
@@ -707,7 +707,7 @@ fn a_successor_that_listed_once_never_brings_back_the_peer_it_replaced() {
     let refreshed = registry.refresh();
     assert!(refreshed.loaded.is_empty(), "{refreshed:?}");
     assert_eq!(refreshed.refused.len(), 1, "{refreshed:?}");
-    assert!(why(&refreshed, "lab.guatiao.toml").contains("the peer `lab`"));
+    assert!(why(&refreshed, "lab.guatiao.cfg").contains("the peer `lab`"));
     drop(held);
     let _ = std::fs::remove_dir_all(&dir);
 }

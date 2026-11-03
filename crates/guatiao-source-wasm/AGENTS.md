@@ -19,7 +19,7 @@ Guests: Rust with `guest/` (`guatiao-wasm-guest`, its own `AGENTS.md`), Go
 with `guest-go/` (package `guest`, its own `AGENTS.md`), any other language
 by the ABI below.
 
-## A library (a `*.guatiao.toml` and its module)
+## A library (a `*.guatiao.cfg` and its module)
 
 ```toml
 type = "wasm"                     # required: the source that serves it
@@ -107,7 +107,7 @@ refuses the library.
 ## The engine (`WasmEngine`)
 
 `impl guatiao_bridge::Engine`: `ThreadModel::Locked`, `type Library =
-Arc<WasmLibrary>`, manifests `*.guatiao.toml` of type `wasm`, `id_key = "module"`,
+Arc<WasmLibrary>`, manifests `*.guatiao.cfg` of type `wasm`, `id_key = "module"`,
 code extension `wasm`, `Opened::Described`.
 
 ```rust

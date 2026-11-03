@@ -109,7 +109,7 @@ fn scratch(name: &str) -> PathBuf {
 /// A library of one module: `code` is its file, `id` its name.
 fn put(dir: &Path, id: &str, manifest_extra: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao.toml")),
+        dir.join(format!("{id}.guatiao.cfg")),
         format!("type = \"rhai\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
     )
     .expect("written");
@@ -272,6 +272,77 @@ fn a_rust_host_calls_the_rhai_greeters() {
 }
 
 #[test]
+fn a_manifest_in_toml_json_or_yaml_is_served_and_the_old_name_is_not_found() {
+    let dir = scratch("formats");
+    let code = std::fs::read_to_string(
+        repo().join("examples/rhai_provider/rhai_greeter/rhai_greeter.rhai"),
+    )
+    .expect("the example");
+    let kinds = "\"greeter\", \"counter\"";
+    let manifests = [
+        (
+            "plain",
+            format!("type = \"rhai\"\nmodule = \"plain\"\nkinds = [{kinds}]\n"),
+        ),
+        (
+            "as_toml",
+            format!("#!toml\ntype = \"rhai\"\nmodule = \"as_toml\"\nkinds = [{kinds}]\n"),
+        ),
+        (
+            "as_json",
+            format!(
+                "#!json\n{{\"type\": \"rhai\", \"module\": \"as_json\", \"kinds\": [{kinds}]}}\n"
+            ),
+        ),
+        (
+            "as_yaml",
+            "#!yaml\ntype: rhai\nmodule: as_yaml\nkinds: [greeter, counter]\n".to_string(),
+        ),
+    ];
+    for (id, manifest) in &manifests {
+        std::fs::write(dir.join(format!("{id}.guatiao.cfg")), manifest).expect("written");
+        std::fs::write(dir.join(format!("{id}.rhai")), &code).expect("written");
+    }
+    // The name before manifests became `.cfg` files.
+    std::fs::write(
+        dir.join("old.guatiao.toml"),
+        format!("type = \"rhai\"\nmodule = \"old\"\nkinds = [{kinds}]\n"),
+    )
+    .expect("written");
+    std::fs::write(dir.join("old.rhai"), &code).expect("written");
+
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    assert_eq!(changed.loaded.len(), manifests.len(), "{changed:?}");
+    for (id, _) in &manifests {
+        let hello = greeter(&registry, &format!("{id}_hello"));
+        assert_eq!(
+            greeting(&hello.greet("ana").expect("greeted")),
+            "hello, ana",
+            "{id}"
+        );
+    }
+    assert!(registry.offer::<dyn Greeter>("old_hello").is_none());
+
+    // An unknown format line is listed as refused, naming the file.
+    std::fs::write(
+        dir.join("odd.guatiao.cfg"),
+        format!("#!ini\ntype = \"rhai\"\nmodule = \"odd\"\nkinds = [{kinds}]\n"),
+    )
+    .expect("written");
+    let again = registry.refresh();
+    assert!(
+        again
+            .refused
+            .iter()
+            .any(|r| r.reason.contains("odd.guatiao.cfg")),
+        "{again:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_source_file_serves_them_too() {
     let Some(file) = source_file() else {
         println!("skipped: this crate's file is not built beside the tests");
@@ -332,7 +403,7 @@ fn an_edit_serves_new_code_and_a_deleted_library_retires() {
     );
 
     drop(new);
-    std::fs::remove_file(dir.join("rhai_edited.guatiao.toml")).expect("removed");
+    std::fs::remove_file(dir.join("rhai_edited.guatiao.cfg")).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     assert_eq!(registry.collect().len(), 1, "closed");

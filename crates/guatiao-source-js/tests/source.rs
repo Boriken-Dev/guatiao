@@ -126,7 +126,7 @@ fn scratch(name: &str) -> PathBuf {
 /// greeter kinds are one import away: `kinds()`.
 fn put(dir: &Path, id: &str, manifest_extra: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao.toml")),
+        dir.join(format!("{id}.guatiao.cfg")),
         format!(
             "type = \"js\"\nname = \"{id}\"\nmain = \"{id}.js\"\nkinds = [\"greeter\", \"counter\"]\npaths = [\".\", \"{}\"]\n{manifest_extra}",
             Path::new(&kinds_module()).parent().unwrap().display().to_string().replace('\\', "/")
@@ -371,7 +371,7 @@ fn an_edit_serves_new_code_and_a_deleted_library_retires() {
     );
 
     drop(new);
-    std::fs::remove_file(dir.join("js_edited.guatiao.toml")).expect("removed");
+    std::fs::remove_file(dir.join("js_edited.guatiao.cfg")).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     assert_eq!(registry.collect().len(), 1, "closed");
@@ -782,8 +782,8 @@ fn a_flood_of_reactions_a_stopped_call_queued_ends_and_the_source_carries_on() {
         "0",
         "no reaction of the stopped call ran"
     );
-    std::fs::write(dir.join("js_flood.guatiao.toml"), {
-        let text = std::fs::read_to_string(dir.join("js_flood.guatiao.toml")).unwrap();
+    std::fs::write(dir.join("js_flood.guatiao.cfg"), {
+        let text = std::fs::read_to_string(dir.join("js_flood.guatiao.cfg")).unwrap();
         text.replace("1.0.0", "1.0.1")
     })
     .expect("written");
@@ -1108,9 +1108,9 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
         "version = \"1.0.0\"\n",
         &with_kinds("export class P extends Provider { static kinds = [Greeter]; greet() {} }\n"),
     );
-    let listed = std::fs::read_to_string(dir.join("js_unlisted.guatiao.toml")).expect("read");
+    let listed = std::fs::read_to_string(dir.join("js_unlisted.guatiao.cfg")).expect("read");
     std::fs::write(
-        dir.join("js_unlisted.guatiao.toml"),
+        dir.join("js_unlisted.guatiao.cfg"),
         listed.replace(
             "kinds = [\"greeter\", \"counter\"]",
             "kinds = [\"counter\"]",
@@ -1158,7 +1158,7 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
     std::fs::write(dir.join("elsewhere.js"), "export {};\n").expect("written");
     // A manifest naming a file that is not there.
     std::fs::write(
-        dir.join("js_missing.guatiao.toml"),
+        dir.join("js_missing.guatiao.cfg"),
         "type = \"js\"\nname = \"js_missing\"\nversion = \"1.0.0\"\nmain = \"nothing.js\"\nkinds = [\"greeter\"]\n",
     )
     .expect("written");
@@ -1166,7 +1166,7 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
     let inner = dir.join("inner");
     std::fs::create_dir_all(&inner).expect("made");
     for name in ["js_outside"] {
-        for ext in ["js", "guatiao.toml"] {
+        for ext in ["js", "guatiao.cfg"] {
             std::fs::rename(
                 dir.join(format!("{name}.{ext}")),
                 inner.join(format!("{name}.{ext}")),
@@ -1402,9 +1402,9 @@ fn sixty_four_bit_numbers_cross_whole_as_bigint() {
             kinds_module()
         ),
     );
-    let listed = std::fs::read_to_string(dir.join("js_wide.guatiao.toml")).expect("read");
+    let listed = std::fs::read_to_string(dir.join("js_wide.guatiao.cfg")).expect("read");
     std::fs::write(
-        dir.join("js_wide.guatiao.toml"),
+        dir.join("js_wide.guatiao.cfg"),
         listed.replace("kinds = [\"greeter\", \"counter\"]", "kinds = [\"wide\"]"),
     )
     .expect("written");
