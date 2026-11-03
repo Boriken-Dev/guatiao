@@ -148,3 +148,17 @@ def test_what_cannot_be_opened_is_refused_in_words(reg, tmp_path):
     assert "version `9.9.9`" in refused["py_liar"] and "`1.0.0`" in refused["py_liar"]
     assert "put `version` in the manifest" in refused["py_computed"]
     assert reg.libraries() == []
+
+
+def test_a_running_interpreter_is_joined_only_where_it_keeps_what_is_asked(reg):
+    """A Python host's interpreter is the one the bridge uses: asking for
+    `isolated`, or naming `shipped`, from one that is not is refused rather
+    than ignored; saying nothing joins it as it is."""
+    from guatiao import GuatiaoError
+
+    if sys.flags.isolated or sys.flags.ignore_environment:
+        pytest.skip("this interpreter is isolated already")
+    for isolation in ("isolated", "shipped"):
+        with pytest.raises(GuatiaoError, match="already running"):
+            reg.add_source_file(_BRIDGE, {"dirs": [], "isolation": isolation})
+    reg.add_source_file(_BRIDGE, {"dirs": [], "isolation": "inherit"})

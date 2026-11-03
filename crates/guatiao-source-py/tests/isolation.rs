@@ -39,6 +39,10 @@ _facts = {
     "executable": sys.executable,
     "path": os.pathsep.join(sys.path),
 }
+import importlib.util
+
+_shadow = importlib.util.find_spec("iso_shadow")
+_facts["shadow"] = os.path.normcase(os.path.realpath(_shadow.origin)) if _shadow else "-"
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "facts.txt"), "w", encoding="utf-8") as out:
     for key, value in _facts.items():
         out.write(f"{key}={value}\n")
@@ -64,7 +68,7 @@ fn repo() -> PathBuf {
 
 /// A library's manifest in `dir`, by the file name the source lists.
 fn manifest_file(dir: &Path, stem: &str) -> PathBuf {
-    dir.join(format!("{stem}.guatiao.toml"))
+    dir.join(format!("{stem}.guatiao"))
 }
 
 fn library_name(base: &str) -> String {
@@ -114,21 +118,11 @@ fn main() {
         }
     };
 
-    // What the environment brings: only `inherit` takes it. CPython 3.9
-    // and 3.10 on Windows do not start with `PYTHONPATH` set and no paths
-    // in the registry, as a `python.exe` from the same installation does.
-    let old_windows = cfg!(windows) && python.minor < 11;
+    // What the environment brings: only `inherit` takes it.
     // Before 3.14 CPython on Windows reads a `pyvenv.cfg` beside the
     // program whatever it is told, and `isolated` refuses instead.
     let unheld_venv = cfg!(windows) && python.minor < 14;
     for (isolation, runs) in [("inherit", true), ("shipped", false), ("isolated", false)] {
-        if old_windows && runs {
-            println!(
-                "skipped: env-{isolation}, 3.{} does not start with PYTHONPATH here",
-                python.minor
-            );
-            continue;
-        }
         let case = Case::new(&root, &format!("env-{isolation}"));
         let planted = case.plant_site("envsite");
         let facts = case.run(&bridge, isolation, None, &[("PYTHONPATH", &planted)]);
@@ -192,14 +186,6 @@ fn main() {
             pth.push_str(&format!("{}\nimport site\n", planted.display()));
             std::fs::write(case.host.join(format!("{HOST}._pth")), pth).unwrap();
             let facts = case.run(&bridge, isolation, None, &[]);
-            if old_windows && isolation == "isolated" {
-                check(
-                    &case.name,
-                    facts.refused("cannot keep") && facts.refused("._pth"),
-                    format!("refused on 3.{}: {facts:?}", python.minor),
-                );
-                continue;
-            }
             check(
                 &case.name,
                 facts.started() && facts.ran_from(&planted) == honoured,
@@ -233,6 +219,72 @@ fn main() {
             );
         }
     }
+
+    // `inherit` starts with any one of the variables CPython reads set,
+    // where 3.9 on Windows found no standard library and ended the process.
+    for (name, value) in [
+        ("PYTHONUSERBASE", "userbase"),
+        ("PYTHONDONTWRITEBYTECODE", "1"),
+        ("PYTHONVERBOSE", "0"),
+    ] {
+        let case = Case::new(&root, &format!("inherit-{}", name.to_lowercase()));
+        let value = if value == "userbase" {
+            case.dir.join("userbase")
+        } else {
+            PathBuf::from(value)
+        };
+        let facts = case.run(&bridge, "inherit", None, &[(name, &value)]);
+        check(
+            &case.name,
+            facts.started(),
+            format!("inherit with {name} set started: {facts:?}"),
+        );
+    }
+
+    // Python files beside the host's executable: shipped with the program,
+    // so `shipped` may read them (Windows puts that directory on
+    // `sys.path`); `isolated` never does.
+    for isolation in ["shipped", "isolated"] {
+        let case = Case::new(&root, &format!("exedir-{isolation}"));
+        std::fs::write(case.host.join("sitecustomize.py"), SITECUSTOMIZE).unwrap();
+        std::fs::write(case.host.join("iso_shadow.py"), "SHADOW = True\n").unwrap();
+        let facts = case.run(&bridge, isolation, None, &[]);
+        let ran = facts.ran_from(&case.host);
+        let shadowed = facts.get("shadow") == normal(&case.host.join("iso_shadow.py"));
+        let (expect_ran, expect_shadowed) = match isolation {
+            "isolated" => (false, false),
+            _ => (ran, cfg!(windows)),
+        };
+        check(
+            &case.name,
+            facts.started() && ran == expect_ran && shadowed == expect_shadowed,
+            format!(
+                "beside the executable: sitecustomize ran {ran}, a module found {shadowed}; {facts:?}"
+            ),
+        );
+    }
+
+    // `home` relative to the bridge file's own directory.
+    let case = Case::new(&root, "isolated-relative-home");
+    let relative = relative_to(bridge.parent().unwrap(), &python.base);
+    let facts = case.run(&bridge, "isolated", Some(&relative), &[]);
+    check(
+        &case.name,
+        facts.prefix_is(&python.base),
+        format!(
+            "a relative home {} is the bridge's: {facts:?}",
+            relative.display()
+        ),
+    );
+
+    // A start that failed is the answer to every later one.
+    let case = Case::new(&root, "failed-start");
+    let said = case.run_raw(&bridge, "failed-start", None, &[]);
+    check(
+        &case.name,
+        said.contains("ok: failed-start"),
+        format!("a failed start: {said}"),
+    );
 
     // `home` names the installation an `isolated` interpreter reads.
     let case = Case::new(&root, "isolated-home");
@@ -482,6 +534,10 @@ fn child(args: &[String]) {
         refusals(bridge);
         return;
     }
+    if isolation == "failed-start" {
+        failed_start(bridge, work);
+        return;
+    }
     let mut registry = Registry::new("isolation", "1.0");
     let mut config = base_config();
     config.set("isolation", isolation);
@@ -512,6 +568,44 @@ fn child(args: &[String]) {
         }
         Err(e) => println!("no facts: {e}"),
     }
+}
+
+/// `to` as a path relative to `from`, both absolute on one volume.
+fn relative_to(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut out = PathBuf::new();
+    for _ in common..from.len() {
+        out.push("..");
+    }
+    for part in &to[common..] {
+        out.push(part.as_os_str());
+    }
+    out
+}
+
+/// An interpreter that did not start, from a `home` holding no standard
+/// library: refused, and every later source refused with its words, not
+/// started again over what CPython left.
+fn failed_start(bridge: &Path, work: &Path) {
+    let empty = work.join("empty-home");
+    std::fs::create_dir_all(&empty).unwrap();
+    let mut config = base_config();
+    config.set("isolation", "isolated");
+    config.set("home", empty.display().to_string().as_str());
+    let first = Registry::new("first", "1.0").add_source_file(bridge, &config);
+    match first {
+        Err(SourceError::Refused { message, .. }) if message.contains("did not start") => {}
+        other => panic!("expected the start to fail, got {other:?}"),
+    };
+    let second = Registry::new("second", "1.0").add_source_file(bridge, &base_config());
+    match second {
+        Err(SourceError::Refused { message, .. })
+            if message.contains("did not start earlier in this process") => {}
+        other => panic!("expected the first failure again, got {other:?}"),
+    }
+    println!("ok: failed-start");
 }
 
 /// Settings refused before any interpreter starts, and a second source
