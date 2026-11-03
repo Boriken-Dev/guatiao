@@ -1570,6 +1570,25 @@ write now.
   - A source an access control list denies sees a WebTransport connection
     that does not open, no longer a refusal (`GONE` rather than
     `BAD_VALUE`).
+  - A WebTransport server's link is named `https`, with no address, in
+    `Link::peer()`: coqui-web gives a session no peer address.
+  - coqui-web bounds a message by one number, both ways. A WebSocket or
+    WebTransport channel's bound is the larger of the link's `max_frame`
+    (what it reads) and the peer's (what it may send), so an answer larger
+    than this side's own `max_frame` crosses as it does over `tcp://`; the
+    reader still refuses a frame past its own `max_frame`, but the channel
+    may buffer one message up to the larger bound first. A write that finds
+    coqui-web's send queue full waits for the link's write timeout instead
+    of ending the link. `FrameWrite::set_max_frame` is new, a default that
+    does nothing.
+  - A mutual-TLS `wss://` listener whose policy allows resumption is
+    refused when it binds (a resumed TLS 1.3 session presents no
+    certificate to name the client by). A list rule naming the local
+    address or port is decided by the address the listener is bound to, and
+    refuses every client only on a wildcard bind. A mutual-TLS
+    `WtListen` keeps the policy's list in its TLS, which with no addresses
+    to decide by refuses every client, so no stranger is recorded as
+    waiting in a trust store behind the list's back.
   - `WsListen::from_listener`, `from_listener_tls`, `WtListen::from_socket`
     and `from_socket_trusted` are gone: coqui-web binds the address itself.
   - The `webtransport` feature no longer enables `quic`, and `ws` and
