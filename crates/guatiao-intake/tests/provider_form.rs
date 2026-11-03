@@ -9,7 +9,7 @@
 #![cfg(feature = "derive")]
 
 use guatiao::library::Registry;
-use guatiao::{Alloc, Map, ValueError};
+use guatiao::{Alloc, Map, Value};
 use guatiao_intake::{Form, FormRef, PROVIDER_FORM_KEY, Screen, provider_form};
 
 #[guatiao::kind]
@@ -128,16 +128,34 @@ fn a_provider_is_shown_with_its_own_form_else_the_one_its_schema_implies() {
         "a schema says nothing of widgets"
     );
 
-    // Nothing to configure, and something under the key that is no form.
+    // Nothing to configure.
     let plain = registry.provider("guatiao_intake_plain").expect("filed");
     assert_eq!(
         provider_form(plain.config_schema(), plain.meta(), Alloc::rust()),
         Ok(None)
     );
+}
+
+#[test]
+fn what_is_malformed_is_skipped_as_a_host_reading_it_by_hand_skips_it() {
+    let registry = registry();
+    let dialer = registry.provider("guatiao_intake_dialer").expect("filed");
     let mut meta = Map::new();
     meta.set(PROVIDER_FORM_KEY, "a form");
+
+    // No form under the key: the schema's own, as with no meta at all.
+    let shown = provider_form(dialer.config_schema(), Some(&meta), Alloc::rust())
+        .expect("a form")
+        .expect("the schema implies one");
+    let implied = provider_form(dialer.config_schema(), None, Alloc::rust())
+        .expect("a form")
+        .expect("the schema implies one");
+    assert_eq!(shown, implied);
+
+    // Nothing usable at all is nothing to show.
+    assert_eq!(provider_form(None, Some(&meta), Alloc::rust()), Ok(None));
     assert_eq!(
-        provider_form(None, Some(&meta), Alloc::rust()),
-        Err(ValueError::WrongKind)
+        provider_form(Some(&Value::from("a schema")), None, Alloc::rust()),
+        Ok(None)
     );
 }

@@ -122,15 +122,18 @@ guatiao_status guatiao_intake_for_schema(const guatiao_value *schema,
  `schema` and `meta` are what the registry answers for the provider:
  `guatiao_registry_provider_config` and `guatiao_registry_provider_meta`,
  or the `config` and `meta` of one map `guatiao_registry_catalog` lists.
- Either may be null, or ABSENT. **A provider with neither a form nor a
- schema is not an error**: `out` stays ABSENT and the status is
- `GUATIAO_OK`, since there is nothing to configure. A declared form is
- not checked against the schema here; `guatiao_intake_check` does that.
+ Either may be null, or ABSENT. **What is malformed is skipped**, as a
+ host reading the key by hand skips it: a `meta` that is not a map, or a
+ value under the key that is not one, is no form, and the schema's
+ implied form is answered; a `schema` that is not a map implies none.
+ **A provider left with neither is not an error**: `out` stays ABSENT
+ and the status is `GUATIAO_OK`, since there is nothing to configure. A
+ declared form is not checked against the schema here;
+ `guatiao_intake_check` does that.
 
- `GUATIAO_ERR_WRONG_KIND` when `meta` is not a map, what it holds under
- the key is not one, or `schema` is not one. `out` receives a value the
- **caller owns**, whichever way it was reached, and frees with
- `guatiao_value_free`.
+ `GUATIAO_ERR_ALLOC` for an allocator that is null or refuses. `out`
+ receives a value the **caller owns**, whichever way it was reached,
+ and frees with `guatiao_value_free`.
 
  # Safety
 
