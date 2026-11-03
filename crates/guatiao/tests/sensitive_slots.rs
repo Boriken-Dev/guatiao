@@ -13,7 +13,7 @@ use core::ffi::c_void;
 use guatiao::exports::kind::guatiao_kind_floor_hash;
 use guatiao::library::{Kind, ProviderError, Remote};
 use guatiao::value::types::Str;
-use guatiao::{Alloc, Map, Status, Text, Value};
+use guatiao::{Alloc, Map, Status, Text, TryAsRef, Value};
 
 #[guatiao::kind(name = "vault")]
 pub trait Vault: Send + Sync {
@@ -25,7 +25,7 @@ pub trait Vault: Send + Sync {
     fn all(&self) -> Result<Map, ProviderError>;
     /// A secret, as text.
     #[sensitive]
-    fn pin(&self) -> String;
+    fn pin(&self) -> Result<Value, ProviderError>;
     /// Not a secret.
     fn name(&self) -> String;
 }
@@ -38,13 +38,13 @@ pub trait VaultUnmarked: Send + Sync {
     /// Secrets, by name.
     fn all(&self) -> Result<Map, ProviderError>;
     /// A secret, as text.
-    fn pin(&self) -> String;
+    fn pin(&self) -> Result<Value, ProviderError>;
     /// Not a secret.
     fn name(&self) -> String;
 }
 
 /// The floor hash both kinds have, pinned: the mark is not hashed.
-const FLOOR_HASH: u32 = 249_464_095;
+const FLOOR_HASH: u32 = 3_988_188_681;
 
 struct Keeper;
 
@@ -60,8 +60,8 @@ impl Vault for Keeper {
         m.set("k", Text::new("v"));
         Ok(m)
     }
-    fn pin(&self) -> String {
-        String::from("1234")
+    fn pin(&self) -> Result<Value, ProviderError> {
+        Ok(Text::new("1234").into())
     }
     fn name(&self) -> String {
         String::from("keeper")
@@ -147,7 +147,11 @@ fn a_sensitive_answer_is_in_the_wiping_allocator_unless_the_caller_names_another
     assert!(all.alloc().unwrap().is_wiping());
     let named = vault.read_in("hunter2", Alloc::rust()).unwrap();
     assert!(!named.alloc().unwrap().is_wiping());
-    assert_eq!(vault.pin(), "1234");
+    assert_eq!(
+        TryAsRef::<str>::try_as_ref(&vault.pin().unwrap()),
+        Some("1234")
+    );
+    assert!(vault.pin().unwrap().alloc().unwrap().is_wiping());
     assert_eq!(vault.name(), "keeper");
 }
 
@@ -161,8 +165,8 @@ impl Vault for Hoarder {
     fn all(&self) -> Result<Map, ProviderError> {
         Ok(Map::new_in(Alloc::wiping()))
     }
-    fn pin(&self) -> String {
-        String::from("1234")
+    fn pin(&self) -> Result<Value, ProviderError> {
+        Ok(Text::new("1234").into())
     }
     fn name(&self) -> String {
         String::from("hoarder")

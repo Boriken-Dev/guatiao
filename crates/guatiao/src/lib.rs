@@ -340,6 +340,30 @@ pub use guatiao_derive::Provider;
 ///     fn f(&self) -> Result<foreign::String, ProviderError>;
 /// }
 /// ```
+///
+/// A `#[sensitive]` slot answers a value its caller can wipe: never a bare
+/// `String`, which the caller would hold beyond any wipe.
+///
+/// ```compile_fail
+/// #[guatiao::kind]
+/// pub trait Leaky: Send + Sync {
+///     #[sensitive]
+///     fn pin(&self) -> String;
+/// }
+/// ```
+///
+/// ```
+/// use guatiao::library::ProviderError;
+/// use guatiao::{Secret, Value};
+///
+/// #[guatiao::kind]
+/// pub trait Kept: Send + Sync {
+///     #[sensitive]
+///     fn pin(&self) -> Result<Secret<String>, ProviderError>;
+///     #[sensitive]
+///     fn read(&self) -> Result<Value, ProviderError>;
+/// }
+/// ```
 #[cfg(feature = "provider")]
 pub use guatiao_derive::kind;
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the

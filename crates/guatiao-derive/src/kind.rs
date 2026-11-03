@@ -533,6 +533,14 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     // `tests/kind_glue_probes.rs`.
 
     let sensitive = sensitive_mark(&f.attrs)?;
+    if sensitive && matches!(ret, RetKind::Text) {
+        return Err(syn::Error::new_spanned(
+            &sig.output,
+            "a `#[sensitive]` slot cannot answer a `String`: its caller would hold a copy \
+             nothing wipes; answer `Result<Secret<String>, ProviderError>`, or a `Value` built \
+             through the carrier",
+        ));
+    }
     let signature = normalised_signature(sig, roots);
     Ok(MethodPlan {
         ident: sig.ident.clone(),
@@ -2131,10 +2139,6 @@ fn emit_shim(
             // SAFETY: the proxy passes a writable out slot.
             unsafe { ::guatiao::library::kind::write_out(__out, #answer) }
         },
-        RetKind::Text if m.sensitive => quote! {
-            // SAFETY: the proxy passes a writable out slot.
-            unsafe { ::guatiao::library::kind::write_out(__out, ::guatiao::library::kind::sensitive_text(&#answer)) }
-        },
         RetKind::Text => quote! {
             // SAFETY: the proxy passes a writable out slot.
             unsafe { ::guatiao::library::kind::write_out(__out, ::guatiao::Text::new(&#answer)) }
@@ -2684,6 +2688,14 @@ mod tests {
             (
                 "pub trait V: Send + Sync { #[sensitive] #[sensitive] fn read(&self) -> Result<Value, ProviderError>; }",
                 "is given once",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> String; }",
+                "cannot answer a `String`",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<String, ProviderError>; }",
+                "Secret<String>",
             ),
         ] {
             let err = expand_str("", item).expect_err(item);
