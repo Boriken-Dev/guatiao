@@ -513,12 +513,18 @@ pooled. Microseconds per call, median.
 | `call_map` (built in the carrier) | 0.1775 | 0.1639 | -7.7% |
 | `call_scalar` | 0.0021 | 0.0021 | +0.0% |
 
-**`into_local_foreign`, +32.6%, is the price of the promise**: moving a
-tree out of another allocator now overwrites every byte the original
-holds (each text, number, bytes and key, a volatile store per byte and
-a fence) before freeing it, where it was freed as it was. The work grows
-with the bytes moved, not with the calls; a tree already local
-(`into_local_local`) does no more than before. `clone_map` and
+**`into_local_foreign`, +32.6%, is the price of the promise**, and it
+has two parts this run does not separate: a second walk over the
+original after the copy, overwriting every block it holds (each text,
+number, bytes and key, over a stack it allocates) before freeing it,
+where it was freed as it was; and, while copying, a check per node of
+whether its source lives in the wiping allocator, so a secret's copy is
+made there. The volatile stores are only part of the first; the walk
+itself, visiting every node a second time, is the rest. The work grows
+with the size of the tree moved, not with the calls; a tree already
+local (`into_local_local`) does no more than before. These numbers
+predate the home check also accepting the wiping allocator, one more
+comparison per container of a tree that is not home. `clone_map` and
 `call_map_copied` copy a tree and ask, for each node, whether its source
 lives in the wiping allocator; within the run-to-run spread of this
 machine (`call_map`, whose code did not change, moved -7.7%). Nothing
