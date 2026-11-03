@@ -210,8 +210,13 @@ for_schema(SchemaRef, Alloc) -> Result<Value, ValueError>
 for_field(FieldRef, Alloc) -> Option<Result<Value, ValueError>>   // None: no members
 form_for(FormRef, SchemaRef, path, Alloc) -> Option<Result<Value, ValueError>>
                                    // assigned wins; else what the schema implies
+provider_form(Option<&Value>, Option<&Map>, Alloc) -> Result<Option<Value>, ValueError>
+                                   // a provider's (schema, meta): meta["form"] wins; else what
+                                   // the schema implies; Ok(None) with neither; WrongKind when
+                                   // meta["form"] or the schema is not a map
 // C: guatiao_intake_for_schema(schema, alloc, out)
 //    guatiao_intake_form_for(form, schema, path, alloc, out)
+//    guatiao_intake_provider_form(schema, meta, alloc, out)   -- either may be null or ABSENT
 //      -- nothing to show it with leaves `out` ABSENT and answers OK
 
 // reading (borrowed views; skip what is malformed)
@@ -310,6 +315,27 @@ a provider that declares no `meta`, and `guatiao_map_find` then answers
 NULL. The bindings read it the same way: `Registry.provider_meta` and
 `intake.PROVIDER_FORM_KEY` in Python, `providerMeta` and
 `intake.providerFormKey` in Dart and Node.
+
+**A provider that declares no form is still shown with one**: the form
+its schema implies. `provider_form` is that rule, for every provider a
+registry lists and before any is built; it does not check the form
+against the schema (`check` does).
+
+```rust
+for provider in registry.all() {
+    let form = provider_form(provider.config_schema(), provider.meta(), Alloc::rust())?;
+    // None: it takes no configuration and declares no form
+}
+```
+
+```c
+/* one entry of guatiao_registry_catalog's list */
+guatiao_intake_provider_form(guatiao_map_find(entry, guatiao_cstr("config")),
+                             guatiao_map_find(entry, guatiao_cstr("meta")), &alloc, &form);
+```
+
+Python: `intake.provider_form(entry.get("config"), entry.get("meta"))`
+over an entry of `Registry.catalog()`, a dict or a `Value` each.
 
 ## Which word belongs to which layer
 

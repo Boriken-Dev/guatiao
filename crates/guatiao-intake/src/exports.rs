@@ -352,6 +352,65 @@ pub unsafe extern "C" fn guatiao_intake_for_schema(
     })
 }
 
+/// The form a provider's settings are shown with: **the one it declares**
+/// in its `meta` under `"form"` (`GUATIAO_INTAKE_PROVIDER_FORM_KEY`),
+/// **or the one its configuration schema implies** when it declares none,
+/// as `guatiao_intake_for_schema` makes it.
+///
+/// `schema` and `meta` are what the registry answers for the provider:
+/// `guatiao_registry_provider_config` and `guatiao_registry_provider_meta`,
+/// or the `config` and `meta` of one map `guatiao_registry_catalog` lists.
+/// Either may be null, or ABSENT. **A provider with neither a form nor a
+/// schema is not an error**: `out` stays ABSENT and the status is
+/// `GUATIAO_OK`, since there is nothing to configure. A declared form is
+/// not checked against the schema here; `guatiao_intake_check` does that.
+///
+/// `GUATIAO_ERR_WRONG_KIND` when `meta` is not a map, what it holds under
+/// the key is not one, or `schema` is not one. `out` receives a value the
+/// **caller owns**, whichever way it was reached, and frees with
+/// `guatiao_value_free`.
+///
+/// # Safety
+///
+/// `schema` and `meta` are null or address values, and `out` addresses
+/// writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_intake_provider_form(
+    schema: *const Value,
+    meta: *const Value,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(out => {
+        // SAFETY: the caller's contract: null or a value. ABSENT reads as
+        // not given, as a lookup that found nothing answers it.
+        let schema = unsafe { schema.as_ref() }.filter(|v| !matches!(v.tag(), Ok(::guatiao::Tag::GUATIAO_ABSENT)));
+        // SAFETY: as above.
+        let meta = match unsafe { meta.as_ref() }.filter(|v| !matches!(v.tag(), Ok(::guatiao::Tag::GUATIAO_ABSENT))) {
+            None => None,
+            Some(value) => match ::guatiao::TryAsRef::<Map>::try_as_ref(value) {
+                Some(map) => Some(map),
+                None => return Status::GUATIAO_ERR_WRONG_KIND,
+            },
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match crate::create::provider_form(schema, meta, alloc) {
+            Ok(None) => Status::GUATIAO_OK,
+            Ok(Some(form)) => {
+                // SAFETY: `out` is writable by contract, and the tree
+                // MOVES into it rather than being copied.
+                unsafe { ::core::ptr::write(out, form) };
+                Status::GUATIAO_OK
+            }
+            Err(e) => Status::from(e),
+        }
+    })
+}
+
 /// The form to show the field at `path` with: **the one the form
 /// assigns, or the one its schema implies**.
 ///

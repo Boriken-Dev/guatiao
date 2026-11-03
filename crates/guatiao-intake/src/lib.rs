@@ -143,7 +143,7 @@ pub mod prelude {
 }
 
 pub use build::{Form, Hints, Section};
-pub use create::{for_field, for_schema, form_for};
+pub use create::{for_field, for_schema, form_for, provider_form};
 pub use declare::{FormBuilder, FormField, FormFieldBuilder};
 pub use flat::{SEPARATOR, flatten, is_sensitive, keys, resolve, resolve_in, split, unflatten};
 /// `#[derive(Form)]`, behind the `derive` feature: a type's default
