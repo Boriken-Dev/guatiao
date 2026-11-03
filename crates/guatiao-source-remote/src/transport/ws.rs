@@ -3,19 +3,22 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! WebSocket (RFC 6455), what a browser can open, through coqui-web:
-//! `ws://` with no TLS, on loopback only, and `wss://` over a server
-//! certificate (feature `tls`). Each frame's body is one binary message,
+//! `ws://` with no TLS, on loopback unless told otherwise, and `wss://`
+//! over a server certificate (feature `tls`). Each frame's body is one binary message,
 //! with no length in front. A listener admits peers by an access control
 //! list as [`TcpListen`](super::tcp::TcpListen) does, by address, before
 //! the upgrade; a connection upgrades on its first read, on the thread
 //! serving it.
 //!
 //! coqui-web runs the TLS of a `wss://` link itself, from a rustls
-//! configuration. It does not report the certificate a client presented,
-//! so a mutual-TLS listener notes it as the handshake verifies it: the
-//! handshake of a connection runs on a thread of its own, and a verifier
-//! that records what the client proved there tells the link whose
-//! connection it is.
+//! configuration, and reports the certificate each side presented
+//! (`peer_certificates`), by which a link names its peer at mutual TLS.
+//! The handshake of a connection runs on the thread serving it, which is
+//! given the connection's addresses for the policy's list.
+//!
+//! A plain `ws://` beyond loopback carries nothing secret and is a
+//! weakening: [`WsListen::bind_beyond_loopback`] and
+//! [`WsConnect::beyond_loopback`] choose it, and a host reports it.
 
 #![forbid(unsafe_code)]
 
@@ -30,7 +33,7 @@ use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
 use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
-use super::web::{Open, Refused, Shared, connection, io_error, source_of};
+use super::web::{Open, Refused, Shared, connection, io_error};
 use super::{Connect, Connection};
 
 /// How often a listener looks up from waiting for a connection to report
@@ -47,12 +50,14 @@ fn limits() -> Limits {
     Limits::default()
 }
 
-/// Connects to a WebSocket URL: `ws://host:port/path` (loopback only), or
+/// Connects to a WebSocket URL: `ws://host:port/path` (loopback unless
+/// [`beyond_loopback`](WsConnect::beyond_loopback)), or
 /// `wss://host:port/path` once given TLS (`WsConnect::tls`).
 #[derive(Clone)]
 pub struct WsConnect {
     url: String,
     timeout: Duration,
+    beyond_loopback: bool,
     #[cfg(feature = "tls")]
     tls: Option<Wss>,
 }
@@ -80,9 +85,24 @@ impl WsConnect {
         WsConnect {
             url: url.to_string(),
             timeout: CONNECT_TIMEOUT,
+            beyond_loopback: false,
             #[cfg(feature = "tls")]
             tls: None,
         }
+    }
+
+    /// Lets a plain `ws://` URL name a host beyond this machine: nothing
+    /// is encrypted, and the key proof alone decides the link. A
+    /// weakening, which a host reports ([`plain_beyond_loopback`](Self::plain_beyond_loopback)).
+    #[must_use]
+    pub fn beyond_loopback(mut self) -> WsConnect {
+        self.beyond_loopback = true;
+        self
+    }
+
+    /// Whether a plain `ws://` beyond loopback is allowed.
+    pub fn plain_beyond_loopback(&self) -> bool {
+        self.beyond_loopback
     }
 
     /// Over TLS as `config` says (a `wss://` URL): the server known by its
@@ -169,7 +189,7 @@ impl WsConnect {
             Failure::Permission if !self.encrypted() => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "`ws://` reaches only this machine (loopback), and {addr} is not: connect to wss://"
+                    "`ws://` reaches only this machine (loopback) unless the connection allows a plain WebSocket beyond it (`plain_beyond_loopback`), and {addr} is not loopback: connect to wss://"
                 ),
             ),
             Failure::Timeout => io::Error::new(
@@ -191,6 +211,9 @@ impl Connect for WsConnect {
         let mut dialer = WsDialer::new()
             .with_frames(Frames::Binary)
             .with_limits(limits());
+        if self.beyond_loopback {
+            dialer = dialer.with_plain_beyond_loopback();
+        }
         #[cfg(feature = "tls")]
         let watching = self.tls.as_ref().map(|wss| {
             // One verifier for this connection, so what it saw is this
@@ -214,16 +237,12 @@ impl Connect for WsConnect {
         let channel = dialer
             .dial(Kind::WebSocket, &url, self.timeout)
             .map_err(|failure| self.refused(failure, &url, rejected()))?;
-        let shared = Shared::new(self.encrypted(), false);
         #[cfg(feature = "tls")]
-        let peer = self
-            .tls
-            .as_ref()
-            .filter(|wss| wss.proves)
-            .and_then(|_| watching.as_ref().and_then(|w| w.proven()));
+        let names_peer = self.tls.as_ref().is_some_and(|wss| wss.proves);
         #[cfg(not(feature = "tls"))]
-        let peer = None;
-        shared.open(Arc::new(channel) as Arc<dyn Channel>, peer);
+        let names_peer = false;
+        let shared = Shared::new(self.encrypted(), false, names_peer);
+        shared.open(Arc::new(channel) as Arc<dyn Channel>);
         let scheme = if self.encrypted() { "wss" } else { "ws" };
         let at = format!(
             "{}:{}",
@@ -249,11 +268,11 @@ pub struct WsListen {
     refused: Arc<Refused>,
     encrypted: bool,
     /// Whether clients present a certificate, which a link names them by.
-    #[cfg(feature = "tls")]
     mutual: bool,
     /// The address it listens on, which the list's rules can name.
-    #[cfg(feature = "tls")]
+    #[cfg_attr(not(feature = "tls"), allow(dead_code))]
     bound: SocketAddr,
+    beyond_loopback: bool,
 }
 
 impl core::fmt::Debug for WsListen {
@@ -261,6 +280,7 @@ impl core::fmt::Debug for WsListen {
         f.debug_struct("WsListen")
             .field("addr", &self.listener.local_addr().ok())
             .field("encrypted", &self.encrypted)
+            .field("plain_beyond_loopback", &self.beyond_loopback)
             .finish()
     }
 }
@@ -272,7 +292,7 @@ fn bind_failed(failure: Failure, address: SocketAddr, tls: bool) -> io::Error {
         Failure::Permission if !tls => io::Error::new(
             io::ErrorKind::PermissionDenied,
             format!(
-                "ws:// listens on loopback only, and {address} is not: listen on wss:// to be reached from another machine"
+                "ws:// listens on loopback only unless told it may not (`plain_beyond_loopback`), and {address} is not: listen on wss:// to be reached from another machine"
             ),
         ),
         other => io_error(other),
@@ -280,12 +300,37 @@ fn bind_failed(failure: Failure, address: SocketAddr, tls: bool) -> io::Error {
 }
 
 impl WsListen {
-    /// Binds `address`, which must be loopback (coqui-web carries no
-    /// plain WebSocket past this machine: use [`bind_tls`](Self::bind_tls)
-    /// beyond it), admitting the peers `acl` permits.
+    /// Binds `address`, which must be loopback (use
+    /// [`bind_tls`](Self::bind_tls), or
+    /// [`bind_beyond_loopback`](Self::bind_beyond_loopback), to be reached
+    /// from another machine), admitting the peers `acl` permits.
     pub fn bind(address: &str, acl: Acl) -> io::Result<WsListen> {
+        WsListen::plain(address, acl, false)
+    }
+
+    /// Binds `address`, any address a wildcard included, with no TLS:
+    /// nothing is encrypted and the key proof and the list alone decide
+    /// who links. A weakening, which a host reports
+    /// ([`plain_beyond_loopback`](Self::plain_beyond_loopback)).
+    pub fn bind_beyond_loopback(address: &str, acl: Acl) -> io::Result<WsListen> {
+        WsListen::plain(address, acl, true)
+    }
+
+    /// Whether this listener may be reached beyond loopback with nothing
+    /// encrypted.
+    pub fn plain_beyond_loopback(&self) -> bool {
+        self.listener.plain_beyond_loopback()
+    }
+
+    fn plain(address: &str, acl: Acl, beyond: bool) -> io::Result<WsListen> {
         let address = bind_address(address)?;
-        let listener = Listener::bind(address, None).map_err(|f| bind_failed(f, address, false))?;
+        let listener = if beyond {
+            Listener::bind_plain(address)
+        } else {
+            Listener::bind(address, None)
+        }
+        .map_err(|f| bind_failed(f, address, false))?;
+        let beyond_loopback = listener.plain_beyond_loopback();
         let bound = listener.local_addr().map_err(io_error)?;
         let refused = Arc::new(Refused::default());
         let turned = Arc::clone(&refused);
@@ -305,10 +350,9 @@ impl WsListen {
             listener,
             refused,
             encrypted: false,
-            #[cfg(feature = "tls")]
             mutual: false,
-            #[cfg(feature = "tls")]
             bound,
+            beyond_loopback,
         })
     }
 
@@ -322,11 +366,9 @@ impl WsListen {
     pub fn bind_tls(address: &str, config: &super::tls::TlsConfig) -> io::Result<WsListen> {
         let address = bind_address(address)?;
         let mutual = config.is_mutual() && config.proves_peers();
-        let tls = if mutual {
-            super::web::server_config_proving(config, super::tls::WEBSOCKET_ALPN)?
-        } else {
-            super::web::server_config(config, super::tls::WEBSOCKET_ALPN, None)?
-        };
+        // The handshake runs on the thread serving the connection, which
+        // is given its addresses: the list stays in the TLS.
+        let tls = super::web::server_config(config, super::tls::WEBSOCKET_ALPN, None, true)?;
         let listener =
             Listener::bind(address, Some(tls)).map_err(|f| bind_failed(f, address, true))?;
         let bound = listener.local_addr().map_err(io_error)?;
@@ -349,6 +391,7 @@ impl WsListen {
             encrypted: true,
             mutual,
             bound,
+            beyond_loopback: false,
         })
     }
 
@@ -367,39 +410,36 @@ impl WsListen {
             match self.listener.next(Some(REPORT_EVERY)) {
                 Ok(pending) => {
                     let scheme = if self.encrypted { "wss" } else { "ws" };
-                    let peer = match source_of(&pending) {
-                        Some(source) => format!("{scheme} {source}"),
-                        None => scheme.to_string(),
-                    };
+                    let source = pending.peer_addr();
+                    let peer = format!("{scheme} {source}");
+                    let cancel = pending.canceller();
                     #[cfg(feature = "tls")]
                     let (mutual, bound) = (self.mutual, self.bound);
-                    let source = source_of(&pending).and_then(|s| s.parse::<SocketAddr>().ok());
                     let open: Open = Box::new(move || {
-                        // At mutual TLS the handshake runs on this thread,
-                        // alone: the client it proves is this connection's,
-                        // and the list reads this connection's addresses.
+                        // At mutual TLS the list reads this connection's
+                        // addresses from the scope around the handshake,
+                        // which runs on this thread alone.
                         #[cfg(feature = "tls")]
                         if mutual {
-                            super::web::forget_proven();
-                            let channel =
-                                coqui_peer_tls::with_addresses(source, Some(bound), || {
-                                    pending.handshake()
-                                })
-                                .map_err(io_error)?;
-                            return Ok((
-                                Arc::new(channel) as Arc<dyn Channel>,
-                                super::web::take_proven(),
-                            ));
+                            return coqui_peer_tls::with_addresses(
+                                Some(source),
+                                Some(bound),
+                                || pending.handshake(),
+                            )
+                            .map(|channel| Arc::new(channel) as Arc<dyn Channel>)
+                            .map_err(io_error);
                         }
-                        #[cfg(not(feature = "tls"))]
-                        let _ = source;
                         pending
                             .handshake()
-                            .map(|channel| (Arc::new(channel) as Arc<dyn Channel>, None))
+                            .map(|channel| Arc::new(channel) as Arc<dyn Channel>)
                             .map_err(io_error)
                     });
-                    let shared = Shared::new(self.encrypted, false);
-                    return Ok(Accepted::Connection(connection(shared, Some(open), peer)));
+                    let shared = Shared::new(self.encrypted, false, self.mutual);
+                    return Ok(Accepted::Connection(connection(
+                        shared,
+                        Some((open, cancel)),
+                        peer,
+                    )));
                 }
                 Err(Failure::Timeout) => {}
                 Err(failure) => return Err(io_error(failure)),

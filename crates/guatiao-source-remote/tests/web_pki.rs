@@ -55,21 +55,6 @@ fn every() -> Vec<Over> {
     all
 }
 
-/// Whether a link over `over` can name a client by the certificate it
-/// presented, which mutual TLS needs: coqui-web does not report one for a
-/// WebTransport session, so those links run at server TLS.
-fn names_clients(over: Over) -> bool {
-    match over {
-        Over::Tcp => true,
-        #[cfg(feature = "quic")]
-        Over::Quic => true,
-        #[cfg(feature = "ws")]
-        Over::Wss => true,
-        #[cfg(feature = "webtransport")]
-        Over::Wt => false,
-    }
-}
-
 /// A directory of its own under the target's scratch space, emptied.
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -301,40 +286,33 @@ fn a_chained_identity_is_presented_whole_on_every_transport() {
     let client_id = Identity::generate().unwrap();
     let mut policy = guatiao_source_remote::transport::tls::Policy::modern();
     policy.acl = Some(only(&client_id, None));
-    let server = TlsConfig::open(&state).unwrap().policy(policy);
+    let server = TlsConfig::open(&state).unwrap().policy(policy.clone());
     assert_eq!(server.identity().intermediates_der().len(), 1);
     coqui_peer_tls::TrustStoreExt::accept_certificate(
         server.trust_store().unwrap(),
         client_id.certificate_der(),
     )
     .unwrap();
+    // A WebTransport listener cannot hold a store beside a list naming a
+    // fingerprint (its handshake has no addresses): it pins the client.
+    let pinned = TlsConfig::open(&state)
+        .unwrap()
+        .pins([client_id.fingerprint()])
+        .policy(policy);
     let client = TlsConfig::new(client_id).roots(Roots::bundle_file(&bundle));
-    for over in every().into_iter().filter(|over| names_clients(*over)) {
-        let port = listen_as(over, &server, LinkOptions::new(Trust::Secure));
+    for over in every() {
+        let config = if format!("{over:?}") == "Wt" {
+            &pinned
+        } else {
+            &server
+        };
+        let port = listen_as(over, config, LinkOptions::new(Trust::Secure));
         let source = RemoteSource::new(
             connect(over, "localhost", port, &client),
             LinkOptions::new(Trust::Secure),
         );
         assert_eq!(
             greeting(&source).unwrap_or_else(|e| panic!("{over:?}: {e:?}")),
-            "hello, roots",
-            "{over:?}"
-        );
-    }
-    // Where no link can name a client (WebTransport), the same chained
-    // identity at server TLS, which a client with no identity verifies by
-    // the root alone.
-    let at_server_tls = TlsConfig::open(&state).unwrap().server_tls();
-    let client = by_roots(&bundle);
-    for over in every().into_iter().filter(|over| !names_clients(*over)) {
-        let port = listen_as(
-            over,
-            &at_server_tls,
-            LinkOptions::new(Trust::ServerTls).key(KEY),
-        );
-        assert_eq!(
-            greeting(&source(over, "localhost", port, &client))
-                .unwrap_or_else(|e| panic!("{over:?}: {e:?}")),
             "hello, roots",
             "{over:?}"
         );

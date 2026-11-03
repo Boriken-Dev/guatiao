@@ -260,12 +260,13 @@ fn a_mutual_tls_server_refuses_a_client_with_no_certificate() {
             LinkOptions::new(Trust::ServerTls).key(KEY),
         );
         let e = source.link().unwrap_err();
-        // A QUIC handshake the server ends reaches a WebTransport client
-        // as a connection that did not open; that a mutual-TLS WebTransport
-        // listener refuses a client with no certificate is shown with raw
+        // A QUIC handshake the server ends reaches a WebTransport client as
+        // a connection that did not finish, which coqui-web cannot tell
+        // from a lost path (`GONE`); the refusal itself is shown with raw
         // channels in `webtransport.rs`.
         #[cfg(feature = "webtransport")]
         if matches!(over, Over::Wt) {
+            assert_eq!(e.status, Status::GUATIAO_ERR_GONE, "{over:?}: {e:?}");
             continue;
         }
         assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{over:?}: {e:?}");
@@ -275,12 +276,6 @@ fn a_mutual_tls_server_refuses_a_client_with_no_certificate() {
 #[test]
 fn a_server_tls_server_refuses_a_client_asking_mutual_tls() {
     for over in every() {
-        // A WebTransport client asking mutual TLS is refused before it
-        // connects: `mutual_tls_is_not_offered_over_webtransport`.
-        #[cfg(feature = "webtransport")]
-        if matches!(over, Over::Wt) {
-            continue;
-        }
         let (address, server, _) = device(over, LinkOptions::new(Trust::ServerTls).key(KEY));
         // A client holding an identity the server never asks for, at the
         // secure level: the trust levels differ.

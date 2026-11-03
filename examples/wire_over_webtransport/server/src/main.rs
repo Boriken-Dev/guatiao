@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Serves WebTransport on UDP port 4433 (`WIRE_PORT`; `WIRE_BIND` the address) through
+//! Serves WebTransport on UDP port 4433 (`WIRE_PORT`) through
 //! coqui-web: to each session that opens its stream and says hello it
 //! announces the schema on channel 1, then sends a value every
 //! `WIRE_INTERVAL_MS` (default 1000). Each channel frame is one coqui-web
@@ -16,7 +16,7 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use core::error::Error;
-use core::net::{IpAddr, Ipv4Addr, SocketAddr};
+use core::net::{Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
 use coqui_peer_tls::{Identity, Policy};
@@ -53,17 +53,12 @@ fn main() -> Result<(), Failure> {
     let tls =
         coqui_peer_tls::server_config_without_client_auth_with(&identity, &[], &Policy::modern())?
             .config;
-    // QUIC does not fall back between address families, and a socket
-    // bound to `::` takes IPv4 clients only where the system makes it
-    // dual-stack: `WIRE_BIND=::` serves IPv6 (`localhost` may resolve to
-    // it), the default serves IPv4.
-    let bind: IpAddr = match std::env::var("WIRE_BIND") {
-        Ok(text) => text.parse()?,
-        Err(_) => Ipv4Addr::UNSPECIFIED.into(),
-    };
-    let listener = Listener::bind(SocketAddr::new(bind, port), Arc::new(tls))
-        .map_err(|e| format!("cannot listen on UDP {bind}:{port}: {e}"))?;
-    println!("listening on https://{bind}:{port}");
+    // A client that resolves `localhost` to `::1` first falls back to
+    // the IPv4 address (coqui-web dials each address a name resolves to).
+    let bind = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
+    let listener = Listener::bind(bind, Arc::new(tls))
+        .map_err(|e| format!("cannot listen on UDP {bind}: {e}"))?;
+    println!("listening on https://localhost:{port}");
 
     loop {
         let pending = listener.next(None).map_err(|e| e.to_string())?;

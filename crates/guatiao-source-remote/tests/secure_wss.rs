@@ -256,22 +256,61 @@ fn a_server_the_client_does_not_pin_is_refused_as_a_trust_failure() {
     assert!(e.message().contains("not pinned"), "{}", e.message());
 }
 
-/// TLS 1.3 resumption skips the client's certificate, which the listener
-/// names the client by: a mutual listener that allows resumption is
-/// refused when it binds, one at server TLS is not.
+/// A listener and a client that both allow resumption name the client at
+/// every link, resumed or not: the channel reports the chain a resumed
+/// TLS 1.3 session carries too.
 #[test]
-fn a_mutual_listener_does_not_allow_resumption_it_could_not_name() {
+fn a_resumed_session_still_names_the_client() {
+    use coqui_peer_tls::{Pins, Trust as Pinned};
+    use coqui_web::websocket::{Dialer, Frames};
+    use coqui_web::{Channel, Dialer as _, Kind};
     use guatiao_source_remote::transport::tls::Policy;
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
     let mut resuming = Policy::modern();
     resuming.allow_resumption = true;
-    let mutual = TlsConfig::new(server_id.clone())
+    let server = TlsConfig::new(server_id.clone())
         .pins([client_id.fingerprint()])
         .policy(resuming.clone());
-    let e = WsListen::bind_tls("127.0.0.1:0", &mutual).unwrap_err();
-    assert!(e.to_string().contains("resumption"), "{e}");
-    let server_tls = TlsConfig::new(server_id).server_tls().policy(resuming);
-    WsListen::bind_tls("127.0.0.1:0", &server_tls).unwrap();
+    let listener = WsListen::bind_tls("127.0.0.1:0", &server).unwrap();
+    let at = listener.local_addr().unwrap();
+    // One client configuration for every dial, so its session cache is
+    // shared and a later dial can resume an earlier one.
+    let built = coqui_peer_tls::client_config_with(
+        &client_id,
+        &Pinned::Pinned(Pins::fixed([server_id.fingerprint()])),
+        &[b"http/1.1"],
+        &resuming,
+    )
+    .unwrap();
+    let config = Arc::new(built.config);
+    for _ in 0..3 {
+        let config = Arc::clone(&config);
+        let dialing = std::thread::spawn(move || {
+            let url = url::Url::parse(&format!("wss://{at}/")).unwrap();
+            let channel = Dialer::new()
+                .with_frames(Frames::Binary)
+                .with_tls(config)
+                .dial(Kind::WebSocket, &url, core::time::Duration::from_secs(10))
+                .unwrap();
+            channel.send(b"hello").unwrap();
+            channel
+        });
+        let Accepted::Connection(mut accepted) = listener.accept().unwrap() else {
+            panic!("admitted");
+        };
+        accepted
+            .reader
+            .set_timeout(Some(core::time::Duration::from_secs(10)))
+            .unwrap();
+        let mut hello = Vec::new();
+        assert!(accepted.reader.read_frame(&mut hello, 1 << 10).unwrap());
+        assert_eq!(
+            accepted.reader.peer_id(),
+            Some(client_id.fingerprint().canonical())
+        );
+        let channel = dialing.join().unwrap();
+        channel.close();
+    }
 }
 
 /// An access control list rule that names the address a client came to is
