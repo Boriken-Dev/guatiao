@@ -216,6 +216,20 @@ impl HostRegistry {
         Ok(list.into())
     }
 
+    /// Every provider, best first, with everything a settings screen
+    /// shows about it: none is built.
+    fn catalog(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        let mut list = List::new_in(alloc);
+        for provider in self.inner.all_ranked() {
+            list.try_push(catalog_value(
+                alloc,
+                provider,
+                self.inner.library_of(provider),
+            )?)?;
+        }
+        Ok(list.into())
+    }
+
     /// One provider by key, or `None` when nothing answers to it.
     fn provider(&self, key: &str, alloc: Alloc) -> Option<Result<Value, ValueError>> {
         self.inner.provider(key).map(|p| provider_value(alloc, p))
@@ -1369,6 +1383,65 @@ pub unsafe extern "C" fn guatiao_registry_providers(
     })
 }
 
+/// Every provider of every loaded library, best first, as a list of maps
+/// holding everything a settings screen shows about one: **no provider
+/// is built to answer**, and no `create` slot is called.
+///
+/// Each map has what [`guatiao_registry_providers`] writes (`key`, `id`,
+/// `display_name`, `version`, `library`, `kinds`, `from`, `source`,
+/// `priority`, `has_config`, `vtable_size`), and:
+///
+/// - `available`: whether it can run here, asked now through its
+///   `available` slot, never cached; `reason`, its words, only when it
+///   cannot.
+/// - `config`: a copy of its configuration schema; absent when it takes
+///   none.
+/// - `meta`: a copy of its `meta` map, where its form is, under `"form"`
+///   (`GUATIAO_INTAKE_PROVIDER_FORM_KEY`); absent when it declares none.
+///   `guatiao_intake_provider_form` answers that form, or the one the
+///   schema implies when there is none.
+/// - `library_key` and `library_version`: the library that offered it.
+/// - `digest`: `"sha256:"` and 64 lowercase hex digits, of the file that
+///   library was mapped from, read the first time any call asks and kept;
+///   absent for a library from no file (registered, or served by a
+///   source). `digest_error`, the reason, when reading the file failed.
+///
+/// A library's own instance (a provider with no `create`) was made by its
+/// entry point when it loaded, and calling `available` calls into it;
+/// nothing here makes another.
+///
+/// The caller owns the list, frees it with `guatiao_value_free`, and may
+/// keep it past every library. `GUATIAO_ERR_ALLOC` when `alloc` is null
+/// or incomplete.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_libraries`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_catalog(
+    reg: *const HostRegistry,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match registry.catalog(alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
+    })
+}
+
 /// One provider by the key this registry filed it under, as a map.
 ///
 /// `GUATIAO_ERR_NOT_FOUND` when nothing answers to that key.
@@ -2002,6 +2075,50 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     map.try_set("priority", one.priority())?;
     map.try_set("has_config", Value::from(one.config_schema().is_some()))?;
     map.try_set("vtable_size", one.vtable().1)?;
+    Ok(map.into())
+}
+
+/// One provider as [`guatiao_registry_catalog`] lists it: what
+/// [`provider_value`] says, plus its availability asked now, copies of its
+/// schema and `meta`, and its library's key, version and digest.
+fn catalog_value(
+    alloc: Alloc,
+    one: &Provider,
+    library: Option<&crate::library::Loaded>,
+) -> Result<Value, ValueError> {
+    let mut map = Map::try_from(provider_value(alloc, one)?).map_err(|_| ValueError::WrongKind)?;
+    match one.available() {
+        Ok(()) => map.try_set("available", Value::from(true))?,
+        Err(why) => {
+            map.try_set("available", Value::from(false))?;
+            map.try_set("reason", Text::new_in(alloc, why).map(Value::from)?)?;
+        }
+    }
+    if let Some(schema) = one.config_schema() {
+        map.try_set("config", schema.clone_in(alloc)?)?;
+    }
+    if let Some(meta) = one.meta() {
+        map.try_set("meta", meta.clone_in(alloc)?)?;
+    }
+    if let Some(library) = library {
+        map.try_set("library_key", text_value(alloc, &library.key)?)?;
+        map.try_set(
+            "library_version",
+            Text::new_in(alloc, &library.version).map(Value::from)?,
+        )?;
+        match library.digest() {
+            Ok(Some(digest)) => {
+                map.try_set("digest", Text::new_in(alloc, &digest).map(Value::from)?)?;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                map.try_set(
+                    "digest_error",
+                    Text::new_in(alloc, &e.to_string()).map(Value::from)?,
+                )?;
+            }
+        }
+    }
     Ok(map.into())
 }
 

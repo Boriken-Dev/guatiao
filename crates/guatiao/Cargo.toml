@@ -60,7 +60,10 @@ c-header = ["dep:cbindgen"]
 # decides whether a file exports the entry symbol by READING its export
 # table, never by mapping it, because mapping runs static initialisers
 # that can abort the process. See `src/library/scan.rs`.
-load = ["dep:libloading", "dep:object"]
+#
+# `sha2` answers `Loaded::digest`: a library file's SHA-256, read only
+# when a host asks for it.
+load = ["dep:libloading", "dep:object", "dep:sha2"]
 
 # Enforces a schema's `pattern` in `validate_text` and `validate_value`.
 # Without it the keyword is carried and read but never checked -- a
@@ -72,6 +75,7 @@ regex = ["dep:regex"]
 guatiao-derive = { path = "../guatiao-derive", version = "=0.0.0-alpha.1", optional = true }
 libloading = { version = "0.8", optional = true }
 regex = { version = "1", optional = true }
+sha2 = { version = "0.10", optional = true, default-features = false }
 # Parses PE, ELF and Mach-O export tables as DATA. Default features off:
 # this reads three formats and writes none, and a scan should not drag in
 # a linker's worth of code.

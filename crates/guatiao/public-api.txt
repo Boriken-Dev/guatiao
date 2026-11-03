@@ -43,6 +43,7 @@ pub const guatiao::exports::library::GUATIAO_IMPORT_SEARCH_PATH: u32
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_add_source_file(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_available(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_best(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_catalog(*const guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_collect(*mut guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_free(*mut guatiao::exports::library::HostRegistry)
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_host(*mut guatiao::exports::library::HostRegistry) -> *const guatiao::library::desc::HostInfo<'static>
@@ -1337,6 +1338,8 @@ pub guatiao::library::registry::Loaded::providers: usize
 pub guatiao::library::registry::Loaded::skipped: alloc::vec::Vec<guatiao::library::registry::Skipped>
 pub guatiao::library::registry::Loaded::source: alloc::string::String
 pub guatiao::library::registry::Loaded::version: alloc::string::String
+impl guatiao::library::registry::Loaded
+pub fn guatiao::library::registry::Loaded::digest(&self) -> core::result::Result<core::option::Option<alloc::string::String>, core::io::error::Error>
 impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::registry::Provider
@@ -1388,6 +1391,7 @@ pub fn guatiao::library::registry::Registry::key_template(&self) -> &guatiao::li
 pub fn guatiao::library::registry::Registry::keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::libraries_keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::library_key_template(&self) -> &guatiao::library::key::KeyTemplate
+pub fn guatiao::library::registry::Registry::library_of(&self, &guatiao::library::registry::Provider) -> core::option::Option<&guatiao::library::registry::Loaded>
 pub fn guatiao::library::registry::Registry::load_file(&mut self, &std::path::Path) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::loaded(&self) -> &[guatiao::library::registry::Loaded]
 pub fn guatiao::library::registry::Registry::mismatches<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&guatiao::library::registry::Provider, guatiao::library::kind::KindMismatch)> + '_
@@ -2100,6 +2104,8 @@ pub guatiao::library::Loaded::providers: usize
 pub guatiao::library::Loaded::skipped: alloc::vec::Vec<guatiao::library::registry::Skipped>
 pub guatiao::library::Loaded::source: alloc::string::String
 pub guatiao::library::Loaded::version: alloc::string::String
+impl guatiao::library::registry::Loaded
+pub fn guatiao::library::registry::Loaded::digest(&self) -> core::result::Result<core::option::Option<alloc::string::String>, core::io::error::Error>
 impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::Notice<'a>
@@ -2350,6 +2356,7 @@ pub fn guatiao::library::registry::Registry::key_template(&self) -> &guatiao::li
 pub fn guatiao::library::registry::Registry::keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::libraries_keyed_by(&mut self, &str) -> core::result::Result<(), guatiao::library::key::KeyError>
 pub fn guatiao::library::registry::Registry::library_key_template(&self) -> &guatiao::library::key::KeyTemplate
+pub fn guatiao::library::registry::Registry::library_of(&self, &guatiao::library::registry::Provider) -> core::option::Option<&guatiao::library::registry::Loaded>
 pub fn guatiao::library::registry::Registry::load_file(&mut self, &std::path::Path) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::loaded(&self) -> &[guatiao::library::registry::Loaded]
 pub fn guatiao::library::registry::Registry::mismatches<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&guatiao::library::registry::Provider, guatiao::library::kind::KindMismatch)> + '_

@@ -27,7 +27,7 @@ A C, C++ or Dart consumer reads a whole tree through
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-`load` pulls `libloading` and `object`, and `regex` pulls `regex`.
+`load` pulls `libloading`, `object` and `sha2`, and `regex` pulls `regex`.
 
 ---
 
@@ -2102,6 +2102,40 @@ own words. One "unsupported" leaves a person with no idea which way to go.
 In C: `guatiao_registry_available`, `guatiao_registry_why_not`, and
 `guatiao_registry_provider_available(reg, key, &reason)`.
 
+### Every provider, before any is built
+
+A settings screen asks the registry for everything it shows about every
+provider, and **nothing it asks builds one**: the descriptor already
+holds the kinds, id, name, version, configuration schema and `meta`, and
+availability is a slot. Only `instantiate` (C: `create`) calls a
+provider's `create` slot. A provider with no `create` is its own one
+instance, made by its library's entry point when the library loaded.
+
+```rust
+for provider in reg.all() {                     // best first: reg.all_ranked()
+    let library = reg.library_of(provider);     // Option<&Loaded>: the library that offered it
+    let digest = library.map(Loaded::digest);   // Result<Option<String>, io::Error>: "sha256:<64 hex>"
+    provider.kinds(); provider.id(); provider.display_name(); provider.version();
+    provider.available();                       // Err(reason): asked now, never cached
+    provider.config_schema(); provider.meta();  // the form: guatiao_intake::provider_form(schema, meta, alloc)
+}
+```
+
+- **`Loaded::digest` is the SHA-256 of the file the library was mapped
+  from**, read the first time it is asked and then kept, from the file
+  the registry opened just before mapping it and holds while the library
+  is loaded: a file replaced at that path later does not change it.
+  `Ok(None)` for a library from no file (registered, or served by a
+  source); `Err` is the read's I/O error, and a later call reads again.
+  It says what was loaded; a host pinning libraries checks the bytes
+  before it loads them.
+- **In C, one call**: `guatiao_registry_catalog(reg, &alloc, &out)`, a
+  list of maps, best first: the provider map below plus `available`,
+  `reason` (only when unavailable), `config` and `meta` (copies, absent
+  when undeclared), `library_key`, `library_version`, and `digest`
+  (absent for a library from no file; `digest_error` when the read
+  failed). The caller frees it and may keep it past every library.
+
 ### What things are filed under is the host's choice
 
 ```rust
@@ -2340,6 +2374,8 @@ guatiao_registry_collect(reg, &alloc, &answer);                // closes retired
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);
+guatiao_registry_catalog(reg, &alloc, &answer);                // every provider, with availability, schema,
+                                                               // meta and digest; builds none
 const void *vt = guatiao_registry_provider_table(reg, key, guatiao_cstr("greeter"), &size);  // by kind
 const void *one = guatiao_registry_provider_vtable(reg, key, &size);                       // its single table
 void *ctx = guatiao_registry_provider_ctx(reg, key);
@@ -2377,7 +2413,8 @@ and the borrowed config schema have their own accessors. A provider's
 `meta` has one too, so a listing does not copy it per provider:
 `guatiao_registry_provider_meta` writes a copy in `alloc` (ABSENT for a
 provider that declares none, `GUATIAO_ERR_NOT_FOUND` for an unknown key),
-which outlives the library. A pointer inside
+which outlives the library; `guatiao_registry_catalog` is the listing
+that does copy both, for a host that wants all of it. A pointer inside
 a map would be a number a caller has to cast back, and reading one is the
 moment a caller takes on the kind's contract.
 
