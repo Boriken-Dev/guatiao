@@ -626,6 +626,10 @@ impl Clone for Value {
     /// `v.clone_in(v.alloc()?)`. An allocation failure aborts, as the
     /// short forms do.
     ///
+    /// **A secret stays wiped**: a tree whose root lives in
+    /// [`Alloc::wiping`] is copied into the wiping allocator, so the copy
+    /// is overwritten when it is freed, as the original is.
+    ///
     /// # Panics
     ///
     /// On content this build refuses: an unknown tag, text that is not
@@ -635,10 +639,11 @@ impl Clone for Value {
     /// [`clone_in`](Value::clone_in), which reports them. Equality reads
     /// the same bytes and never fails, so `v == v` holds for such a tree.
     fn clone(&self) -> Value {
-        super::types::cloned(
-            self.clone_in(Alloc::rust()),
-            core::alloc::Layout::new::<Value>(),
-        )
+        let home = match self.alloc() {
+            Ok(a) if a.is_wiping() => Alloc::wiping(),
+            _ => Alloc::rust(),
+        };
+        super::types::cloned(self.clone_in(home), core::alloc::Layout::new::<Value>())
     }
 }
 
@@ -711,6 +716,81 @@ impl Drop for Value {
 }
 
 impl Value {
+    /// Whether any buffer of this tree lives in [`Alloc::wiping`]: a text,
+    /// a number, bytes, a map key, or a list's or map's own array. What a
+    /// printer asks before showing a tree, since such a tree holds, or is
+    /// built around, a secret. Allocates nothing past a heap stack for
+    /// nested containers.
+    pub fn is_sensitive(&self) -> bool {
+        let wiping = |recorded: *const Allocator| {
+            !recorded.is_null()
+                // SAFETY: a recorded allocator outlives its container, by
+                // the contract on `Alloc`.
+                && unsafe { Alloc::from_raw(recorded) }.is_ok_and(|a| a.is_wiping())
+        };
+        let mut stack = vec![self];
+        while let Some(node) = stack.pop() {
+            match Tag::try_from(node.tag) {
+                Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => {
+                    if node.text_arm().is_some_and(|t| wiping(t.alloc)) {
+                        return true;
+                    }
+                }
+                Ok(Tag::GUATIAO_BYTES) => {
+                    // SAFETY: the tag says the bytes arm is live.
+                    let bytes: &Buffer = unsafe { &node.payload.bytes };
+                    if wiping(bytes.alloc) {
+                        return true;
+                    }
+                }
+                Ok(Tag::GUATIAO_LIST) => {
+                    // SAFETY: the tag says the list arm is live.
+                    let list: &List = unsafe { &node.payload.list };
+                    if wiping(list.alloc) {
+                        return true;
+                    }
+                    stack.extend(list.iter());
+                }
+                Ok(Tag::GUATIAO_MAP) => {
+                    let Some(map) = node.map_arm() else { continue };
+                    if wiping(map.alloc) {
+                        return true;
+                    }
+                    for entry in map.entries() {
+                        if wiping(entry.key.alloc) {
+                            return true;
+                        }
+                        stack.push(&entry.value);
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Overwrites with zeros every byte this tree's texts, numbers, bytes
+    /// and map keys own, leaving its shape: what [`Wipe`](crate::Wipe)
+    /// does before the tree is freed. Bytes a node does not own
+    /// (`cap == 0`, a literal) are left alone.
+    pub(crate) fn wipe_bytes_in_place(&mut self) {
+        let mut stack: Vec<&mut Value> = vec![self];
+        while let Some(node) = stack.pop() {
+            match Value::owned_mut(node) {
+                Owned::Text(text) => super::raw::wipe_bytes(text),
+                Owned::Buffer(buffer) => super::raw::wipe_bytes(buffer),
+                Owned::List(list) => stack.extend(list.iter_mut()),
+                Owned::Map(map) => {
+                    for entry in map.entries_mut() {
+                        super::raw::wipe_bytes(&mut entry.key);
+                        stack.push(&mut entry.value);
+                    }
+                }
+                Owned::Nothing => {}
+            }
+        }
+    }
+
     /// Whether this node's tag selects an arm that owns a buffer.
     fn owns_storage(&self) -> bool {
         matches!(

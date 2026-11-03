@@ -727,6 +727,86 @@ pub unsafe extern "C" fn guatiao_alloc_default(out: *mut Allocator) -> Status {
     })
 }
 
+/// The allocator a secret is built in: Rust's global allocator, with a
+/// `free` that overwrites every block with zeros before releasing it.
+///
+/// Writes it through `out`; the caller keeps the struct alive for as long
+/// as any tree built through it, as with `guatiao_alloc_default`.
+///
+/// Every block guatiao releases through an allocator goes through its
+/// `free` with the exact `size` it was allocated with: a tree freed, the
+/// block a growing string, bytes, list or map leaves behind, and the
+/// source of a move into another allocator. So everything built through
+/// this one is overwritten before it is released, and a tree moved into
+/// it (`guatiao_value_make_local`) leaves its old blocks overwritten too.
+/// Build a secret here from its first byte: a node built in another
+/// allocator keeps that allocator when it is stored into a tree that
+/// lives here. A slot whose kind marks it `sensitive` names this
+/// allocator in its carrier.
+///
+/// **Your own allocator can do the same**: a `free` that overwrites the
+/// `size` bytes it is given (with stores the compiler keeps, such as a
+/// `volatile` loop or `memset_explicit`) before releasing them wipes
+/// everything guatiao frees through it.
+///
+/// # Safety
+///
+/// `out` addresses writable storage for one allocator.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_alloc_wiping(out: *mut Allocator) -> Status {
+    entry!(out => {
+        // SAFETY: checked non-null and writable by contract.
+        unsafe { ptr::write(out, crate::value::alloc::wiping_alloc()) };
+        Status::GUATIAO_OK
+    })
+}
+
+/// Whether `alloc` is the allocator `guatiao_alloc_wiping` writes,
+/// recognised by its `free`. False for a null or unusable one, and for
+/// an allocator of the caller's own, even one that wipes.
+///
+/// # Safety
+///
+/// `alloc` is null or valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_alloc_is_wiping(alloc: *const Allocator) -> bool {
+    // SAFETY: null or valid by the caller's contract.
+    unsafe { Alloc::from_raw(alloc) }.is_ok_and(|a| a.is_wiping())
+}
+
+/// Whether any buffer of `value`'s tree lives in the wiping allocator: a
+/// text, a number, bytes, a map key, or a list's or map's own array. What
+/// a printer asks before showing a tree. False for a null `value`.
+///
+/// # Safety
+///
+/// `value` is null or a valid, well-formed value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_value_is_sensitive(value: *const Value) -> bool {
+    // SAFETY: null or valid by the caller's contract.
+    unsafe { value.as_ref() }.is_some_and(Value::is_sensitive)
+}
+
+/// Overwrites with zeros every byte `v`'s tree owns (its texts, numbers,
+/// bytes and map keys, at any depth, in whatever allocator each lives),
+/// then frees the tree and leaves `v` null-tagged: how a caller wipes a
+/// secret it holds in an allocator that does not wipe, or sooner than
+/// freeing it would. Bytes a node does not own (`cap == 0`, a literal)
+/// are not written.
+///
+/// # Safety
+///
+/// `v` is null or a valid, well-formed value the caller owns, which
+/// nothing reads afterwards but as a null value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_value_wipe(v: *mut Value) -> Status {
+    entry!(v => {
+        // SAFETY: checked non-null and well-formed by contract.
+        crate::value::Wipe::wipe(unsafe { &mut *v });
+        Status::GUATIAO_OK
+    })
+}
+
 /// `size` zeroed bytes aligned to `align` from this library's own heap,
 /// or null when `size` is 0, `align` is not a power of two, or the heap
 /// is exhausted.
@@ -792,12 +872,25 @@ pub unsafe extern "C" fn guatiao_wire_encode(
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
+        // Into the wiping allocator, the bytes on the way are wiped too:
+        // encoded at their size, so no growth leaves a block behind.
+        let wiping = a.is_wiping();
         // SAFETY: checked non-null and well-formed by contract.
-        let bytes = match crate::value::wire::to_bytes(unsafe { &*value }) {
+        let value = unsafe { &*value };
+        let encoded = if wiping {
+            crate::value::wire::to_bytes_exact(value)
+        } else {
+            crate::value::wire::to_bytes(value)
+        };
+        let mut bytes = match encoded {
             Ok(bytes) => bytes,
             Err(e) => return e.into(),
         };
-        match Buffer::new_in(a, &bytes).map(Value::from) {
+        let answer = Buffer::new_in(a, &bytes).map(Value::from);
+        if wiping {
+            crate::value::Wipe::wipe(&mut bytes);
+        }
+        match answer {
             // SAFETY: `out` is writable and holds no value the caller owns.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
             Err(e) => e.into(),

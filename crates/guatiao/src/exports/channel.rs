@@ -122,11 +122,15 @@ unsafe fn answer_frame(
     let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
         return Status::GUATIAO_ERR_ALLOC;
     };
-    let frame = match frame {
+    let mut frame = match frame {
         Ok(frame) => frame,
         Err(e) => return e.into(),
     };
-    match Buffer::new_in(a, &frame).map(Value::from) {
+    let answer = Buffer::new_in(a, &frame).map(Value::from);
+    if a.is_wiping() {
+        crate::value::Wipe::wipe(&mut frame);
+    }
+    match answer {
         Ok(v) => {
             // SAFETY: `out` is writable and holds no value the caller owns.
             unsafe { ptr::write(out, v) };
@@ -185,7 +189,15 @@ pub unsafe extern "C" fn guatiao_wire_send(
     out!(out);
     entry!(value, out => {
         // SAFETY: checked non-null and well-formed by contract.
-        let frame = channel::send(channel, unsafe { &*value });
+        let value = unsafe { &*value };
+        // Into the wiping allocator, the frame is built at its size, so
+        // no growth leaves a block behind, and wiped once copied.
+        // SAFETY: null or valid by the caller's contract.
+        let frame = if unsafe { Alloc::from_raw(alloc) }.is_ok_and(|a| a.is_wiping()) {
+            channel::send_exact(channel, value)
+        } else {
+            channel::send(channel, value)
+        };
         // SAFETY: forwarded; `out` checked non-null.
         unsafe { answer_frame(alloc, frame, out) }
     })

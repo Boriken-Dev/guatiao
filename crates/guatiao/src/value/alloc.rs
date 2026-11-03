@@ -239,6 +239,51 @@ impl Alloc {
             .expect("the constant vtable this crate writes is complete")
     }
 
+    /// Rust's global allocator, wiping every block it frees: the
+    /// allocator a secret is built in.
+    ///
+    /// **What it promises.** Every block guatiao releases through it is
+    /// overwritten with zeros before it goes back to the global
+    /// allocator: a tree dropped, the block a growing text, buffer, list
+    /// or map leaves behind, and the source of a move into another
+    /// allocator. The writes are volatile and fenced, so the compiler
+    /// cannot drop them as stores to memory about to be freed.
+    ///
+    /// **What it does not.** A buffer records the allocator that made it,
+    /// so the promise is per buffer: build a secret here from its first
+    /// byte. A node built elsewhere and stored into a tree that lives
+    /// here keeps its own allocator, and a copy taken out of it (a
+    /// `String`, a binding's string) is the copier's to wipe. `clone()`
+    /// of a tree that lives here copies into this allocator; `into_local`
+    /// moves it into [`Alloc::rust`], which does not wipe.
+    pub fn wiping() -> Alloc {
+        /// As in [`Alloc::rust`].
+        struct Vtable(Allocator);
+
+        // SAFETY: as for `Alloc::rust`'s vtable: a never-written
+        // constant whose `ctx` addresses an immutable static nothing
+        // dereferences, over Rust's thread-safe global allocator.
+        unsafe impl Sync for Vtable {}
+
+        static WIPING: Vtable = Vtable(wiping_alloc());
+
+        // SAFETY: `WIPING.0` is fully initialised, lives for `'static`,
+        // and declares its own size.
+        unsafe { Alloc::from_raw(&WIPING.0) }
+            .expect("the constant vtable this crate writes is complete")
+    }
+
+    /// Whether this is [`Alloc::wiping`], recognised by its `ctx`, which
+    /// is the address of a static of this build's and nothing else's.
+    ///
+    /// Only this build's wiping allocator answers `true`: one another
+    /// copy of the library linked into the same process hands out, or an
+    /// allocator a caller wrote whose `free` wipes too, wipes as well but
+    /// is not recognised here.
+    pub fn is_wiping(&self) -> bool {
+        core::ptr::eq(self.ctx.cast_const(), wiping_mark())
+    }
+
     /// The allocator's own address, which is what an owned container
     /// stores.
     pub fn as_raw(&self) -> *const Allocator {
@@ -328,6 +373,58 @@ unsafe extern "C" fn rust_free_fn(_ctx: *mut c_void, p: *mut c_void, size: usize
     // SAFETY: the contract on `FreeFn` is that `p` came from the
     // matching `alloc` with this exact size and alignment.
     unsafe { alloc::alloc::dealloc(p.cast::<u8>(), layout) }
+}
+
+/// Overwrites `len` bytes at `ptr` with zeros, as stores the compiler
+/// keeps: each is volatile, and a fence after them stops a later free
+/// from being reordered before them.
+///
+/// # Safety
+///
+/// `ptr` is valid for writes of `len` bytes, or `len` is 0.
+pub(crate) unsafe fn wipe(ptr: *mut u8, len: usize) {
+    for i in 0..len {
+        // SAFETY: `i < len`, within the block the caller vouches for.
+        unsafe { ptr.add(i).write_volatile(0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+unsafe extern "C" fn rust_wiping_free_fn(
+    ctx: *mut c_void,
+    p: *mut c_void,
+    size: usize,
+    align: usize,
+) {
+    if !p.is_null() && size != 0 {
+        // SAFETY: the contract on `FreeFn` is that `p` is a live block of
+        // `size` bytes from the matching `alloc`, about to be released.
+        unsafe { wipe(p.cast::<u8>(), size) };
+    }
+    // SAFETY: as above; the block is released as `rust_free_fn` would.
+    unsafe { rust_free_fn(ctx, p, size, align) }
+}
+
+/// What the wiping allocator's `ctx` points at, never read or written:
+/// its address is how [`Alloc::is_wiping`] tells that allocator apart. A
+/// function's address cannot do that job, since one function may have
+/// several.
+static WIPING_MARK: u8 = 0;
+
+const fn wiping_mark() -> *const c_void {
+    ptr::addr_of!(WIPING_MARK).cast::<c_void>()
+}
+
+/// [`Alloc::wiping`] as a raw vtable: Rust's global allocator, with a
+/// `free` that overwrites every block with zeros before releasing it.
+pub const fn wiping_alloc() -> Allocator {
+    Allocator {
+        struct_size: size_of::<Allocator>() as u32,
+        ctx: wiping_mark().cast_mut(),
+        alloc: Some(rust_alloc_fn),
+        free: Some(rust_wiping_free_fn),
+        release: None,
+    }
 }
 
 /// An allocator over Rust's global allocator, as a raw vtable for a

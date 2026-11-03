@@ -168,7 +168,7 @@ impl<T: Walk + ToOwned + ?Sized> Walk for Cow<'_, T> {
     }
 }
 
-impl<T: Walk> Walk for Secret<T> {
+impl<T: Walk + crate::value::wipe::Wipe> Walk for Secret<T> {
     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
         self.expose().walk(visitor)
     }

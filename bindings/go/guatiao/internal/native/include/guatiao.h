@@ -3332,6 +3332,72 @@ guatiao_status guatiao_buffer_push(const struct guatiao_alloc *alloc,
 guatiao_status guatiao_alloc_default(struct guatiao_alloc *out);
 
 /*
+ The allocator a secret is built in: Rust's global allocator, with a
+ `free` that overwrites every block with zeros before releasing it.
+
+ Writes it through `out`; the caller keeps the struct alive for as long
+ as any tree built through it, as with `guatiao_alloc_default`.
+
+ Every block guatiao releases through an allocator goes through its
+ `free` with the exact `size` it was allocated with: a tree freed, the
+ block a growing string, bytes, list or map leaves behind, and the
+ source of a move into another allocator. So everything built through
+ this one is overwritten before it is released, and a tree moved into
+ it (`guatiao_value_make_local`) leaves its old blocks overwritten too.
+ Build a secret here from its first byte: a node built in another
+ allocator keeps that allocator when it is stored into a tree that
+ lives here. A slot whose kind marks it `sensitive` names this
+ allocator in its carrier.
+
+ **Your own allocator can do the same**: a `free` that overwrites the
+ `size` bytes it is given (with stores the compiler keeps, such as a
+ `volatile` loop or `memset_explicit`) before releasing them wipes
+ everything guatiao frees through it.
+
+ # Safety
+
+ `out` addresses writable storage for one allocator.
+ */
+guatiao_status guatiao_alloc_wiping(struct guatiao_alloc *out);
+
+/*
+ Whether `alloc` is the allocator `guatiao_alloc_wiping` writes,
+ recognised by its `free`. False for a null or unusable one, and for
+ an allocator of the caller's own, even one that wipes.
+
+ # Safety
+
+ `alloc` is null or valid.
+ */
+bool guatiao_alloc_is_wiping(const struct guatiao_alloc *alloc);
+
+/*
+ Whether any buffer of `value`'s tree lives in the wiping allocator: a
+ text, a number, bytes, a map key, or a list's or map's own array. What
+ a printer asks before showing a tree. False for a null `value`.
+
+ # Safety
+
+ `value` is null or a valid, well-formed value.
+ */
+bool guatiao_value_is_sensitive(const struct guatiao_value *value);
+
+/*
+ Overwrites with zeros every byte `v`'s tree owns (its texts, numbers,
+ bytes and map keys, at any depth, in whatever allocator each lives),
+ then frees the tree and leaves `v` null-tagged: how a caller wipes a
+ secret it holds in an allocator that does not wipe, or sooner than
+ freeing it would. Bytes a node does not own (`cap == 0`, a literal)
+ are not written.
+
+ # Safety
+
+ `v` is null or a valid, well-formed value the caller owns, which
+ nothing reads afterwards but as a null value.
+ */
+guatiao_status guatiao_value_wipe(struct guatiao_value *v);
+
+/*
  `size` zeroed bytes aligned to `align` from this library's own heap,
  or null when `size` is 0, `align` is not a power of two, or the heap
  is exhausted.

@@ -354,7 +354,7 @@ where
     }
 }
 
-impl<T: FromWalk> FromWalk for Secret<T> {
+impl<T: FromWalk + crate::value::wipe::Wipe> FromWalk for Secret<T> {
     fn from_walk<W: Walker>(walker: W) -> Result<Secret<T>, MapError> {
         T::from_walk(walker).map(Secret::new)
     }

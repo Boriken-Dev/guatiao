@@ -245,7 +245,7 @@ pub use schema::Schema;
 pub use value::types::Str;
 pub use value::{
     Alloc, AllocError, Buffer, Date, DateTime, Entry, List, MAX_DEPTH, Map, Number, Payload,
-    Secret, Span, Status, Tag, Text, Time, Timestamp, Value, ValueError,
+    Secret, Span, Status, Tag, Text, Time, Timestamp, Value, ValueError, Wipe,
 };
 
 /// # What `#[derive(Provider)]` refuses

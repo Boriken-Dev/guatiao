@@ -789,6 +789,12 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
             let status = unsafe { guatiao_alloc_default(core::ptr::null_mut()) };
             assert_eq!(status, Status::GUATIAO_ERR_NULL);
         }),
+        ("guatiao_alloc_wiping", || {
+            // Its one failure is a null `out`.
+            // SAFETY: null is the case under test.
+            let status = unsafe { guatiao_alloc_wiping(core::ptr::null_mut()) };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        }),
         ("guatiao_wire_encode", || {
             let value = Value::null();
             // SAFETY: a null allocator is the failure under test.
