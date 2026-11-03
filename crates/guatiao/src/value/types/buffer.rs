@@ -280,7 +280,7 @@ impl Buffer {
 
     /// A copy through `alloc`, reporting its refusal.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Buffer, ValueError> {
-        Buffer::new_in(alloc, self)
+        Buffer::new_in(super::copy_home(self.alloc, alloc), self)
     }
 }
 

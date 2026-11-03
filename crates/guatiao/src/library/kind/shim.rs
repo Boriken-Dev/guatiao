@@ -645,25 +645,45 @@ pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
     unsafe { Map::from_ptr(&out) }?;
     // A copy frees the original here, through the allocator that made it,
     // while the library that made it is still leased by the caller.
-    Ok(out.into_alloc(home)?)
+    if crate::value::walk::map_recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    let copy = crate::value::walk::copy_map_exact(&out, home);
+    let mut original = out;
+    crate::value::Wipe::wipe(&mut original);
+    Ok(copy?)
 }
 
 /// A value a call returned, as the caller gets it: unchanged when every
 /// container in it records `home`, the allocator the caller carried in,
-/// otherwise copied into `home` and the original freed through its own.
+/// otherwise copied entirely into `home` (a part in this side's wiping
+/// allocator included: the carrier is the caller's to name) and the
+/// original overwritten and freed through its own.
 /// So nothing a host holds needs a library's allocator, or its image,
 /// after the call. A shim runs it on what it answers, so a caller in any
 /// language gets this; a proxy runs it again on what it receives, for a
 /// table that ignored the carrier.
 #[doc(hidden)]
 pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
-    Ok(out.into_alloc(home)?)
+    if crate::value::walk::recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    let copy = crate::value::walk::copy_value_exact(&out, home);
+    let mut original = out;
+    crate::value::Wipe::wipe(&mut original);
+    Ok(copy?)
 }
 
 /// [`value_ret`] for a list.
 #[doc(hidden)]
 pub fn list_ret(out: List, home: Alloc) -> Result<List, ProviderError> {
-    Ok(out.into_alloc(home)?)
+    if crate::value::walk::list_recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    let copy = crate::value::walk::copy_list_exact(&out, home);
+    let mut original = out;
+    crate::value::Wipe::wipe(&mut original);
+    Ok(copy?)
 }
 
 /// The `available` slot over a Rust method: runs `ask` on the instance

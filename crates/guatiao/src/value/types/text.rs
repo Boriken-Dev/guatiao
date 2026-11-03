@@ -316,7 +316,7 @@ impl Text {
 
     /// A copy through `alloc`, reporting its refusal.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Text, ValueError> {
-        Text::new_in(alloc, self)
+        Text::new_in(super::copy_home(self.alloc, alloc), self)
     }
 
     /// The text `ptr` points at, checked: how a text C hands over by

@@ -106,6 +106,16 @@ impl Number {
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         self.0.alloc()
     }
+
+    /// The address of the allocator this number's text recorded.
+    pub(crate) fn recorded(&self) -> *const crate::value::alloc::Allocator {
+        self.0.alloc
+    }
+
+    /// A copy in exactly `alloc`, wherever this one lives.
+    pub(crate) fn copy_in(&self, alloc: Alloc) -> Result<Number, ValueError> {
+        Ok(Number(Text::new_in(alloc, &self.0)?))
+    }
 }
 
 impl Clone for Number {

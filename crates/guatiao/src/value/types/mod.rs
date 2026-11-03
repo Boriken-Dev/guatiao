@@ -92,19 +92,30 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
+/// Whether `recorded`, an allocator a container recorded, is this build's
+/// wiping allocator.
+pub(crate) fn lives_in_wiping(recorded: *const crate::value::alloc::Allocator) -> bool {
+    !recorded.is_null()
+        // SAFETY: the address a container recorded is an allocator that
+        // outlives it, by the contract on `Alloc`.
+        && unsafe { Alloc::from_raw(recorded) }.is_ok_and(|a| a.is_wiping())
+}
+
+/// Where a copy of a buffer that recorded `recorded` goes when `asked` was
+/// named: the wiping allocator for one that lives there, so a copy of a
+/// secret is wiped as the original is, whatever was asked.
+pub(crate) fn copy_home(recorded: *const crate::value::alloc::Allocator, asked: Alloc) -> Alloc {
+    if lives_in_wiping(recorded) {
+        Alloc::wiping()
+    } else {
+        asked
+    }
+}
+
 /// Where `clone()` copies a container that recorded `recorded`: into
-/// [`Alloc::wiping`] when it lives there, so a copy of a secret is wiped
-/// as the original is; into [`Alloc::rust`] otherwise.
+/// [`Alloc::wiping`] when it lives there; into [`Alloc::rust`] otherwise.
 pub(crate) fn clone_home(recorded: *const crate::value::alloc::Allocator) -> Alloc {
-    if recorded.is_null() {
-        return Alloc::rust();
-    }
-    // SAFETY: the address a container recorded is an allocator that
-    // outlives it, by the contract on `Alloc`.
-    match unsafe { Alloc::from_raw(recorded) } {
-        Ok(a) if a.is_wiping() => Alloc::wiping(),
-        _ => Alloc::rust(),
-    }
+    copy_home(recorded, Alloc::rust())
 }
 
 /// What `Clone` does with a copy `clone_in` refused: an allocation
