@@ -154,10 +154,17 @@ fn formats() -> Formats<Value> {
                         CodecError::at_offset(bytes, e.valid_up_to()).message("not UTF-8")
                     })?;
                     toml_text::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| {
-                        let at = e.position().map_or_else(CodecError::new, |p| {
-                            CodecError::new().line(p.line).column(p.column)
-                        });
-                        at.message(e.to_string())
+                        match e {
+                            guatiao_serde::text::Error::Syntax {
+                                position: Some(at),
+                                detail,
+                                ..
+                            } => CodecError::new()
+                                .line(at.line)
+                                .column(at.column)
+                                .message(detail),
+                            other => CodecError::new().message(other.to_string()),
+                        }
                     })
                 },
                 |_: &Value| Err(CodecError::new().message("only read here")),
@@ -198,6 +205,13 @@ fn a_cfg_file_is_toml_unless_its_first_line_names_another_format() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("registered: toml"), "{error}");
+    // The first line is removed and still counted; the position is given once.
+    let error = document("daemon.cfg", "#!toml\nlisten 5\n")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("line 2"), "{error}");
+    assert_eq!(error.matches("line ").count(), 1, "{error}");
+    assert!(!error.contains("toml:"), "{error}");
     let error = document("daemon.conf", DOCUMENT).unwrap_err();
     assert!(
         error.to_string().contains("registered: cfg, toml"),

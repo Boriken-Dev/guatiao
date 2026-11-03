@@ -966,7 +966,7 @@ fn the_configuration_page_reads_and_describes_a_daemon() -> Result<(), Box<dyn c
     use guatiao::schema::validate::validate_map;
     use guatiao::{Alloc, FromValue, Schema, Value};
     use guatiao_serde::Presentation;
-    use guatiao_serde::text::toml;
+    use guatiao_serde::text::{Error, toml};
 
     // anycfg chooses the format by the file's name and bounds its size. A codec
     // passes on a position and the parser's words, never an excerpt of the file.
@@ -979,11 +979,16 @@ fn the_configuration_page_reads_and_describes_a_daemon() -> Result<(), Box<dyn c
                 let text = core::str::from_utf8(bytes).map_err(|e| {
                     CodecError::at_offset(bytes, e.valid_up_to()).message("not UTF-8")
                 })?;
-                toml::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| {
-                    let at = e.position().map_or_else(CodecError::new, |p| {
-                        CodecError::new().line(p.line).column(p.column)
-                    });
-                    at.message(e.to_string())
+                toml::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| match e {
+                    Error::Syntax {
+                        position: Some(at),
+                        detail,
+                        ..
+                    } => CodecError::new()
+                        .line(at.line)
+                        .column(at.column)
+                        .message(detail),
+                    other => CodecError::new().message(other.to_string()),
                 })
             },
             |_: &Value| Err(CodecError::new().message("only read here")),
