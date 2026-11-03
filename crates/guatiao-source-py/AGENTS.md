@@ -34,10 +34,46 @@ over the one interpreter.
 | `dirs` | directories whose `*.guatiao` files of type `python`, and those of their immediate subdirectories, are libraries | none |
 | `manifests` | manifest files, listed as well | none |
 | `paths` | put first on `sys.path` once, when the source is added: where `guatiao` and shared kind modules are | none |
+| `isolation` | how much the interpreter this file starts takes from outside the configuration: `shipped`, `inherit` or `isolated` (below) | `shipped` |
+| `home` | the Python installation that interpreter runs from (`sys.base_prefix`): an existing directory; not taken under `inherit` | CPython's own answer; under `isolated`, libpython's directory (Windows) or the one above its `lib` |
+| `import_dirs` | the registry's, not this file's: on Windows, where `python3.dll` (and the `python3XX.dll` it forwards to) is found when it is not beside the file or the host, as `[sys.base_prefix]` | none |
 
-A key holding anything but a list of text is `GUATIAO_ERR_BAD_VALUE`; a
-configuration that is not a map, `GUATIAO_ERR_WRONG_KIND`; an
-interpreter that cannot start, `GUATIAO_ERR_UNSUPPORTED`.
+A list key holding anything but a list of text, `isolation` naming no
+mode, or `home` under `inherit` or naming no directory is
+`GUATIAO_ERR_BAD_VALUE`; a configuration that is not a map,
+`GUATIAO_ERR_WRONG_KIND`; an interpreter that cannot start,
+`GUATIAO_ERR_UNSUPPORTED`.
+
+## Isolation
+
+The interpreter is started from CPython's isolated configuration unless
+`isolation` is `inherit`, so a host's environment does not choose the
+code a library runs:
+
+| `isolation` | reads | ignores |
+| --- | --- | --- |
+| `shipped` (the default) | a `._pth` and a `pyvenv.cfg` beside the host's executable (an embedded Python shipped with the program), `home` | `PYTHONPATH`, `PYTHONHOME` and every other `PYTHON*` variable, user site-packages, a program found on `PATH` |
+| `inherit` | the environment as well, as a `python` started there would: CPython's `Py_InitializeEx` | nothing; this is the weaker setting |
+| `isolated` | only `home` (or libpython's own installation) and `paths`: CPython is told the executable is the installation's own | everything beside the host's executable, and the environment |
+
+`home` and `isolation` apply when this file starts the interpreter: the
+first source added decides, and a later one asking for another
+`isolation` or `home` is refused (`GUATIAO_ERR_BAD_VALUE`, naming both).
+A Python host's interpreter is joined as it is, and neither applies.
+
+CPython before 3.14 on Windows takes the executable from the system
+whatever it is told, and `site` reads a `pyvenv.cfg` beside it or one
+directory up; before 3.11 it also reads the program's `._pth` whatever
+`home` says. `isolated` there refuses to start
+(`GUATIAO_ERR_UNSUPPORTED`, naming the file) while such a file exists,
+rather than read it. 3.9 and 3.10 on Windows find no standard library
+from the isolated configuration with no `home`, so `shipped` gives them
+libpython's directory as `home`; they read the program's `._pth` all the
+same. Elsewhere `inherit` names the program `python3` and CPython looks
+it up on `PATH`, so a virtual environment whose `bin` is there decides
+`sys.prefix`; `shipped` and `isolated` name the program themselves.
+Measured on Windows with 3.9, 3.11 and 3.14 and on Linux with 3.14
+(`tests/isolation.rs`).
 
 The binding inside loads the guatiao functions this file exports, unless
 `GUATIAO_LIBRARY` is set or the host is Python and its binding already
@@ -83,9 +119,12 @@ anything else is a refusal asking for `version` in the manifest.
 pyo3's embedding links one `libpython` at build:
 
 - **Windows**: the DLL imports `python3.dll` and nothing versioned; one
-  build serves every CPython from 3.9 on. `python3.dll` is found on the
-  DLL search path: beside `python.exe` for a Python host, through `PATH`
-  for any other.
+  build serves every CPython from 3.9 on. A Python host has it loaded
+  already; any other names the Python installation in the
+  configuration's `import_dirs` (the registry maps `python3.dll` and the
+  `python3XX.dll` it forwards to from there, under its default import
+  search), or puts it on `PATH` and sets the registry's import search to
+  `path`.
 - **Linux**: the build has `NEEDED libpython3.X.so.1.0`, the minor of the
   Python it was built with (`PYO3_PYTHON`), abi3 or not; build one per
   minor, against the host's own when the host is Python.

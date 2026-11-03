@@ -116,8 +116,8 @@ Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries
 finds what a file the registry opens imports: `ImportSearch.LIBRARY`, the
 default, looks beside the file, beside the host's executable, in the
 system directory and in `os.add_dll_directory` directories;
-`ImportSearch.PATH` then retries a missing import with Windows' standard
-search, which reaches the current directory and `PATH`, as a non-Python
+`ImportSearch.PATH` then looks for a library the file imports itself
+and those leave missing in the current directory and on `PATH`, as a non-Python
 host adding a Python bridge needs; unix ignores it),
 `provider_config(key)` (a borrowed, read-only `Ref` onto the schema --
 writing through it raises `TypeError`, and it is never `.close()`d),
@@ -253,9 +253,10 @@ last (a Rust method answering `Result`).
 | `None` | -- | no answer |
 
 A kind class's annotations are read in its module: define it at module
-level. A method may not be named `has`, `close`, `kind`, `ctx`, `size` (a
+level. A method may not be named `has`, `kind`, `ctx`, `size` (a
 remote's own) or start with `_`; a slot is found by position, so name it
-otherwise. A required method may follow an optional one. `Kind` refuses,
+otherwise. A slot may be named `close`: on a `kinds.Object` whose kind has
+one, `close()` calls it, and `destroy()` ends the object. A required method may follow an optional one. `Kind` refuses,
 as `#[guatiao::kind]` and the library's reader do, a method named
 `header`, a `bytearray` (`BYTES_MUT`) argument on a kind that is not an
 object kind, and an object passed or answered on a method that is not
@@ -276,7 +277,7 @@ What crosses, each way:
 | text answer | `str` | `str` |
 | `Taken[K]` | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |
 | `Lent[K]` | a Python object, or a `kinds.Object` | a `kinds.Remote`, valid for the call |
-| `K` answer | a `kinds.Object`; `close()` calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
+| `K` answer | a `kinds.Object`; `destroy()` (or `close()`, when `K` has no `close` slot, or leaving a `with` block) calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
 
 **A view lent for one call** (a borrowed or lent tree, a lent object)
 raises `ValueError` if used after the call returned.

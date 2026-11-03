@@ -35,6 +35,25 @@ write now.
   and `guatiao_intake.provider_form`; Dart: `Registry.catalog()` and
   `providerForm`. The `load` feature now pulls `sha2`, and `winapi-util`
   on Windows.
+- **A source file's `import_dirs`.** The configuration given to
+  `add_source_file` may hold `import_dirs`, a list of directories the
+  registry takes for itself: on Windows, a library the file imports
+  itself and the import search does not find beside it, beside the host
+  or in the system directory is mapped from the first of them holding it,
+  with what it forwards to beside it, under either import search. A
+  non-Python host names the Python installation there, and the bridge's
+  `python3.dll` and the `python3XX.dll` it forwards to load without
+  `PATH`. Anything but a list of text is `SourceError::Config`
+  (`GUATIAO_ERR_BAD_VALUE`). Ignored elsewhere.
+- **guatiao-source-py: `isolation` and `home`.** How much the interpreter
+  the bridge starts takes from outside its configuration: `shipped` (the
+  default), `inherit` or `isolated`, and the installation it runs from;
+  see Changed for what the default now leaves out.
+- **Python: a kind's slot may be named `close`.** `python -m
+  guatiao.kinds` writes it and `Kind` takes it, no longer refusing it as
+  a remote's own; on a `kinds.Object` whose kind has one, `close()` calls
+  the slot. `kinds.Object.destroy()` ends an object whatever its kind,
+  as leaving a `with` block does.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and
@@ -1460,6 +1479,22 @@ write now.
   changes. A `--acl` or `--policy` file that is TOML under an extension other
   than `.toml`, `.json`, `.yaml`, `.yml` or `.cfg` takes `.toml` or `.cfg`.
 
+- **guatiao-source-py's interpreter takes nothing from the environment by
+  default.** It starts from CPython's isolated configuration: a `._pth`
+  or `pyvenv.cfg` shipped beside the host's executable is read, and
+  `PYTHONPATH`, `PYTHONHOME`, the other `PYTHON*` variables and user
+  site-packages are not. `isolation = "inherit"` starts it as before;
+  `isolated` reads only `home` and `paths`. A Python host's interpreter
+  is joined as it is.
+- **The import search `path` widens only what is missing.** On Windows a
+  file refused for a missing import has its import table read, and only
+  the libraries it imports itself that the default search leaves missing
+  are looked for in the current directory and on `PATH` (after
+  `import_dirs` and the Windows directory) and mapped from there; the
+  file is then opened again with the default search, so a copy of
+  another import in the current directory or on `PATH` is no longer
+  taken over the one beside the host. A missing import of an import is
+  not looked for. A refusal names each import found nowhere.
 - **guatiao-source-remote: a WebTransport client told `certificate_unknown`
   as its link's first read arrives** is told the server does not trust it,
   in the words a QUIC client hears, rather than that the server ended the

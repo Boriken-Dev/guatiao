@@ -119,9 +119,10 @@ enum class import_search : std::uint32_t {
   /// directory and in directories the process added; not the current
   /// directory or `PATH`. The default.
   library = GUATIAO_IMPORT_SEARCH_LIBRARY,
-  /// Those first; a file they leave an import missing for is opened again
-  /// with Windows' standard search from its own directory: the system
-  /// directories, the current directory and `PATH`.
+  /// Those first; a library the file imports itself that they leave
+  /// missing is then looked for in a source file's `import_dirs`, the
+  /// Windows directory, the current directory and `PATH`, and mapped from
+  /// there. Everything else it imports is found as under `library`.
   path = GUATIAO_IMPORT_SEARCH_PATH,
 };
 

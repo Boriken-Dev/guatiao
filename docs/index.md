@@ -178,7 +178,7 @@ ships beside itself, is found where the platform's loader looks:
 | | where a file's imports are found |
 | --- | --- |
 | Windows, the default (`library`) | beside the file, beside the host's executable, in the system directory and in directories the process added (`AddDllDirectory`, Python's `os.add_dll_directory`); never the current directory or `PATH` |
-| Windows, `path` | the same first; a file they leave an import missing for is opened again with Windows' standard search from its own directory: the system directories, the current directory and `PATH` |
+| Windows, `path` | the same first; a library the file imports itself that they leave missing is then looked for in a source file's `import_dirs`, the Windows directory, the current directory and `PATH`, and mapped from there; everything else it imports is found as under `library` |
 | Linux, FreeBSD | `LD_LIBRARY_PATH`, the directories the file's own `RUNPATH` names (`$ORIGIN` is the file's directory) and the system's; not the file's directory unless its `RUNPATH` names it, and not the current directory |
 | macOS | an import named `@rpath/...` on `DYLD_LIBRARY_PATH` and in the file's run paths (`@loader_path` is the file's directory), then the system's; not the file's directory unless a run path names it, and not the current directory |
 
@@ -191,13 +191,19 @@ with `-Wl,-rpath,'$ORIGIN'`, and on macOS when what it imports is named
 Windows, the plugin's imports to its directory, the host's and the
 system's.
 
-`path` is the host's choice for a file whose imports live elsewhere, such
-as the Python bridge, which imports `python3.dll` from the Python
-installation: `Registry::set_import_search(ImportSearch::Path)`, in C
+A source file whose imports live in a directory of their own, such as
+the Python bridge, which imports `python3.dll` from a Python installation,
+names it in its configuration's `import_dirs`, which the registry takes
+for itself: on Windows a library the file imports itself and the search
+leaves missing is mapped from the first of them holding it, with what it
+forwards to beside it (`python3XX.dll`), under either setting.
+`path` is the host's choice for a file whose imports are wherever `PATH`
+says: `Registry::set_import_search(ImportSearch::Path)`, in C
 `guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_PATH)`,
-and the same setting in every binding's registry. Other platforms have no
-such choice per file and ignore it: there the file's own `RUNPATH` and the
-loader's environment decide.
+and the same setting in every binding's registry. It widens only what the
+file itself imports and the default leaves missing. Other platforms have
+no such choice per file and ignore both: there the file's own `RUNPATH`
+and the loader's environment decide.
 
 ## Learn more
 

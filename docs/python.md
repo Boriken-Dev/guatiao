@@ -210,8 +210,22 @@ old build still answer.
 
 | OS | one bridge build serves |
 | --- | --- |
-| Windows | every CPython from 3.9 on (it links `python3.dll`: a host that is not Python puts the Python installation on `PATH` and sets its registry's import search to `path`) |
+| Windows | every CPython from 3.9 on (it links `python3.dll`: a host that is not Python names the Python installation in the bridge's `import_dirs`, or puts it on `PATH` and sets its registry's import search to `path`) |
 | Linux, macOS | the CPython minor it was built with: build one per minor |
+
+The interpreter the bridge starts in a host that is not Python takes
+nothing from the environment by default. Its configuration's `isolation`
+says how much it takes:
+
+| `isolation` | the interpreter reads |
+| --- | --- |
+| `shipped` (default) | what is shipped beside the host's executable (a `._pth`, a `pyvenv.cfg`) and the configuration's `home`; no `PYTHONPATH`, `PYTHONHOME` or user site-packages |
+| `inherit` | the environment as well, as a `python` started there would |
+| `isolated` | only the configuration's `home` (else the installation libpython is in) and `paths` |
+
+A Python host's own interpreter is joined as it is.
+[The bridge's reference](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-py/AGENTS.md)
+has what each Python version on Windows can keep out.
 
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
 holds two libraries and the commands that serve them to the Rust and
