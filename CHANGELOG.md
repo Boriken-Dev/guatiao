@@ -43,12 +43,22 @@ write now.
   with what it forwards to beside it, under either import search. A
   non-Python host names the Python installation there, and the bridge's
   `python3.dll` and the `python3XX.dll` it forwards to load without
-  `PATH`. Anything but a list of text is `SourceError::Config`
-  (`GUATIAO_ERR_BAD_VALUE`). Ignored elsewhere.
+  `PATH`. A relative directory is the source file's. Anything but a list
+  of text is `SourceError::Config` (`GUATIAO_ERR_BAD_VALUE`). A library
+  mapped this way is the process's while the file is: a library loaded
+  meanwhile that imports the same name binds to it. Ignored elsewhere.
 - **guatiao-source-py: `isolation` and `home`.** How much the interpreter
   the bridge starts takes from outside its configuration: `shipped` (the
-  default), `inherit` or `isolated`, and the installation it runs from;
-  see Changed for what the default now leaves out.
+  default), `inherit` or `isolated`, and the installation it runs from
+  (relative to the bridge file); see Changed for what the default now
+  leaves out. `isolated` sets the module search path to exactly the
+  installation's standard library and runs no `site`, so nothing beside
+  the host's executable is imported; `shipped` keeps that directory, which
+  CPython puts on `sys.path` on Windows, as shipped with the program. A
+  start that failed refuses every later source with its words; an
+  interpreter already running is refused for `isolated`, or a named
+  `shipped`, when its flags do not hold to it; a Python older than 3.9 is
+  refused.
 - **Python: a kind's slot may be named `close`.** `python -m
   guatiao.kinds` writes it and `Kind` takes it, no longer refusing it as
   a remote's own; on a `kinds.Object` whose kind has one, `close()` calls
@@ -1493,8 +1503,11 @@ write now.
   `import_dirs` and the Windows directory) and mapped from there; the
   file is then opened again with the default search, so a copy of
   another import in the current directory or on `PATH` is no longer
-  taken over the one beside the host. A missing import of an import is
-  not looked for. A refusal names each import found nowhere.
+  taken over the one beside the host. An import the loader finds in a
+  directory the process added counts as present. A missing import of an
+  import is not looked for, and a name holding a directory or a drive is
+  never looked for. What was mapped is let go with the file. A refusal
+  names each import found nowhere.
 - **guatiao-source-remote: a WebTransport client told `certificate_unknown`
   as its link's first read arrives** is told the server does not trust it,
   in the words a QUIC client hears, rather than that the server ended the

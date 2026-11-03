@@ -35,8 +35,8 @@ over the one interpreter.
 | `manifests` | manifest files, listed as well | none |
 | `paths` | put first on `sys.path` once, when the source is added: where `guatiao` and shared kind modules are | none |
 | `isolation` | how much the interpreter this file starts takes from outside the configuration: `shipped`, `inherit` or `isolated` (below) | `shipped` |
-| `home` | the Python installation that interpreter runs from (`sys.base_prefix`): an existing directory; not taken under `inherit` | CPython's own answer; under `isolated`, libpython's directory (Windows) or the one above its `lib` |
-| `import_dirs` | the registry's, not this file's: on Windows, where `python3.dll` (and the `python3XX.dll` it forwards to) is found when it is not beside the file or the host, as `[sys.base_prefix]` | none |
+| `home` | the Python installation that interpreter runs from (`sys.base_prefix`): an existing directory, relative to this file's; not taken under `inherit` | CPython's own answer; under `isolated`, libpython's directory (Windows) or the one above its `lib` |
+| `import_dirs` | the registry's, not this file's: on Windows, where `python3.dll` (and the `python3XX.dll` it forwards to) is found when it is not beside the file or the host, as `[sys.base_prefix]`; relative to this file's directory | none |
 
 A list key holding anything but a list of text, `isolation` naming no
 mode, or `home` under `inherit` or naming no directory is
@@ -50,30 +50,44 @@ The interpreter is started from CPython's isolated configuration unless
 `isolation` is `inherit`, so a host's environment does not choose the
 code a library runs:
 
-| `isolation` | reads | ignores |
+| `isolation` | `sys.path` and `site` read | ignored |
 | --- | --- | --- |
-| `shipped` (the default) | a `._pth` and a `pyvenv.cfg` beside the host's executable (an embedded Python shipped with the program), `home` | `PYTHONPATH`, `PYTHONHOME` and every other `PYTHON*` variable, user site-packages, a program found on `PATH` |
-| `inherit` | the environment as well, as a `python` started there would: CPython's `Py_InitializeEx` | nothing; this is the weaker setting |
-| `isolated` | only `home` (or libpython's own installation) and `paths`: CPython is told the executable is the installation's own | everything beside the host's executable, and the environment |
+| `shipped` (the default) | what is shipped with the program: a `._pth` or a `pyvenv.cfg` beside the host's executable, and on Windows the executable's own directory, which CPython puts on `sys.path` (a module or `sitecustomize.py` there is found); `home`; the installation's site-packages | `PYTHONPATH`, `PYTHONHOME` and every other `PYTHON*` variable, user site-packages, a program found on `PATH` |
+| `inherit` | the environment as well, as a `python` started there would | nothing: the weaker setting |
+| `isolated` | exactly the standard library of `home` (else of libpython's own installation) and `paths`: the module search path is set to it, `site` is not run, and from 3.14 CPython is told the executable is the installation's own | everything beside the host's executable, the installation's site-packages, the environment |
+
+`inherit` and the import search `path` (the registry's) are the weaker
+settings. Saying so to a host in every language waits for a channel from
+a source to its host; until then a host that chose one knows it chose it.
 
 `home` and `isolation` apply when this file starts the interpreter: the
 first source added decides, and a later one asking for another
 `isolation` or `home` is refused (`GUATIAO_ERR_BAD_VALUE`, naming both).
-A Python host's interpreter is joined as it is, and neither applies.
+A relative `home` is this file's directory's. A start that failed leaves
+CPython where it cannot start again: every later source is refused with
+the first failure's words (`GUATIAO_ERR_UNSUPPORTED`). An interpreter
+already running in the process (the host is Python, or another copy of
+this file started it) is used as it is: `isolated` is refused unless its
+`sys.flags.isolated` is set, and `shipped` named in the configuration
+unless `sys.flags.ignore_environment` is (`GUATIAO_ERR_BAD_VALUE`); the
+default and `inherit` join it, and `home` is not applied.
 
-CPython before 3.14 on Windows takes the executable from the system
-whatever it is told, and `site` reads a `pyvenv.cfg` beside it or one
-directory up; before 3.11 it also reads the program's `._pth` whatever
-`home` says. `isolated` there refuses to start
-(`GUATIAO_ERR_UNSUPPORTED`, naming the file) while such a file exists,
-rather than read it. 3.9 and 3.10 on Windows find no standard library
-from the isolated configuration with no `home`, so `shipped` gives them
-libpython's directory as `home`; they read the program's `._pth` all the
-same. Elsewhere `inherit` names the program `python3` and CPython looks
-it up on `PATH`, so a virtual environment whose `bin` is there decides
-`sys.prefix`; `shipped` and `isolated` name the program themselves.
-Measured on Windows with 3.9, 3.11 and 3.14 and on Linux with 3.14
-(`tests/isolation.rs`).
+What CPython reads whatever it is told is refused rather than read
+(`GUATIAO_ERR_UNSUPPORTED`, naming it): before 3.14 on Windows `site`
+reads a `pyvenv.cfg` beside the executable or one directory up, so
+`isolated` refuses while one is there; on macOS `site` takes `sys.prefix`
+from `__PYVENV_LAUNCHER__`, so `shipped` and `isolated` refuse while it
+is set (by reading CPython's `site`, not run on macOS). A Python older
+than 3.9 is refused. 3.9 and 3.10 on Windows find no standard library
+with no `home`, from either configuration, so `shipped` and `inherit` (with
+no `PYTHONHOME`) give them libpython's directory. From 3.14 every mode is
+started through `PyInitConfig` and a failure is a refusal; before, `inherit`
+is `Py_InitializeEx(0)`, which ends the process where CPython cannot
+start. Elsewhere than Windows `inherit` names the program `python3` and
+CPython looks it up on `PATH`, so a virtual environment whose `bin` is
+there decides `sys.prefix`; `shipped` and `isolated` name the program
+themselves. Measured on Windows with 3.9, 3.11 and 3.14 and on Linux with
+3.14 (`tests/isolation.rs`).
 
 The binding inside loads the guatiao functions this file exports, unless
 `GUATIAO_LIBRARY` is set or the host is Python and its binding already
