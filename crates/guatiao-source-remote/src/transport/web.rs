@@ -473,11 +473,13 @@ impl Refused {
 }
 
 #[cfg(feature = "tls")]
+#[cfg_attr(not(feature = "ws"), allow(unused_imports))]
 pub(super) use verified::{
     Watching, forget_proven, server_config, server_config_proving, take_proven,
 };
 
 #[cfg(feature = "tls")]
+#[cfg_attr(not(feature = "ws"), allow(dead_code))]
 mod verified {
     use alloc::sync::Arc;
     use core::cell::RefCell;
@@ -718,6 +720,13 @@ mod verified {
         config: &TlsConfig,
         alpn: &[u8],
     ) -> io::Result<Arc<ServerConfig>> {
+        // rustls skips the client verifier when it resumes a TLS 1.3
+        // session, and with it the noting of who the client is.
+        if config.tls_policy().allow_resumption {
+            return Err(crate::transport::tls::invalid(
+                "a mutual-TLS WebSocket listener names its clients by the certificate they prove, which a resumed session does not present: leave the policy's allow_resumption off",
+            ));
+        }
         let mut bare = config.tls_policy().clone();
         bare.acl = None;
         let verifier = config
@@ -737,18 +746,25 @@ mod verified {
 
     /// The server configuration coqui-web's listeners take: `config`'s
     /// identity (or `resolver`'s certificates), policy and trust, naming
-    /// `alpn`. The policy's access control list is left out of the TLS
+    /// `alpn`. Where no client presents a certificate (server TLS, no
+    /// security) the policy's access control list is left out of the TLS
     /// configuration: coqui-peer-tls reads each connection's addresses
     /// from a scope its own accept helpers set, which coqui-web's
     /// listeners do not, so the listener decides the list by address
-    /// before the handshake instead.
+    /// before the handshake instead. Where clients do present one (a
+    /// mutual-TLS WebTransport listener, whose handshake runs on threads
+    /// no scope reaches) the list stays: with no addresses to decide by,
+    /// coqui-peer-tls refuses every client, and none is recorded as
+    /// waiting in a trust store behind the list's back.
     pub(crate) fn server_config(
         config: &TlsConfig,
         alpn: &[u8],
         resolver: Option<Arc<dyn ResolvesServerCert>>,
     ) -> io::Result<Arc<ServerConfig>> {
         let mut policy = config.tls_policy().clone();
-        policy.acl = None;
+        if !(config.is_mutual() && config.proves_peers()) {
+            policy.acl = None;
+        }
         let built = config.clone().policy(policy).server_naming(alpn)?;
         match resolver {
             None => Ok(built),
@@ -762,9 +778,10 @@ mod verified {
 }
 
 /// Whether a listener of `config` admits a client from `source` by its
-/// address: a rule naming the address a packet came to cannot be decided
-/// from the source alone, and is refused, as it is on a QUIC endpoint
-/// that cannot tell the local address.
+/// address. A rule naming the address a packet came to (or the port) is
+/// decided by the address the listener is bound to; when that is a
+/// wildcard it cannot be, and the rule refuses the client, as it does on
+/// a QUIC endpoint that cannot tell the local address.
 #[cfg(feature = "tls")]
 pub(super) fn admits(
     config: &super::tls::TlsConfig,
@@ -774,8 +791,8 @@ pub(super) fn admits(
     match &config.tls_policy().acl {
         None => true,
         Some(acl) => {
-            !acl.rules.iter().any(|r| r.destination.is_some())
-                && config.admits(source, bound).is_ok()
+            let names_local = acl.rules.iter().any(|r| r.destination.is_some());
+            (!names_local || !bound.ip().is_unspecified()) && config.admits(source, bound).is_ok()
         }
     }
 }

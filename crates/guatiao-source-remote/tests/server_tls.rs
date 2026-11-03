@@ -261,7 +261,9 @@ fn a_mutual_tls_server_refuses_a_client_with_no_certificate() {
         );
         let e = source.link().unwrap_err();
         // A QUIC handshake the server ends reaches a WebTransport client
-        // as a connection that did not open.
+        // as a connection that did not open; that a mutual-TLS WebTransport
+        // listener refuses a client with no certificate is shown with raw
+        // channels in `webtransport.rs`.
         #[cfg(feature = "webtransport")]
         if matches!(over, Over::Wt) {
             continue;

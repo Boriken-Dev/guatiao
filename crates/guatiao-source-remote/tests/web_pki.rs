@@ -321,6 +321,24 @@ fn a_chained_identity_is_presented_whole_on_every_transport() {
             "{over:?}"
         );
     }
+    // Where no link can name a client (WebTransport), the same chained
+    // identity at server TLS, which a client with no identity verifies by
+    // the root alone.
+    let at_server_tls = TlsConfig::open(&state).unwrap().server_tls();
+    let client = by_roots(&bundle);
+    for over in every().into_iter().filter(|over| !names_clients(*over)) {
+        let port = listen_as(
+            over,
+            &at_server_tls,
+            LinkOptions::new(Trust::ServerTls).key(KEY),
+        );
+        assert_eq!(
+            greeting(&source(over, "localhost", port, &client))
+                .unwrap_or_else(|e| panic!("{over:?}: {e:?}")),
+            "hello, roots",
+            "{over:?}"
+        );
+    }
 }
 
 /// At server TLS no client presents a certificate, so a rule naming one
