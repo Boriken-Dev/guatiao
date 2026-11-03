@@ -304,9 +304,16 @@ for provider in registry.all() {
 }
 ```
 
-`Loaded::digest` answers `sha256:` and 64 hex digits, read once from the
-file the registry held open since just before mapping it, or `None` for a
-library from no file (registered, or served by a source).
+`Loaded::digest` answers `sha256:` and 64 hex digits of the file the
+library was mapped from, and only while the file at its absolute path is
+still that file, unchanged: the registry records the file's identity
+(device and inode, or volume and file index, with its size and last
+write) just before and after mapping it, and checks it before and after
+hashing. A file replaced or written since is an error, "the file changed
+since it was loaded", never another file's digest. `None` for a library
+from no file (registered, or served by a source). The first time it is
+asked it reads the whole file on the calling thread; a digest is kept,
+an error is not.
 
 ### C
 
@@ -316,8 +323,8 @@ guatiao_registry_catalog(reg, &alloc, &catalog);   /* a list of maps, best first
 guatiao_values all = guatiao_list_items(&catalog);
 for (size_t i = 0; i < all.len; i++) {
   const guatiao_value *one = &all.ptr[i];
-  /* id, display_name, version, kinds, library, library_version, digest,
-     available and reason, config, meta */
+  /* id, display_name, version, kinds, library, library_version, digest
+     or digest_error, available and reason, config, meta */
   guatiao_intake_provider_form(guatiao_map_find(one, guatiao_cstr("config")),
                                guatiao_map_find(one, guatiao_cstr("meta")), &alloc, &form);
   /* ABSENT: nothing to configure */
@@ -333,8 +340,26 @@ import guatiao_intake as intake
 
 for entry in reg.catalog():                     # plain dicts, best first
     form = intake.provider_form(entry.get("config"), entry.get("meta"))
-    # entry["digest"], entry["available"], entry.get("reason"), ...
+    # entry.get("digest") or entry["digest_error"], entry["available"], ...
 ```
 
-The other bindings read the same fields one call at a time today:
-their providers listing, availability, configuration schema and `meta`.
+### Dart
+
+```dart
+import 'package:guatiao_intake/guatiao_intake.dart' as intake;
+
+for (final entry in reg.catalog()) {             // plain maps, best first
+  final form = intake.providerForm(entry['config'], entry['meta']);   // null: nothing to configure
+  // entry['digest'] ?? entry['digest_error'], entry['available'], ...
+  form?.close();
+}
+```
+
+`providerForm` reads the form; whatever is malformed is skipped as above,
+so a value under `"form"` that is not a map gives the schema's form.
+
+Node, Go, Julia, R, MATLAB and Octave, Fortran and C++ have no catalog
+yet: they read a provider's kinds, availability, configuration schema and
+`meta` one call at a time (`providers`, the per-key availability call,
+`provider_config`, `provider_meta`) and the implied form with their
+intake package's `for_schema`; no call there answers a library's digest.

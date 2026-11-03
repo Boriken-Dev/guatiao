@@ -19,16 +19,22 @@ write now.
   provider of every loaded library, best first, with what
   `guatiao_registry_providers` says plus `available` (asked now) and its
   `reason`, copies of its `config` schema and `meta`, `library_key`,
-  `library_version` and the library file's `digest` (`sha256:` and hex);
-  no `create` slot is called. In Rust, `Registry::library_of(&provider)`
-  names a provider's library and `Loaded::digest()` reads the SHA-256 of
-  the file it was mapped from, the first time it is asked, from the file
-  held open since just before the mapping (`None` for a library from no
-  file). guatiao-intake's `provider_form(schema, meta, alloc)` and
+  `library_version` and the library file's `digest` (`sha256:` and hex)
+  or a `digest_error` saying why there is none; no `create` slot is
+  called, and the first call reads each library file in full on the
+  calling thread. In Rust, `Registry::library_of(&provider)` names a
+  provider's library and `Loaded::digest()` reads the SHA-256 of the
+  file it was mapped from, answered only while the file at its path is
+  still the one loaded, unchanged (its identity is recorded just before
+  and after the mapping and checked before and after hashing; otherwise
+  "the file changed since it was loaded"); `None` for a library from no
+  file. guatiao-intake's `provider_form(schema, meta, alloc)` and
   `guatiao_intake_provider_form` answer the form a provider is shown
   with: its own under `meta["form"]`, else the one its schema implies,
-  else nothing. Python: `Registry.catalog()` and
-  `guatiao_intake.provider_form`. The `load` feature now pulls `sha2`.
+  else nothing, skipping what is malformed. Python: `Registry.catalog()`
+  and `guatiao_intake.provider_form`; Dart: `Registry.catalog()` and
+  `providerForm`. The `load` feature now pulls `sha2`, and `winapi-util`
+  on Windows.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and
@@ -1428,6 +1434,11 @@ write now.
 
 ### Changed
 
+- **A library file is mapped by its absolute path on every platform.**
+  `Registry::load_file` with a bare file name loads the file of that name
+  in the current directory on Linux, macOS and FreeBSD too, as it already
+  did on Windows, rather than whatever the loader's own search
+  (`LD_LIBRARY_PATH`, the system directories) finds under that name.
 - **Breaking: a library manifest is `<name>.guatiao[.<major>[.<minor>]]`
   and is read through anycfg.** The name is like a versioned shared object
   (`greeters.guatiao`, `greeters.guatiao.2`, `greeters.guatiao.2.1`; digits
