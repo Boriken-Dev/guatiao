@@ -22,10 +22,12 @@ guatiao = { path = "../../../crates/guatiao" }
 # the schema, the framing -- is what the browser client shares, and it
 # builds for wasm with guatiao alone.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-# WebTransport over HTTP/3, server and client; `self-signed` (a default)
-# makes the short-lived certificate a browser accepts by hash.
-wtransport = "0.7"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+# WebTransport channels, server and client. A git dependency until
+# coqui-web is released.
+coqui-web = { git = "https://github.com/Boriken-Dev/coqui-web.git", rev = "cb420e9574fcde311f7241dd173b35563a085648", features = ["webtransport"] }
+# The short-lived certificate a browser accepts by hash, and the TLS
+# configuration that presents it.
+coqui-peer-tls = { version = "=0.0.0-alpha.1", features = ["generate"] }
 
 [lints]
 workspace = true

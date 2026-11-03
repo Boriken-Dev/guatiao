@@ -24,6 +24,11 @@ web-sys = { version = "0.3", features = [
     "ReadableStream",
     "ReadableStreamDefaultReader",
     "WebTransport",
+    "WebTransportBidirectionalStream",
     "WebTransportHash",
     "WebTransportOptions",
+    "WebTransportReceiveStream",
+    "WebTransportSendStream",
+    "WritableStream",
+    "WritableStreamDefaultWriter",
 ] }

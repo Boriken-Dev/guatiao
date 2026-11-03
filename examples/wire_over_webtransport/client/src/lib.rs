@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! The browser's end: opens WebTransport to the server with its
-//! certificate pinned by hash, reads the one stream the server opens,
-//! splits it into frames and hands each to a `Receiver`, which checks
+//! certificate pinned by hash, opens one stream and says hello on it,
+//! splits what the server sends into frames and hands each to a `Receiver`, which checks
 //! every value against the schema its channel announced. Each outcome is
 //! passed to `log` as a line of text.
 
@@ -15,10 +15,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    ReadableStream, ReadableStreamDefaultReader, WebTransport, WebTransportHash,
-    WebTransportOptions,
+    ReadableStream, ReadableStreamDefaultReader, WebTransport, WebTransportBidirectionalStream,
+    WebTransportHash, WebTransportOptions,
 };
-use wire_over_webtransport::frames;
+use wire_over_webtransport::{HELLO, delimited, frames};
 
 /// Connects to `url`, trusting the certificate whose SHA-256 is `hash`,
 /// and calls `log` with a line for every frame until the stream ends.
@@ -33,11 +33,16 @@ pub async fn run(url: String, hash: Vec<u8>, log: Function) -> Result<(), JsValu
     let transport = WebTransport::new_with_options(&url, &options)?;
     JsFuture::from(transport.ready().unchecked_into::<js_sys::Promise>()).await?;
 
-    // The server opens one stream; read the first, then its bytes.
-    let incoming = reader(&transport.incoming_unidirectional_streams())?;
-    let first = JsFuture::from(incoming.read()).await?;
-    let stream: ReadableStream = Reflect::get(&first, &"value".into())?.dyn_into()?;
-    let bytes = reader(&stream)?;
+    // The page opens the one stream, and says hello on it: the server
+    // sees a stream once its opener has sent on it.
+    let stream: WebTransportBidirectionalStream =
+        JsFuture::from(transport.create_bidirectional_stream())
+            .await?
+            .dyn_into()?;
+    let writer = stream.writable().get_writer()?;
+    let hello = Uint8Array::from(delimited(HELLO).as_slice());
+    JsFuture::from(writer.write_with_chunk(&hello)).await?;
+    let bytes = reader(&stream.readable())?;
 
     let mut receiver = Receiver::new();
     let mut buffer = Vec::new();

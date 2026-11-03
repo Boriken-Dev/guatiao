@@ -12,6 +12,10 @@ use guatiao::{Map, Value};
 /// The one channel this example uses.
 pub const CHANNEL: u64 = 1;
 
+/// What a client sends first. The server sees a stream once its opener has
+/// sent on it, and starts the channel then.
+pub const HELLO: &[u8] = b"hello";
+
 /// What every value on [`CHANNEL`] must be: a greeting and a count.
 pub fn schema() -> Value {
     SchemaBuilder::new()
