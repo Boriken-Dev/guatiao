@@ -102,9 +102,11 @@ of every loaded library, best first, and **builds none**: a list of
 dicts, each what `providers()` holds plus `available` (asked now) and
 `reason` when it cannot run, `config` (its schema) and `meta` when it
 declares them, `library_key`, `library_version`, and `digest`
-(`"sha256:"` and the hex of the file its library was mapped from, read
-the first time any call asks; absent for a library from no file,
-`digest_error` when the read failed). The form to show each with is
+(`"sha256:"` and the hex of the file its library was mapped from, only
+while that file is still the one loaded, unchanged; absent for a
+library from no file) or `digest_error` (why not, such as "the file
+changed since it was loaded"). The first call reads each library file
+in full; a digest is kept, an error is not. The form to show each with is
 `guatiao_intake.provider_form(entry.get("config"), entry.get("meta"))`.
 
 Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries()`,

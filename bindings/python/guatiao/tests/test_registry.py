@@ -176,6 +176,23 @@ def test_the_catalog_lists_every_provider_of_a_directory_and_builds_none(tmp_pat
         assert library.catalog_built() == 1
 
 
+def test_a_catalog_names_why_a_library_has_no_digest(tmp_path):
+    built = native.build_catalog_library(tmp_path)
+    if built is None:
+        pytest.skip("no C compiler found")
+    with Registry("catalog-host", "1.0") as reg:
+        reg.load_file(str(built))
+        # Another file at the path, before anything asked: renaming a mapped
+        # file works on every platform, where overwriting one does not.
+        built.rename(tmp_path / "moved_away.bin")
+        built.write_bytes(b"not the library")
+        catalog = reg.catalog()
+        assert len(catalog) == 4
+        for entry in catalog:
+            assert "digest" not in entry
+            assert entry["digest_error"] == "the file changed since it was loaded"
+
+
 def test_a_provider_carries_its_kinds_descriptions():
     committed = json.loads(
         (native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.kinds.json").read_text(

@@ -60,8 +60,9 @@ intake.form_for(form_doc, schema, "path")  # a Value, or None
   a provider is shown with, its own under `meta[PROVIDER_FORM_KEY]` or
   else the one `schema` implies; `None` when it has neither. Each of
   `schema` and `meta` is a `Value`, a `Ref`, a plain dict (an entry of
-  `guatiao.Registry.catalog()` holds dicts) or `None`; `WrongKind` when
-  what `meta` holds under the key is not a map.
+  `guatiao.Registry.catalog()` holds dicts) or `None`. What is not a map
+  is skipped, as reading the key by hand skips it: a value under the key
+  that is no form gives the schema's form.
 
 ## The flat store
 

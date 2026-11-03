@@ -234,8 +234,10 @@ class Registry:
         `available` (asked now) and `reason` when it cannot run,
         `config` (its schema) and `meta` when it declares them,
         `library_key`, `library_version`, and `digest` (`"sha256:"` and the
-        hex of the file its library was mapped from; absent for a library
-        from no file). `guatiao_intake.provider_form(entry.get("config"),
+        hex of the file its library was mapped from, while it is still that
+        file, unchanged; absent for a library from no file) or
+        `digest_error` saying why not. The first call reads each library
+        file in full. `guatiao_intake.provider_form(entry.get("config"),
         entry.get("meta"))` answers the form to show it with."""
         return cast(List[Dict[str, Any]], self._call(_lib.core().guatiao_registry_catalog))
 
