@@ -260,8 +260,19 @@ token.close()                                 # overwritten, then freed
   `repr` then shows `[sensitive]`. `Value.wipe()` overwrites a tree in
   any allocator and frees it.
 - The view `reveal()` answers, and every slice of it, holds the value
-  alive: while any lives, `close()`, `wipe()` and every change to the
-  value raise `BufferError`, so none reads memory that was freed.
+  alive: while any lives, `close()`, `wipe()`, handing the value to a
+  slot, lending it and every change to it raise `BufferError`, so none
+  reads memory that was freed or moved. A `reveal()` on another thread
+  while the value is being closed, wiped or handed over raises
+  `BufferError` too.
+- Of an argument a call lends or borrows to a provider, which the caller
+  frees once the call returns, `reveal()` reads a copy in the wiping
+  allocator, wiped when its last view and slice go: a slice the provider
+  keeps stays readable and is the provider's.
+- A slice kept in a reference cycle holds its value until the garbage
+  collector frees the cycle, and `close()` raises until then. A view
+  still alive when the interpreter exits keeps its tree from being freed,
+  and so from being wiped, until the process ends.
 - A slot its kind marks `@sensitive` (`kinds.sensitive`, or
   `"sensitive": true` in the description) answers a `Value` kept in the
   wiping allocator, a text answer included (`kinds.SensitiveText`), never
