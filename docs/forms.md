@@ -278,3 +278,63 @@ In every binding the `meta` is a copy, outliving the library, that you
 close (or that its finalizer frees); the schema is the registry's (a
 borrowed view in Python, Dart, Node, Go, Julia and Fortran, a copy in R
 and MATLAB).
+
+## Every provider, before any is built
+
+A settings screen lists every provider of every library a host loaded,
+with each one's form, and builds none of them: its kinds, id, name and
+version, the digest of the file its library was mapped from, whether it
+can run here and why not, its configuration schema, and the form to show
+it with. A provider that declares no form is shown with the one its
+schema implies (one section per `x-section`, ids only, a secret masked);
+one that takes no configuration has nothing to show. Only asking for an
+instance calls a provider's `create`.
+
+### Rust
+
+```rust
+use guatiao::Alloc;
+use guatiao_intake::provider_form;
+
+for provider in registry.all() {
+    let digest = registry.library_of(provider).map(|library| library.digest());
+    let unavailable = provider.available().err();        // asked now
+    let form = provider_form(provider.config_schema(), provider.meta(), Alloc::rust())?;
+    // provider.kinds(), .id(), .display_name(), .version(), .config_schema()
+}
+```
+
+`Loaded::digest` answers `sha256:` and 64 hex digits, read once from the
+file the registry held open since just before mapping it, or `None` for a
+library from no file (registered, or served by a source).
+
+### C
+
+```c
+guatiao_value catalog = {0}, form = {0};
+guatiao_registry_catalog(reg, &alloc, &catalog);   /* a list of maps, best first */
+guatiao_values all = guatiao_list_items(&catalog);
+for (size_t i = 0; i < all.len; i++) {
+  const guatiao_value *one = &all.ptr[i];
+  /* id, display_name, version, kinds, library, library_version, digest,
+     available and reason, config, meta */
+  guatiao_intake_provider_form(guatiao_map_find(one, guatiao_cstr("config")),
+                               guatiao_map_find(one, guatiao_cstr("meta")), &alloc, &form);
+  /* ABSENT: nothing to configure */
+  guatiao_value_free(&form);
+}
+guatiao_value_free(&catalog);
+```
+
+### Python
+
+```python
+import guatiao_intake as intake
+
+for entry in reg.catalog():                     # plain dicts, best first
+    form = intake.provider_form(entry.get("config"), entry.get("meta"))
+    # entry["digest"], entry["available"], entry.get("reason"), ...
+```
+
+The other bindings read the same fields one call at a time today:
+their providers listing, availability, configuration schema and `meta`.
