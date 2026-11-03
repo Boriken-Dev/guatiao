@@ -1089,6 +1089,7 @@ pub fn guatiao::library::kind::SlotDescription::doc(&self) -> core::option::Opti
 pub fn guatiao::library::kind::SlotDescription::fallible(&self) -> bool
 pub fn guatiao::library::kind::SlotDescription::name(&self) -> &str
 pub fn guatiao::library::kind::SlotDescription::required(&self) -> bool
+pub fn guatiao::library::kind::SlotDescription::sensitive(&self) -> bool
 impl core::clone::Clone for guatiao::library::kind::SlotDescription
 pub fn guatiao::library::kind::SlotDescription::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::library::kind::SlotDescription

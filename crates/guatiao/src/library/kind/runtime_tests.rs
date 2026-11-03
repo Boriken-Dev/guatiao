@@ -513,6 +513,41 @@ fn call_on(
     unsafe { caller.call_raw(table.as_ptr(), table.size(), ctx(n), slot, args) }
 }
 
+/// A slot its description marks `sensitive` is answered in the wiping
+/// allocator, and the same slot unmarked in this side's own.
+#[test]
+fn a_caller_names_the_wiping_allocator_for_a_sensitive_slot() {
+    let text = include_str!("../../../../../examples/greeter_kind/include/greeter_kind.kinds.json");
+    let mut json: serde_json::Value = serde_json::from_str(text).expect("JSON");
+    let greeter = json["kinds"]
+        .as_array_mut()
+        .expect("kinds")
+        .iter_mut()
+        .find(|k| k["name"] == "greeter")
+        .expect("described");
+    for slot in greeter["slots"].as_array_mut().expect("slots") {
+        if slot["name"] == "greet" {
+            slot["sensitive"] = serde_json::Value::Bool(true);
+        }
+    }
+    let marked = Arc::new(KindDescription::from_value(&value_of(greeter)).expect("a description"));
+    let (greet, slot) = marked.slot("greet").expect("a slot");
+    assert!(slot.sensitive());
+    assert_eq!(marked.floor_hash(), kind("greeter").floor_hash());
+
+    let mechanism = Direct::default();
+    let serve = Arc::new(Served::default());
+    for (described, wiping) in [(marked, true), (kind("greeter"), false)] {
+        let table = ServedTable::new(Arc::clone(&described), |_| true, serve.clone(), &mechanism)
+            .expect("built");
+        let caller = Caller::new(described, &mechanism).expect("prepared");
+        let Ok(Answer::Map(map)) = call_on(&caller, &table, 4, greet, vec![Arg::Str("di")]) else {
+            panic!("a map");
+        };
+        assert_eq!(map.alloc().expect("owned").is_wiping(), wiping);
+    }
+}
+
 #[test]
 fn a_caller_reaches_a_served_table_with_every_shape() {
     let mechanism = Direct::default();
