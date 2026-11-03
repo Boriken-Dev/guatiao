@@ -194,6 +194,14 @@ library itself, beside the host's executable or in the system directory,
 and on `PATH` only when the host sets `import_search::path`
 ([where a library's imports are found](index.md#where-a-librarys-imports-are-found)).
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it, every growth included. A
+`std::string` copied out of it reallocates as it grows and frees its old
+blocks unwiped: read a secret through the tree's own bytes instead, and
+`guatiao_value_wipe` overwrites a tree you hold in another allocator.
+
 ## What C++ cannot do that Rust can
 
 - Run a kind's default body for a slot a provider leaves empty: such a

@@ -723,6 +723,36 @@ schema marks (`x-sensitive` or `writeOnly`) is replaced at any depth, and
 whatever the schema does not describe is hidden too. Local `$ref`s are
 followed. `WrongKind` for a schema that is not a map.
 
+**Where a secret lives**: the library's wiping allocator overwrites every
+block with zeros before releasing it, the one a growing string or list
+leaves included. The same on the VM and the web.
+
+```dart
+final secret = Value.sensitive({'token': 't0ken'});   // built in the wiping allocator
+secret.isSensitive;                                    // true
+secret.toString();                                     // 'Value([sensitive])'
+secret.asMap()['token']!.reveal((bytes) => use(bytes)); // the tree's own bytes, no copy
+secret.close();                                        // overwritten, then freed
+other.wipe();                                          // any Value: overwritten, freed, left null
+```
+
+- `Ref.reveal<R>(R Function(Uint8List bytes) use)`: an unmodifiable view
+  over a string's, number's or bytes' own memory (native, or the module's
+  on the web), valid during `use` only; `StateError` for any other node.
+- `Ref.isSensitive`; `toString` of a `Value` holding anything in the
+  wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites
+  every byte a tree holds, in any allocator, and frees it.
+- **A slot marked sensitive** (`@sensitive` in `describe.dart`;
+  `"sensitive": true` in a description; not part of the floor hash): the
+  generated remote names the wiping allocator and answers a `Value` kept
+  there, a text answer included (the interface's type is `Object`: a
+  provider returns a `String` or a `Value` holding one), never a
+  `String`. `KindSlot.sensitive` says it. A Dart provider's answer is
+  built there.
+- **What cannot be wiped**: a Dart `String` (`toDart()`, `utf8.decode`
+  make one), which the collector keeps and may have copied, and a
+  provider's own `String`.
+
 ## Reading memory you do not own
 
 `Ref.borrowed(Pointer<guatiao_value>)` is a read-only view of a tree

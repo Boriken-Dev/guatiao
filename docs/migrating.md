@@ -181,6 +181,34 @@ let is_map = match value.tag()? {
 };
 ```
 
+### `Secret<T>` wipes on drop, and needs `T: Wipe`
+
+*Not released yet: under `[Unreleased]`.* `Secret<T>` overwrites what it
+holds when dropped, so it requires `T: Wipe` and is no longer `Copy`;
+`into_inner` requires `T: Default`. `Wipe` is implemented for `String`,
+`Vec<u8>`, `Box<str>`, `Box<[u8]>`, the scalars, `Option<T>`, `Box<T>`
+and guatiao's `Value`, `Text`, `Buffer`, `List` and `Map`.
+
+```rust
+use guatiao::{Secret, Wipe};
+
+// A type of your own held as a secret says how it is overwritten.
+struct Pin([u8; 6]);
+
+impl Wipe for Pin {
+    fn wipe(&mut self) {
+        for b in &mut self.0 {
+            b.wipe();
+        }
+    }
+}
+
+let pin = Secret::new(Pin(*b"123456"));
+// A copy where `Secret<T>` was `Copy`.
+let token = Secret::new(String::from("t0ken"));
+let again = token.clone();
+```
+
 ## Schema and derives
 
 ### A typed field is checked as its type

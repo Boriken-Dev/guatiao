@@ -162,6 +162,12 @@ end
 
 Every value of the shared wire vectors comes back as it went.
 
+## Secrets
+
+A secret built in the wiping allocator is overwritten when guatiao frees
+it. A Lua string read out of it cannot be wiped: Lua interns short
+strings and keeps every string until it collects it.
+
 ## What Lua cannot do
 
 - **Build provider instances from a configuration.** A provider is one

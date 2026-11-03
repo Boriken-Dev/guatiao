@@ -527,6 +527,36 @@ whatever the schema does not describe, an undeclared key say, is hidden
 too. Local `$ref`s are followed. `WrongKind` for a schema that is not a
 map.
 
+**Where a secret lives.** `wiping_alloc()` is the library's wiping
+allocator: every block freed through it is overwritten with zeros first,
+the one a growing string or list leaves included.
+
+```python
+secret = Value({"token": "t0ken"}, alloc=wiping_alloc())
+secret.is_sensitive                      # True: some part lives there
+repr(secret)                             # '<guatiao.Value [sensitive]>'
+with secret.as_map()["token"].reveal() as view:   # read-only memoryview, no copy
+    ...
+secret.close()                           # overwritten, then freed
+other.wipe()                             # any Value: overwritten, freed, left null
+```
+
+- `Ref.reveal()`: a context manager answering a read-only `memoryview`
+  over a string's, number's or bytes' own memory, released when the block
+  ends; `TypeError` for any other node.
+- `Ref.is_sensitive`; `repr` of a `Value` or `Ref` holding anything in
+  the wiping allocator is `[sensitive]`. `Value.wipe()` overwrites every
+  byte a tree holds, in any allocator, and frees it.
+- **A slot marked `@sensitive`** (`kinds.sensitive`; `"sensitive": true`
+  in a description; not part of the floor hash): a caller's carrier names
+  the wiping allocator and the answer is a `Value` kept there, a text
+  answer included (annotated `kinds.SensitiveText`, a `str` or a `Value`
+  on the provider's side), never a `str`. A Python provider's answer is
+  built there.
+- **What cannot be wiped**: a `str` or `bytes` (`to_python()`,
+  `bytes(view)`, `str(...)` make one), which Python keeps until it
+  collects it, and a provider's own `str`.
+
 ## ffi: for a package over another guatiao library
 
 `guatiao.ffi` is what `guatiao-serde` and `guatiao-intake` build on, and

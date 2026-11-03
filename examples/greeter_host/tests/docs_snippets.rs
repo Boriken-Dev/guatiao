@@ -376,12 +376,35 @@ fn migrating_values() -> Result<(), Box<dyn core::error::Error>> {
         ("try again later", 14, true)
     );
 
+    // MIG-SECRET-BEGIN
+    use guatiao::{Secret, Wipe};
+
+    // A type of your own held as a secret says how it is overwritten.
+    struct Pin([u8; 6]);
+
+    impl Wipe for Pin {
+        fn wipe(&mut self) {
+            for b in &mut self.0 {
+                b.wipe();
+            }
+        }
+    }
+
+    let pin = Secret::new(Pin(*b"123456"));
+    // A copy where `Secret<T>` was `Copy`.
+    let token = Secret::new(String::from("t0ken"));
+    let again = token.clone();
+    // MIG-SECRET-END
+    assert_eq!(pin.expose().0, *b"123456");
+    assert_eq!(again.expose(), "t0ken");
+
     for (n, name) in [
         "MIG-TO-VALUE",
         "MIG-SET",
         "MIG-ITER-MUT",
         "MIG-CLONE",
         "MIG-STATUS",
+        "MIG-SECRET",
     ]
     .into_iter()
     .enumerate()
@@ -490,7 +513,7 @@ fn migrating_schema_and_derives() -> Result<(), Box<dyn core::error::Error>> {
         .into_iter()
         .enumerate()
     {
-        assert_eq!(rust_block(MIGRATING, 5 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 6 + n), marked(name), "{name}");
     }
     Ok(())
 }
@@ -669,7 +692,7 @@ fn migrating_kinds_and_providers() -> Result<(), Box<dyn core::error::Error>> {
     .into_iter()
     .enumerate()
     {
-        assert_eq!(rust_block(MIGRATING, 9 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 10 + n), marked(name), "{name}");
     }
     Ok(())
 }
@@ -822,7 +845,7 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
     .into_iter()
     .enumerate()
     {
-        assert_eq!(rust_block(MIGRATING, 15 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 16 + n), marked(name), "{name}");
     }
     Ok(())
 }
@@ -863,7 +886,7 @@ fn migrating_serde_and_intake() -> Result<(), Box<dyn core::error::Error>> {
     // MIG-SPLIT-END
 
     for (n, name) in ["MIG-SYNTAX", "MIG-SPLIT"].into_iter().enumerate() {
-        assert_eq!(rust_block(MIGRATING, 24 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 25 + n), marked(name), "{name}");
     }
     Ok(())
 }

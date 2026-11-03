@@ -361,6 +361,15 @@ binding's tests have it call every slot of a TypeScript greeter.
 Serving Node modules to a host that is not a Node process (a bridge, as
 guatiao-source-py is for Python) is not offered.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A JavaScript `string` read out of it
+cannot be wiped: it is immutable and the engine keeps it until it
+collects it. A `Uint8Array` over a buffer you own can be zeroed; prefer
+bytes to text for a secret, and `guatiao_value_wipe` for a tree you hold
+in another allocator.
+
 ## Threads
 
 Everything runs on Node's main thread. A library may call a provider or

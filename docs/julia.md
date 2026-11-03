@@ -176,6 +176,14 @@ a version is given. `Guatiao.register_library(reg, JlGreeter)` registers
 it, and any host in this process, Rust, C, Python, Go or Julia, calls its
 providers through the same tables it calls any library's through.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A Julia `String` read out of it cannot
+be wiped: it is immutable. A `Vector{UInt8}`, or `unsafe_wrap` over the
+tree's own bytes, can be zeroed; `guatiao_value_wipe` overwrites a tree
+you hold in another allocator.
+
 ## Threads
 
 A slot a Julia provider or object serves runs on the thread that calls

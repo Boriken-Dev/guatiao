@@ -410,9 +410,45 @@ What honours the marks:
 - **A form.** The form a schema implies shows a marked text field with
   the `password` widget, masked while it is typed.
 
-What a mark does not do: encrypt the value, compare it in constant time,
-or wipe it from memory. It says who may see it, and the code that shows,
-logs or returns values honours it.
+What a mark does not do: encrypt the value or compare it in constant
+time. It says who may see it, and the code that shows, logs or returns
+values honours it.
+
+### Where a secret lives: the wiping allocator
+
+Wiping is a matter of where a value lives, not of its encoding: the wire
+bytes of a secret are its value's bytes, and nothing on the wire says
+it is one. Every guatiao container records the allocator that made it
+and frees every block through that allocator's `free`, which receives
+the block's exact size: when a tree is freed, when a growing string,
+bytes, list or map leaves its old block behind, and when a tree moves
+into another allocator. The **wiping allocator** (C
+`guatiao_alloc_wiping`, Rust `Alloc::wiping()`) overwrites each block
+with zeros, with stores the compiler keeps, before releasing it. So a
+secret built there from its first byte leaves nothing readable behind
+in memory guatiao manages.
+
+- **Build it there.** A buffer keeps the allocator that made it: a node
+  built elsewhere and stored into a tree that lives in the wiping
+  allocator keeps its own. Moving a tree into the wiping allocator
+  (`guatiao_value_make_local`, Rust `into_alloc`/`make_local_in`)
+  overwrites the blocks it leaves behind; a copy of a tree that lives
+  there (`clone()`) is made there too.
+- **What shows a value hides one that lives there.** `guatiao_value_is_sensitive`
+  says whether any part of a tree does; Rust's `Dump`, Python's `repr`
+  and Dart's `toString` print `[sensitive]` in its place.
+- **Wiping on demand.** `guatiao_value_wipe` overwrites every byte a tree
+  holds, in whatever allocator, and frees it, leaving null.
+- **Your own allocator can wipe too**: a `free` that overwrites the
+  `size` bytes it is given before releasing them covers everything
+  guatiao frees through it.
+- **What no allocator reaches.** A copy taken out of the tree into a
+  language's own string is that language's: an immutable string in
+  Python, JavaScript, Dart, Go, Julia, R, MATLAB or Lua cannot be wiped
+  at all. Read a secret through a view of the tree's own bytes (Python
+  `Ref.reveal()`, Dart `Ref.reveal`) instead, and see each language's
+  page for what it can and cannot wipe. What a provider keeps of its own
+  is the provider's.
 
 ## Values on the wire
 
@@ -536,7 +572,13 @@ a file beside the header (`include/<crate>.kinds.json`):
   leave null; the two come in any order, and the floor hash covers every
   slot, required or not), `fallible` (it ends in `guatiao_provider_error
   *err`), `args` (after `ctx`, in order), `answer` (written through a
-  pointer before `err`; absent when there is none), and an optional `doc`.
+  pointer before `err`; absent when there is none), an optional
+  `sensitive` (`true`: the answer is a secret, so a caller names the
+  wiping allocator in its carrier and keeps the answer there, a text
+  answer as a value rather than a language string; absent is `false`),
+  and an optional `doc`. **`sensitive` is not part of the floor hash**: it
+  changes which allocator a caller names, not the table, so a kind keeps
+  its hash whether or not a slot is marked.
 - **An argument** is `name`, `type`, and for a tree or an object
   `pass`. An **answer** is `type`, and `kind` for an object.
 

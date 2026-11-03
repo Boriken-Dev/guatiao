@@ -152,6 +152,14 @@ notices, and its providers from the classes in its namespace that carry a
 host in this session, Rust, C, Python, Go, Julia, R or M, calls its
 providers through the same tables it calls any library's through.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A `char` array read out of it cannot
+be reliably wiped from M code: arrays are copied on write, so earlier
+copies stay. `guatiao_value_wipe` overwrites a tree you hold in another
+allocator.
+
 ## Threads
 
 M code runs only on the interpreter's thread. A slot an M provider or
