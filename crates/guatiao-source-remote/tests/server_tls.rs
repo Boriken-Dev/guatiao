@@ -467,7 +467,7 @@ fn a_peer_manifest_s_token_file_holds_the_token_the_server_program_requires() {
     // As an editor that marks UTF-8 and ends lines in CRLF writes it.
     std::fs::write(lab.join("lab.token"), "\u{feff}s3cret\r\n").unwrap();
     std::fs::write(
-        lab.join("lab.guatiao.cfg"),
+        lab.join("lab.guatiao"),
         manifest("lab", "token_file = \"lab.token\"\n"),
     )
     .unwrap();
@@ -493,11 +493,11 @@ fn a_peer_manifest_s_token_file_holds_the_token_the_server_program_requires() {
     // a manifest's own replaces the source's `token`.
     let others = dir.join("others");
     std::fs::create_dir_all(&others).unwrap();
-    std::fs::write(others.join("plain.guatiao.cfg"), manifest("plain", "")).unwrap();
+    std::fs::write(others.join("plain.guatiao"), manifest("plain", "")).unwrap();
     let own = dir.join("own");
     std::fs::create_dir_all(&own).unwrap();
     std::fs::write(
-        own.join("own.guatiao.cfg"),
+        own.join("own.guatiao"),
         manifest("own", "token_file = \"../lab/lab.token\"\n"),
     )
     .unwrap();

@@ -64,7 +64,7 @@ let hello = #{
 #{ providers: #{ hello: hello } }      // served as `greeters_hello`
 ```
 
-its manifest beside it, `greeters.guatiao.cfg`:
+its manifest beside it, `greeters.guatiao`:
 
 ```toml
 type = "rhai"
@@ -123,7 +123,7 @@ holds a greeter serving every slot of the example kinds.
 | --- | --- |
 | `guatiao_source` | the entry point a host's `add_source_file` calls; declares `source=rhai` |
 | configuration | `{"dirs": [..], "manifests": [..], "kinds": [..], "limits": {..}}` |
-| `*.guatiao.cfg` | one Rhai library: `type = "rhai"`, `module`, `kinds`, `paths`, optional `version` |
+| `*.guatiao` | one Rhai library: `type = "rhai"`, `module`, `kinds`, `paths`, optional `version` |
 | `guatiao::` | in a script: `refuse`, `number`, `ABSENT`, `STATUS`, `VERSION` |
 | `RhaiEngine`, `RhaiValues` | the Rust side: the engine, and the value conversion |
 

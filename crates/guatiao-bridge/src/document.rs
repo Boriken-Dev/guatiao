@@ -2,29 +2,49 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Configuration files, read through `anycfg` into a guatiao value.
+//! A manifest's text, read through `anycfg` into a guatiao value.
 //!
-//! `.toml`, `.json`, `.yaml` and `.yml` choose their format by extension. A
-//! `.cfg` file names its format on its first line (`#!toml`, `#!json`,
-//! `#!yaml`, the line's last word), which is removed before parsing, and is
-//! TOML when it has no such line. Any other extension is refused with the
-//! list of the accepted ones. A failure names the file and, when the parser
-//! knows it, the position; it never quotes the document.
+//! The file's name never chooses the format: a first line `#!toml`, `#!json`
+//! or `#!yaml` does, and is removed before parsing, and a document without
+//! one is TOML. JSON and YAML are read only when the bridge is built with
+//! its `json` and `yaml` features; a document that names a format not built
+//! in is refused, saying so. A failure carries the position the parser gave
+//! and never quotes the document.
 
-use std::path::Path;
 use std::sync::OnceLock;
 
 use anycfg::{Callbacks, CodecError, Formats, Options};
 use guatiao::{Alloc, Value};
 use guatiao_serde::{Presentation, text};
 
+/// What a codec may pass on: the parser's words and the position it gave,
+/// without the format name or a position of its own (anycfg adds the
+/// position, counted from the document's first line).
 fn failure(error: text::Error) -> CodecError {
-    let at = error.position().map_or_else(CodecError::new, |position| {
-        CodecError::new()
-            .line(position.line)
-            .column(position.column)
-    });
-    at.message(error.to_string())
+    match error {
+        text::Error::Syntax {
+            position, detail, ..
+        } => {
+            let at = match position {
+                Some(p) if p.line > 0 => {
+                    let at = CodecError::new().line(p.line);
+                    // Anycfg counts columns from 1; a parser reporting the end of
+                    // its input as column 0 says no column.
+                    if p.column > 0 {
+                        at.column(p.column)
+                    } else {
+                        at
+                    }
+                }
+                _ => CodecError::new(),
+            };
+            at.message(detail)
+        }
+        text::Error::Format { detail, .. } | text::Error::Unsupported { detail, .. } => {
+            CodecError::new().message(detail)
+        }
+        other => CodecError::new().message(other.to_string()),
+    }
 }
 
 fn utf8(bytes: &[u8]) -> Result<&str, CodecError> {
@@ -35,6 +55,15 @@ fn utf8(bytes: &[u8]) -> Result<&str, CodecError> {
 
 fn read_only(_: &Value) -> Result<Vec<u8>, CodecError> {
     Err(CodecError::new().message("documents are only read here"))
+}
+
+#[cfg(not(all(feature = "json", feature = "yaml")))]
+fn not_built_in(feature: &'static str) -> impl Fn(&[u8]) -> Result<Value, CodecError> {
+    move |_| {
+        Err(CodecError::new().message(format!(
+            "this format is not built in (guatiao-bridge's `{feature}` feature)"
+        )))
+    }
 }
 
 fn build() -> Result<Formats<Value>, anycfg::Error> {
@@ -50,48 +79,37 @@ fn build() -> Result<Formats<Value>, anycfg::Error> {
             read_only,
         ),
     )?;
-    formats.register(
-        text::json::NAME,
-        ["json"],
-        Callbacks::new(
-            |bytes: &[u8]| {
-                text::json::from_str(utf8(bytes)?, Alloc::rust(), Presentation::new())
-                    .map_err(failure)
-            },
-            read_only,
-        ),
-    )?;
-    formats.register(
-        text::yaml::NAME,
-        ["yaml", "yml"],
-        Callbacks::new(
-            |bytes: &[u8]| {
-                text::yaml::from_str(utf8(bytes)?, Alloc::rust(), Presentation::new())
-                    .map_err(failure)
-            },
-            read_only,
-        ),
-    )?;
-    formats.register_auto(["cfg"], text::toml::NAME)?;
+    #[cfg(feature = "json")]
+    let json = Callbacks::new(
+        |bytes: &[u8]| {
+            text::json::from_str(utf8(bytes)?, Alloc::rust(), Presentation::new()).map_err(failure)
+        },
+        read_only,
+    );
+    #[cfg(not(feature = "json"))]
+    let json = Callbacks::new(not_built_in("json"), read_only);
+    formats.register("json", ["json"], json)?;
+    #[cfg(feature = "yaml")]
+    let yaml = Callbacks::new(
+        |bytes: &[u8]| {
+            text::yaml::from_str(utf8(bytes)?, Alloc::rust(), Presentation::new()).map_err(failure)
+        },
+        read_only,
+    );
+    #[cfg(not(feature = "yaml"))]
+    let yaml = Callbacks::new(not_built_in("yaml"), read_only);
+    formats.register("yaml", ["yaml", "yml"], yaml)?;
+    formats.set_default(text::toml::NAME)?;
     Ok(formats)
 }
 
-/// The three formats over one value, `.cfg` choosing by its first line and
-/// then TOML.
-pub fn formats() -> &'static Formats<Value> {
+fn formats() -> &'static Formats<Value> {
     static FORMATS: OnceLock<Formats<Value>> = OnceLock::new();
-    FORMATS.get_or_init(|| build().expect("the three formats register"))
+    FORMATS.get_or_init(|| build().expect("the formats register"))
 }
 
-/// The document `bytes` of a file named `name`, as a value: only the
-/// extension of `name` is used.
-pub fn parse(name: &str, bytes: &[u8]) -> Result<Value, anycfg::Error> {
-    formats().from_slice(bytes, Options::new().name(name))
-}
-
-/// The document in the file at `path`, as a value. The error names the file.
-pub fn read(path: &Path) -> Result<Value, String> {
-    formats()
-        .load(path, Options::new())
-        .map_err(|e| format!("{}: {e}", path.display()))
+/// A manifest's bytes as a value, in the format their first line names,
+/// else TOML.
+pub(crate) fn parse(bytes: &[u8]) -> Result<Value, anycfg::Error> {
+    formats().from_slice(bytes, Options::new())
 }

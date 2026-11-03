@@ -1106,7 +1106,7 @@ fn a_peer_manifest_names_a_peer_over_quic() {
         .accept_key(&coqui_peer_tls::certificate_key(client.certificate_der()).unwrap())
         .unwrap();
     std::fs::write(
-        peers.join("lab.guatiao.cfg"),
+        peers.join("lab.guatiao"),
         format!(
             "type = \"remote\"\nname = \"lab\"\nconnect = \"quic://{address}\"\nsecurity = \"mutual-tls\"\n\
              identity_file = \"lab.identity.pem\"\npins = [\"{}\"]\n",

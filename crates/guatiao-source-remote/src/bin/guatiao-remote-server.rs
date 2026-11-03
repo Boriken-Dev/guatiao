@@ -216,11 +216,102 @@ fn parse() -> Result<Args, String> {
     Ok(a)
 }
 
-/// A configuration file as a value, through anycfg: `.toml`, `.json`,
-/// `.yaml` and `.yml` by extension, `.cfg` by a `#!` first line, else TOML.
+/// Configuration files, read through anycfg into a value: `.toml`, `.json`,
+/// `.yaml` and `.yml` by extension, and `.cfg` by a `#!toml|json|yaml` first
+/// line (removed), else TOML. Any other extension is refused.
+#[cfg(feature = "tcp")]
+mod documents {
+    use std::sync::OnceLock;
+
+    use anycfg::{Callbacks, CodecError, Formats, Options};
+    use guatiao::{Alloc, Value};
+    use guatiao_serde::{Presentation, text};
+
+    /// The parser's words and position, without the format name or a
+    /// position of its own (anycfg adds the position), and never an excerpt.
+    fn failure(error: text::Error) -> CodecError {
+        match error {
+            text::Error::Syntax {
+                position, detail, ..
+            } => match position {
+                Some(p) if p.line > 0 => {
+                    let at = CodecError::new().line(p.line);
+                    // Columns count from 1; the end of the input is not column 0.
+                    (if p.column > 0 {
+                        at.column(p.column)
+                    } else {
+                        at
+                    })
+                    .message(detail)
+                }
+                _ => CodecError::new().message(detail),
+            },
+            text::Error::Format { detail, .. } | text::Error::Unsupported { detail, .. } => {
+                CodecError::new().message(detail)
+            }
+            other => CodecError::new().message(other.to_string()),
+        }
+    }
+
+    fn utf8(bytes: &[u8]) -> Result<&str, CodecError> {
+        core::str::from_utf8(bytes)
+            .map_err(|e| CodecError::at_offset(bytes, e.valid_up_to()).message("not valid UTF-8"))
+    }
+
+    fn read_only(_: &Value) -> Result<Vec<u8>, CodecError> {
+        Err(CodecError::new().message("documents are only read here"))
+    }
+
+    fn build() -> Result<Formats<Value>, anycfg::Error> {
+        let how = Presentation::new;
+        let mut formats = Formats::new();
+        formats.register(
+            "toml",
+            ["toml"],
+            Callbacks::new(
+                move |b: &[u8]| {
+                    text::toml::from_str(utf8(b)?, Alloc::rust(), how()).map_err(failure)
+                },
+                read_only,
+            ),
+        )?;
+        formats.register(
+            "json",
+            ["json"],
+            Callbacks::new(
+                move |b: &[u8]| {
+                    text::json::from_str(utf8(b)?, Alloc::rust(), how()).map_err(failure)
+                },
+                read_only,
+            ),
+        )?;
+        formats.register(
+            "yaml",
+            ["yaml", "yml"],
+            Callbacks::new(
+                move |b: &[u8]| {
+                    text::yaml::from_str(utf8(b)?, Alloc::rust(), how()).map_err(failure)
+                },
+                read_only,
+            ),
+        )?;
+        formats.register_auto(["cfg"], "toml")?;
+        Ok(formats)
+    }
+
+    /// The file at `path` as a value; the error names the file.
+    pub(super) fn read(path: &std::path::Path) -> Result<Value, String> {
+        static FORMATS: OnceLock<Formats<Value>> = OnceLock::new();
+        FORMATS
+            .get_or_init(|| build().expect("the formats register"))
+            .load(path, Options::new())
+            .map_err(|e| e.to_string())
+    }
+}
+
 #[cfg(feature = "tcp")]
 fn document(path: &std::path::Path) -> Result<Value, String> {
-    guatiao_bridge::document::read(path)
+    documents::read(path)
 }
 
 #[cfg(all(test, feature = "tcp"))]
@@ -261,13 +352,21 @@ mod document_tests {
         }
         let other = write(&dir, "h.conf", "port = 7\n");
         let why = document(&other).unwrap_err();
-        assert!(why.contains("h.conf"), "{why}");
+        assert_eq!(why.matches("h.conf").count(), 1, "{why}");
         let broken = write(&dir, "i.json", "{\"secret-value\" 7}");
         let why = document(&broken).unwrap_err();
-        assert!(
-            why.contains("i.json") && !why.contains("secret-value"),
-            "{why}"
-        );
+        assert_eq!(why.matches("i.json").count(), 1, "the file once: {why}");
+        assert!(!why.contains("secret-value"), "{why}");
+        assert_eq!(why.matches("line 1").count(), 1, "the position once: {why}");
+        // After a format line the position counts it, once.
+        let after = write(&dir, "j.cfg", "#!json\n{\n\"secret-value\" 7}");
+        let why = document(&after).unwrap_err();
+        assert!(why.contains("line 3"), "{why}");
+        assert!(!why.contains("line 2"), "{why}");
+        assert!(!why.contains("secret-value"), "{why}");
+        let missing = dir.join("absent.toml");
+        let why = document(&missing).unwrap_err();
+        assert_eq!(why.matches("absent.toml").count(), 1, "{why}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

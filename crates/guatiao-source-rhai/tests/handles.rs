@@ -149,7 +149,7 @@ fn registry(dir: &Path) -> Registry {
     .expect("written");
     std::fs::write(dir.join("rhai_relay.rhai"), RELAY).expect("written");
     std::fs::write(
-        dir.join("rhai_relay.guatiao.cfg"),
+        dir.join("rhai_relay.guatiao"),
         "type = \"rhai\"\nmodule = \"rhai_relay\"\nkinds = [\"relay\"]\n",
     )
     .expect("written");

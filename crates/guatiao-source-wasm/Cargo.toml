@@ -29,7 +29,7 @@ path = "src/lib.rs"
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 # Manifests, stamps, refresh, the source table, kinds served from their
 # descriptions and the limits: wasmtime is its engine.
-guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1", features = ["json", "yaml"] }
 # A guest has no FFI: its providers' tables, and its calls into the
 # host's objects, are libffi closures and calls.
 guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
