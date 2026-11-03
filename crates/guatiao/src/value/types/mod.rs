@@ -139,8 +139,9 @@ macro_rules! where_it_lives {
             /// This, owned in this binary's allocator: unchanged, and
             /// allocating nothing, when it [`is_local`](Self::is_local);
             /// otherwise copied into [`Alloc::rust`] and the original
-            /// freed through the allocators it recorded. Where `clone`
-            /// would copy a tree you already own, this moves it.
+            /// overwritten with zeros and freed through the allocators it
+            /// recorded. Where `clone` would copy a tree you already own,
+            /// this moves it.
             ///
             /// # Panics
             ///
@@ -153,14 +154,17 @@ macro_rules! where_it_lives {
                     return self;
                 }
                 let layout = $layout(&self);
-                $crate::value::types::cloned(self.clone_in(Alloc::rust()), layout)
+                let copy = self.clone_in(Alloc::rust());
+                let mut original = self;
+                $crate::value::wipe::Wipe::wipe(&mut original);
+                $crate::value::types::cloned(copy, layout)
             }
 
             /// This, owned in `alloc`: unchanged when everything it owns
             /// already records `alloc`, otherwise copied there and the
-            /// original freed through the allocators it recorded. Into
-            /// [`Alloc::wiping`], the original is overwritten first, so
-            /// the move leaves nothing readable behind.
+            /// original overwritten with zeros and freed through the
+            /// allocators it recorded, so the move leaves nothing readable
+            /// behind, whatever `alloc` is.
             ///
             /// # Errors
             ///
@@ -171,17 +175,16 @@ macro_rules! where_it_lives {
                     return Ok(self);
                 }
                 let copy = self.clone_in(alloc);
-                if alloc.is_wiping() {
-                    let mut original = self;
-                    $crate::value::wipe::Wipe::wipe(&mut original);
-                }
+                let mut original = self;
+                $crate::value::wipe::Wipe::wipe(&mut original);
                 copy
             }
 
             /// Moves this tree into `alloc` where it stands: every block
             /// another allocator made, a container's array or a key's or
             /// a leaf's bytes, is moved into one from `alloc` and the old
-            /// one freed through the allocator that made it. Nothing is
+            /// one overwritten with zeros and freed through the allocator
+            /// that made it, whatever `alloc` is. Nothing is
             /// copied twice and nothing is read as content, so a tree a
             /// foreign producer wrote moves as it is. Allocates nothing
             /// when everything already records `alloc`.
