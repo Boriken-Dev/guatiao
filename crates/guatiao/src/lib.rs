@@ -341,8 +341,10 @@ pub use guatiao_derive::Provider;
 /// }
 /// ```
 ///
-/// A `#[sensitive]` slot answers a value its caller can wipe: never a bare
-/// `String`, which the caller would hold beyond any wipe.
+/// A `#[sensitive]` slot answers a value its caller can wipe: a
+/// `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a number, a `bool` or
+/// nothing, or a `Result` of one. Any other type, a bare `String` or an
+/// `Option<String>` among them, the caller would hold beyond any wipe.
 ///
 /// ```compile_fail
 /// #[guatiao::kind]
@@ -352,9 +354,19 @@ pub use guatiao_derive::Provider;
 /// }
 /// ```
 ///
+/// ```compile_fail
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Leakier: Send + Sync {
+///     #[sensitive]
+///     fn pin(&self) -> Result<Option<String>, ProviderError>;
+/// }
+/// ```
+///
 /// ```
 /// use guatiao::library::ProviderError;
-/// use guatiao::{Secret, Value};
+/// use guatiao::{Secret, Text, Value};
 ///
 /// #[guatiao::kind]
 /// pub trait Kept: Send + Sync {
@@ -362,6 +374,8 @@ pub use guatiao_derive::Provider;
 ///     fn pin(&self) -> Result<Secret<String>, ProviderError>;
 ///     #[sensitive]
 ///     fn read(&self) -> Result<Value, ProviderError>;
+///     #[sensitive]
+///     fn text(&self) -> Result<Text, ProviderError>;
 /// }
 /// ```
 #[cfg(feature = "provider")]

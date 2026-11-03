@@ -45,21 +45,33 @@ impl<'a> Roots<'a> {
     /// `guatiao` or `::guatiao`, or under the `crate =` root. `None` for
     /// anything else, a path ending in one of those names included.
     pub(crate) fn guatiao(&self, path: &Path) -> Option<&'static str> {
-        let (prefix, name) = split(path)?;
+        let (_, name) = split(path)?;
         let name = *GUATIAO_NAMES.iter().find(|n| **n == name)?;
+        self.names_guatiao(path, name).then_some(name)
+    }
+
+    /// Whether `path` spells guatiao's type `name` the way [`Roots::guatiao`]
+    /// reads one: for a type, such as `Secret`, that a signature may spell
+    /// but the glue does not otherwise treat specially, so it stays out of
+    /// the canonical spelling the hash reads.
+    pub(crate) fn names_guatiao(&self, path: &Path, name: &str) -> bool {
+        let Some((prefix, last)) = split(path) else {
+            return false;
+        };
+        if last != name {
+            return false;
+        }
         if prefix.is_empty() && path.leading_colon.is_none() {
-            return Some(name);
+            return true;
         }
         if prefix.first().is_some_and(|s| s == "guatiao") {
-            return Some(name);
+            return true;
         }
-        let root: Vec<String> = self
-            .krate?
-            .segments
-            .iter()
-            .map(|s| s.ident.to_string())
-            .collect();
-        prefix.starts_with(&root).then_some(name)
+        let Some(krate) = self.krate else {
+            return false;
+        };
+        let root: Vec<String> = krate.segments.iter().map(|s| s.ident.to_string()).collect();
+        prefix.starts_with(&root)
     }
 
     /// The name of the standard type `path` spells: bare, or under
