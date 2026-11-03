@@ -646,6 +646,7 @@ mod verified {
     /// The policy's list with its fingerprints in canonical form, checked
     /// once: a rule naming something that is not a SHA-256 fingerprint is
     /// refused here, as a listener is made. `None` where there is no list.
+    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
     pub(crate) fn canonical_list(config: &TlsConfig) -> io::Result<Option<Arc<Acl>>> {
         let Some(acl) = &config.tls_policy().acl else {
             return Ok(None);
