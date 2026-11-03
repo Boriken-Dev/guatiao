@@ -202,6 +202,7 @@ pub struct SlotDescription {
     fallible: bool,
     args: Vec<ArgDescription>,
     answer: Option<AnswerType>,
+    sensitive: bool,
     doc: Option<String>,
 }
 
@@ -229,6 +230,13 @@ impl SlotDescription {
     /// What it answers through `out`, or `None` for nothing.
     pub fn answer(&self) -> Option<&AnswerType> {
         self.answer.as_ref()
+    }
+
+    /// Whether its kind marks it `sensitive`: a caller names the wiping
+    /// allocator for its answer. Not part of the floor hash: it changes
+    /// which allocator is named, not the table.
+    pub fn sensitive(&self) -> bool {
+        self.sensitive
     }
 
     /// Its documentation, or `None`.
@@ -454,6 +462,7 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
         fallible,
         args,
         answer,
+        sensitive: flag(map, at, "sensitive", Some(false))?,
         doc: doc(map, at)?,
     })
 }
@@ -698,6 +707,9 @@ fn slot_value(slot: &SlotDescription, alloc: Alloc) -> Result<Value, ValueError>
     map.set_in("args", args, alloc)?;
     if let Some(answer) = &slot.answer {
         map.set_in("answer", answer_value(answer, alloc)?, alloc)?;
+    }
+    if slot.sensitive {
+        put(&mut map, "sensitive", true, alloc)?;
     }
     if let Some(doc) = &slot.doc {
         put(&mut map, "doc", doc.as_str(), alloc)?;

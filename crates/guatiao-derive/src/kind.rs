@@ -316,6 +316,9 @@ struct MethodPlan {
     signature: String,
     /// The method's doc comment, for the kind's description.
     doc: Option<String>,
+    /// `#[sensitive]`: the proxy names the wiping allocator for the answer
+    /// and builds the arguments it converts there; not hashed.
+    sensitive: bool,
 }
 
 fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<Vec<MethodPlan>> {
@@ -529,6 +532,7 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     // section of the shipped `AGENTS.md` instead, and pinned by
     // `tests/kind_glue_probes.rs`.
 
+    let sensitive = sensitive_mark(&f.attrs)?;
     let signature = normalised_signature(sig, roots);
     Ok(MethodPlan {
         ident: sig.ident.clone(),
@@ -540,7 +544,39 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
         default: f.default.clone(),
         signature,
         doc: doc_text(&f.attrs),
+        sensitive,
     })
+}
+
+/// Whether a method carries `#[sensitive]`, which takes no arguments.
+fn sensitive_mark(attrs: &[syn::Attribute]) -> syn::Result<bool> {
+    let mut marked = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("sensitive")) {
+        if !matches!(attr.meta, syn::Meta::Path(_)) {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "`#[sensitive]` takes no arguments",
+            ));
+        }
+        if marked {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "`#[sensitive]` is given once",
+            ));
+        }
+        marked = true;
+    }
+    Ok(marked)
+}
+
+/// The allocator a proxy builds in for a slot: the wiping one for a
+/// `#[sensitive]` slot, this side's own otherwise.
+fn proxy_alloc(m: &MethodPlan) -> TokenStream {
+    if m.sensitive {
+        quote!(::guatiao::Alloc::wiping())
+    } else {
+        quote!(::guatiao::Alloc::rust())
+    }
 }
 
 /// The `dyn K` inside an `Object<dyn K>` path, `None` for any other
@@ -1252,6 +1288,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     // an implementation becomes a handle. `where Self: Sized` keeps it off
     // the trait object, so it is not a slot.
     let mut tr = tr.clone();
+    for item in &mut tr.items {
+        if let TraitItem::Fn(f) = item {
+            f.attrs.retain(|a| !a.path().is_ident("sensitive"));
+        }
+    }
     if object {
         let into_object: TraitItem = syn::parse_quote! {
             /// This implementation as a handle: boxed beside its table,
@@ -1617,6 +1658,9 @@ fn description_fn(
         }
         json.text("]");
         describe_answer(&mut json, &m.ret);
+        if m.sensitive {
+            json.text(",\"sensitive\":true");
+        }
         if let Some(doc) = &m.doc {
             json.text(",\"doc\":");
             json.string(doc);
@@ -1977,10 +2021,18 @@ fn emit_shim(
         RetKind::Value | RetKind::Map | RetKind::List | RetKind::Owned(_)
     )
     .then(|| {
+        let read = if m.sensitive {
+            quote!(::guatiao::library::kind::return_alloc_or(
+                __out,
+                ::guatiao::Alloc::wiping()
+            ))
+        } else {
+            quote!(::guatiao::library::kind::return_alloc(__out))
+        };
         quote! {
             // SAFETY: the proxy passes an initialised out slot, and the
             // allocator a carrier names outlives what is built through it.
-            let __alloc = unsafe { ::guatiao::library::kind::return_alloc(__out) };
+            let __alloc = unsafe { #read };
         }
     });
 
@@ -2078,6 +2130,10 @@ fn emit_shim(
         RetKind::Scalar(_) => quote! {
             // SAFETY: the proxy passes a writable out slot.
             unsafe { ::guatiao::library::kind::write_out(__out, #answer) }
+        },
+        RetKind::Text if m.sensitive => quote! {
+            // SAFETY: the proxy passes a writable out slot.
+            unsafe { ::guatiao::library::kind::write_out(__out, ::guatiao::library::kind::sensitive_text(&#answer)) }
         },
         RetKind::Text => quote! {
             // SAFETY: the proxy passes a writable out slot.
@@ -2279,8 +2335,9 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             },
             ArgKind::Owned(ty) => {
                 let f = fail(quote!(::guatiao::library::ProviderError::from(__e)));
+                let alloc = proxy_alloc(m);
                 quote! {
-                    let #name = match <#ty as ::guatiao::ToValue>::to_value_in(&#ident, ::guatiao::Alloc::rust()) {
+                    let #name = match <#ty as ::guatiao::ToValue>::to_value_in(&#ident, #alloc) {
                         ::core::result::Result::Ok(__v) => __v,
                         ::core::result::Result::Err(__e) => { #f }
                     };
@@ -2436,8 +2493,8 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     let alloc_init = if m.answers_tree() {
         Some(quote! { let __alloc = #alloc_param; })
     } else {
-        matches!(m.ret, RetKind::Owned(_))
-            .then(|| quote! { let __alloc = ::guatiao::Alloc::rust(); })
+        let alloc = proxy_alloc(m);
+        matches!(m.ret, RetKind::Owned(_)).then(|| quote! { let __alloc = #alloc; })
     };
     // A tree lent mutably is settled after the call, OK or not: whatever
     // the callee put into it is moved into the allocator it recorded, so
@@ -2538,6 +2595,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     // asking for this side's.
     let in_method = in_ident(method);
     let names = m.args.iter().map(|a| &a.ident);
+    let home = proxy_alloc(m);
     quote! {
         fn #in_method(#receiver #(, #params)*, #alloc_param: ::guatiao::Alloc) #ret_ty {
             #alloc_init
@@ -2545,7 +2603,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         }
 
         fn #method(#receiver #(, #params)*) #ret_ty {
-            self.#in_method(#(#names,)* ::guatiao::Alloc::rust())
+            self.#in_method(#(#names,)* #home)
         }
     }
 }
@@ -2603,6 +2661,35 @@ mod tests {
             fn count(&self, bytes: &[u8], flag: bool) -> i64 { bytes.len() as i64 }
         }
     "#;
+
+    /// `#[sensitive]` leaves the trait it marks, takes no arguments and is
+    /// given once; a slot it marks builds through the wiping allocator.
+    #[test]
+    fn a_sensitive_mark_is_taken_off_the_trait_and_read_once() {
+        let marked = r#"
+            pub trait Vault: Send + Sync {
+                #[sensitive]
+                fn read(&self, key: &str) -> Result<Value, ProviderError>;
+            }
+        "#;
+        let out = expand_str("", marked).expect("expands");
+        assert!(!out.contains("# [sensitive]"), "{out}");
+        assert!(out.contains("Alloc :: wiping ()"), "{out}");
+        assert!(out.contains(r#"\"sensitive\":true"#), "{out}");
+        for (item, why) in [
+            (
+                "pub trait V: Send + Sync { #[sensitive(yes)] fn read(&self) -> Result<Value, ProviderError>; }",
+                "takes no arguments",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] #[sensitive] fn read(&self) -> Result<Value, ProviderError>; }",
+                "is given once",
+            ),
+        ] {
+            let err = expand_str("", item).expect_err(item);
+            assert!(err.contains(why), "{item}: {err}");
+        }
+    }
 
     #[test]
     fn a_two_method_trait_expands_to_parseable_items() {

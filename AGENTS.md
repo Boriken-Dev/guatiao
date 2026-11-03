@@ -149,6 +149,7 @@ cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test container_r
   --test std_traits --test public_surface --test exports_boundary \
   --test schema_as_value --test kind_glue_probes --test schema_constraints \
   --test schema_annotations --test status_codes --test ownership \
+  --test wiping_alloc --test sensitive_slots \
   -- --skip a_tree_of_any_depth
 cargo +nightly-2026-09-21 miri test -p guatiao-intake --all-features \
   --test paths --test flat_projection

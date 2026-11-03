@@ -601,16 +601,39 @@ impl Carrier for Value {
 #[doc(hidden)]
 pub unsafe fn return_alloc<C: Carrier>(out: *const C) -> Alloc {
     // SAFETY: the caller's contract.
+    unsafe { return_alloc_or(out, Alloc::rust()) }
+}
+
+/// [`return_alloc`], with `fallback` where the caller named none: the
+/// wiping allocator, for a slot its kind marks sensitive.
+///
+/// # Safety
+///
+/// As [`return_alloc`].
+#[doc(hidden)]
+pub unsafe fn return_alloc_or<C: Carrier>(out: *const C, fallback: Alloc) -> Alloc {
+    // SAFETY: the caller's contract.
     let Some(out) = (unsafe { out.as_ref() }) else {
-        return Alloc::rust();
+        return fallback;
     };
     let raw = out.carried();
     if raw.is_null() {
-        return Alloc::rust();
+        return fallback;
     }
     // SAFETY: a carrier's allocator outlives what is built through it, by
     // the caller's contract; `from_raw` checks the rest.
-    unsafe { Alloc::from_raw(raw) }.unwrap_or_else(|_| Alloc::rust())
+    unsafe { Alloc::from_raw(raw) }.unwrap_or(fallback)
+}
+
+/// A sensitive slot's text answer, built in [`Alloc::wiping`]: the copy
+/// the caller frees is overwritten first. Aborts if the allocator
+/// refuses, as `Text::new` does.
+#[doc(hidden)]
+pub fn sensitive_text(text: &str) -> Text {
+    match Text::new_in(Alloc::wiping(), text) {
+        Ok(t) => t,
+        Err(_) => alloc::alloc::handle_alloc_error(crate::value::types::bytes_layout(text.len())),
+    }
 }
 
 /// A map a shim wrote through a `*mut Map`, its keys checked as

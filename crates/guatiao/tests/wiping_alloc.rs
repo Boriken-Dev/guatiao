@@ -275,6 +275,124 @@ fn nothing_that_prints_a_secret_shows_it() {
     );
 }
 
+/// A slot its kind marks `#[sensitive]`: what crosses it is built in, or
+/// moved into, the wiping allocator, so the call leaves nothing behind
+/// but what the provider kept of its own.
+#[cfg(feature = "provider")]
+mod slots {
+    use core::ffi::c_void;
+
+    use guatiao::library::{ProviderError, Remote};
+    use guatiao::{Secret, Text, Value};
+
+    use super::{SECRET, secret, seen};
+
+    #[guatiao::kind(name = "wiped_vault")]
+    pub trait Marked: Send + Sync {
+        #[sensitive]
+        fn read(&self) -> Result<Value, ProviderError>;
+        #[sensitive]
+        fn token(&self) -> Result<Secret<String>, ProviderError>;
+        #[sensitive]
+        fn store(&self, value: Secret<String>) -> Result<(), ProviderError>;
+    }
+
+    #[guatiao::kind(name = "plain_vault")]
+    pub trait Plain: Send + Sync {
+        fn read(&self) -> Result<Value, ProviderError>;
+        fn token(&self) -> Result<Secret<String>, ProviderError>;
+        fn store(&self, value: Secret<String>) -> Result<(), ProviderError>;
+    }
+
+    /// Builds its answers in Rust's allocator, ignoring the carrier: the
+    /// move into the caller's is what has to wipe.
+    struct Careless;
+
+    impl Marked for Careless {
+        fn read(&self) -> Result<Value, ProviderError> {
+            Ok(Text::new(secret()).into())
+        }
+        fn token(&self) -> Result<Secret<String>, ProviderError> {
+            Ok(Secret::new(String::from(secret())))
+        }
+        fn store(&self, value: Secret<String>) -> Result<(), ProviderError> {
+            assert_eq!(value.expose().as_bytes(), SECRET);
+            Ok(())
+        }
+    }
+
+    impl Plain for Careless {
+        fn read(&self) -> Result<Value, ProviderError> {
+            Ok(Text::new(secret()).into())
+        }
+        fn token(&self) -> Result<Secret<String>, ProviderError> {
+            Ok(Secret::new(String::from(secret())))
+        }
+        fn store(&self, value: Secret<String>) -> Result<(), ProviderError> {
+            assert_eq!(value.expose().as_bytes(), SECRET);
+            Ok(())
+        }
+    }
+
+    static CARELESS: Careless = Careless;
+    static MARKED: MarkedVtable = MarkedVtable::of::<Careless>();
+    static PLAIN: PlainVtable = PlainVtable::of::<Careless>();
+
+    fn marked() -> Remote<dyn Marked> {
+        // SAFETY: a table `of::<Careless>()` with the `&Careless` it was
+        // built for, both `'static`.
+        unsafe {
+            Remote::<dyn Marked>::from_raw(
+                &MARKED as *const MarkedVtable as *const c_void,
+                size_of::<MarkedVtable>(),
+                &CARELESS as *const Careless as *mut c_void,
+            )
+        }
+        .expect("a full table validates")
+    }
+
+    fn plain() -> Remote<dyn Plain> {
+        // SAFETY: as for `marked`.
+        unsafe {
+            Remote::<dyn Plain>::from_raw(
+                &PLAIN as *const PlainVtable as *const c_void,
+                size_of::<PlainVtable>(),
+                &CARELESS as *const Careless as *mut c_void,
+            )
+        }
+        .expect("a full table validates")
+    }
+
+    #[test]
+    fn a_sensitive_tree_answer_built_elsewhere_is_moved_and_wiped() {
+        let (m, p) = (marked(), plain());
+        assert!(seen(|| drop(p.read().unwrap())) >= 1, "the control");
+        assert_eq!(
+            seen(|| {
+                let v = m.read().unwrap();
+                assert!(v.alloc().unwrap().is_wiping());
+                drop(v);
+            }),
+            0
+        );
+    }
+
+    #[test]
+    fn a_sensitive_converted_answer_and_argument_leave_nothing() {
+        let (m, p) = (marked(), plain());
+        assert!(seen(|| drop(p.token().unwrap())) >= 1, "the control");
+        assert_eq!(seen(|| drop(m.token().unwrap())), 0);
+        assert!(
+            seen(|| p.store(Secret::new(String::from(secret()))).unwrap()) >= 1,
+            "the control"
+        );
+        assert_eq!(
+            seen(|| m.store(Secret::new(String::from(secret()))).unwrap()),
+            0
+        );
+    }
+}
+
 /// The wire encoding into the wiping allocator: the bytes on the way, a
 /// vector of the global allocator's, are wiped once copied out.
 #[test]

@@ -1787,8 +1787,14 @@ impl Caller {
             };
             cells[1 + k] = Cell::Ptr(at);
         }
-        // The answer's storage: a carrier in this side's allocator.
-        let mut out = Out::for_answer(s.answer())?;
+        // The answer's storage: a carrier in this side's allocator, the
+        // wiping one for a slot its kind marks sensitive.
+        let home = if s.sensitive() {
+            Alloc::wiping()
+        } else {
+            Alloc::rust()
+        };
+        let mut out = Out::for_answer(s.answer(), home)?;
         if let Some(at) = out.address() {
             cells.push(Cell::Ptr(at));
         }
@@ -1843,7 +1849,7 @@ impl Caller {
         }
         drop(err);
         settled?;
-        out.into_answer()
+        out.into_answer(home)
     }
 }
 
@@ -1871,7 +1877,7 @@ enum Out {
 }
 
 impl Out {
-    fn for_answer(ty: Option<&AnswerType>) -> Result<Out, ProviderError> {
+    fn for_answer(ty: Option<&AnswerType>, home: Alloc) -> Result<Out, ProviderError> {
         Ok(match ty {
             None => Out::Nothing,
             Some(AnswerType::Scalar(s)) => match s {
@@ -1891,9 +1897,9 @@ impl Out {
                 _ => return Err(ProviderError::from(Status::GUATIAO_ERR_UNSUPPORTED)),
             },
             Some(AnswerType::Text) => Out::Text(Text::new("")),
-            Some(AnswerType::Tree(Tree::Value)) => Out::Value(Value::carrier(Alloc::rust())),
-            Some(AnswerType::Tree(Tree::Map)) => Out::Map(Map::carrier(Alloc::rust())),
-            Some(AnswerType::Tree(Tree::List)) => Out::List(List::carrier(Alloc::rust())),
+            Some(AnswerType::Tree(Tree::Value)) => Out::Value(Value::carrier(home)),
+            Some(AnswerType::Tree(Tree::Map)) => Out::Map(Map::carrier(home)),
+            Some(AnswerType::Tree(Tree::List)) => Out::List(List::carrier(home)),
             Some(AnswerType::Object { .. }) => Out::Object(ObjectRaw::null()),
         })
     }
@@ -1931,7 +1937,7 @@ impl Out {
         core::mem::forget(self);
     }
 
-    fn into_answer(self) -> Result<Answer, ProviderError> {
+    fn into_answer(self, home: Alloc) -> Result<Answer, ProviderError> {
         Ok(match self {
             Out::Nothing => Answer::Nothing,
             Out::Bool(b) => Answer::Bool(b),
@@ -1948,9 +1954,9 @@ impl Out {
             Out::F32(f) => Answer::Float(f.into()),
             Out::F64(f) => Answer::Float(f),
             Out::Text(t) => Answer::Text(text_ret(t)?.to_string()),
-            Out::Value(v) => Answer::Value(value_ret(v, Alloc::rust())?),
-            Out::Map(m) => Answer::Map(map_ret(m, Alloc::rust())?),
-            Out::List(l) => Answer::List(list_ret(l, Alloc::rust())?),
+            Out::Value(v) => Answer::Value(value_ret(v, home)?),
+            Out::Map(m) => Answer::Map(map_ret(m, home)?),
+            Out::List(l) => Answer::List(list_ret(l, home)?),
             // SAFETY: the callee handed this object over through `out`.
             Out::Object(o) => Answer::Object(unsafe { RawObject::from_raw(o) }),
         })
