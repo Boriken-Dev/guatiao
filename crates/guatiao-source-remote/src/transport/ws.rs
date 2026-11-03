@@ -18,7 +18,9 @@
 //!
 //! A plain `ws://` beyond loopback carries nothing secret and is a
 //! weakening: [`WsListen::bind_beyond_loopback`] and
-//! [`WsConnect::beyond_loopback`] choose it, and a host reports it.
+//! [`WsConnect::beyond_loopback`] choose it, and a host reports it (a
+//! source made from a configuration lists it; one made from a connector
+//! has the connector, which says it).
 
 #![forbid(unsafe_code)]
 
@@ -33,7 +35,7 @@ use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
 use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
-use super::web::{Open, Refused, Shared, connection, io_error};
+use super::web::{Open, Refused, Shared, connection, io_error, names_local};
 use super::{Connect, Connection};
 
 /// How often a listener looks up from waiting for a connection to report
@@ -339,8 +341,12 @@ impl WsListen {
             .with_limits(limits())
             .with_admission(move |source| {
                 // A peer proving no identity: a rule naming a fingerprint
-                // never matches it.
-                let permitted = acl.decide_anonymous(source, bound).outcome == Outcome::Permit;
+                // never matches it. A rule naming the address or port a
+                // packet came to cannot be decided on a wildcard bind,
+                // where it is not known, and refuses the peer, as it does
+                // for the TLS listeners.
+                let permitted = !(bound.ip().is_unspecified() && names_local(&acl))
+                    && acl.decide_anonymous(source, bound).outcome == Outcome::Permit;
                 if !permitted {
                     turned.add(source);
                 }

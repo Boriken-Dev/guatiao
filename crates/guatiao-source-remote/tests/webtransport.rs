@@ -244,21 +244,54 @@ fn mutual_tls_completes_over_webtransport_and_names_both_ends() {
         Box::new(WtConnect::new(&url(&at), &stranger).unwrap()),
         LinkOptions::new(Trust::Secure),
     );
-    assert!(refused.link().is_err(), "not pinned");
+    // The listener refuses it in the TLS handshake, which coqui-web reports
+    // as a path lost, so the client is told `GONE` and that the handshake
+    // did not finish (see `a_client_the_tls_refuses_is_told_so`).
+    let e = refused.link().unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_GONE, "not pinned: {e:?}");
+    assert!(
+        e.message().contains("did not finish"),
+        "not pinned: {}",
+        e.message()
+    );
     // And raw channels: a browser's none, a stranger's, the pinned one's.
     let pin = server_id.fingerprint();
     assert_eq!(raw(Some(&client_id), pin, &at), Reached::Held);
     assert_eq!(raw(None, pin, &at), Reached::Refused, "no certificate");
 }
 
+/// A client that TLS refuses (an unpinned certificate) should be told so,
+/// as `BAD_VALUE` naming the refusal. coqui-web reports the failed
+/// handshake as a path lost, so it is told `GONE` for now: the test waits
+/// for coqui-web to report a TLS refusal as its own failure.
+#[test]
+#[ignore = "coqui-web request 9: a TLS refusal is reported as a path lost"]
+fn a_client_the_tls_refuses_is_told_so() {
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+    let at = spawn(
+        WtListen::bind("127.0.0.1:0", &server).unwrap(),
+        common::server(LinkOptions::new(Trust::Secure)),
+    );
+    let stranger = TlsConfig::new(Identity::generate().unwrap()).pins([server_id.fingerprint()]);
+    let e = RemoteSource::new(
+        Box::new(WtConnect::new(&url(&at), &stranger).unwrap()),
+        LinkOptions::new(Trust::Secure),
+    )
+    .link()
+    .unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(e.message().contains("does not trust"), "{}", e.message());
+}
+
 /// A fingerprint the list denies is refused once the handshake has shown
-/// whose it is, and another is not; a trust store cannot be told what the
-/// handshake could not decide by, and a list naming a fingerprint over
-/// one is refused when the listener binds.
+/// whose it is, and told so; another is not denied. The list is checked as
+/// the listener is made, and a trust store cannot back a mutual listener:
+/// its handshake has no address to record a waiting client under.
 #[test]
 fn the_list_decides_a_mutual_webtransport_client_by_its_fingerprint() {
     use guatiao_source_remote::acl::{Acl, Action, Rule};
-    use guatiao_source_remote::transport::tls::{Policy, TrustStore};
+    use guatiao_source_remote::transport::tls::Policy;
     let server_id = Identity::generate().unwrap();
     let (denied, allowed) = (Identity::generate().unwrap(), Identity::generate().unwrap());
     let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
@@ -285,35 +318,46 @@ fn the_list_decides_a_mutual_webtransport_client_by_its_fingerprint() {
         .map(|_| ())
     };
     link(&allowed).expect("a client the list does not deny");
-    assert!(link(&denied).is_err(), "a client the list denies");
+    let e = link(&denied).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(
+        e.message().contains("access control list refuses"),
+        "{}",
+        e.message()
+    );
 
-    // A store records waiting clients as the handshake finds them, with
-    // no address to hold them against the list by.
+    // A malformed fingerprint is refused as the listener is made.
+    let mut bad = Rule::new(Action::Deny, "any".parse().unwrap());
+    bad.fingerprint = Some("not a fingerprint".to_string());
+    let mut malformed = Acl::default();
+    malformed.push(bad);
+    let mut policy = Policy::modern();
+    policy.acl = Some(malformed);
+    let e = WtListen::bind(
+        "127.0.0.1:0",
+        &TlsConfig::new(server_id.clone())
+            .pins([allowed.fingerprint()])
+            .policy(policy),
+    )
+    .unwrap_err();
+    assert!(e.to_string().contains("fingerprint"), "{e}");
+
+    // A store backs no mutual listener, with a list or without one.
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("webtransport_list_store");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let mut policy = Policy::modern();
     policy.acl = Some(acl);
-    let stored = TlsConfig::open(&dir).unwrap().policy(policy);
-    let e = WtListen::bind("127.0.0.1:0", &stored).unwrap_err();
-    assert!(e.to_string().contains("fingerprint"), "{e}");
-    // The control: a store and a list of addresses alone bind, and a
-    // stranger is recorded as waiting.
-    let mut policy = Policy::modern();
-    let mut only = Acl::default();
-    only.push(Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap()));
-    policy.acl = Some(only);
-    let by_address = TlsConfig::open(&dir).unwrap().policy(policy);
-    let at = spawn(
-        WtListen::bind("127.0.0.1:0", &by_address).unwrap(),
-        common::server(LinkOptions::new(Trust::Secure)),
-    );
-    let stranger = Identity::generate().unwrap();
-    let _ = raw(Some(&stranger), by_address.fingerprint(), &at);
-    let store = TrustStore::open(&dir).unwrap();
-    common::eventually("a stranger the list allows waits", || {
-        !store.waiting().unwrap().is_empty()
-    });
+    for stored in [
+        TlsConfig::open(&dir).unwrap().policy(policy),
+        TlsConfig::open(&dir).unwrap(),
+    ] {
+        let e = WtListen::bind("127.0.0.1:0", &stored).unwrap_err();
+        assert!(e.to_string().contains("trust store"), "{e}");
+    }
+    // The control: server TLS, which asks no client for a certificate,
+    // binds over a store.
+    WtListen::bind("127.0.0.1:0", &TlsConfig::open(&dir).unwrap().server_tls()).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
 

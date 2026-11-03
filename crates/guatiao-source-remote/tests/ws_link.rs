@@ -118,20 +118,69 @@ fn lan_address() -> Option<core::net::IpAddr> {
 
 /// A plain WebSocket beyond loopback is a deliberate, named weakening: off
 /// by default at the listener, the connector and the configuration, and
-/// listed by the source when it is on.
+/// listed by the source when it is on. Nothing here needs a network.
 #[test]
-fn a_plain_websocket_beyond_loopback_needs_naming_and_is_reported() {
-    let Some(ip) = lan_address() else {
-        eprintln!("skipped: this machine has no address beyond loopback");
-        return;
-    };
-    // Off by default: the listener refuses to bind past loopback.
+fn a_plain_websocket_beyond_loopback_is_off_by_default_and_reported() {
     let refused = WsListen::bind("0.0.0.0:0", common::permit(&["0.0.0.0/0"])).unwrap_err();
     assert_eq!(refused.kind(), std::io::ErrorKind::PermissionDenied);
-
+    assert!(
+        refused.to_string().contains("plain_beyond_loopback"),
+        "{refused}"
+    );
     let listener =
         WsListen::bind_beyond_loopback("0.0.0.0:0", common::permit(&["0.0.0.0/0"])).unwrap();
     assert!(listener.plain_beyond_loopback());
+
+    // A documentation address: the connector refuses it before it connects.
+    let url = "ws://192.0.2.1:9/";
+    let e = WsConnect::new(url).connect().unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
+    assert!(e.to_string().contains("plain_beyond_loopback"), "{e}");
+    assert!(!WsConnect::new(url).plain_beyond_loopback());
+    assert!(
+        WsConnect::new(url)
+            .beyond_loopback()
+            .plain_beyond_loopback()
+    );
+
+    // A configuration names it, and the source lists it; one built from a
+    // connector in Rust holds the connector, which its host asks.
+    let mut config = Map::new();
+    config.set("connect", url);
+    config.set("security", "none");
+    config.set("key", "test-key");
+    let off = RemoteSource::from_config(&config).unwrap();
+    assert!(off.weakened().is_empty());
+    let e = off.link().unwrap_err();
+    assert!(
+        e.message().contains("plain_beyond_loopback"),
+        "{}",
+        e.message()
+    );
+    config.set("plain_beyond_loopback", true);
+    let on = RemoteSource::from_config(&config).unwrap();
+    let weakened = on.weakened();
+    assert_eq!(weakened.len(), 1, "{weakened:?}");
+    assert_eq!(weakened[0].0, "");
+    assert_eq!(weakened[0].1.setting, "plain_beyond_loopback");
+    assert_eq!(weakened[0].1.value, "true");
+}
+
+/// The same over an address of this machine beyond loopback, which only a
+/// machine with a network has. Without one this fails, saying so, unless
+/// `GUATIAO_SKIP_LAN` names the choice to skip it.
+#[test]
+fn a_plain_websocket_beyond_loopback_links_when_named() {
+    let Some(ip) = lan_address() else {
+        assert!(
+            std::env::var_os("GUATIAO_SKIP_LAN").is_some(),
+            "this machine has no address beyond loopback to link over: set GUATIAO_SKIP_LAN to skip this test"
+        );
+        eprintln!("SKIPPED (GUATIAO_SKIP_LAN): no address beyond loopback");
+        return;
+    };
+    let listener =
+        WsListen::bind_beyond_loopback("0.0.0.0:0", common::permit(&["0.0.0.0/0"])).unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
     std::thread::spawn(move || {
@@ -144,30 +193,45 @@ fn a_plain_websocket_beyond_loopback_needs_naming_and_is_reported() {
             }
         }
     });
-
-    // The connector refuses it by default, and names the setting.
     let url = format!("ws://{ip}:{port}/");
-    let e = WsConnect::new(&url).connect().unwrap_err();
-    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
-    assert!(e.to_string().contains("plain_beyond_loopback"), "{e}");
-
-    // A configuration names it, and the source lists it.
+    // Off by default, and the listener has no say in it.
+    assert!(WsConnect::new(&url).connect().is_err());
     let mut config = Map::new();
     config.set("connect", url.as_str());
     config.set("security", "none");
     config.set("key", "test-key");
-    let off = RemoteSource::from_config(&config).unwrap();
-    assert!(off.weakened().is_empty());
-    assert!(off.link().is_err(), "off by default");
     config.set("plain_beyond_loopback", true);
-    let on = RemoteSource::from_config(&config).unwrap();
-    let weakened = on.weakened();
-    assert_eq!(weakened.len(), 1, "{weakened:?}");
-    assert_eq!(weakened[0].0, "");
-    assert_eq!(weakened[0].1.setting, "plain_beyond_loopback");
-    let (registry, refused) = refresh(on);
+    let (registry, refused) = refresh(RemoteSource::from_config(&config).unwrap());
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(registry.offers::<dyn Greeter>().count(), 1);
+}
+
+/// A list rule that names the address a client came to cannot be decided
+/// by a listener bound to a wildcard, which does not know it: the rule
+/// refuses the client, as it does a TLS listener. `tcp://` decides it by
+/// the accepted socket's address (the control); a rule naming the address
+/// denies here, so the WebSocket refuses too, not permits for want of a
+/// match.
+#[test]
+fn a_wildcard_plain_websocket_listener_refuses_on_a_rule_naming_a_destination() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tcp::TcpListen;
+    let mut deny = Rule::new(Action::Deny, "127.0.0.0/8".parse().unwrap());
+    deny.destination = Some("127.0.0.1/32".parse().unwrap());
+    let mut acl = Acl::default();
+    acl.push(deny);
+    acl.push(Rule::new(Action::Permit, "127.0.0.0/8".parse().unwrap()));
+
+    // The control: TCP on a wildcard refuses a loopback client by the rule.
+    let tcp = TcpListen::bind("0.0.0.0:0", acl.clone()).unwrap();
+    let port = tcp.local_addr().unwrap().port();
+    let _client = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    assert!(matches!(tcp.accept().unwrap(), Accepted::Refused(_)));
+
+    let ws = WsListen::bind_beyond_loopback("0.0.0.0:0", acl).unwrap();
+    let port = ws.local_addr().unwrap().port();
+    let _client = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    assert!(matches!(ws.accept().unwrap(), Accepted::Refused(_)));
 }
 
 /// The server binary listens beyond loopback only when told, and says it
