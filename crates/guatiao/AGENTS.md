@@ -86,7 +86,7 @@ map.copy_from(&Map) / copy_from_in(&Map, alloc) -> Result<usize, ValueError>
 map.iter() / map.keys() / map.values()
 map["host"] -> &Value                  // panics when absent, as HashMap does
 map.clone_in(alloc) -> Result<Map, ValueError>
-map.is_local() -> bool                 // every container and key records Alloc::rust()
+map.is_local() -> bool                 // every container and key records Alloc::rust() or Alloc::wiping()
 map.into_local() -> Map                // unchanged when local, else copied, original freed
 map.into_alloc(alloc) -> Result<Map, ValueError>   // the same, for a named allocator
 map.make_local_in(alloc) -> Result<(), ValueError> // in place, through &mut: moves only what alloc did not make
@@ -2549,9 +2549,11 @@ library three ways:
 - **`#[sensitive]` on a method** of `#[guatiao::kind]` marks its answer a
   secret: the proxy's `<method>` names `Alloc::wiping()` in the carrier
   (and builds the arguments it converts there), a shim with no carrier
-  builds there, and the description says `"sensitive": true`. It refuses
-  a method answering `String` (a copy nobody wipes): answer
-  `Result<Secret<String>, ProviderError>` or a `Value`. Tables built at
+  builds there, and the description says `"sensitive": true`. Such a
+  method answers a `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a
+  number, a `bool` or nothing, or a `Result` of one; any other type
+  (`String`, `Option<String>`, `Vec<u8>`, a struct of yours) is refused at
+  compile time, a copy nobody wipes. Tables built at
   run time honour the mark too, their caller keeping a sensitive text
   answer as `Answer::Value` in the wiping allocator. Not hashed: `FLOOR_HASH` is the same with or
   without it. A provider building through `<method>_in`, or one whose
@@ -2891,11 +2893,17 @@ there leaves nothing readable behind: freed, grown (the old block), or
 moved into another allocator (the source). **Every move between
 allocators overwrites the block it leaves**, whatever the target
 (`into_alloc`, `into_local`, `make_local_in`,
-`guatiao_value_make_local`, a kind's answer into its carrier). **A copy
+`guatiao_value_make_local`, a kind's answer into its carrier). **A node
+that lives there stays there**: those moves and the settle after a lent
+`&mut` call count this build's wiping allocator as home, so a second
+`into_local()` changes nothing. **A copy
 of a node that lives there is made there** (`clone`, `clone_in`,
 `guatiao_value_clone`), whatever allocator was asked for, a map whose
-array or any key lives there whole; a kind's answer alone moves into
-exactly the carrier its caller named. The promise is per buffer: a node
+array or any key lives there whole. **A kind's answer alone moves into
+exactly the carrier its caller named**: a slot not marked `#[sensitive]`
+answering a secret hands its caller an unwiped copy `is_sensitive` does
+not see (the provider's block is overwritten); mark the slot
+`#[sensitive]` to keep the answer in the wiping allocator. The promise is per buffer: a node
 built elsewhere and stored into a wiping tree keeps its own allocator.
 **Recognised within this copy of the library only** (by `ctx`):
 `is_wiping`, `is_sensitive` and the `[sensitive]` placeholder know
