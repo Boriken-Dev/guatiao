@@ -120,8 +120,8 @@ ones and opens the new.
 
 ## A page
 
-A browser page reaches a server the only way a page can, a WebSocket, and
-speaks the frames itself: no native library, no WebAssembly module. The
+A browser page reaches a server by a WebSocket (or WebTransport, below),
+and speaks the frames itself: no native library, no WebAssembly module. The
 Dart package `guatiao` carries the client, `package:guatiao/remote.dart`,
 in plain Dart, so the same code runs under dart2js, dart2wasm and on the
 Dart VM:
@@ -132,7 +132,7 @@ import 'dart:convert';
 import 'package:guatiao/remote.dart';
 
 final link = await RemoteLink.connect(
-  Uri.parse('ws://192.0.2.21:7000/'),
+  Uri.parse('ws://127.0.0.1:7000/'),
   security: RemoteSecurity.none,       // ws:// carries no TLS: say so
   key: utf8.encode(key),               // the key, as the page gets it
 );
@@ -151,9 +151,12 @@ chat.release();
 await link.close();
 ```
 
-The server listens with `--listen ws://ADDRESS:PORT --security none`,
+The server listens with `--listen ws://127.0.0.1:PORT --security none`,
 as `tcp://` does with no TLS: peers admitted by address range, the key
-proved both ways, no encryption. A link's security is one choice, the
+proved both ways, no encryption. coqui-web, which carries the
+WebSocket, listens and dials a plain `ws://` on this machine alone
+(loopback); a page on another machine reaches the server over `wss://`
+or `https://`. A link's security is one choice, the
 same as everywhere ([Security](#security)), mutual TLS unless named, and
 the URL must agree with it: `ws://` runs `none` alone, `wss://` the two
 TLS modes. A call is typed by the description the
@@ -176,7 +179,7 @@ package (no koffi, no native library):
 ```ts
 import { RemoteLink, RemoteObject, Served } from 'guatiao-remote';
 
-const link = await RemoteLink.connect('ws://192.0.2.21:7000/', { security: 'none', key });
+const link = await RemoteLink.connect('ws://127.0.0.1:7000/', { security: 'none', key });
 const catalog = await link.list();
 const library = catalog.libraries.find((l) => l.id === 'derived_greeter')!;
 await link.open(library);
@@ -325,8 +328,8 @@ from 5 ms up to a second while the failures last.
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
 | `tcp://host:port` | another machine: with no TLS (feature `tcp`), or TLS 1.3 (feature `tls`; `tls://` names the same) | no TLS 22–36 µs on loopback, 114–123 µs from a host to a VM on it; mutual TLS 33–37 µs on loopback |
 | `quic://host:port` | any network (feature `quic`): TLS 1.3 inside QUIC, with datagrams beside the calls | 58–83 µs on loopback (Windows), about 220 µs in WSL, at mutual TLS |
-| `ws://host:port/path`, `wss://host:port/path` | a browser, or any WebSocket client (feature `ws`; `wss://` with `tls`): one binary message per frame body; `ws://` with no TLS, `wss://` with it | not measured |
-| `https://host:port/path` | WebTransport, HTTP/3 over QUIC (feature `webtransport`): what a browser opens with the server's certificate pinned by its hash; one stream per link, datagrams beside it | not measured |
+| `ws://host:port/path`, `wss://host:port/path` | a browser, or any WebSocket client (feature `ws`, through coqui-web; `wss://` with `tls`): one binary message per frame body; `ws://` with no TLS and on this machine alone, `wss://` with TLS | not measured |
+| `https://host:port/path` | WebTransport, HTTP/3 over QUIC (feature `webtransport`, through coqui-web): what a browser opens with the server's certificate pinned by its hash; one stream per link, datagrams beside it | not measured |
 | `rdma://host:port` | another machine with an RDMA device, with no TLS; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -460,7 +463,8 @@ every client. Nothing listens on a network unless told where.
     socket and the shared file are created for their owner alone
     (`0600`), a named pipe takes Windows' default access, and a child's
     stdio is the host's own. The HELLO names trust `local`.
-  - Across a network (`tcp://`, `ws://`, `quic://`, `https://`, `rdma://`), for one
+  - Across a network (`tcp://`, `quic://`, `https://`, `rdma://`; `ws://`
+    on this machine alone), for one
     the owner isolates between known devices: the listener admits peers
     by an access control list (below), and **a peer the list denies is
     closed unread**; both sides prove a pre-shared key in the handshake,
@@ -513,9 +517,9 @@ Where a URL says whether it runs TLS, it must agree with the security:
 | `tcp://` | plain TCP | TLS over TCP | TLS over TCP (default) |
 | `tls://` | refused | TLS over TCP | TLS over TCP (default) |
 | `quic://` | QUIC, no certificate checked | QUIC | QUIC (default) |
-| `ws://` | WebSocket | refused: use `wss://` | refused: use `wss://` |
+| `ws://` | WebSocket, on this machine alone | refused: use `wss://` | refused: use `wss://` |
 | `wss://` | refused: use `ws://` | WebSocket over TLS | WebSocket over TLS (default) |
-| `https://` | WebTransport, no certificate asked of the client | WebTransport | WebTransport (default) |
+| `https://` | WebTransport, no certificate asked of the client | WebTransport | refused: coqui-web does not report a client's certificate; name `server-tls`, or use `quic://` |
 | `rdma://` | RDMA | refused | refused |
 | `local://`, `shm://`, a child | the default | refused | refused |
 
@@ -585,7 +589,8 @@ let source = RemoteSource::new(
 );
 
 // The same over a WebSocket (`wss://`), as a browser holding a client
-// certificate connects.
+// certificate connects (WebTransport, `https://`, runs server TLS or none
+// alone).
 let listener = WsListen::bind_tls("0.0.0.0:7443", &device)?;
 let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
 ```
@@ -818,13 +823,22 @@ a time.
 
 `https://host:port/path` (feature `webtransport`) is WebTransport: an
 HTTP/3 session over QUIC, what a browser opens with `new
-WebTransport(url)`. It runs `quic://`'s TLS (the same identity, pins or
-trust store, policy, access control list, Retry, no migration) under
-HTTP/3's application protocol `h3`, and any of the three securities. A
+WebTransport(url)`. It runs the session's TLS through coqui-web (the
+configuration's identity, pins, roots, policy, and the list's address
+rules, with a Retry proving a source's address before the list decides)
+under HTTP/3's application protocol `h3`, at server TLS or none. A
+source the list denies sees a QUIC connection that does not open, as it
+would from an unreachable server. A
 page uses server TLS (the key or a token inside the link) or none (the
 key alone); mutual TLS needs its browser to present a client
 certificate, which Chrome did not to a profile holding none (whether it
-presents one a user installed is not measured). A session carries one bidirectional stream with the frames
+presents one a user installed is not measured), and coqui-web, which
+runs the session's TLS, does not report the certificate a client
+presented: a listener configured for mutual TLS (the server starts and
+says so) asks every client for one and refuses a client with none, but
+no link completes at the secure level, and `WtConnect::new` refuses a
+mutual-TLS configuration. Use server TLS here, or `quic://` for mutual
+TLS. A session carries one bidirectional stream with the frames
 exactly as over TCP; the server takes every session, whatever its path,
 and does not read the `Origin` a browser sends. Datagrams are the
 session's (HTTP/3 datagrams): `Link::datagrams()` as over QUIC, and a

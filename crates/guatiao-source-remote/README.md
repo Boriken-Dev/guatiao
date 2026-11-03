@@ -55,13 +55,18 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `tcp` | `hmac`, `sha2`, `getrandom`, `coqui-net-acl`, `windows-sys` (Windows only) | TCP with no TLS |
-| `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3, and 1.2 where a policy allows it: server TLS and mutual TLS (over TCP, and `wss://` with `ws`) |
+| `tls` | `tcp`, `coqui-peer`, `coqui-peer-tls`, `rustls` (ring) | TLS 1.3, and 1.2 where a policy allows it: server TLS and mutual TLS (over TCP, and `wss://` with `ws`; server TLS alone over WebTransport) |
 | `platform-roots` | `tls`, `rustls-platform-verifier` | a server verified by the operating system's certificate authorities (`roots = "platform"`) |
 | `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |
 | `local` | `interprocess`, `windows-sys` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
-| `ws` | `tcp`, `tungstenite` | WebSocket: what a browser page connects to |
-| `webtransport` | `quic`, `wtransport` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash |
+| `ws` | `tcp`, `coqui-web`, `url` | WebSocket: what a browser page connects to; `ws://` on this machine alone, `wss://` with `tls` |
+| `webtransport` | `tls`, `coqui-web`, `url` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash; server TLS or no security |
+
+`ws` and `webtransport` take their channels from
+[coqui-web](https://github.com/Boriken-Dev/coqui-web), a git dependency
+until it is released, which keeps this crate from being published to
+crates.io before then.
 
 Kind tables are built at run time through `guatiao-libffi` (libffi, built
 from C).
