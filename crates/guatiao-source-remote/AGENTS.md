@@ -387,13 +387,26 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   `wss://`). Any path is accepted, the `Origin` header unread (the key
   proof is the gate); a text message or a message over `max` ends the
   channel (`InvalidData`); a close or a dropped connection ends the reads
-  as a stream's end of file does. A message past the largest the link's
-  reader last allowed is refused on the way out too (`InvalidInput`):
-  `set_max_message` bounds both ways. **`wss://`** (with `tls`):
+  as a stream's end of file does. coqui-web bounds a message by one
+  number, both ways, so the channel's bound is the larger of what the
+  link's reader allows (`max_frame`) and what its peer takes
+  (`FrameWrite::set_max_frame`, called once the handshake has agreed it):
+  a frame past the peer's is refused by the writer (`InvalidInput`), the
+  reader keeps its own size check, and a peer can make this side buffer
+  one message up to the larger bound before that check (a stream never
+  holds more than `max_frame`). A write that finds coqui-web's send queue
+  full (`NoProgress`) waits for room, polling up to 20 ms apart, for the
+  link's write timeout (`FrameWrite::set_timeout`; none: while the
+  channel lives) and then fails `TimedOut`. **`wss://`** (with `tls`):
   `WsConnect::tls` and `WsListen::bind_tls` run the TLS of `tls://`
   (identity, pins or store, roots, policy and its `acl`, refusals as
   `BAD_VALUE`) under the upgrade, naming ALPN `http/1.1` and requiring
-  none (a browser offers it or nothing). At mutual TLS the listener's
+  none (a browser offers it or nothing). A mutual-TLS listener whose
+  policy allows resumption is refused when it binds: rustls skips the
+  client's certificate on a resumed TLS 1.3 session, which the link names
+  the client by. A rule of the list naming the local address or port is
+  decided by the address the listener is bound to, and refuses every
+  client only on a wildcard bind. At mutual TLS the listener's
   handshake of a connection runs alone on its thread, and a client
   verifier (`web::Proving`) notes the fingerprint of the certificate the
   client proved it holds the key of, in a thread-local the thread reads

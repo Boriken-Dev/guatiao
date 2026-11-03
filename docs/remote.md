@@ -519,7 +519,7 @@ Where a URL says whether it runs TLS, it must agree with the security:
 | `quic://` | QUIC, no certificate checked | QUIC | QUIC (default) |
 | `ws://` | WebSocket, on this machine alone | refused: use `wss://` | refused: use `wss://` |
 | `wss://` | refused: use `ws://` | WebSocket over TLS | WebSocket over TLS (default) |
-| `https://` | WebTransport, no certificate asked of the client | WebTransport | refused: coqui-web does not report a client's certificate; name `server-tls`, or use `quic://` |
+| `https://` | WebTransport, no certificate asked of the client | WebTransport | a connect is refused (`BAD_VALUE`): coqui-web does not report a client's certificate; name `server-tls`, or use `quic://`. A server (`--security mutual-tls`) still starts, with a warning, asks clients for a certificate and refuses the ones that present none or are not pinned, but no link completes |
 | `rdma://` | RDMA | refused | refused |
 | `local://`, `shm://`, a child | the default | refused | refused |
 
