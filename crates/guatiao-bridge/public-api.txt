@@ -8,6 +8,10 @@ impl core::fmt::Debug for guatiao_bridge::conformance::Outcome
 pub fn guatiao_bridge::conformance::Outcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn guatiao_bridge::conformance::round_trip<C: guatiao_bridge::Convert>(&C) -> alloc::vec::Vec<(alloc::string::String, guatiao_bridge::conformance::Outcome)>
 pub fn guatiao_bridge::conformance::values() -> alloc::vec::Vec<(alloc::string::String, guatiao::value::value::Value)>
+pub mod guatiao_bridge::document
+pub fn guatiao_bridge::document::formats() -> &'static anycfg::formats::Formats<guatiao::value::value::Value>
+pub fn guatiao_bridge::document::parse(&str, &[u8]) -> core::result::Result<guatiao::value::value::Value, anycfg::error::Error>
+pub fn guatiao_bridge::document::read(&std::path::Path) -> core::result::Result<guatiao::value::value::Value, alloc::string::String>
 pub mod guatiao_bridge::manifest
 #[non_exhaustive] pub enum guatiao_bridge::manifest::Found
 pub guatiao_bridge::manifest::Found::Broken

@@ -46,6 +46,7 @@ mod calling;
 mod config;
 mod convert;
 mod described;
+pub mod document;
 mod engine;
 mod error;
 mod kinds;

@@ -64,7 +64,7 @@ M.providers = { hello = Hello }      -- served as `greeters_hello`
 return M
 ```
 
-its manifest beside it, `greeters.guatiao.toml`:
+its manifest beside it, `greeters.guatiao.cfg`:
 
 ```toml
 type = "lua"
@@ -107,7 +107,7 @@ holds a greeter serving every slot of the example kinds.
 | --- | --- |
 | `guatiao_source` | the entry point a host's `add_source_file` calls; declares `source=lua` |
 | configuration | `{"dirs": [..], "manifests": [..], "kinds": [..], "limits": {..}}` |
-| `*.guatiao.toml` | one Lua library: `type = "lua"`, `module`, `kinds`, `paths`, optional `version` |
+| `*.guatiao.cfg` | one Lua library: `type = "lua"`, `module`, `kinds`, `paths`, optional `version` |
 | `require "guatiao"` | in a library: `null`, `absent`, `list`, `map`, `bytes`, `number`, `buffer`, `error`, `status`, `kinds`, `kind` |
 | `LuaEngine`, `LuaValues`, `helpers`, `module` | the Rust side: the engine, the value conversion, the `guatiao` tables |
 

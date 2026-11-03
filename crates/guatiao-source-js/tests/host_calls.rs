@@ -229,7 +229,7 @@ fn registry(dir: &Path) -> Registry {
     std::fs::write(dir.join("kinds.json"), KINDS).expect("written");
     std::fs::write(dir.join("feeder.js"), FEEDER.replace("KINDS", KINDS)).expect("written");
     std::fs::write(
-        dir.join("feeder.guatiao.toml"),
+        dir.join("feeder.guatiao.cfg"),
         "type = \"js\"\nname = \"feeder\"\nversion = \"1.0.0\"\nmain = \"feeder.js\"\nkinds = [\"feeder\"]\n",
     )
     .expect("written");

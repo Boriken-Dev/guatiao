@@ -21,7 +21,8 @@ value conversion, and nothing else.
   library a manifest describes, answer calls into it, close it — with a
   **thread model**: called from any thread, behind the engine's own lock,
   or pinned to one engine thread the bridge starts and queues calls to.
-- **Manifests and stamps** — a library is described by a small TOML file
+- **Manifests and stamps** — a library is described by a small file
+  (`<name>.guatiao.cfg`: TOML, or JSON or YAML under a `#!` first line)
   read without running any code; its stamp follows the manifest and the
   newest code file, so a refresh serves an edit and an old instance keeps
   working on the old build.

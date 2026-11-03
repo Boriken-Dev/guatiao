@@ -268,7 +268,7 @@ fn registry(dir: &Path, limits: Option<Map>) -> Registry {
         std::fs::write(dir.join(format!("{name}.js")), code.replace("KINDS", KINDS))
             .expect("written");
         std::fs::write(
-            dir.join(format!("{name}.guatiao.toml")),
+            dir.join(format!("{name}.guatiao.cfg")),
             format!(
                 "type = \"js\"\nname = \"{name}\"\nversion = \"1.0.0\"\nmain = \"{name}.js\"\nkinds = [\"{kind}\"]\n"
             ),

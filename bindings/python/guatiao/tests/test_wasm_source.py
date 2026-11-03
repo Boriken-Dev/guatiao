@@ -84,7 +84,7 @@ def test_the_wasm_greeters_are_served_and_called(reg, module):
 def test_a_rebuilt_module_is_served_and_a_deleted_library_retired(reg, tmp_path):
     lib = tmp_path / "rebuilt"
     lib.mkdir()
-    (lib / "wasm_rebuilt.guatiao.toml").write_text(
+    (lib / "wasm_rebuilt.guatiao.cfg").write_text(
         'type = "wasm"\nmodule = "wasm_rebuilt"\nversion = "1.0.0"\nkinds = ["greeter", "counter", "wide"]\n',
         encoding="utf-8",
     )

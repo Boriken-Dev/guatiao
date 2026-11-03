@@ -22,7 +22,7 @@
 //! | `max_frame`, `max_calls` | the link's bounds |
 //! | `dirs`, `manifests` | instead of `connect` or `child`: directories of peer manifests (and their immediate subdirectories), and manifest files; the keys above are then every peer's unless its manifest names them |
 //!
-//! A peer manifest is a `<name>.guatiao.toml` of `type = "remote"`:
+//! A peer manifest is a `<name>.guatiao.cfg` of `type = "remote"`:
 //!
 //! ```toml
 //! type = "remote"

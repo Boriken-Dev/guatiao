@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! CPython as a guatiao-bridge engine: a library is a module, its manifest
-//! a `*.guatiao.toml` of type `python`, its tables built by the Python binding itself.
+//! a `*.guatiao.cfg` of type `python`, its tables built by the Python binding itself.
 
 #![forbid(unsafe_code)]
 

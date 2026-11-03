@@ -5,7 +5,8 @@ and its thread, manifests and stamps, the glue to guatiao's `Source`,
 kinds served from their descriptions, a library's code calling a host's
 objects, limits and error mapping, and value conversion checked against
 shared vectors. `#![forbid(unsafe_code)]`.
-Depends on `guatiao` and `guatiao-serde` (`json`, `toml`). No features.
+Depends on `guatiao`, `guatiao-serde` (`json`, `toml`, `yaml`) and `anycfg`
+(by git revision until it is published). No features.
 
 Providers an engine declares are served through tables built from their
 kinds' descriptions by a `guatiao::library::kind::Mechanism` the source is
@@ -150,18 +151,32 @@ A key holding anything but a list of text is `` `dirs` is not a list of
 text `` (`GUATIAO_ERR_BAD_VALUE`). `text_list(&map, key)` is that reader:
 the list under `key`, empty when absent, `BridgeError::Config` otherwise.
 
+## Configuration files (`document`)
+
+```rust
+document::formats() -> &'static anycfg::Formats<Value>   // toml, json, yaml; `.cfg` auto, TOML default
+document::parse(name: &str, bytes: &[u8]) -> Result<Value, anycfg::Error>   // `name`'s extension only
+document::read(path: &Path) -> Result<Value, String>      // the error names the file
+```
+
+`.toml`, `.json`, `.yaml`/`.yml` by extension; `.cfg` by a `#!toml|json|yaml`
+first line (removed), else TOML. Any other extension, or an unknown `#!`
+name, is refused naming the registered ones; a failure carries a position and
+never quotes the document. Reading is all it does (the codecs do not write).
+
 ## Manifests (`manifest`)
 
 ```rust
 pub struct ManifestFormat { pub serves, pub id_key, pub code_extensions, pub skip_dirs }
-manifest::SUFFIX = ".guatiao.toml";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai", "remote"]
+// a manifest is TOML, or JSON/YAML under a `#!json`/`#!yaml` first line (document::parse)
+manifest::SUFFIX = ".guatiao.cfg";  manifest::TYPES = ["python", "js", "lua", "wasm", "rhai", "remote"]
 manifest::find(&format, dirs, files) -> Vec<Found>;  manifest::read(&format, path) -> Option<Found>
 manifest::content_stamp(&bytes) -> String   // FNV-1a 64-bit, 16 hex digits
 Manifest: path() id() version() kinds() paths() stamp() table()
 Found::{Library(Manifest), Broken { path, stamp, why }}
 ```
 
-A manifest is a file named `*.guatiao.toml`. `type` (required, text)
+A manifest is a file named `*.guatiao.cfg`. `type` (required, text)
 names the source that serves it, `serves`: a manifest of another type
 in `TYPES` is passed over without a word (`read` answers `None`), and
 one with no `type`, or a type neither in `TYPES` nor the format's own,

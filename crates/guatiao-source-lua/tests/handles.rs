@@ -166,7 +166,7 @@ fn registry(dir: &Path) -> Registry {
     .expect("written");
     std::fs::write(dir.join("lua_relay.lua"), RELAY).expect("written");
     std::fs::write(
-        dir.join("lua_relay.guatiao.toml"),
+        dir.join("lua_relay.guatiao.cfg"),
         "type = \"lua\"\nmodule = \"lua_relay\"\nkinds = [\"relay\"]\n",
     )
     .expect("written");

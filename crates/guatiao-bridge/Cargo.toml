@@ -23,11 +23,17 @@ default = []
 
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
-# TOML for manifests, JSON for kind descriptions and the shared vectors.
+# The formats a configuration file may be written in (manifests among
+# them), and JSON for kind descriptions and the shared vectors.
 guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = [
     "json",
     "toml",
+    "yaml",
 ] }
+# Reads configuration files by their extension or first line. A git
+# dependency until anycfg is published, which comes before this crate's
+# release.
+anycfg = { git = "https://github.com/jose-pr/anycfg-rs", rev = "bf71f7097a550037972a0651e8bd35747b8dcd11" }
 
 [dev-dependencies]
 guatiao = { path = "../guatiao", features = ["provider", "load"] }

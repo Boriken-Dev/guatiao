@@ -71,7 +71,7 @@ return M
 and its manifest beside it:
 
 ```toml
-# greeters.guatiao.toml
+# greeters.guatiao.cfg
 type = "lua"
 module = "greeters"
 kinds = ["greeter", "counter"]

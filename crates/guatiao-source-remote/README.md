@@ -88,7 +88,7 @@ A host in any other language adds the library file with a configuration
 map (`{"connect": "tcp://192.0.2.21:7000", "security": "none", "key_file":
 "link.key"}`, or `{"child": [...]}` for a server in a child process), or
 names directories of peer manifests (`{"dirs": ["peers"]}`): each
-`<name>.guatiao.toml` of `type = "remote"` is a peer, its libraries
+`<name>.guatiao.cfg` of `type = "remote"` is a peer, its libraries
 served as `<name>/<id>`.
 
 A server:

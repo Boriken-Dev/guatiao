@@ -91,7 +91,7 @@ pub fn scratch(name: &str) -> PathBuf {
 /// A library of one script: `code` is its file, `id` its name.
 pub fn put(dir: &Path, id: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao.toml")),
+        dir.join(format!("{id}.guatiao.cfg")),
         format!("type = \"rhai\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n"),
     )
     .expect("written");
