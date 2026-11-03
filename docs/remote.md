@@ -75,7 +75,7 @@ A peer can be a file, as a library is: a manifest of `type = "remote"`
 names.
 
 ```toml
-# peers/lab-printer.guatiao.toml
+# peers/lab-printer.guatiao.cfg
 type = "remote"
 name = "lab-printer"
 connect = "tcp://192.0.2.5:7000"
@@ -284,7 +284,7 @@ client pins. A client it does not know is refused and listed by
 `--waiting` with the address it came from; `--accept` admits it from its
 next link on. `--pin FINGERPRINT` (repeatable) trusts fixed clients
 instead of the store, `--identity PATH` names an identity file instead
-of a state directory, `--policy PATH` reads a TLS policy (TOML or JSON,
+of a state directory, `--policy PATH` reads a TLS policy (TOML, JSON or YAML,
 below), and `--acl PATH` or `--range CIDR` the access control list.
 
 It serves the providers of the libraries it loads (`--load`, `--scan`)
@@ -561,7 +561,7 @@ list is canonicalised (any spelling `PeerId` reads) and must be a
 SHA-256 one: a listener given another is refused as it is made. In
 Rust the listeners take a `coqui_net_acl::Acl` (re-exported as
 `guatiao_source_remote::acl`); `guatiao-remote-server` reads one with
-`--acl PATH` (this form, in TOML or JSON) or builds one of permit rules
+`--acl PATH` (this form, in TOML, JSON or YAML) or builds one of permit rules
 from `--range CIDR`, and over TLS takes it from the policy's `[acl]`
 table. A TLS listener with no list admits every source to the
 handshake, where the certificate decides.

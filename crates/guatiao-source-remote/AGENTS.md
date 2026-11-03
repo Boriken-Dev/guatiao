@@ -7,7 +7,7 @@ protocol over every transport. `#![deny(unsafe_code)]`; `unsafe` only in
 (the mapped rings) and `src/transport/rdma/verbs.rs` (libibverbs),
 listed by `tests/unsafe_stays_in_exports.rs`. Depends on `guatiao`
 (`load`), `guatiao-libffi` (the kind tables' mechanism: libffi built from
-C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`,
+C), `guatiao-bridge` (kind descriptions and configuration files) and `guatiao-serde` (`json`,
 `toml`). The network features depend on coqui-net-acl, coqui-peer and
 coqui-peer-tls: coqui-net-acl at `=0.0.0-alpha.0`, coqui-peer and coqui-peer-tls at
 `=0.0.0-alpha.1`.

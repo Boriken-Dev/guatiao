@@ -84,7 +84,8 @@ webtransport = ["quic", "dep:wtransport"]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 # The kind tables it serves and calls through: libffi's closures and calls.
 guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
-# Kind descriptions read from their JSON documents.
+# Kind descriptions read from their JSON documents, and configuration files
+# read through anycfg.
 guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
 guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json", "toml"] }
 # The trusted level's handshake proof. RustCrypto, pure Rust.
