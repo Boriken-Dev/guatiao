@@ -34,6 +34,9 @@ guatiao-intake = { path = "../../crates/guatiao-intake", features = ["derive"] }
 # `guatiao_serde::adapt`.
 guatiao-serde = { path = "../../crates/guatiao-serde", features = ["toml"] }
 toml = "1"
+# Reads a configuration file by its extension or its first line; a git
+# dependency until anycfg is published.
+anycfg = { git = "https://github.com/jose-pr/anycfg-rs", rev = "bf71f7097a550037972a0651e8bd35747b8dcd11" }
 
 [lints]
 workspace = true

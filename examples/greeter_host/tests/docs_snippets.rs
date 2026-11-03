@@ -961,13 +961,35 @@ fn the_configuration_page_reads_and_describes_a_daemon() -> Result<(), Box<dyn c
     );
 
     // CONFIG-READ-BEGIN
+    use anycfg::{Callbacks, CodecError, Formats, Options};
     use guatiao::schema::SchemaRef;
     use guatiao::schema::validate::validate_map;
-    use guatiao::{Alloc, FromValue, Schema};
+    use guatiao::{Alloc, FromValue, Schema, Value};
     use guatiao_serde::Presentation;
     use guatiao_serde::text::toml;
 
-    let value = toml::from_str(&text, Alloc::rust(), Presentation::new())?;
+    // anycfg chooses the format by the file's name and bounds its size. A codec
+    // passes on a position and the parser's words, never an excerpt of the file.
+    let mut formats = Formats::<Value>::new();
+    formats.register(
+        "toml",
+        ["toml"],
+        Callbacks::new(
+            |bytes: &[u8]| {
+                let text = core::str::from_utf8(bytes).map_err(|e| {
+                    CodecError::at_offset(bytes, e.valid_up_to()).message("not UTF-8")
+                })?;
+                toml::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| {
+                    let at = e.position().map_or_else(CodecError::new, |p| {
+                        CodecError::new().line(p.line).column(p.column)
+                    });
+                    at.message(e.to_string())
+                })
+            },
+            |_: &Value| Err(CodecError::new().message("only read here")),
+        ),
+    )?;
+    let value = formats.from_str(&text, Options::new().name("daemon.toml"))?;
 
     // The schema refuses what the type does not declare, a misspelled key
     // included, naming the key; reading alone would skip it.

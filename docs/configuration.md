@@ -12,6 +12,7 @@ and no serde derive on the type.
 [dependencies]
 guatiao = { version = "=0.0.0-alpha.1", features = ["derive"] }
 guatiao-serde = { version = "=0.0.0-alpha.1", features = ["toml"] }
+anycfg = { git = "https://github.com/jose-pr/anycfg-rs", rev = "bf71f7097a550037972a0651e8bd35747b8dcd11" }   # reads the file
 guatiao-intake = { version = "=0.0.0-alpha.1", features = ["derive"] }   # for a form
 ```
 
@@ -65,13 +66,35 @@ reads the same way in every language
 ## Reading the file
 
 ```rust
+use anycfg::{Callbacks, CodecError, Formats, Options};
 use guatiao::schema::SchemaRef;
 use guatiao::schema::validate::validate_map;
-use guatiao::{Alloc, FromValue, Schema};
+use guatiao::{Alloc, FromValue, Schema, Value};
 use guatiao_serde::Presentation;
 use guatiao_serde::text::toml;
 
-let value = toml::from_str(&text, Alloc::rust(), Presentation::new())?;
+// anycfg chooses the format by the file's name and bounds its size. A codec
+// passes on a position and the parser's words, never an excerpt of the file.
+let mut formats = Formats::<Value>::new();
+formats.register(
+    "toml",
+    ["toml"],
+    Callbacks::new(
+        |bytes: &[u8]| {
+            let text = core::str::from_utf8(bytes).map_err(|e| {
+                CodecError::at_offset(bytes, e.valid_up_to()).message("not UTF-8")
+            })?;
+            toml::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| {
+                let at = e.position().map_or_else(CodecError::new, |p| {
+                    CodecError::new().line(p.line).column(p.column)
+                });
+                at.message(e.to_string())
+            })
+        },
+        |_: &Value| Err(CodecError::new().message("only read here")),
+    ),
+)?;
+let value = formats.from_str(&text, Options::new().name("daemon.toml"))?;
 
 // The schema refuses what the type does not declare, a misspelled key
 // included, naming the key; reading alone would skip it.
@@ -80,6 +103,14 @@ validate_map(SchemaRef::new(&schema).ok_or("not a schema")?, &value)?;
 
 let daemon = Daemon::from_value(&value)?;
 ```
+
+[anycfg](https://github.com/jose-pr/anycfg-rs) names no format: register
+`json` (`["json"]`) and `yaml` (`["yaml", "yml"]`) the same way over
+`guatiao_serde::text::json` and `text::yaml`, and
+`formats.register_auto(["cfg"], "toml")?` makes a `.cfg` file name its format
+on its first line (`#!json`, `#!yaml`, `#!toml`), TOML when it has none.
+guatiao's own libraries are described by `<name>.guatiao.cfg` files read
+this way.
 
 A refusal names where it happened, `tls`, `listen` or `peers[0]`, and
 never quotes the value: a configuration can hold a secret. A TOML date
