@@ -560,3 +560,54 @@ fn a_move_out_of_an_allocator_that_does_not_wipe_overwrites_what_it_leaves() {
         0
     );
 }
+
+/// A copy of a node that lives in the wiping allocator is made in the
+/// wiping allocator, whatever allocator the copy was asked for: a secret
+/// inside a tree that does not, a key included, stays a secret.
+#[test]
+fn a_copy_of_a_secret_inside_a_plain_tree_stays_in_the_wiping_allocator() {
+    use guatiao::exports::value::guatiao_value_clone;
+
+    let w = Alloc::wiping();
+    let plain = || {
+        let mut map = Map::new();
+        map.set("user", Text::new("alice"));
+        map.set("token", Value::from(Text::new_in(w, secret()).unwrap()));
+        let mut keyed = Map::new();
+        keyed.set_in(secret(), Value::null(), w).unwrap();
+        assert!(
+            !keyed.alloc().unwrap().is_wiping(),
+            "the array is not, the key is"
+        );
+        map.set("keyed", keyed);
+        Value::from(map)
+    };
+    let n = seen(|| {
+        let v = plain();
+        let copies = [v.clone(), v.clone_in(Alloc::rust()).unwrap(), {
+            let mut out = Value::absent();
+            // SAFETY: a valid allocator and value; `out` holds nothing.
+            let status = unsafe { guatiao_value_clone(Alloc::rust().as_raw(), &v, &mut out) };
+            assert_eq!(status, guatiao::Status::GUATIAO_OK);
+            out
+        }];
+        for copy in &copies {
+            assert!(copy.is_sensitive());
+            let shown = format!("{:?}", Dump(copy));
+            assert!(
+                !shown.contains("hunter2") && shown.contains("alice"),
+                "{shown}"
+            );
+        }
+        let text = Text::new_in(w, secret()).unwrap();
+        assert!(
+            text.clone_in(Alloc::rust())
+                .unwrap()
+                .alloc()
+                .unwrap()
+                .is_wiping()
+        );
+        drop((v, copies));
+    });
+    assert_eq!(n, 0);
+}

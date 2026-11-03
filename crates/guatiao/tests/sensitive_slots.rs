@@ -150,3 +150,45 @@ fn a_sensitive_answer_is_in_the_wiping_allocator_unless_the_caller_names_another
     assert_eq!(vault.pin(), "1234");
     assert_eq!(vault.name(), "keeper");
 }
+
+/// Builds every answer in the wiping allocator, whatever the carrier.
+struct Hoarder;
+
+impl Vault for Hoarder {
+    fn read(&self, key: &str) -> Result<Value, ProviderError> {
+        Ok(Text::new_in(Alloc::wiping(), key)?.into())
+    }
+    fn all(&self) -> Result<Map, ProviderError> {
+        Ok(Map::new_in(Alloc::wiping()))
+    }
+    fn pin(&self) -> String {
+        String::from("1234")
+    }
+    fn name(&self) -> String {
+        String::from("hoarder")
+    }
+}
+
+static HOARDER: Hoarder = Hoarder;
+static HOARDER_TABLE: VaultVtable = VaultVtable::of::<Hoarder>();
+
+/// The carrier is the caller's to name: an answer is moved into exactly
+/// the allocator it carried, a provider's secret included, as a C or a
+/// binding caller relies on to hold nothing of the library's.
+#[test]
+fn an_answer_moves_into_exactly_the_allocator_the_caller_named() {
+    // SAFETY: a table `of::<Hoarder>()` with the `&Hoarder` it was built
+    // for, both `'static`.
+    let vault = unsafe {
+        Remote::<dyn Vault>::from_raw(
+            &HOARDER_TABLE as *const VaultVtable as *const c_void,
+            size_of::<VaultVtable>(),
+            &HOARDER as *const Hoarder as *mut c_void,
+        )
+    }
+    .expect("a full table validates");
+    let named = vault.read_in("hunter2", Alloc::rust()).unwrap();
+    assert!(named.alloc().unwrap().as_raw() == Alloc::rust().as_raw());
+    let all = vault.all_in(Alloc::rust()).unwrap();
+    assert!(all.alloc().unwrap().as_raw() == Alloc::rust().as_raw());
+}

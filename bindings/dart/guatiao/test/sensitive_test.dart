@@ -142,6 +142,23 @@ void main() {
     secret.close();
   });
 
+  test('a secret copied into a plain tree stays in the wiping allocator', () {
+    final secret = Value.sensitive(_secret);
+    addTearDown(secret.close);
+    final plain = Value({'user': 'alice'});
+    addTearDown(plain.close);
+    plain.asMap()['token'] = secret;
+    final items = Value(['a']);
+    addTearDown(items.close);
+    items.asList()[0] = secret;
+    final built = Value.fromDart(secret);
+    addTearDown(built.close);
+    for (final holder in [plain, items, built]) {
+      expect(holder.isSensitive, isTrue, reason: '$holder');
+      expect(holder.toString(), isNot(contains('hunter2')));
+    }
+  });
+
   group('a slot its kind marks sensitive', () {
     late DartVaultRemote vault;
     late int ctx;

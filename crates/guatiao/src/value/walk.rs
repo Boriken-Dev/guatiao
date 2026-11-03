@@ -17,6 +17,27 @@ use super::value::{Owned, arm};
 
 // --- copying ------------------------------------------------------------
 
+/// How a copy is made: the allocator asked for, and whether a node that
+/// lives in this build's wiping allocator is copied there instead (every
+/// copy but a kind's answer moving into the carrier its caller named).
+#[derive(Clone, Copy)]
+struct Copy {
+    alloc: Alloc,
+    keeps_secrets: bool,
+}
+
+impl Copy {
+    /// Where a copy of what `recorded` made goes: the wiping allocator for
+    /// a secret, unless this copy is exact; else the one asked for.
+    fn home(self, recorded: *const crate::value::alloc::Allocator) -> Alloc {
+        if self.keeps_secrets && super::types::lives_in_wiping(recorded) {
+            Alloc::wiping()
+        } else {
+            self.alloc
+        }
+    }
+}
+
 /// A container being copied.
 struct Copying<'a> {
     built: Built,
@@ -24,6 +45,8 @@ struct Copying<'a> {
     /// The key this container goes under in its parent, when the parent
     /// is a map.
     key: Option<&'a str>,
+    /// Where this container's copy, its array and its keys, is built.
+    alloc: Alloc,
 }
 
 enum Built {
@@ -47,19 +70,34 @@ impl Built {
 }
 
 impl<'a> Copying<'a> {
-    fn list(src: &'a List, key: Option<&'a str>, alloc: Alloc) -> Result<Self, ValueError> {
+    fn list(src: &'a List, key: Option<&'a str>, how: Copy) -> Result<Self, ValueError> {
+        let alloc = how.home(src.alloc);
         Ok(Copying {
             built: Built::List(List::with_capacity_in(alloc, src.len())?),
             left: Left::List(src.iter()),
             key,
+            alloc,
         })
     }
 
-    fn map(src: &'a Map, key: Option<&'a str>, alloc: Alloc) -> Result<Self, ValueError> {
+    /// A map whose array or any of whose keys lives in the wiping
+    /// allocator is copied there whole, its keys with it.
+    fn map(src: &'a Map, key: Option<&'a str>, how: Copy) -> Result<Self, ValueError> {
+        let secret_key = how.keeps_secrets
+            && src
+                .entries()
+                .iter()
+                .any(|e| super::types::lives_in_wiping(e.key.alloc));
+        let alloc = if secret_key {
+            Alloc::wiping()
+        } else {
+            how.home(src.alloc)
+        };
         Ok(Copying {
             built: Built::Map(Map::with_capacity_in(alloc, src.len())?),
             left: Left::Map(src.iter()),
             key,
+            alloc,
         })
     }
 
@@ -74,12 +112,12 @@ impl<'a> Copying<'a> {
     }
 
     /// Adds a finished copy, under `key` when this is a map.
-    fn attach(&mut self, key: Option<&str>, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+    fn attach(&mut self, key: Option<&str>, value: Value) -> Result<(), ValueError> {
         match &mut self.built {
-            Built::List(list) => list.push_node(value, alloc),
+            Built::List(list) => list.push_node(value, self.alloc),
             Built::Map(map) => {
                 let key = key.expect("a map's child is reached with its key");
-                map.insert_node(key, value, alloc)
+                map.insert_node(key, value, self.alloc)
             }
         }
     }
@@ -99,36 +137,45 @@ where
     node.try_as_ref().ok_or(ValueError::NotUtf8)
 }
 
-fn step<'a>(node: &'a Value, key: Option<&'a str>, alloc: Alloc) -> Result<Step<'a>, ValueError> {
+fn step<'a>(node: &'a Value, key: Option<&'a str>, how: Copy) -> Result<Step<'a>, ValueError> {
     Ok(Step::Leaf(match node.tag()? {
-        Tag::GUATIAO_LIST => return Ok(Step::Open(Copying::list(arm(node)?, key, alloc)?)),
-        Tag::GUATIAO_MAP => return Ok(Step::Open(Copying::map(text(node)?, key, alloc)?)),
+        Tag::GUATIAO_LIST => return Ok(Step::Open(Copying::list(arm(node)?, key, how)?)),
+        Tag::GUATIAO_MAP => return Ok(Step::Open(Copying::map(text(node)?, key, how)?)),
         Tag::GUATIAO_ABSENT => Value::absent(),
         Tag::GUATIAO_NULL => Value::null(),
         Tag::GUATIAO_BOOL => Value::from(*arm::<bool>(node)?),
-        Tag::GUATIAO_STRING => text::<Text>(node)?.clone_in(alloc)?.into(),
-        Tag::GUATIAO_NUMBER => arm::<Number>(node)?.clone_in(alloc)?.into(),
-        Tag::GUATIAO_BYTES => arm::<Buffer>(node)?.clone_in(alloc)?.into(),
+        Tag::GUATIAO_STRING => {
+            let t = text::<Text>(node)?;
+            Text::new_in(how.home(t.alloc), t)?.into()
+        }
+        Tag::GUATIAO_NUMBER => {
+            let n = arm::<Number>(node)?;
+            n.copy_in(how.home(n.recorded()))?.into()
+        }
+        Tag::GUATIAO_BYTES => {
+            let b = arm::<Buffer>(node)?;
+            Buffer::new_in(how.home(b.alloc), b)?.into()
+        }
     }))
 }
 
 /// Fills `root` and every container under it. A failure part-way drops
 /// the stack, and with it everything built so far.
-fn copy_tree(root: Copying<'_>, alloc: Alloc) -> Result<Built, ValueError> {
+fn copy_tree(root: Copying<'_>, how: Copy) -> Result<Built, ValueError> {
     let mut stack = vec![root];
     loop {
         let top = stack
             .last_mut()
             .expect("the root leaves the stack only to return");
         match top.next() {
-            Some((key, node)) => match step(node, key, alloc)? {
-                Step::Leaf(copy) => top.attach(key, copy, alloc)?,
+            Some((key, node)) => match step(node, key, how)? {
+                Step::Leaf(copy) => top.attach(key, copy)?,
                 Step::Open(container) => stack.push(container),
             },
             None => {
                 let done = stack.pop().expect("the top was just read");
                 match stack.last_mut() {
-                    Some(parent) => parent.attach(done.key, done.built.into_value(), alloc)?,
+                    Some(parent) => parent.attach(done.key, done.built.into_value())?,
                     None => return Ok(done.built),
                 }
             }
@@ -136,28 +183,93 @@ fn copy_tree(root: Copying<'_>, alloc: Alloc) -> Result<Built, ValueError> {
     }
 }
 
-/// A deep copy of `node` through `alloc`.
-pub(crate) fn copy_value(node: &Value, alloc: Alloc) -> Result<Value, ValueError> {
-    match step(node, None, alloc)? {
+fn copy_value_how(node: &Value, how: Copy) -> Result<Value, ValueError> {
+    match step(node, None, how)? {
         Step::Leaf(copy) => Ok(copy),
-        Step::Open(root) => Ok(copy_tree(root, alloc)?.into_value()),
+        Step::Open(root) => Ok(copy_tree(root, how)?.into_value()),
     }
 }
 
-/// A deep copy of `list` through `alloc`.
-pub(crate) fn copy_list(list: &List, alloc: Alloc) -> Result<List, ValueError> {
-    match copy_tree(Copying::list(list, None, alloc)?, alloc)? {
+fn copy_list_how(list: &List, how: Copy) -> Result<List, ValueError> {
+    match copy_tree(Copying::list(list, None, how)?, how)? {
         Built::List(copy) => Ok(copy),
         Built::Map(_) => unreachable!("a list's copy is a list"),
     }
 }
 
-/// A deep copy of `map` through `alloc`.
-pub(crate) fn copy_map(map: &Map, alloc: Alloc) -> Result<Map, ValueError> {
-    match copy_tree(Copying::map(map, None, alloc)?, alloc)? {
+fn copy_map_how(map: &Map, how: Copy) -> Result<Map, ValueError> {
+    match copy_tree(Copying::map(map, None, how)?, how)? {
         Built::Map(copy) => Ok(copy),
         Built::List(_) => unreachable!("a map's copy is a map"),
     }
+}
+
+/// A deep copy of `node` through `alloc`; a node that lives in the wiping
+/// allocator is copied there instead, so a copy of a secret stays one.
+pub(crate) fn copy_value(node: &Value, alloc: Alloc) -> Result<Value, ValueError> {
+    copy_value_how(
+        node,
+        Copy {
+            alloc,
+            keeps_secrets: true,
+        },
+    )
+}
+
+/// A deep copy of `list`, as [`copy_value`].
+pub(crate) fn copy_list(list: &List, alloc: Alloc) -> Result<List, ValueError> {
+    copy_list_how(
+        list,
+        Copy {
+            alloc,
+            keeps_secrets: true,
+        },
+    )
+}
+
+/// A deep copy of `map`, as [`copy_value`].
+pub(crate) fn copy_map(map: &Map, alloc: Alloc) -> Result<Map, ValueError> {
+    copy_map_how(
+        map,
+        Copy {
+            alloc,
+            keeps_secrets: true,
+        },
+    )
+}
+
+/// A deep copy of `node` entirely in `alloc`: how a kind's answer moves
+/// into the carrier its caller named, which is the caller's to choose.
+pub(crate) fn copy_value_exact(node: &Value, alloc: Alloc) -> Result<Value, ValueError> {
+    copy_value_how(
+        node,
+        Copy {
+            alloc,
+            keeps_secrets: false,
+        },
+    )
+}
+
+/// [`copy_value_exact`] for a list.
+pub(crate) fn copy_list_exact(list: &List, alloc: Alloc) -> Result<List, ValueError> {
+    copy_list_how(
+        list,
+        Copy {
+            alloc,
+            keeps_secrets: false,
+        },
+    )
+}
+
+/// [`copy_value_exact`] for a map.
+pub(crate) fn copy_map_exact(map: &Map, alloc: Alloc) -> Result<Map, ValueError> {
+    copy_map_how(
+        map,
+        Copy {
+            alloc,
+            keeps_secrets: false,
+        },
+    )
 }
 
 // --- where a tree lives ---------------------------------------------------

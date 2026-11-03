@@ -202,3 +202,19 @@ def test_wipe_overwrites_a_tree_in_an_allocator_that_does_not():
     assert watching.held == 0
     assert secret.is_null()
     secret.close()
+
+
+def test_a_secret_copied_into_a_plain_tree_stays_in_the_wiping_allocator():
+    secret = Value(SECRET, alloc=wiping_alloc())
+    plain = Value({"user": "alice"})
+    plain.as_map()["token"] = secret
+    items = Value(["a"])
+    items.as_list()[0] = secret
+    built = Value(secret)
+    for holder in (plain, items, built):
+        assert holder.is_sensitive, repr(holder)
+        assert "hunter2" not in repr(holder)
+    with plain.as_map()["token"].reveal() as view:
+        assert view.tobytes() == SECRET.encode()
+    for v in (plain, items, built, secret):
+        v.close()
