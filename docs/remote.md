@@ -624,7 +624,9 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   certificate and never recorded: accepting it could not let it in.
   Removing a peer from the
   store refuses its next link: TLS session resumption is off at both
-  ends unless the policy's `allow_resumption` keeps it.
+  ends unless the policy's `allow_resumption` keeps it, and a resumed
+  session (over `wss://` too) runs no verifier, so the store and the
+  list's fingerprint rules are not asked again for it.
 - **A refusal says why.** The side that refuses names the reason, one
   wording for each of coqui-peer-tls's refusals:
 
@@ -834,9 +836,12 @@ under HTTP/3's application protocol `h3`, at mutual TLS, server TLS or
 none: a native peer at mutual TLS presents its certificate, which the
 channel reports, and each end names the other by its fingerprint
 (`Link::peer_id()`). The list's fingerprint rules are decided once the
-certificate is known and before any frame is read; a store-backed mutual
-listener whose list names a fingerprint is refused when it binds (pin the
-clients instead). A source the list denies, or any connection the server
+certificate is known and before any frame is read, and a client it denies
+is told so (`BAD_VALUE`); a mutual listener backed by a trust store is
+refused when it binds, with a list or without, since its handshake has no
+connection address to record a waiting client under (pin the clients
+instead). A client TLS itself refuses is reported by coqui-web as a lost
+path, and told `GONE`. A source the list denies, or any connection the server
 declines, is QUIC's CONNECTION_REFUSED, and the client says it was
 "refused the connection (by its access control list, or the server
 refused the connection)": it cannot tell which. A

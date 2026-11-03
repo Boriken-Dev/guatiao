@@ -256,7 +256,9 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   not recorded); the waiting caps count an IPv6 source by its /64
   (`TrustStore::with_ipv6_prefix`). Session resumption is off at both
   ends unless the policy sets `allow_resumption` (a weakening), so a peer
-  removed from the store is refused at its next link. A refusal names its
+  removed from the store is refused at its next link; a resumed session
+  (a mutual `wss://` too) runs no verifier, so the store and the list's
+  fingerprint rules are not asked again for it. A refusal names its
   reason, one wording for each of coqui-peer-tls's `Refusal`s (the
   list by address or by fingerprint, `rule N` counted in tens or `its
   default`; not pinned; not accepted; a chain where a pinned peer
@@ -317,10 +319,18 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   connection addresses: its address rules before the handshake, in
   coqui-web's admission (after a Retry proved the address), and its
   fingerprint rules once the certificate is known and before any frame is
-  read (`web::list_permits`; a client it denies is closed). A store-backed
-  mutual listener (no fixed pins) whose list names a fingerprint is
-  refused when it binds, since the store would record a client the list
-  forbids as waiting before the list could say so. A source the list
+  read (`web::list_permits`; a client it denies is sent the link's
+  refusal, `BAD_VALUE` naming the rule, and closed). The list is checked
+  once, as the listener is made: a rule naming something that is not a
+  SHA-256 fingerprint is refused there. A mutual listener backed by a
+  trust store (no fixed pins) is refused when it binds, with a list or
+  without: its handshake has no connection address, so the store would
+  record every stranger waiting without its source, in one bucket where
+  strangers evict each other; the clients are pinned. A client the
+  TLS handshake itself refuses (an unpinned certificate) is reported by
+  coqui-web as a lost path and told `GONE`, "the handshake did not
+  finish" (the ignored test `a_client_the_tls_refuses_is_told_so` waits
+  for a failure of its own). A source the list
   denies, or any connection the server declines, is QUIC's
   CONNECTION_REFUSED, which coqui-web reports as `Failure::Permission`; a
   client cannot tell which, and says "refused the connection (by its access
@@ -397,8 +407,12 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   `WsListen::bind_beyond_loopback` / `WsConnect::beyond_loopback` (the
   `plain_beyond_loopback` key, `--plain-beyond-loopback`) choose it: nothing
   is encrypted and the key proof and the list alone decide, a weakening
-  every host reports (`RemoteSource::weakened()`, the server's start-up
-  line). Any path is accepted, the `Origin` header unread (the key proof is
+  `RemoteSource::weakened()` lists for a source made from a configuration
+  and the server prints at start (a source made by `RemoteSource::new`
+  holds a connector its host can ask: `WsConnect::plain_beyond_loopback`).
+  On a wildcard bind a list rule naming the address or port a client came
+  to cannot be decided and refuses the client, as on the TLS listeners.
+  Any path is accepted, the `Origin` header unread (the key proof is
   the gate); a text message or a message over `max` ends the channel
   (`InvalidData`); a close or a dropped connection ends the reads as a
   stream's end of file does. The channel is told apart what it reads
