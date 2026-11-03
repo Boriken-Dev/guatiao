@@ -14,6 +14,21 @@ write now.
 
 ### Added
 
+- **Every provider a host loaded, listed for a settings screen with none
+  built.** `guatiao_registry_catalog(reg, alloc, &out)` lists each
+  provider of every loaded library, best first, with what
+  `guatiao_registry_providers` says plus `available` (asked now) and its
+  `reason`, copies of its `config` schema and `meta`, `library_key`,
+  `library_version` and the library file's `digest` (`sha256:` and hex);
+  no `create` slot is called. In Rust, `Registry::library_of(&provider)`
+  names a provider's library and `Loaded::digest()` reads the SHA-256 of
+  the file it was mapped from, the first time it is asked, from the file
+  held open since just before the mapping (`None` for a library from no
+  file). guatiao-intake's `provider_form(schema, meta, alloc)` and
+  `guatiao_intake_provider_form` answer the form a provider is shown
+  with: its own under `meta["form"]`, else the one its schema implies,
+  else nothing. Python: `Registry.catalog()` and
+  `guatiao_intake.provider_form`. The `load` feature now pulls `sha2`.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and
