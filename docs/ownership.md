@@ -334,15 +334,27 @@ map grows and leaves its old block, and when a tree moves elsewhere. So
 releasing it, and a secret built there leaves nothing readable behind.
 
 - Build a secret there from its first byte. A node built in another
-  allocator and stored into a wiping tree keeps its own; moving a tree
-  into the wiping allocator (`into_alloc`, `make_local_in`,
-  `guatiao_value_make_local`) overwrites what it leaves behind.
-- A tree that lives there `clone()`s into it; `into_local()` moves it
-  into `Alloc::rust()`, which does not wipe.
+  allocator and stored into a wiping tree keeps its own.
+- **Every move overwrites what it leaves**, whatever the target: `into_alloc`,
+  `into_local`, `make_local_in`, `guatiao_value_make_local` and a kind's
+  answer moving into the caller's carrier overwrite each block they leave
+  before its own allocator frees it. A target this copy of the library
+  does not recognise (another copy's wiping allocator, a C author's own)
+  may still be keeping a secret.
+- **A copy of a secret stays one**: `clone()`, `clone_in` and
+  `guatiao_value_clone` make a copy of a node that lives in the wiping
+  allocator there, whatever allocator was asked for. A kind's answer is
+  the exception: it moves into exactly the carrier its caller named.
+- **One copy of the library at a time**: `is_sensitive` and the
+  `[sensitive]` placeholder know this copy's wiping allocator only, so a
+  library printing what the host built in the host's can show it.
 - A kind's method marked `#[sensitive]` answers in the wiping allocator:
   its proxy names it in the carrier unless the caller names another
   (`<method>_in`), and a provider building through `<method>_in`, or a C
-  one building in the carrier, puts nothing anywhere else.
+  one building in the carrier, puts nothing anywhere else. Such a method
+  answers `Result<Secret<String>, ProviderError>` or a `Value`, never a
+  bare `String`, which its caller could not wipe; the attribute refuses
+  one.
 - `Secret<T>` wipes what it holds when dropped, and `Wipe::wipe` (C
   `guatiao_value_wipe`) overwrites a tree in any allocator.
 - What leaves guatiao's containers (a `String` a caller converts to, a

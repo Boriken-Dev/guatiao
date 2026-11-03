@@ -160,6 +160,11 @@ be reliably wiped from M code: arrays are copied on write, so earlier
 copies stay. `guatiao_value_wipe` overwrites a tree you hold in another
 allocator.
 
+MATLAB and Octave reads a kind description's `"sensitive": true` and
+does nothing with it: a caller of a slot marked sensitive gets the
+answer in this binding's default allocator, and text as a language
+string, as for any other slot.
+
 ## Threads
 
 M code runs only on the interpreter's thread. A slot an M provider or

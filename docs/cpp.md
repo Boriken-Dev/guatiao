@@ -202,6 +202,11 @@ overwritten when guatiao frees it, every growth included. A
 blocks unwiped: read a secret through the tree's own bytes instead, and
 `guatiao_value_wipe` overwrites a tree you hold in another allocator.
 
+C++ reads a kind description's `"sensitive": true` and does nothing with
+it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## What C++ cannot do that Rust can
 
 - Run a kind's default body for a slot a provider leaves empty: such a

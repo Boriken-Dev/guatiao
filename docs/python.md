@@ -259,6 +259,9 @@ token.close()                                 # overwritten, then freed
 - `Ref.is_sensitive` says whether any part of a tree lives there;
   `repr` then shows `[sensitive]`. `Value.wipe()` overwrites a tree in
   any allocator and frees it.
+- The view `reveal()` answers, and every slice of it, holds the value
+  alive: while any lives, `close()`, `wipe()` and every change to the
+  value raise `BufferError`, so none reads memory that was freed.
 - A slot its kind marks `@sensitive` (`kinds.sensitive`, or
   `"sensitive": true` in the description) answers a `Value` kept in the
   wiping allocator, a text answer included (`kinds.SensitiveText`), never

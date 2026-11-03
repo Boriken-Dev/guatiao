@@ -430,13 +430,25 @@ in memory guatiao manages.
 
 - **Build it there.** A buffer keeps the allocator that made it: a node
   built elsewhere and stored into a tree that lives in the wiping
-  allocator keeps its own. Moving a tree into the wiping allocator
-  (`guatiao_value_make_local`, Rust `into_alloc`/`make_local_in`)
-  overwrites the blocks it leaves behind; a copy of a tree that lives
-  there (`clone()`) is made there too.
+  allocator keeps its own.
+- **A move leaves nothing behind, whatever the target.** Every move of a
+  tree between two allocators (`guatiao_value_make_local`, Rust
+  `into_alloc`, `into_local`, `make_local_in`, a kind's answer moving
+  into its caller's carrier) overwrites the block it leaves before that
+  block's own allocator frees it.
+- **A copy of a secret stays a secret.** A copy of a node that lives in
+  the wiping allocator (`guatiao_value_clone`, Rust `clone`/`clone_in`,
+  a binding's store or copy) is made in the wiping allocator whatever
+  allocator was asked for, and a map whose array or any key lives there
+  is copied there whole. A kind's answer is the one exception: it moves
+  into exactly the allocator its caller carried in.
 - **What shows a value hides one that lives there.** `guatiao_value_is_sensitive`
   says whether any part of a tree does; Rust's `Dump`, Python's `repr`
-  and Dart's `toString` print `[sensitive]` in its place.
+  and Dart's `toString` print `[sensitive]` in its place. **Within one
+  copy of the library**: a library linking its own copy has a wiping
+  allocator of its own, which wipes just the same but which the other
+  copy cannot tell apart, so a library printing an argument the host
+  built in the host's wiping allocator can show it.
 - **Wiping on demand.** `guatiao_value_wipe` overwrites every byte a tree
   holds, in whatever allocator, and frees it, leaving null.
 - **Your own allocator can wipe too**: a `free` that overwrites the
@@ -575,8 +587,9 @@ a file beside the header (`include/<crate>.kinds.json`):
   pointer before `err`; absent when there is none), an optional
   `sensitive` (`true`: the answer is a secret, so a caller names the
   wiping allocator in its carrier and keeps the answer there, a text
-  answer as a value rather than a language string; absent is `false`),
-  and an optional `doc`. **`sensitive` is not part of the floor hash**: it
+  answer as a value rather than a language string; absent is `false`;
+  Rust, the tables built at run time, Python and Dart honour it, every
+  other binding reads past it), and an optional `doc`. **`sensitive` is not part of the floor hash**: it
   changes which allocator a caller names, not the table, so a kind keeps
   its hash whether or not a slot is marked.
 - **An argument** is `name`, `type`, and for a tree or an object

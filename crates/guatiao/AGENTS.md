@@ -2549,8 +2549,11 @@ library three ways:
 - **`#[sensitive]` on a method** of `#[guatiao::kind]` marks its answer a
   secret: the proxy's `<method>` names `Alloc::wiping()` in the carrier
   (and builds the arguments it converts there), a shim with no carrier
-  builds there, a `String` answer is built there, and the description
-  says `"sensitive": true`. Not hashed: `FLOOR_HASH` is the same with or
+  builds there, and the description says `"sensitive": true`. It refuses
+  a method answering `String` (a copy nobody wipes): answer
+  `Result<Secret<String>, ProviderError>` or a `Value`. Tables built at
+  run time honour the mark too, their caller keeping a sensitive text
+  answer as `Answer::Value` in the wiping allocator. Not hashed: `FLOOR_HASH` is the same with or
   without it. A provider building through `<method>_in`, or one whose
   answer is moved there, leaves no copy behind; what it keeps of its own
   is its own.
@@ -2885,12 +2888,19 @@ is Rust's global allocator with a `free` that overwrites every block with
 zeros, volatile and fenced, before releasing it. Since every block goes
 back through the allocator that made it, with its size, a tree built
 there leaves nothing readable behind: freed, grown (the old block), or
-moved into another allocator (the source). Moving a tree **into** it
-(`into_alloc`, `make_local_in`, `guatiao_value_make_local`) overwrites
-what the move leaves in the other allocator. A tree whose root lives
-there `clone()`s into it; `into_local()` moves it to `Alloc::rust()`.
-The promise is per buffer: a node built elsewhere and stored into a
-wiping tree keeps its own allocator.
+moved into another allocator (the source). **Every move between
+allocators overwrites the block it leaves**, whatever the target
+(`into_alloc`, `into_local`, `make_local_in`,
+`guatiao_value_make_local`, a kind's answer into its carrier). **A copy
+of a node that lives there is made there** (`clone`, `clone_in`,
+`guatiao_value_clone`), whatever allocator was asked for, a map whose
+array or any key lives there whole; a kind's answer alone moves into
+exactly the carrier its caller named. The promise is per buffer: a node
+built elsewhere and stored into a wiping tree keeps its own allocator.
+**Recognised within this copy of the library only** (by `ctx`):
+`is_wiping`, `is_sensitive` and the `[sensitive]` placeholder know
+nothing of another linked copy's wiping allocator, so a library printing
+an argument the host built in the host's can show it.
 
 ```rust
 Alloc::wiping() -> Alloc;  alloc.is_wiping() -> bool   // this build's wiping allocator only

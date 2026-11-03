@@ -204,6 +204,11 @@ overwritten when guatiao frees it. A `character` buffer you copy it into
 is yours, and you can overwrite it before it goes;
 `guatiao_value_wipe` overwrites a tree you hold in another allocator.
 
+Fortran reads a kind description's `"sensitive": true` and does nothing
+with it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## Threads
 
 A slot a Fortran provider or object serves runs on the thread that calls

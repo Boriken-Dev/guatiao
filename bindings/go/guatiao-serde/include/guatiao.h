@@ -3342,12 +3342,19 @@ guatiao_status guatiao_alloc_default(struct guatiao_alloc *out);
  `free` with the exact `size` it was allocated with: a tree freed, the
  block a growing string, bytes, list or map leaves behind, and the
  source of a move into another allocator. So everything built through
- this one is overwritten before it is released, and a tree moved into
- it (`guatiao_value_make_local`) leaves its old blocks overwritten too.
- Build a secret here from its first byte: a node built in another
- allocator keeps that allocator when it is stored into a tree that
- lives here. A slot whose kind marks it `sensitive` names this
- allocator in its carrier.
+ this one is overwritten before it is released. A move between any two
+ allocators (`guatiao_value_make_local`) overwrites the block it leaves
+ as well, and a copy (`guatiao_value_clone`) of a node that lives here
+ is made here, whatever allocator was asked for. Build a secret here
+ from its first byte: a node built in another allocator keeps that
+ allocator when it is stored into a tree that lives here. A slot whose
+ kind marks it `sensitive` names this allocator in its carrier.
+
+ **Recognised within one copy of the library**: another library
+ linking its own copy has its own wiping allocator, which wipes just
+ the same, but which this copy does not tell apart from any other, so
+ `guatiao_value_is_sensitive` and a printer's placeholder here say
+ nothing of what lives there.
 
  **Your own allocator can do the same**: a `free` that overwrites the
  `size` bytes it is given (with stores the compiler keeps, such as a
@@ -3362,8 +3369,10 @@ guatiao_status guatiao_alloc_wiping(struct guatiao_alloc *out);
 
 /*
  Whether `alloc` is the allocator `guatiao_alloc_wiping` writes,
- recognised by its `free`. False for a null or unusable one, and for
- an allocator of the caller's own, even one that wipes.
+ recognised by its `ctx`, the address of a static of this copy of the
+ library. False for a null or unusable one, for an allocator of the
+ caller's own, even one that wipes, and for the wiping allocator of
+ another copy of the library linked into the same process.
 
  # Safety
 

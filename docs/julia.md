@@ -184,6 +184,11 @@ be wiped: it is immutable. A `Vector{UInt8}`, or `unsafe_wrap` over the
 tree's own bytes, can be zeroed; `guatiao_value_wipe` overwrites a tree
 you hold in another allocator.
 
+Julia reads a kind description's `"sensitive": true` and does nothing
+with it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## Threads
 
 A slot a Julia provider or object serves runs on the thread that calls
