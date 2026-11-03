@@ -82,6 +82,13 @@ def build_layout(into: Path) -> "Path | None":
     return _build("layout.c", into, "c_layout")
 
 
+def build_catalog_library(into: Path) -> "Path | None":
+    """`catalog_library.c`, four providers a settings screen lists, whose
+    every `create` refuses saying whether it was the first: the file, or
+    `None` without a compiler."""
+    return _build("catalog_library.c", into, "catalog_library")
+
+
 def library_dir() -> str:
     """The directory the suite's libraries are in: `GUATIAO_LIBRARY`, or
     the directory of the file it names (an application's own library

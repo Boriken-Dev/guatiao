@@ -227,6 +227,18 @@ class Registry:
         view, _buf = _make_str(kind.encode("utf-8"))
         return cast(List[Any], self._call(_lib.core().guatiao_registry_providers, view))
 
+    def catalog(self) -> List[Dict[str, Any]]:
+        """Every provider of every loaded library, best first, with what a
+        settings screen shows about each, and **none of them built**: one
+        dict per provider holding what `providers()` does, plus
+        `available` (asked now) and `reason` when it cannot run,
+        `config` (its schema) and `meta` when it declares them,
+        `library_key`, `library_version`, and `digest` (`"sha256:"` and the
+        hex of the file its library was mapped from; absent for a library
+        from no file). `guatiao_intake.provider_form(entry.get("config"),
+        entry.get("meta"))` answers the form to show it with."""
+        return cast(List[Dict[str, Any]], self._call(_lib.core().guatiao_registry_catalog))
+
     def available(self, kind: str = "") -> List[Any]:
         view, _buf = _make_str(kind.encode("utf-8"))
         return cast(List[Any], self._call(_lib.core().guatiao_registry_available, view))

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import hashlib
 import json
 import os
 
@@ -124,6 +126,54 @@ def test_a_providers_meta_is_a_copy_carrying_its_form():
         assert reg.provider_meta("derived_greeter_hello") is None
         with pytest.raises(errors.NotFound):
             reg.provider_meta("nobody")
+
+
+def test_the_catalog_lists_every_provider_of_a_directory_and_builds_none(tmp_path):
+    built = native.build_catalog_library(tmp_path)
+    if built is None:
+        pytest.skip("no C compiler found")
+    with Registry("catalog-host", "1.0") as reg:
+        report = reg.scan_dir(str(tmp_path))
+        assert report["failed"] == [] and len(report["loaded"]) == 1, report
+        catalog = {entry["id"]: entry for entry in reg.catalog()}
+        assert sorted(catalog) == [
+            "catalog_configured",
+            "catalog_implied",
+            "catalog_plain",
+            "catalog_unavailable",
+        ]
+        digest = "sha256:" + hashlib.sha256(built.read_bytes()).hexdigest()
+
+        configured = catalog["catalog_configured"]
+        assert configured["kinds"] == ["counter"]
+        assert configured["display_name"] == "Configured, with a form"
+        assert configured["version"] == "2.0"
+        assert configured["library"] == "catalog_library"
+        assert configured["library_version"] == "1.0"
+        assert configured["digest"] == digest
+        assert configured["available"] is True and "reason" not in configured
+        assert configured["config"]["required"] == ["host", "port"]
+        assert configured["meta"]["form"]["sections"] == [{"id": "net", "title": "Network"}]
+
+        implied = catalog["catalog_implied"]
+        assert implied["version"] == "1.0"
+        assert "meta" not in implied
+        assert implied["config"]["properties"]["token"]["x-sensitive"] is True
+
+        unavailable = catalog["catalog_unavailable"]
+        assert unavailable["available"] is False
+        assert unavailable["reason"] == "no device here"
+        assert "config" not in unavailable and not unavailable["has_config"]
+        assert catalog["catalog_plain"]["available"] is True
+
+        # Listing asked the library for nothing: its count says so, and so
+        # does its refusal of the first instance asked for afterwards.
+        library = ctypes.CDLL(str(built))
+        assert library.catalog_built() == 0
+        with pytest.raises(errors.GuatiaoError) as refused:
+            reg.create("catalog_configured", {"host": "localhost", "port": 8080})
+        assert refused.value.message == "built nothing: the first create this library was asked"
+        assert library.catalog_built() == 1
 
 
 def test_a_provider_carries_its_kinds_descriptions():

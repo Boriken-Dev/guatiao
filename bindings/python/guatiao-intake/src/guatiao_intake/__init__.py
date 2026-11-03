@@ -35,6 +35,7 @@ __all__ = [
     "is_visible",
     "layout",
     "library",
+    "provider_form",
     "resolve",
     "unflatten",
     "use_library",
@@ -58,6 +59,7 @@ _EXPORTS: "dict[str, tuple[list[Any], Any, str | None]]" = {
     "guatiao_intake_is_visible": ([_V, _V, ffi.Str, _V, _P(ctypes.c_bool)], _u32, None),
     "guatiao_intake_for_schema": ([_V, _A, _V], _u32, None),
     "guatiao_intake_form_for": ([_V, _V, ffi.Str, _A, _V], _u32, None),
+    "guatiao_intake_provider_form": ([_V, _V, _A, _V], _u32, None),
     "guatiao_intake_path_get": ([_V, ffi.Str], _V, None),
     "guatiao_intake_resolve": ([_V, ffi.Str], _V, None),
     "guatiao_intake_flat_keys": ([_V, ffi.Str, _A, _V], _u32, None),
@@ -226,6 +228,56 @@ def for_schema(schema: Ref, *, alloc: "ffi.Alloc | None" = None) -> Value:
         )
     )
     return ffi.adopt(out, alloc_struct)
+
+
+def provider_form(
+    schema: "Ref | Mapping[str, Any] | None",
+    meta: "Ref | Mapping[str, Any] | None",
+    *,
+    alloc: "ffi.Alloc | None" = None,
+) -> "Value | None":
+    """The form a provider's settings are shown with: the one it declares
+    in its `meta` under `PROVIDER_FORM_KEY`, or the one its configuration
+    `schema` implies (`for_schema`) when it declares none.
+
+    `schema` and `meta` are what the registry answers for the provider
+    (`provider_config` and `provider_meta`, or the `config` and `meta` of
+    an entry `guatiao.Registry.catalog` lists), either one `None`; a plain
+    dict is converted. `None` when it declares no form and takes no
+    configuration: nothing to show. A declared form is not checked against
+    the schema here; `check` does that.
+    """
+    lib = library()
+    alloc_struct = _alloc(alloc, lib)
+    owned: "list[Value]" = []
+
+    def node(ref: "Ref | Mapping[str, Any] | None") -> Any:
+        if ref is None:
+            return None
+        if isinstance(ref, Mapping):
+            converted = Value.from_python(dict(ref), alloc=alloc)
+            owned.append(converted)
+            return _ptr(converted)
+        return _ptr(ref)
+
+    try:
+        out = ffi.Node()
+        _check_status(
+            lib.guatiao_intake_provider_form(
+                node(schema),
+                node(meta),
+                ctypes.byref(alloc_struct),
+                ctypes.byref(out),
+            )
+        )
+    finally:
+        for value in owned:
+            value.close()
+    value = ffi.adopt(out, alloc_struct)
+    if value.is_absent():
+        value.close()
+        return None
+    return value
 
 
 def form_for(
