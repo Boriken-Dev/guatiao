@@ -2067,7 +2067,12 @@ current directory and `PATH`, in that order; each found is mapped by its
 full path (with what it forwards to beside it, as `python3.dll` forwards
 to `python3XX.dll`), then the file is opened again with the narrow
 search, so everything else it imports comes from where the default finds
-it. A missing import of an import is not looked for. A module already
+it. An import is present when the loader, asked for it as data (nothing
+runs), finds it beside the host, in a directory the process added or in
+System32. A name holding `\`, `/` or `:` is never looked for. A missing
+import of an import is not looked for. What was mapped this way stays
+while the file does (unloading a library lets it go) and, while mapped,
+answers its name to every library the process loads, under either search. A module already
 loaded answers an import of its name under either. A refusal's reason
 carries the system's words and names each import found nowhere. Elsewhere the setting is
 ignored: on Linux the file's `RUNPATH` (`$ORIGIN`) and `LD_LIBRARY_PATH`
@@ -2312,10 +2317,10 @@ guatiao_source_info **out, guatiao_provider_error *err)` (`SOURCE_SYMBOL`,
 a scan reports it as `Skipped::Source { serves }` and never loads it.
 `add_source_file` maps it, checks the table's slots lie in its code, and
 **never unmaps it**. The configuration's `import_dirs` (a list of
-directories) is the registry's, taken out before the source sees the
-rest: where, on Windows, a library the file imports itself and the import
-search leaves missing is looked for (see "Where a loaded file's imports
-are found"); ignored elsewhere. `SourceError`: `Open`, `NotASource`,
+directories, a relative one the file's directory's) is the registry's,
+taken out before the source sees the rest: where, on Windows, a library
+the file imports itself and the import search leaves missing is looked
+for (see "Where a loaded file's imports are found"); ignored elsewhere. `SourceError`: `Open`, `NotASource`,
 `Refused { status, message }`, `Malformed`, `Duplicate`, `Config { path,
 key, why }` (`import_dirs` not a list of text); `.status()` is what it
 crosses C as.

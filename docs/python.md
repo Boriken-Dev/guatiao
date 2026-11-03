@@ -223,7 +223,15 @@ says how much it takes:
 | `inherit` | the environment as well, as a `python` started there would |
 | `isolated` | only the configuration's `home` (else the installation libpython is in) and `paths` |
 
-A Python host's own interpreter is joined as it is.
+`inherit`, and the registry's import search `path` that reaches
+`python3.dll` through `PATH`, are the weaker settings; naming the
+installation in the bridge's `import_dirs` keeps the default search. A
+source cannot yet say to its host, in every language, that it runs under
+one: that waits for a channel from a source to its host.
+
+An interpreter already running (a Python host's own) is joined as it is:
+asking it for `isolated`, or naming `shipped`, when its flags do not hold
+to that is refused rather than ignored.
 [The bridge's reference](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-py/AGENTS.md)
 has what each Python version on Windows can keep out.
 

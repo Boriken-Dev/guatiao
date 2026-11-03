@@ -196,7 +196,10 @@ the Python bridge, which imports `python3.dll` from a Python installation,
 names it in its configuration's `import_dirs`, which the registry takes
 for itself: on Windows a library the file imports itself and the search
 leaves missing is mapped from the first of them holding it, with what it
-forwards to beside it (`python3XX.dll`), under either setting.
+forwards to beside it (`python3XX.dll`), under either setting; a relative
+one is the file's directory's. A library mapped that way, or from `PATH`
+under `path`, is the process's while the file that needed it is: any
+library loaded meanwhile that imports the same name binds to it.
 `path` is the host's choice for a file whose imports are wherever `PATH`
 says: `Registry::set_import_search(ImportSearch::Path)`, in C
 `guatiao_registry_set_import_search(reg, GUATIAO_IMPORT_SEARCH_PATH)`,
