@@ -124,6 +124,7 @@ fn a_rust_host_lists_every_provider_of_a_scanned_directory_and_builds_none() {
         let library = registry
             .library_of(provider)
             .expect("every provider has its library");
+        assert_eq!(library.id, provider.library(), "{}", provider.id());
         let form = provider_form(provider.config_schema(), provider.meta(), Alloc::rust())
             .expect("a form or none");
         rows.insert(
@@ -228,20 +229,33 @@ fn a_rust_host_lists_every_provider_of_a_scanned_directory_and_builds_none() {
     }
 }
 
+/// The C catalog library's file name in `dir`.
+fn catalog_file(dir: &Path) -> PathBuf {
+    dir.join(format!(
+        "{}catalog_library{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    ))
+}
+
 #[test]
-fn a_library_s_digest_is_of_the_file_it_was_mapped_from() {
+fn a_digest_is_kept_once_read_and_never_of_another_file() {
     let Some(dir) = plugins("provider_catalog_digest") else {
         println!("skipped: no C compiler found.");
         return;
     };
-    let file = dir.join(format!(
-        "{}catalog_library{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    ));
+    let file = catalog_file(&dir);
     let mapped = sha256_of(&file);
-    let mut registry = Registry::new("catalog-host", "1.0");
-    registry.load_file(&file).expect("it loads");
+
+    // Asked before anything changes: the file's digest, then kept.
+    let mut asked = Registry::new("catalog-host", "1.0");
+    asked.load_file(&file).expect("it loads");
+    let library = &asked.loaded()[0];
+    assert_eq!(library.digest().expect("reads").as_deref(), Some(&*mapped));
+
+    // A second registry maps the same file and has not asked yet.
+    let mut late = Registry::new("catalog-host", "1.0");
+    late.load_file(&file).expect("it loads");
 
     // Another file at that path now: renaming a mapped file works on every
     // platform, where overwriting one does not.
@@ -249,13 +263,15 @@ fn a_library_s_digest_is_of_the_file_it_was_mapped_from() {
     std::fs::rename(&file, &moved).expect("a mapped file renames");
     std::fs::write(&file, b"not the library").expect("a new file at the old path");
 
-    let library = &registry.loaded()[0];
     assert_eq!(
-        library.digest().expect("reads").expect("from a file"),
-        mapped,
-        "the digest is of what was mapped, not of what the path names now"
+        library.digest().expect("kept").as_deref(),
+        Some(&*mapped),
+        "a digest read once is kept"
     );
-    assert_ne!(sha256_of(&file), mapped);
+    let refused = late.loaded()[0]
+        .digest()
+        .expect_err("the path names another file now");
+    assert_eq!(refused.to_string(), "the file changed since it was loaded");
 
     // A library from no file has none.
     let mut linked = Registry::new("catalog-host", "1.0");
@@ -272,6 +288,79 @@ fn a_library_s_digest_is_of_the_file_it_was_mapped_from() {
         )
         .expect("registers");
     assert_eq!(linked.loaded()[0].digest().expect("no I/O"), None);
+}
+
+#[test]
+fn a_file_written_since_its_load_has_no_digest() {
+    let Some(dir) = plugins("provider_catalog_written") else {
+        println!("skipped: no C compiler found.");
+        return;
+    };
+    let file = catalog_file(&dir);
+    let mut registry = Registry::new("catalog-host", "1.0");
+    registry.load_file(&file).expect("it loads");
+
+    // Windows refuses to write a mapped image; elsewhere bytes appended in
+    // place change the file while it stays the same file.
+    let appended = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&file)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, b"tail"));
+    if appended.is_err() {
+        println!("skipped: this platform refuses to write a mapped library");
+        return;
+    }
+    let refused = registry.loaded()[0]
+        .digest()
+        .expect_err("the file is not the one that was loaded");
+    assert_eq!(refused.to_string(), "the file changed since it was loaded");
+}
+
+#[test]
+fn a_bare_file_name_is_the_file_in_the_current_directory() {
+    let Some(dir) = plugins("provider_catalog_bare") else {
+        println!("skipped: no C compiler found.");
+        return;
+    };
+    let file = catalog_file(&dir);
+    let name = PathBuf::from(file.file_name().expect("a file name"));
+    // The other tests here name every path absolutely, so the current
+    // directory is this test's alone to move.
+    let previous = std::env::current_dir().expect("a current directory");
+    std::env::set_current_dir(&dir).expect("the directory exists");
+    let mut registry = Registry::new("catalog-host", "1.0");
+    let loaded = registry.load_file(&name);
+    std::env::set_current_dir(previous).expect("back where it was");
+
+    loaded
+        .expect("the file in the current directory loads")
+        .loaded()
+        .expect("it is a library");
+    assert_eq!(
+        registry.loaded()[0].digest().expect("reads"),
+        Some(sha256_of(&file)),
+        "the bytes named are the bytes mapped"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_loaded_library_holds_no_descriptor_on_its_file() {
+    let Some(dir) = plugins("provider_catalog_descriptors") else {
+        println!("skipped: no C compiler found.");
+        return;
+    };
+    let file = catalog_file(&dir).canonicalize().expect("it exists");
+    let mut registry = Registry::new("catalog-host", "1.0");
+    registry.load_file(&file).expect("it loads");
+
+    let open_on_it = std::fs::read_dir("/proc/self/fd")
+        .expect("procfs")
+        .filter_map(Result::ok)
+        .filter(|fd| std::fs::read_link(fd.path()).is_ok_and(|target| target == file))
+        .count();
+    assert_eq!(open_on_it, 0, "a host that never asks pays nothing");
+    assert!(registry.loaded()[0].digest().expect("reads").is_some());
 }
 
 #[test]

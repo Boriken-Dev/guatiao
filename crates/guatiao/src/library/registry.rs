@@ -556,44 +556,123 @@ pub struct Loaded {
     /// Its say in being unmapped, or `None` for a library that declares
     /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
     unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
-    /// The file it was mapped from, opened just before the mapping, or
-    /// `None` for a library that came from no file.
+    /// The file it was mapped from, or `None` for a library that came from
+    /// no file.
     file: Option<LibraryFile>,
 }
 
-/// A library file, held open from just before it was mapped so that its
-/// digest is of that file and not of whatever its path names later.
-#[derive(Debug)]
-struct LibraryFile(std::sync::Mutex<Digested>);
+/// What a library file was when it was mapped: enough to tell later that
+/// the file at its path is still that file, unchanged. Device and inode on
+/// unix, volume serial and file index on Windows; size and last write on
+/// both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Identity {
+    volume: u64,
+    index: u64,
+    size: u64,
+    modified: (i64, i64),
+}
 
-/// The held file and its digest once read.
+impl Identity {
+    /// The identity of an open file.
+    #[cfg(unix)]
+    fn of(file: &std::fs::File) -> Result<Identity, std::io::Error> {
+        use std::os::unix::fs::MetadataExt as _;
+        let m = file.metadata()?;
+        Ok(Identity {
+            volume: m.dev(),
+            index: m.ino(),
+            size: m.size(),
+            modified: (m.mtime(), m.mtime_nsec()),
+        })
+    }
+
+    /// The identity of an open file.
+    #[cfg(windows)]
+    fn of(file: &std::fs::File) -> Result<Identity, std::io::Error> {
+        let info = winapi_util::file::information(file)?;
+        let written = info.last_write_time().unwrap_or(0);
+        Ok(Identity {
+            volume: info.volume_serial_number(),
+            index: info.file_index(),
+            size: info.file_size(),
+            modified: (i64::try_from(written).unwrap_or(i64::MAX), 0),
+        })
+    }
+
+    /// No identity where the platform names none.
+    #[cfg(not(any(unix, windows)))]
+    fn of(_file: &std::fs::File) -> Result<Identity, std::io::Error> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "this platform names no file identity",
+        ))
+    }
+
+    /// The identity of the file at `path`.
+    fn at(path: &Path) -> Result<Identity, std::io::Error> {
+        Identity::of(&std::fs::File::open(path)?)
+    }
+}
+
+/// A library file: its absolute path and its identity at load, known only
+/// when it was the same immediately before and after the mapping. No
+/// handle is held.
 #[derive(Debug)]
-struct Digested {
-    file: std::fs::File,
-    digest: Option<String>,
+struct LibraryFile {
+    path: PathBuf,
+    /// The identity, or why it is not known.
+    identity: Result<Identity, String>,
+    /// The digest once read.
+    digest: std::sync::Mutex<Option<String>>,
 }
 
 impl LibraryFile {
-    fn new(file: std::fs::File) -> LibraryFile {
-        LibraryFile(std::sync::Mutex::new(Digested { file, digest: None }))
+    /// What a load of `path` saw, from the identities taken before and
+    /// after the mapping.
+    fn new(
+        path: PathBuf,
+        before: Result<Identity, std::io::Error>,
+        after: Result<Identity, std::io::Error>,
+    ) -> LibraryFile {
+        let identity = match (before, after) {
+            (Ok(before), Ok(after)) if before == after => Ok(before),
+            (Ok(_), Ok(_)) => Err("the file changed while it was being loaded".to_string()),
+            (Err(e), _) | (_, Err(e)) => Err(format!(
+                "the file could not be examined when it loaded: {e}"
+            )),
+        };
+        LibraryFile {
+            path,
+            identity,
+            digest: std::sync::Mutex::new(None),
+        }
     }
 
-    /// `sha256:` and 64 lowercase hex digits, read once and then kept.
+    /// `sha256:` and 64 lowercase hex digits of the file at the path, read
+    /// while it is still the file that was loaded, and then kept.
     fn digest(&self) -> Result<String, std::io::Error> {
         use core::fmt::Write as _;
         use sha2::Digest as _;
-        use std::io::{Read as _, Seek as _};
+        use std::io::Read as _;
 
-        // A poisoned lock guards nothing broken: every read seeks first.
-        let mut held = self
-            .0
+        let changed = || std::io::Error::other("the file changed since it was loaded");
+        // A poisoned lock guards nothing broken: the cache is set last.
+        let mut cached = self
+            .digest
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(done) = &held.digest {
+        if let Some(done) = &*cached {
             return Ok(done.clone());
         }
-        let file = &mut held.file;
-        file.seek(std::io::SeekFrom::Start(0))?;
+        let loaded = self
+            .identity
+            .as_ref()
+            .map_err(|why| std::io::Error::other(format!("no digest can be vouched for: {why}")))?;
+        let mut file = std::fs::File::open(&self.path)?;
+        if Identity::of(&file)? != *loaded {
+            return Err(changed());
+        }
         let mut hasher = sha2::Sha256::new();
         let mut buf = alloc::vec![0u8; 64 * 1024];
         loop {
@@ -610,7 +689,12 @@ impl LibraryFile {
             // Writing to a `String` cannot fail.
             let _ = write!(text, "{byte:02x}");
         }
-        held.digest = Some(text.clone());
+        // Written to while it was read: the bytes hashed are of no one
+        // state of the file.
+        if Identity::of(&file)? != *loaded {
+            return Err(changed());
+        }
+        *cached = Some(text.clone());
         Ok(text)
     }
 }
@@ -618,20 +702,26 @@ impl LibraryFile {
 impl Loaded {
     /// The SHA-256 of the file this library was mapped from, as `sha256:`
     /// and 64 lowercase hex digits, or `None` for a library that came from
-    /// no file this registry could open: one the host registered, or one a
-    /// source served.
+    /// no file: one the host registered, or one a source served.
     ///
-    /// Read the first time a host asks, and kept: never at load, so a host
-    /// that does not ask pays nothing. It is read from the file this
-    /// registry opened just before mapping it and has held open since, so
-    /// a file replaced at the same path afterwards does not change it.
-    /// What it says is what was loaded, not whether it should have been: a
-    /// host that pins libraries by digest checks the bytes before loading.
+    /// At load the registry maps the file by its absolute path and records
+    /// the file's identity (device and inode on unix, volume and file index
+    /// on Windows, with its size and last write) from that path just before
+    /// and just after the mapping; no handle is kept. The first time a host
+    /// asks, the file at that path is opened, its identity checked against
+    /// the recorded one, hashed in full on the calling thread, and checked
+    /// again; only then is the digest kept. So **a digest is answered only
+    /// for the file that was loaded, unchanged**; a file replaced or
+    /// written since is an error, never another file's digest. What it says
+    /// is what was loaded, not whether it should have been: a host that
+    /// pins libraries by digest checks the bytes before it loads them.
     ///
     /// # Errors
     ///
-    /// The I/O error reading the file failed with. Nothing is kept, so a
-    /// later call reads again.
+    /// "the file changed since it was loaded" when the identity differs;
+    /// the reason when the identity could not be recorded at load (the file
+    /// could not be examined, or changed during the load); the I/O error of
+    /// a read. Only a success is kept, so a later call asks again.
     pub fn digest(&self) -> Result<Option<String>, std::io::Error> {
         self.file.as_ref().map(LibraryFile::digest).transpose()
     }
@@ -1145,17 +1235,21 @@ impl Registry {
         // locked: the host it reads is the leaked block, and what the
         // block answers is the last published snapshot.
         let host = self.host();
-        // Opened before the mapping and held, for `Loaded::digest`. A file
-        // that cannot be opened here is the loader's to report.
-        let file = std::fs::File::open(path).ok().map(LibraryFile::new);
+        // One absolute path for the mapping and for `Loaded::digest`: a bare
+        // name is the file in the current directory on every platform, not
+        // whatever the loader's own search finds.
+        let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        let before = Identity::at(&absolute);
         let opened =
-            super::raw::open_library(path, host, self.import_search).map_err(|reason| {
+            super::raw::open_library(&absolute, host, self.import_search).map_err(|reason| {
                 LoadError::Open {
                     path: path.to_path_buf(),
                     reason,
                 }
             })?;
-        self.absorb_file(path, source, opened, file)
+        let after = Identity::at(&absolute);
+        let file = LibraryFile::new(absolute, before, after);
+        self.absorb_file(path, source, opened, Some(file))
     }
 
     /// Registers a library the host **links** rather than loads: its
@@ -1668,9 +1762,11 @@ impl Registry {
     /// [`digest`](Loaded::digest). `None` for a provider this registry
     /// does not hold.
     pub fn library_of(&self, provider: &Provider) -> Option<&Loaded> {
-        // By path, as `absorb` recorded it on every provider it took: one
-        // per registered library.
-        self.loaded.iter().find(|l| l.path == provider.from)
+        // By lease, the one identity a library has that no path or loader
+        // can share with another.
+        self.loaded
+            .iter()
+            .find(|l| provider.view.hold.holds(&l.lease))
     }
 
     /// Every provider, of every kind.
@@ -1684,6 +1780,36 @@ mod tests {
     use super::*;
     use crate::library::raw::Hold;
     use core::ffi::c_void;
+
+    #[test]
+    fn a_file_that_could_not_be_examined_at_load_has_no_digest_but_a_reason() {
+        let unseen = || std::io::Error::other("permission denied");
+        let same = Identity {
+            volume: 1,
+            index: 2,
+            size: 3,
+            modified: (4, 5),
+        };
+        for (before, after, why) in [
+            (
+                Err(unseen()),
+                Ok(same),
+                "the file could not be examined when it loaded: permission denied",
+            ),
+            (
+                Ok(same),
+                Ok(Identity { size: 9, ..same }),
+                "the file changed while it was being loaded",
+            ),
+        ] {
+            let file = LibraryFile::new(PathBuf::from("unused"), before, after);
+            let refused = file.digest().expect_err("nothing to vouch for");
+            assert_eq!(
+                refused.to_string(),
+                format!("no digest can be vouched for: {why}")
+            );
+        }
+    }
 
     fn provider(id: &str, version: Option<&str>) -> ProviderView {
         ProviderView {

@@ -219,13 +219,28 @@ impl HostRegistry {
     /// Every provider, best first, with everything a settings screen
     /// shows about it: none is built.
     fn catalog(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        // Each library's digest asked once per call, however many
+        // providers it offers: a refusal is not kept, so asking per
+        // provider would read a file once for each.
+        let mut digests: Vec<(&crate::library::Loaded, Result<Option<String>, String>)> =
+            Vec::new();
         let mut list = List::new_in(alloc);
         for provider in self.inner.all_ranked() {
-            list.try_push(catalog_value(
-                alloc,
-                provider,
-                self.inner.library_of(provider),
-            )?)?;
+            let library = match self.inner.library_of(provider) {
+                None => None,
+                Some(library) => {
+                    let at = match digests.iter().position(|(l, _)| core::ptr::eq(*l, library)) {
+                        Some(at) => at,
+                        None => {
+                            let digest = library.digest().map_err(|e| e.to_string());
+                            digests.push((library, digest));
+                            digests.len() - 1
+                        }
+                    };
+                    Some((library, &digests[at].1))
+                }
+            };
+            list.try_push(catalog_value(alloc, provider, library)?)?;
         }
         Ok(list.into())
     }
@@ -1401,10 +1416,18 @@ pub unsafe extern "C" fn guatiao_registry_providers(
 ///   `guatiao_intake_provider_form` answers that form, or the one the
 ///   schema implies when there is none.
 /// - `library_key` and `library_version`: the library that offered it.
-/// - `digest`: `"sha256:"` and 64 lowercase hex digits, of the file that
-///   library was mapped from, read the first time any call asks and kept;
-///   absent for a library from no file (registered, or served by a
-///   source). `digest_error`, the reason, when reading the file failed.
+/// - `digest`: `"sha256:"` and 64 lowercase hex digits of the file that
+///   library was mapped from, **answered only while the file at that
+///   absolute path is still the one loaded, unchanged** (its identity,
+///   recorded just before and after the mapping, is checked before and
+///   after hashing); absent for a library from no file (registered, or
+///   served by a source). Otherwise `digest_error` says why: "the file
+///   changed since it was loaded", the file could not be examined, a read
+///   failed. A digest is kept once read; an error is not.
+///
+/// **The first call reads each library file in full, on the calling
+/// thread**, once per library however many providers it offers; later
+/// calls answer the kept digests.
 ///
 /// A library's own instance (a provider with no `create`) was made by its
 /// entry point when it loaded, and calling `available` calls into it;
@@ -2084,7 +2107,7 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
 fn catalog_value(
     alloc: Alloc,
     one: &Provider,
-    library: Option<&crate::library::Loaded>,
+    library: Option<(&crate::library::Loaded, &Result<Option<String>, String>)>,
 ) -> Result<Value, ValueError> {
     let mut map = Map::try_from(provider_value(alloc, one)?).map_err(|_| ValueError::WrongKind)?;
     match one.available() {
@@ -2100,22 +2123,19 @@ fn catalog_value(
     if let Some(meta) = one.meta() {
         map.try_set("meta", meta.clone_in(alloc)?)?;
     }
-    if let Some(library) = library {
+    if let Some((library, digest)) = library {
         map.try_set("library_key", text_value(alloc, &library.key)?)?;
         map.try_set(
             "library_version",
             Text::new_in(alloc, &library.version).map(Value::from)?,
         )?;
-        match library.digest() {
+        match digest {
             Ok(Some(digest)) => {
-                map.try_set("digest", Text::new_in(alloc, &digest).map(Value::from)?)?;
+                map.try_set("digest", Text::new_in(alloc, digest).map(Value::from)?)?;
             }
             Ok(None) => {}
-            Err(e) => {
-                map.try_set(
-                    "digest_error",
-                    Text::new_in(alloc, &e.to_string()).map(Value::from)?,
-                )?;
+            Err(why) => {
+                map.try_set("digest_error", Text::new_in(alloc, why).map(Value::from)?)?;
             }
         }
     }

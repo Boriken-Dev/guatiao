@@ -2329,10 +2329,18 @@ guatiao_status guatiao_registry_providers(const struct guatiao_registry *reg,
    `guatiao_intake_provider_form` answers that form, or the one the
    schema implies when there is none.
  - `library_key` and `library_version`: the library that offered it.
- - `digest`: `"sha256:"` and 64 lowercase hex digits, of the file that
-   library was mapped from, read the first time any call asks and kept;
-   absent for a library from no file (registered, or served by a
-   source). `digest_error`, the reason, when reading the file failed.
+ - `digest`: `"sha256:"` and 64 lowercase hex digits of the file that
+   library was mapped from, **answered only while the file at that
+   absolute path is still the one loaded, unchanged** (its identity,
+   recorded just before and after the mapping, is checked before and
+   after hashing); absent for a library from no file (registered, or
+   served by a source). Otherwise `digest_error` says why: "the file
+   changed since it was loaded", the file could not be examined, a read
+   failed. A digest is kept once read; an error is not.
+
+ **The first call reads each library file in full, on the calling
+ thread**, once per library however many providers it offers; later
+ calls answer the kept digests.
 
  A library's own instance (a provider with no `create`) was made by its
  entry point when it loaded, and calling `available` calls into it;
