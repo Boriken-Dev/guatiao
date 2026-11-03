@@ -16,9 +16,10 @@ use alloc::collections::BTreeMap;
 use core::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
+use anycfg::{Callbacks, CodecError, Formats, Options};
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
-use guatiao::{Alloc, FromValue, Map, MapError, Schema, ToValue};
+use guatiao::{Alloc, FromValue, Map, MapError, Schema, ToValue, Value};
 use guatiao_intake::{Form, FormRef, Screen, check};
 use guatiao_serde::Presentation;
 use guatiao_serde::text::toml as toml_text;
@@ -139,9 +140,40 @@ fn expected() -> Daemon {
     }
 }
 
+/// TOML over guatiao's value, read through anycfg: `.toml` by its extension, and
+/// `.cfg` by its first line, else TOML.
+fn formats() -> Formats<Value> {
+    let mut formats = Formats::new();
+    formats
+        .register(
+            "toml",
+            ["toml"],
+            Callbacks::new(
+                |bytes: &[u8]| {
+                    let text = core::str::from_utf8(bytes).map_err(|e| {
+                        CodecError::at_offset(bytes, e.valid_up_to()).message("not UTF-8")
+                    })?;
+                    toml_text::from_str(text, Alloc::rust(), Presentation::new()).map_err(|e| {
+                        let at = e.position().map_or_else(CodecError::new, |p| {
+                            CodecError::new().line(p.line).column(p.column)
+                        });
+                        at.message(e.to_string())
+                    })
+                },
+                |_: &Value| Err(CodecError::new().message("only read here")),
+            ),
+        )
+        .unwrap();
+    formats.register_auto(["cfg"], "toml").unwrap();
+    formats
+}
+
+fn document(name: &str, text: &str) -> Result<Value, anycfg::Error> {
+    formats().from_str(text, Options::new().name(name))
+}
+
 fn read(text: &str) -> Result<Daemon, Box<dyn core::error::Error>> {
-    let value = toml_text::from_str(text, Alloc::rust(), Presentation::new())?;
-    Ok(Daemon::from_value(&value)?)
+    Ok(Daemon::from_value(&document("daemon.toml", text)?)?)
 }
 
 #[test]
@@ -150,11 +182,35 @@ fn it_reads_from_toml_text() {
 }
 
 #[test]
+fn a_cfg_file_is_toml_unless_its_first_line_names_another_format() {
+    let bare = Daemon::from_value(&document("daemon.cfg", DOCUMENT).unwrap()).unwrap();
+    assert_eq!(bare, expected());
+    let named = format!(
+        "#!toml
+{DOCUMENT}"
+    );
+    let named = Daemon::from_value(&document("daemon.cfg", &named).unwrap()).unwrap();
+    assert_eq!(named, expected());
+    let error = document(
+        "daemon.cfg",
+        "#!json
+{}",
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("registered: toml"), "{error}");
+    let error = document("daemon.conf", DOCUMENT).unwrap_err();
+    assert!(
+        error.to_string().contains("registered: cfg, toml"),
+        "{error}"
+    );
+}
+
+#[test]
 fn its_own_schema_accepts_what_it_writes_and_the_document() {
     let schema = Daemon::schema().unwrap();
     let s = SchemaRef::new(&schema).unwrap();
     validate_map(s, &expected().to_value().unwrap()).expect("accepts what it writes");
-    let document = toml_text::from_str(DOCUMENT, Alloc::rust(), Presentation::new()).unwrap();
+    let document = document("daemon.toml", DOCUMENT).unwrap();
     validate_map(s, &document).expect("accepts the document");
     // And reads back what it wrote.
     let written = expected().to_value().unwrap();
