@@ -544,8 +544,14 @@ other.wipe()                             # any Value: overwritten, freed, left n
 - `Ref.reveal()`: a context manager answering a read-only `memoryview`
   over a string's, number's or bytes' own memory, released when the block
   ends; `TypeError` for any other node. The view and every slice of it
-  hold the value alive, and while any lives `close()`, `wipe()` and every
-  change to the value raise `BufferError`.
+  hold the value alive, and while any lives `close()`, `wipe()`, handing
+  the value to a slot, lending it and every change to it raise
+  `BufferError`; so does a `reveal()` on another thread while the value
+  is being closed, wiped or handed over. Of a node a call lends or
+  borrows (a provider's argument), the view is over a copy in the wiping
+  allocator, wiped when its last view and slice go. A slice in a
+  reference cycle holds the value until the cycle is collected; one alive
+  at interpreter exit leaves its tree unfreed and unwiped.
 - `Ref.is_sensitive`; `repr` of a `Value` or `Ref` holding anything in
   the wiping allocator is `[sensitive]`. `Value.wipe()` overwrites every
   byte a tree holds, in any allocator, and frees it.

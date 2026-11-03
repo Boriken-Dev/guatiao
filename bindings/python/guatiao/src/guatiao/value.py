@@ -18,6 +18,7 @@ import contextlib
 import ctypes
 import decimal
 import math
+import threading
 import weakref
 from collections.abc import Mapping
 from typing import Any, Iterator, Protocol, Union
@@ -298,16 +299,14 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
     raise TypeError(f"cannot convert {type(obj)!r} to a guatiao value")
 
 
-def _revealed(owner: Any, ptr: int, size: int) -> Any:
+def _revealed(owner: "Value", ptr: int, size: int) -> Any:
     """The `size` bytes at `ptr` as a ctypes array that holds `owner`
     alive, recorded on `owner` as revealed while it lives: what every
-    view and slice of a reveal refers to."""
+    view and slice of a reveal refers to. Called under `owner._lock`."""
     holder_type: Any = type("_Revealed", (ctypes.c_char * size,), {})
     holder = holder_type.from_address(ptr)
     holder.owner = owner
-    reveals = getattr(owner, "_reveals", None)
-    if reveals is not None:
-        reveals[id(holder)] = holder
+    owner._reveals[id(holder)] = holder
     return holder
 
 
@@ -388,30 +387,66 @@ class Ref:
         Python keeps and guatiao cannot wipe.
 
         The view, and every slice taken from it, holds the tree alive: while
-        any of them lives, `close()`, `wipe()` and every change to the tree
-        raise `BufferError`, so none of them can read memory that was
-        freed or moved."""
-        node = self._require_node()
-        if node.tag in (_abi.Tag.STRING, _abi.Tag.NUMBER):
-            storage: Any = node.payload.text
-        elif node.tag == _abi.Tag.BYTES:
-            storage = node.payload.bytes
-        else:
-            raise TypeError("only a string, a number or bytes can be revealed")
-        if storage.len == 0:
+        any of them lives, `close()`, `wipe()`, handing the tree to a slot,
+        lending it and every change to it raise `BufferError`, so none of
+        them can read memory that was freed or moved. A slice kept in a
+        reference cycle holds it until the garbage collector frees the
+        cycle; one still alive when the interpreter exits keeps its tree
+        from being freed, and so from being wiped, until the process ends.
+        A `reveal()` on another thread while the value is being closed,
+        wiped or handed over raises `BufferError`.
+
+        Of a node a call lends or borrows, which its caller frees once the
+        call returns, the view is over a copy made in the wiping
+        allocator, wiped when the last view and slice of it go."""
+        owner = self.owner
+        if not isinstance(owner, Value):
+            self._revealable()
+            with self._private_copy().reveal() as view:
+                yield view
+            return
+        with owner._lock:
+            if owner._ending:
+                raise BufferError("this value is being closed, wiped or handed over")
+            storage = self._revealable()
+            holder = None if storage.len == 0 else _revealed(owner, storage.ptr, storage.len)
+        if holder is None:
             view = memoryview(b"")
             try:
                 yield view
             finally:
                 view.release()
             return
-        base = memoryview(_revealed(self.owner, storage.ptr, storage.len)).cast("B")
+        base = memoryview(holder).cast("B")
+        del holder
         view = base.toreadonly()
         try:
             yield view
         finally:
             view.release()
             base.release()
+
+    def _revealable(self) -> Any:
+        """The text or bytes arm of this node, which `reveal()` reads."""
+        node = self._require_node()
+        if node.tag in (_abi.Tag.STRING, _abi.Tag.NUMBER):
+            return node.payload.text
+        if node.tag == _abi.Tag.BYTES:
+            return node.payload.bytes
+        raise TypeError("only a string, a number or bytes can be revealed")
+
+    def _private_copy(self) -> "Value":
+        """This node copied into the wiping allocator, as a `Value` of
+        its own."""
+        node = self._require_node()
+        alloc = wiping_alloc()
+        out = _abi.Value()
+        check(
+            _lib.core().guatiao_value_clone(
+                ctypes.byref(alloc), ctypes.byref(node), ctypes.byref(out)
+            )
+        )
+        return Value(_raw=out, alloc=alloc)
 
     def is_absent(self) -> bool:
         return self.tag == _abi.Tag.ABSENT
@@ -683,6 +718,10 @@ class Value(Ref):
         self._alloc_override = alloc
         # The holders of views `reveal()` answered that are still alive.
         self._reveals: "weakref.WeakValueDictionary[int, Any]" = weakref.WeakValueDictionary()
+        # Held while a reveal is recorded or the tree is claimed to be
+        # freed or moved, so the two never interleave across threads.
+        self._lock = threading.Lock()
+        self._ending = False
         self._closed = False
         Ref.__init__(self, self, ())
         if obj is _UNSET and not fields:
@@ -713,6 +752,21 @@ class Value(Ref):
         self._check_open()
         self._check_unrevealed()
 
+    @contextlib.contextmanager
+    def _ending_tree(self) -> Iterator[None]:
+        """Claims the tree for an operation that frees or moves all of
+        it: refused while a view `reveal()` answered lives, and a
+        `reveal()` on another thread is refused until it is done, so none
+        reads what it frees."""
+        with self._lock:
+            self._check_open()
+            self._check_unrevealed()
+            self._ending = True
+        try:
+            yield
+        finally:
+            self._ending = False
+
     def _ensure_alloc(self) -> "_abi.Alloc":
         if self._alloc_override is not None:
             return self._alloc_override
@@ -726,20 +780,25 @@ class Value(Ref):
         allocator each part lives, then frees it: this value is null
         afterwards. What a secret built outside the wiping allocator needs
         before it goes; one built there is wiped by `close()` as well."""
-        self._check_open()
-        self._check_unrevealed()
-        check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
+        with self._ending_tree():
+            check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
 
     def close(self) -> None:
+        """Frees the tree, wiping what lives in the wiping allocator.
+        `BufferError` while a view `reveal()` answered, or a slice of one,
+        lives."""
         if getattr(self, "_closed", True):
             return
-        self._check_unrevealed()
-        try:
-            _lib.core().guatiao_value_free(ctypes.byref(self._raw))
-        finally:
-            self._closed = True
+        with self._ending_tree():
+            try:
+                _lib.core().guatiao_value_free(ctypes.byref(self._raw))
+            finally:
+                self._closed = True
 
     def __del__(self) -> None:
+        # A view still alive here is in a cycle being collected, or the
+        # interpreter is exiting: the tree is left unfreed, and unwiped,
+        # rather than freed under it.
         try:
             self.close()
         except Exception:

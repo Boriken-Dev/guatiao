@@ -143,10 +143,11 @@ def complete(alloc_ptr: Any) -> bool:
 
 def _move_out(value: Value) -> "_abi.Value":
     """The root node of `value`, moved into a fresh struct: `value` holds
-    ABSENT afterwards and frees nothing."""
-    value._check_open()
-    moved = _abi.Value.from_buffer_copy(value._raw)
-    ctypes.memset(ctypes.addressof(value._raw), 0, ctypes.sizeof(_abi.Value))
+    ABSENT afterwards and frees nothing. `BufferError` while a view of it
+    `reveal()` answered lives: the callee may free the tree."""
+    with value._ending_tree():
+        moved = _abi.Value.from_buffer_copy(value._raw)
+        ctypes.memset(ctypes.addressof(value._raw), 0, ctypes.sizeof(_abi.Value))
     return moved
 
 
