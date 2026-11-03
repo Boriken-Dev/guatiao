@@ -17,9 +17,10 @@ from typing import Protocol
 
 import pytest
 
-from guatiao import Value, _abi, _lib, wiping_alloc
+from guatiao import Map, Value, _abi, _lib, wiping_alloc
 from guatiao.kinds import (
     KindProtocol,
+    Lent,
     SensitiveText,
     ValueAnswer,
     _description,
@@ -92,6 +93,9 @@ class Vault(KindProtocol, Protocol, kind="py_vault"):
     @required
     def name(self) -> str: ...
 
+    @required
+    def touch(self, map: Lent[Map]) -> None: ...
+
 
 class PlainVault(KindProtocol, Protocol, kind="py_plain_vault"):
     """The same slots, none marked."""
@@ -106,6 +110,9 @@ class PlainVault(KindProtocol, Protocol, kind="py_plain_vault"):
     @required
     def name(self) -> str: ...
 
+    @required
+    def touch(self, map: Lent[Map]) -> None: ...
+
 
 class Keeper:
     def read(self, key: str) -> ValueAnswer:
@@ -116,6 +123,9 @@ class Keeper:
 
     def name(self) -> str:
         return "keeper"
+
+    def touch(self, map: Map) -> None:
+        pass
 
 
 def test_the_mark_is_not_in_the_floor_hash():
@@ -159,7 +169,7 @@ def test_the_description_says_which_slots_are_sensitive_and_reads_back():
     assert slots["pin"].get("sensitive") is True
     assert "sensitive" not in slots["name"]
     read = kinds_of(document)["py_vault"]
-    assert [m.sensitive for m in read.methods] == [True, True, False]
+    assert [m.sensitive for m in read.methods] == [True, True, False, False]
     assert read.floor_hash == Vault.kind.floor_hash
     module = generate(document)
     assert "    @sensitive\n    def pin(self) -> SensitiveText" in module
@@ -252,3 +262,18 @@ def test_a_slice_keeps_the_tree_alive_after_its_value_is_dropped():
 
     gc.collect()
     assert bytes(kept) == SECRET.encode()[0:7]
+
+
+def test_a_secret_in_a_lent_map_stays_in_the_wiping_allocator():
+    raw = _serve.serve(PlainVault.kind, Keeper())
+    try:
+        vault = PlainVault.kind.bind(raw.table, raw.size, raw.ctx)
+        plain = Value({"user": "alice"})
+        plain.as_map()["token"] = Value(SECRET, alloc=wiping_alloc())
+        vault.touch(plain.as_map())
+        assert plain.is_sensitive
+        assert _lives_in_wiping(plain.as_map()["token"]._require_node())
+        assert "hunter2" not in repr(plain)
+        plain.close()
+    finally:
+        _serve.release(raw.ctx)

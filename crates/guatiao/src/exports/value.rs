@@ -85,8 +85,10 @@ pub unsafe extern "C" fn guatiao_value_clone(
 
 /// Moves the tree in `v` into `alloc` where it stands: every block
 /// another allocator made is moved into one from `alloc` and the old one
-/// freed through the allocator that made it. Allocates nothing when
-/// everything already records `alloc`.
+/// overwritten with zeros and freed through the allocator that made it.
+/// A block in this library's wiping allocator stays where it is, a secret
+/// kept a secret. Allocates nothing when everything already records
+/// `alloc` or lives there.
 ///
 /// What a caller of a kind table calls on a tree answer, or a lent tree,
 /// a slot may have built in the library's own allocator: afterwards the

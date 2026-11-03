@@ -132,16 +132,18 @@ pub(crate) fn cloned<T>(copy: Result<T, ValueError>, layout: Layout) -> T {
 
 /// `is_local`, `into_local`, `into_alloc` and `make_local_in` on an owned
 /// container or a node. `$homed(&self, alloc)` answers whether everything
-/// it owns records `alloc`, without allocating; `$settle(&mut self,
+/// it owns records `alloc` or this build's wiping allocator, without
+/// allocating; `$settle(&mut self,
 /// alloc)` moves what does not; `$layout(&self)` is what an aborted local
 /// copy reports.
 macro_rules! where_it_lives {
     ($ty:ty, $homed:path, $settle:path, $layout:expr) => {
         impl $ty {
             /// Whether everything this owns, map keys included, records
-            /// this binary's allocator ([`Alloc::rust`]): what
-            /// [`into_local`](Self::into_local) hands back unchanged. A
-            /// value that owns nothing is local. Answering allocates
+            /// this binary's allocator ([`Alloc::rust`]) or this build's
+            /// wiping allocator ([`Alloc::wiping`]), where a secret stays:
+            /// what [`into_local`](Self::into_local) hands back unchanged.
+            /// A value that owns nothing is local. Answering allocates
             /// nothing.
             pub fn is_local(&self) -> bool {
                 $homed(self, Alloc::rust().as_raw())
@@ -152,7 +154,9 @@ macro_rules! where_it_lives {
             /// otherwise copied into [`Alloc::rust`] and the original
             /// overwritten with zeros and freed through the allocators it
             /// recorded. Where `clone` would copy a tree you already own,
-            /// this moves it.
+            /// this moves it. A node in this build's wiping allocator
+            /// stays there, so a secret is still wiped when freed, and a
+            /// second call changes nothing.
             ///
             /// # Panics
             ///
@@ -175,7 +179,9 @@ macro_rules! where_it_lives {
             /// already records `alloc`, otherwise copied there and the
             /// original overwritten with zeros and freed through the
             /// allocators it recorded, so the move leaves nothing readable
-            /// behind, whatever `alloc` is.
+            /// behind, whatever `alloc` is. A node in this build's wiping
+            /// allocator counts as home and stays there, a secret kept a
+            /// secret.
             ///
             /// # Errors
             ///
@@ -197,8 +203,10 @@ macro_rules! where_it_lives {
             /// one overwritten with zeros and freed through the allocator
             /// that made it, whatever `alloc` is. Nothing is
             /// copied twice and nothing is read as content, so a tree a
-            /// foreign producer wrote moves as it is. Allocates nothing
-            /// when everything already records `alloc`.
+            /// foreign producer wrote moves as it is. A block in this
+            /// build's wiping allocator stays where it is. Allocates
+            /// nothing when everything already records `alloc` or lives
+            /// there.
             ///
             /// Where [`into_alloc`](Self::into_alloc) takes the tree, this
             /// works through `&mut`: on a tree you were lent, or one a

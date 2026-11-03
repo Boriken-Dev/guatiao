@@ -645,7 +645,7 @@ pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
     unsafe { Map::from_ptr(&out) }?;
     // A copy frees the original here, through the allocator that made it,
     // while the library that made it is still leased by the caller.
-    if crate::value::walk::map_recorded_by(&out, home.as_raw()) {
+    if crate::value::walk::map_recorded_by_exact(&out, home.as_raw()) {
         return Ok(out);
     }
     let copy = crate::value::walk::copy_map_exact(&out, home);
@@ -665,7 +665,7 @@ pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
 /// table that ignored the carrier.
 #[doc(hidden)]
 pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
-    if crate::value::walk::recorded_by(&out, home.as_raw()) {
+    if crate::value::walk::recorded_by_exact(&out, home.as_raw()) {
         return Ok(out);
     }
     let copy = crate::value::walk::copy_value_exact(&out, home);
@@ -677,7 +677,7 @@ pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
 /// [`value_ret`] for a list.
 #[doc(hidden)]
 pub fn list_ret(out: List, home: Alloc) -> Result<List, ProviderError> {
-    if crate::value::walk::list_recorded_by(&out, home.as_raw()) {
+    if crate::value::walk::list_recorded_by_exact(&out, home.as_raw()) {
         return Ok(out);
     }
     let copy = crate::value::walk::copy_list_exact(&out, home);
