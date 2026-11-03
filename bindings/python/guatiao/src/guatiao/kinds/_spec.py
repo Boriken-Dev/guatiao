@@ -14,7 +14,7 @@ from typing import Any, Sequence
 from .. import _abi
 from ..errors import Unsupported, check, raise_for_status
 from . import _serve
-from ._shapes import BYTES_MUT, Scope, Shape, _ObjectShape, answer_shape
+from ._shapes import BYTES_MUT, Scope, Shape, _ObjectShape, answer_shape, sensitive_answer
 from ._table import FloorMismatch
 
 _WORD = ctypes.sizeof(ctypes.c_void_p)
@@ -39,6 +39,10 @@ class Method:
     absent. `arg_names` and `doc` are what a description of
     the kind says of it (`kinds.describe_kinds`); unnamed arguments are
     `arg0`, `arg1`, ...
+
+    `sensitive` marks a slot whose answer is a secret: a caller names the
+    wiping allocator for it and gets a tree or a string back as a `Value`
+    kept there, never as Python data. It is not part of the floor hash.
     """
 
     def __init__(
@@ -51,6 +55,7 @@ class Method:
         required: bool = False,
         arg_names: Sequence[str] = (),
         doc: "str | None" = None,
+        sensitive: bool = False,
     ) -> None:
         for shape in args:
             if getattr(shape, "is_object", False):
@@ -62,6 +67,9 @@ class Method:
         self.name = name
         self.args = tuple(args)
         self.returns = answer_shape(returns) if returns is not None else None
+        self.sensitive = bool(sensitive)
+        if self.sensitive and self.returns is not None:
+            self.returns = sensitive_answer(self.returns)
         self.fallible = fallible
         self.required = required
         names = list(arg_names) + [f"arg{i}" for i in range(len(arg_names), len(self.args))]

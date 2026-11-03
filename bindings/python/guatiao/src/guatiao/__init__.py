@@ -27,7 +27,7 @@ from .errors import (
 from ._lib import LibraryNotFound, MissingSymbol, use_library
 from .registry import ImportSearch, Instance, Registry
 from .schema import redact
-from .value import ABSENT, List, Map, Ref, Value
+from .value import ABSENT, List, Map, Ref, Value, wiping_alloc
 from . import wire
 
 __version__ = "0.0.0a1"
@@ -43,6 +43,7 @@ __all__ = [
     "ImportSearch",
     "Instance",
     "redact",
+    "wiping_alloc",
     "wire",
     "GuatiaoError",
     "BadValue",

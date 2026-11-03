@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from .. import _abi, _lib
 from ..errors import BadValue, NullArgument, raise_for_status
-from ..value import List, Map, Ref, Value, _make_bytes, _make_str
+from ..value import List, Map, Ref, Value, _make_bytes, _make_str, wiping_alloc
 
 _P = ctypes.POINTER
 
@@ -171,12 +171,14 @@ def _free_node(node: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(node))
 
 
-def _make_local(node: "_abi.Value", what: str = "the answer") -> None:
-    """Moves a tree into this binding's allocator, so it outlives the
-    library that built it: a slot's answer, which a slot that ignored the
-    carrier built in its own, or a tree a caller handed over. Freed, and
-    the refusal raised, when the move fails."""
-    status = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
+def _make_local(node: "_abi.Value", what: str = "the answer", alloc: Any = None) -> None:
+    """Moves a tree into this binding's allocator (or `alloc`), so it
+    outlives the library that built it: a slot's answer, which a slot that
+    ignored the carrier built in its own, or a tree a caller handed over.
+    Into the wiping allocator, what it leaves behind is overwritten first.
+    Freed, and the refusal raised, when the move fails."""
+    home = binding_alloc() if alloc is None else alloc
+    status = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(home))
     if status != _abi.Status.OK:
         _free_node(node)
         raise_for_status(status, f"moving {what} into this binding's allocator")
@@ -344,16 +346,26 @@ class _BytesMut(Shape):
 
 
 class _Text(Shape):
-    """`String` as an answer: owned text, read and freed by the caller."""
+    """`String` as an answer: owned text, read and freed by the caller.
+
+    Sensitive, the caller gets it as a `Value` holding the string in the
+    wiping allocator, never as a `str`, and a Python callee's answer is
+    built there."""
 
     name = "TEXT"
     c_out = _abi.String
+
+    def __init__(self, sensitive: bool = False) -> None:
+        self.sensitive = sensitive
 
     def out_slot(self, scope: Scope) -> Any:
         return _abi.String()
 
     def answer(self, out: Any, scope: Scope) -> Any:
         node = _abi.Value(tag=int(_abi.Tag.STRING), payload=_abi.Payload(text=out))
+        if self.sensitive:
+            _make_local(node, alloc=wiping_alloc())
+            return Value(_raw=node, alloc=wiping_alloc())
         try:
             return _text_of(out, "the answer")
         finally:
@@ -363,9 +375,16 @@ class _Text(Shape):
         _free_node(_abi.Value(tag=int(_abi.Tag.STRING), payload=_abi.Payload(text=out)))
 
     def write(self, out_ptr: Any, result: Any) -> None:
+        if self.sensitive and isinstance(result, Ref):
+            # A secret the callee holds natively: moved (a `Value`) or
+            # copied (a view) into the wiping allocator, never through a str.
+            node = _owned_tree(result, int(_abi.Tag.STRING), wiping_alloc())
+            _make_local(node, alloc=wiping_alloc())
+            out_ptr[0] = node.payload.text
+            return
         if not isinstance(result, str):
             raise TypeError(f"a TEXT answer is a str, not {type(result).__name__}")
-        built = Value.string(result)
+        built = Value(result, alloc=wiping_alloc()) if self.sensitive else Value.string(result)
         moved = _move_out(built)
         out_ptr[0] = moved.payload.text
 
@@ -373,10 +392,13 @@ class _Text(Shape):
 class _Tree(Shape):
     """A value, a map or a list, in one of the ways a tree crosses."""
 
-    def __init__(self, name: str, tag: "int | None", mode: str) -> None:
+    def __init__(self, name: str, tag: "int | None", mode: str, sensitive: bool = False) -> None:
         self.name = name
         self.tag = tag
         self.mode = mode  # "borrow", "take", "lend", "answer"
+        # An answer a kind marks sensitive: built in, and kept in, the
+        # wiping allocator.
+        self.sensitive = sensitive
         self.takes = mode == "take"
         struct: Any = _abi.Value if tag is None else (_abi.Map if tag == _abi.Tag.MAP else _abi.List)
         self._struct = struct
@@ -441,9 +463,12 @@ class _Tree(Shape):
         scope.given(lambda: _free_node(node))
         return ctypes.byref(self._arm(node))
 
+    def _home(self) -> Any:
+        return wiping_alloc() if self.sensitive else binding_alloc()
+
     def out_slot(self, scope: Scope) -> Any:
         # The carrier: owns nothing, and names the allocator to build in.
-        alloc = ctypes.pointer(binding_alloc())
+        alloc = ctypes.pointer(self._home())
         scope.keep(alloc)
         if self.tag is None:
             out = _abi.Value(tag=int(_abi.Tag.ABSENT))
@@ -453,8 +478,8 @@ class _Tree(Shape):
 
     def answer(self, out: Any, scope: Scope) -> Any:
         node = out if self.tag is None else self._node_over(out)
-        _make_local(node)
-        return Value(_raw=node, alloc=binding_alloc())
+        _make_local(node, alloc=self._home())
+        return Value(_raw=node, alloc=self._home())
 
     def drop(self, out: Any) -> None:
         _free_node(out if self.tag is None else self._node_over(out))
@@ -493,7 +518,7 @@ class _Tree(Shape):
     def write(self, out_ptr: Any, result: Any) -> None:
         carrier = out_ptr.contents
         named = carrier.payload.map.alloc if self.tag is None else carrier.alloc
-        alloc = named.contents if complete(named) else binding_alloc()
+        alloc = named.contents if complete(named) else self._home()
         node = _owned_tree(result, self.tag, alloc)
         ctypes.memmove(ctypes.addressof(carrier), ctypes.addressof(self._arm(node)),
                        ctypes.sizeof(self._struct))
@@ -588,6 +613,17 @@ def lent(what: Any) -> Shape:
     if getattr(what, "is_object", False):
         return _ObjectShape(what, "lend")
     raise TypeError(f"lent() takes VALUE, MAP, LIST or an object kind, not {what!r}")
+
+
+def sensitive_answer(shape: Any) -> Any:
+    """The answer `shape` takes in a slot its kind marks sensitive: a tree
+    or text built in, and kept in, the wiping allocator. A scalar, an
+    object or nothing is unchanged."""
+    if isinstance(shape, _Tree) and shape.mode == "answer":
+        return _Tree(shape.name, shape.tag, "answer", sensitive=True)
+    if isinstance(shape, _Text):
+        return _Text(sensitive=True)
+    return shape
 
 
 def answer_shape(what: Any) -> Shape:

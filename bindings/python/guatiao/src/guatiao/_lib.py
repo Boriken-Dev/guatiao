@@ -393,6 +393,10 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_string_push": ([_P(Alloc), _P(Value), Str], c_uint32, None),
     "guatiao_buffer_push": ([_P(Alloc), _P(Value), Bytes], c_uint32, None),
     "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
+    "guatiao_alloc_wiping": ([_P(Alloc)], c_uint32, None),
+    "guatiao_alloc_is_wiping": ([_P(Alloc)], ctypes.c_bool, None),
+    "guatiao_value_is_sensitive": ([_P(Value)], ctypes.c_bool, None),
+    "guatiao_value_wipe": ([_P(Value)], c_uint32, None),
     "guatiao_wire_encode": ([_P(Alloc), _P(Value), _P(Value)], c_uint32, None),
     "guatiao_wire_decode": ([_P(Alloc), Bytes, _P(Value)], c_uint32, None),
     "guatiao_wire_announce": (
@@ -459,6 +463,7 @@ class Library:
             fn.restype = restype
             self._funcs[name] = fn
         self._alloc: Alloc | None = None
+        self._wiping: Alloc | None = None
 
     def _missing_stub(self, name: str, feature: str | None) -> Callable[..., Any]:
         path = self.path
@@ -489,6 +494,18 @@ class Library:
                 )
             self._alloc = allocator
         return self._alloc
+
+    @property
+    def wiping_alloc(self) -> Alloc:
+        """The wiping allocator, filled by `guatiao_alloc_wiping` once: every
+        block freed through it is overwritten with zeros first."""
+        if self._wiping is None:
+            allocator = Alloc()
+            status = self.guatiao_alloc_wiping(ctypes.byref(allocator))
+            if status != 0:
+                raise RuntimeError(f"guatiao_alloc_wiping failed with status {status}")
+            self._wiping = allocator
+        return self._wiping
 
 
 _lock = threading.Lock()
