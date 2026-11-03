@@ -59,6 +59,31 @@ void main() {
     }
   });
 
+  test('a catalog entry gives each provider its form', () {
+    final reg = Registry('dart-tests', '0.1');
+    addTearDown(reg.close);
+    reg.scanDir(libraryDir(), rules: 'kind=greeter');
+    final catalog = {for (final entry in reg.catalog()) entry['id']: entry};
+
+    final shouter = catalog['derived_greeter_shouter']!;
+    final form = intake.providerForm(shouter['config'], shouter['meta']);
+    expect(form, isNotNull);
+    addTearDown(form!.close);
+    expect(
+      [
+        for (final s in (form.toDart()! as Map)['sections'] as List)
+          (s as Map)['id'],
+      ],
+      ['words', 'volume'],
+    );
+    final schema = Value.fromDart(shouter['config']);
+    addTearDown(schema.close);
+    expect(intake.check(schema, form), isNull);
+
+    final hello = catalog['derived_greeter_hello']!;
+    expect(intake.providerForm(hello['config'], hello['meta']), isNull);
+  });
+
   test('the form key is the header\'s', () {
     expect(intake.providerFormKey, GUATIAO_INTAKE_PROVIDER_FORM_KEY);
   });

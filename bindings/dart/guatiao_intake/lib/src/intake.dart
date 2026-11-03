@@ -184,6 +184,61 @@ Value forSchema(Ref schema, {Pointer<guatiao_alloc>? alloc}) {
   }
 }
 
+/// The form a provider's settings are shown with: the one it declares in
+/// its [meta] under [providerFormKey], or else the one its configuration
+/// [schema] implies, as [forSchema] makes it.
+///
+/// [schema] and [meta] are what the registry answers for the provider
+/// (`providerConfig` and `providerMeta`, or the `config` and `meta` of an
+/// entry `Registry.catalog` lists): each a [Ref], plain Dart data
+/// (converted), or `null`. What is not a map is skipped, as reading the
+/// key by hand skips it: a value under the key that is no form gives the
+/// schema's form. `null` when that leaves nothing to show. A declared form
+/// is not checked against the schema here; [check] does that.
+///
+/// The caller owns what comes back and closes it.
+Value? providerForm(
+  Object? schema,
+  Object? meta, {
+  Pointer<guatiao_alloc>? alloc,
+}) {
+  final lib = _open();
+  final allocator = alloc ?? lib.alloc;
+  final converted = <Value>[];
+  Pointer<guatiao_value> node(Object? given) {
+    if (given == null) return nullptr;
+    if (given is Ref) return given.requireNode();
+    final value = Value.fromDart(given, alloc: allocator);
+    converted.add(value);
+    return value.requireNode();
+  }
+
+  final out = calloc<guatiao_value>();
+  var filled = false;
+  try {
+    checkStatus(
+      lib.bindings.guatiao_intake_provider_form(
+        node(schema),
+        node(meta),
+        allocator,
+        out,
+      ),
+    );
+    // Nothing to show is an answer, not a failure.
+    if (out.ref.tag == Tag.absent.code) return null;
+    filled = true;
+    return Value.adopt(out, alloc: allocator);
+  } finally {
+    for (final value in converted) {
+      value.close();
+    }
+    if (!filled) {
+      freeNode(out);
+      calloc.free(out);
+    }
+  }
+}
+
 /// The form to show the field at [path] with: the one [form] assigns, or
 /// the one its schema implies.
 ///

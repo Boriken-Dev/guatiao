@@ -269,6 +269,36 @@ class GuatiaoIntakeBindings {
         )
       >();
 
+  imp$1.Dartguatiao_status guatiao_intake_provider_form(
+    ffi.Pointer<guatiao_value> schema,
+    ffi.Pointer<guatiao_value> meta,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_provider_form(schema, meta, alloc, out);
+  }
+
+  late final _guatiao_intake_provider_formPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_provider_form');
+  late final _guatiao_intake_provider_form = _guatiao_intake_provider_formPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   ffi.Pointer<guatiao_value> guatiao_intake_resolve(
     ffi.Pointer<guatiao_value> schema,
     guatiao_str key,

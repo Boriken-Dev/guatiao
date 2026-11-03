@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Every provider listed for a settings screen, none built**:
+  `Registry.catalog()` answers each provider of every loaded library with
+  its availability and reason, configuration schema, `meta`, library key
+  and version, and the library file's `digest` (or a `digest_error`
+  saying why there is none). `Unsupported` on the web.
 - **A page's WebTransport datagrams**: `link.datagrams` (`RemoteDatagrams`,
   `null` over a WebSocket) sends and receives the session's datagrams
   beside the calls (`send`, `maxSize`, `received`). `RemoteChannel` gains

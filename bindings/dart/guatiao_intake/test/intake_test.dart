@@ -316,4 +316,46 @@ void main() {
       );
     });
   });
+
+  test('a provider is shown with its own form, else its schema\'s', () {
+    const schema = <String, Object?>{
+      'type': 'object',
+      'properties': <String, Object?>{
+        'user': <String, Object?>{'type': 'string', 'x-section': 'account'},
+        'token': <String, Object?>{'type': 'string', 'x-sensitive': true},
+      },
+    };
+    const declared = <String, Object?>{
+      'sections': [
+        {'id': 'account', 'title': 'Account'},
+      ],
+    };
+    Object? shown(Object? schema, Object? meta) {
+      final form = intake.providerForm(schema, meta);
+      if (form == null) return null;
+      try {
+        return form.toDart();
+      } finally {
+        form.close();
+      }
+    }
+
+    expect(shown(schema, {intake.providerFormKey: declared}), declared);
+    final implied = shown(schema, null)! as Map;
+    expect(implied['sections'], [
+      {'id': 'account'},
+    ]);
+    expect(
+      ((implied['fields']! as Map)['token']! as Map)['widget'],
+      'password',
+    );
+    // A Value is taken as a map is.
+    final held = Value.fromDart(schema);
+    addTearDown(held.close);
+    expect(shown(held, {'other': 1}), implied);
+    // What is not a form is skipped, as reading the key by hand skips it.
+    expect(shown(schema, {intake.providerFormKey: 'a form'}), implied);
+    expect(shown(null, {intake.providerFormKey: 'a form'}), isNull);
+    expect(shown(null, null), isNull);
+  });
 }

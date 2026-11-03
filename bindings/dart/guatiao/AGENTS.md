@@ -261,6 +261,18 @@ instance.close();
 reg.close();
 ```
 
+`catalog()` is everything a settings screen shows about every provider
+of every loaded library, best first, and **builds none**: a list of
+plain maps, each what `providers()` holds plus `available` (asked now)
+and `reason` when it cannot run, `config` (its schema) and `meta` when it
+declares them, `library_key`, `library_version`, and `digest`
+(`'sha256:'` and the hex of the file its library was mapped from, only
+while that file is still the one loaded, unchanged; absent for a library
+from no file) or `digest_error` saying why not. The first call reads
+each library file in full. `providerForm(entry['config'], entry['meta'])`
+of package:guatiao_intake gives the form to show each with. On the web,
+as the rest of the registry, it throws `Unsupported`.
+
 Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 `available(kind)`, `keyedBy` / `librariesKeyedBy`, `setPriority` /
 `priority`, `importSearch` (get and set: where Windows finds what a file

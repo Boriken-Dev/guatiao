@@ -57,6 +57,7 @@ class Registry {
   }) => _no();
   List<Map<String, Object?>> libraries() => _no();
   List<Map<String, Object?>> providers([String kind = '']) => _no();
+  List<Map<String, Object?>> catalog() => _no();
   List<Map<String, Object?>> available([String kind = '']) => _no();
   Map<String, Object?> whyNot(String kind) => _no();
   Map<String, Object?> provider(String key) => _no();

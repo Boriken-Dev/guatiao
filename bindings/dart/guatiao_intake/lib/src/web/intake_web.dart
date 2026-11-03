@@ -123,6 +123,45 @@ Value forSchema(Ref schema, {Address? alloc}) {
   return Value.adopt(out, alloc: allocator);
 }
 
+/// The form a provider's settings are shown with: its own under
+/// [providerFormKey] in [meta], else the one [schema] implies, else
+/// `null`; each a [Ref], plain Dart data or `null`, what is not a map
+/// skipped. The caller owns what comes back and closes it.
+Value? providerForm(Object? schema, Object? meta, {Address? alloc}) {
+  final m = library();
+  final allocator = alloc ?? m.defaultAlloc;
+  final converted = <Value>[];
+  Address node(Object? given) {
+    if (given == null) return Address.none;
+    if (given is Ref) return given.requireNode();
+    final value = Value.fromDart(given, alloc: allocator);
+    converted.add(value);
+    return value.requireNode();
+  }
+
+  final out = m.alloc(valueSize);
+  var filled = false;
+  try {
+    checkStatus(
+      m.call('guatiao_intake_provider_form', [
+        node(schema),
+        node(meta),
+        allocator,
+        out,
+      ]),
+    );
+    // Nothing to show is an answer, not a failure.
+    if (m.u32(out) == Tag.absent.code) return null;
+    filled = true;
+    return Value.adopt(out, alloc: allocator);
+  } finally {
+    for (final value in converted) {
+      value.close();
+    }
+    if (!filled) freeRoot(out);
+  }
+}
+
 /// The form to show the field at [path] with, or `null`. The caller owns
 /// what comes back and closes it.
 Value? formFor(Ref form, Ref schema, String path, {Address? alloc}) {
