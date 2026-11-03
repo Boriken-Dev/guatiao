@@ -731,14 +731,16 @@ leaves included. The same on the VM and the web.
 final secret = Value.sensitive({'token': 't0ken'});   // built in the wiping allocator
 secret.isSensitive;                                    // true
 secret.toString();                                     // 'Value([sensitive])'
-secret.asMap()['token']!.reveal((bytes) => use(bytes)); // the tree's own bytes, no copy
+secret.asMap()['token']!.reveal((bytes) => use(bytes)); // RevealedBytes: the tree's own bytes
 secret.close();                                        // overwritten, then freed
 other.wipe();                                          // any Value: overwritten, freed, left null
 ```
 
-- `Ref.reveal<R>(R Function(Uint8List bytes) use)`: an unmodifiable view
-  over a string's, number's or bytes' own memory (native, or the module's
-  on the web), valid during `use` only; `StateError` for any other node.
+- `Ref.reveal<R>(R Function(RevealedBytes bytes) use)`: a read-only
+  `List<int>` over a string's, number's or bytes' own memory (native, or
+  the module's on the web), which throws `StateError` once `use` returns;
+  while `use` runs, `close()`, `wipe()` and every change to the value
+  throw `StateError`. `StateError` for any other node.
 - `Ref.isSensitive`; `toString` of a `Value` holding anything in the
   wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites
   every byte a tree holds, in any allocator, and frees it.

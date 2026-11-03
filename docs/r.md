@@ -168,6 +168,11 @@ cannot be wiped: R keeps every string in its global cache, shared and
 kept. A `raw` vector can be zeroed; `guatiao_value_wipe` overwrites a
 tree you hold in another allocator.
 
+R reads a kind description's `"sensitive": true` and does nothing with
+it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## Threads
 
 R code runs only on R's main thread. A slot an R provider or object

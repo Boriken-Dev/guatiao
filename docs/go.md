@@ -333,6 +333,11 @@ be wiped: it is immutable. A `[]byte` copied out can be zeroed, though a
 copy the runtime made while it moved or grew it cannot;
 `guatiao_value_wipe` overwrites a tree you hold in another allocator.
 
+Go reads a kind description's `"sensitive": true` and does nothing with
+it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## Threads
 
 A slot a Go provider or object serves runs on the thread that calls it,

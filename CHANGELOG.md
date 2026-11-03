@@ -85,8 +85,12 @@ write now.
   `Ref.reveal()` (a read-only `memoryview` over the tree's bytes) and
   `Value.wipe()`, and `repr` hides a value in the wiping allocator; Dart
   gains `@sensitive` (`describe.dart`), `Value.sensitive`,
-  `Ref.isSensitive`, `Ref.reveal` (an unmodifiable view over the native
-  or module memory) and `Value.wipe`, and `toString` hides one.
+  `Ref.isSensitive`, `Ref.reveal` (`RevealedBytes` over the native or
+  module memory, readable during the callback only) and `Value.wipe`,
+  and `toString` hides one. A move between allocators overwrites the
+  block it leaves, whatever the target; a copy of a node that lives in
+  the wiping allocator is made there; tables built at run time honour
+  the mark; `#[sensitive]` refuses a method answering a bare `String`.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and

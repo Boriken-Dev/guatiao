@@ -370,6 +370,11 @@ collects it. A `Uint8Array` over a buffer you own can be zeroed; prefer
 bytes to text for a secret, and `guatiao_value_wipe` for a tree you hold
 in another allocator.
 
+Node reads a kind description's `"sensitive": true` and does nothing
+with it: a caller of a slot marked sensitive gets the answer in this
+binding's default allocator, and text as a language string, as for any
+other slot.
+
 ## Threads
 
 Everything runs on Node's main thread. A library may call a provider or

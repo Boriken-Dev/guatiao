@@ -168,6 +168,11 @@ A secret built in the wiping allocator is overwritten when guatiao frees
 it. A Lua string read out of it cannot be wiped: Lua interns short
 strings and keeps every string until it collects it.
 
+Lua's source and module serve and call kinds through the core's tables
+built at run time, which honour a description's `"sensitive": true`: the
+answer is kept in the wiping allocator until it becomes a Lua value, and
+a text answer becomes a Lua string, which nothing can wipe.
+
 ## What Lua cannot do
 
 - **Build provider instances from a configuration.** A provider is one
