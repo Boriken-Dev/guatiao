@@ -21,8 +21,10 @@ _WORD = ctypes.sizeof(ctypes.c_void_p)
 
 #: What a `Remote` or an `Object` answers itself, so no method may be
 #: called it. A slot is found by its position, so the Python name of a
-#: method is free to differ from the header's.
-RESERVED = frozenset({"has", "close", "kind", "ctx", "size"})
+#: method is free to differ from the header's. `close` is not here: an
+#: `Object` whose kind has a `close` slot calls that slot, and `destroy()`
+#: is its own.
+RESERVED = frozenset({"has", "kind", "ctx", "size"})
 
 
 class Method:
@@ -303,8 +305,10 @@ def destroy_raw(raw: "_abi.Object") -> None:
 
 class Object(Remote):
     """An object of an object kind that this side owns: a `Remote` whose
-    `close()` calls its `destroy` slot, once. Handed to a slot that takes
-    it, it is the callee's, and closing it here does nothing."""
+    `destroy()` calls its `destroy` slot, once, as leaving a `with` block
+    and the collector do. `close()` is `destroy()` too, unless the kind has
+    a slot named `close`, which it then calls. Handed to a slot that takes
+    it, it is the callee's, and destroying it here does nothing."""
 
     def __init__(self, kind: Kind, raw: "_abi.Object") -> None:
         if not kind.is_object:
@@ -314,6 +318,9 @@ class Object(Remote):
         # A table that is not the kind's is refused and the object left
         # alone: its slot after the header need not be a `destroy`.
         super().__init__(kind, raw.table, raw.size, raw.ctx)
+        if "close" in kind._by_name:
+            # The instance's own attribute is found before the class's method.
+            self.__dict__["close"] = functools.partial(self._call, kind._by_name["close"])
         self._open = True
 
     def _check(self) -> None:
@@ -329,14 +336,20 @@ class Object(Remote):
         self._open = False
         return self._raw
 
-    def close(self) -> None:
+    def destroy(self) -> None:
+        """Calls the object's `destroy` slot, once; nothing after that, or
+        after the object was handed over."""
         if getattr(self, "_open", False):
             self._open = False
             destroy_raw(self._raw)
 
+    def close(self) -> None:
+        """`destroy()`, for an object whose kind has no `close` slot."""
+        self.destroy()
+
     def __del__(self) -> None:
         try:
-            self.close()
+            self.destroy()
         except Exception:
             pass
 
@@ -344,7 +357,7 @@ class Object(Remote):
         return self
 
     def __exit__(self, *_exc: object) -> None:
-        self.close()
+        self.destroy()
 
     def __repr__(self) -> str:
         return f"<guatiao.kinds.Object {self.kind.name}>"

@@ -148,7 +148,11 @@ def _shim(kind: Any, method: Any) -> Any:
                 # back to its caller's library, which may not outlive that.
                 for got in received:
                     owner: Any = got.owner if isinstance(got, Ref) else got
-                    owner.close()
+                    if hasattr(owner, "destroy"):
+                        # A taken object: its kind may have a `close` slot.
+                        owner.destroy()
+                    else:
+                        owner.close()
             status = _refuse(exc, err, where)
         try:
             scope.close()

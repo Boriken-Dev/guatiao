@@ -12,7 +12,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use guatiao::library::{ImportSearch, Registry};
+extern crate alloc;
+
+use guatiao::library::{ImportSearch, Object, ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map};
 
@@ -95,6 +97,76 @@ fn a_rust_host_serves_python_libraries() {
     // A refresh with nothing changed changes nothing.
     assert!(registry.refresh().is_empty());
     let _ = TryAsRef::<str>::try_as_ref(&guatiao::Value::from("unused"));
+}
+
+/// Opens sessions; served in Python by `tests/python/close_probe.py`.
+#[guatiao::kind]
+pub trait Opener: Send + Sync {
+    /// A new session.
+    fn open(&self) -> Result<Object<dyn Session>, ProviderError>;
+}
+
+/// A line whose last slot is named `close`, as the object's own end is not.
+#[guatiao::kind(object)]
+pub trait Session: Send {
+    /// Says something; refused once closed.
+    fn send(&mut self, what: &str) -> Result<(), ProviderError>;
+    /// Closes the line; the object lives on until it is dropped.
+    fn close(&mut self) -> Result<(), ProviderError>;
+    /// How many things were said.
+    fn said(&self) -> i64;
+}
+
+/// A library's manifest in `dir`, by the file name the source lists.
+fn manifest_file(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.guatiao.toml"))
+}
+
+#[test]
+fn a_slot_named_close_is_served_from_python() {
+    let Some(bridge) = bridge() else {
+        println!("skipped: the bridge is not built beside this test; `cargo build` first");
+        return;
+    };
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("close_probe");
+    std::fs::create_dir_all(&dir).unwrap();
+    let python = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/python");
+    let manifest = manifest_file(&dir, "close_probe");
+    std::fs::write(
+        &manifest,
+        format!(
+            "type = \"python\"\nmodule = \"close_probe\"\nversion = \"0.1.0\"\nkinds = [\"opener\"]\npaths = [{:?}]\n",
+            python.display().to_string()
+        ),
+    )
+    .unwrap();
+    let mut config = Map::new();
+    config.set("manifests", text_list(&[manifest]));
+    config.set(
+        "paths",
+        text_list(&[repo().join("bindings/python/guatiao/src")]),
+    );
+    let mut registry = Registry::new("close-host", "1.0");
+    // python3.dll, which the bridge imports, is in the Python installation, on PATH.
+    registry.set_import_search(ImportSearch::Path);
+    registry
+        .add_source_file(&bridge, &config)
+        .unwrap_or_else(|e| panic!("the bridge was refused: {e}"));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let opener = registry
+        .offer::<dyn Opener>("close_probe_dialer")
+        .expect("served")
+        .expect("as the trait")
+        .shared()
+        .expect("an instance");
+    let mut session = opener.open().expect("a session");
+    session.send("hi").expect("said");
+    session.close().expect("closed");
+    assert_eq!(session.said(), 1);
+    let refused = session.send("again").expect_err("closed");
+    assert!(refused.message().contains("closed"), "{refused:?}");
+    drop(session);
 }
 
 #[test]
