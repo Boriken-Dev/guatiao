@@ -259,10 +259,12 @@ pub(crate) unsafe fn move_buffer<C: Container>(c: &mut C, alloc: Alloc) -> Resul
     // SAFETY: the first `len` elements are initialised, the new block has
     // room for them and was just allocated, so the two cannot overlap.
     unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, len) };
-    // Moving into the wiping allocator leaves nothing readable behind: the
-    // block it came from is overwritten before its own allocator frees it.
-    // A block this container does not own (`cap == 0`) is not written.
-    if alloc.is_wiping() && cap > 0 {
+    // A move leaves nothing readable behind, whatever the target: the block
+    // it came from is overwritten before its own allocator frees it, since
+    // a target this build does not recognise may still be keeping a
+    // secret. A block this container does not own (`cap == 0`) is not
+    // written.
+    if cap > 0 {
         let old = array_size::<C::Elem>(cap)?;
         // SAFETY: `cap > 0` means the block is this container's, `old`
         // bytes long; its elements were just copied out and are not read

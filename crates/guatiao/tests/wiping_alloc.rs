@@ -446,3 +446,117 @@ fn the_c_export_wipes_a_tree_in_any_allocator() {
     let status = unsafe { guatiao_value_wipe(core::ptr::null_mut()) };
     assert_eq!(status, guatiao::Status::GUATIAO_ERR_NULL);
 }
+
+/// An allocator this build does not know that wipes on its own: what
+/// another copy's wiping allocator, or a C author's, looks like from here.
+mod foreign {
+    use core::alloc::Layout;
+    use core::ffi::c_void;
+
+    use guatiao::value::Allocator;
+
+    unsafe extern "C" fn alloc(_ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
+        let Ok(layout) = Layout::from_size_align(size, align) else {
+            return core::ptr::null_mut();
+        };
+        // SAFETY: a non-zero size, which guatiao never asks below.
+        unsafe { std::alloc::alloc(layout).cast() }
+    }
+
+    unsafe extern "C" fn free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
+        for i in 0..size {
+            // SAFETY: `p` is a live block of `size` bytes about to go.
+            unsafe { p.cast::<u8>().add(i).write_volatile(0) };
+        }
+        // SAFETY: the block and its layout, as `alloc` made it.
+        unsafe { std::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
+    }
+
+    pub fn wiping() -> Allocator {
+        Allocator {
+            struct_size: size_of::<Allocator>() as u32,
+            ctx: core::ptr::null_mut(),
+            alloc: Some(alloc),
+            free: Some(free),
+            release: None,
+        }
+    }
+
+    unsafe extern "C" fn plain_free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
+        // SAFETY: the block and its layout, as `alloc` made it.
+        unsafe { std::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
+    }
+
+    /// The same, with a `free` that does not wipe.
+    pub fn plain() -> Allocator {
+        Allocator {
+            free: Some(plain_free),
+            ..wiping()
+        }
+    }
+}
+
+/// A move between allocators overwrites the block it leaves, whatever the
+/// target: here one this build does not recognise as wiping.
+#[test]
+fn a_move_into_an_allocator_this_build_does_not_know_leaves_nothing_behind() {
+    let raw = foreign::wiping();
+    // SAFETY: `raw` outlives every tree built through it, in this test.
+    let other = unsafe { Alloc::from_raw(&raw) }.unwrap();
+    assert!(!other.is_wiping());
+    let tree = || {
+        let r = Alloc::rust();
+        let mut map = Map::new_in(r);
+        map.set_in(secret(), Text::new_in(r, secret()).unwrap(), r)
+            .unwrap();
+        Value::from(map)
+    };
+    assert_eq!(seen(|| drop(tree().into_alloc(other).unwrap())), 0);
+    assert_eq!(
+        seen(|| {
+            let mut v = tree();
+            v.make_local_in(other).unwrap();
+            drop(v);
+        }),
+        0
+    );
+    assert!(seen(|| drop(tree())) >= 2, "the control");
+}
+
+/// A move out of an allocator that does not wipe overwrites what it
+/// leaves there before that allocator frees it: into this build's own
+/// (`into_local`, `into_alloc`, `make_local_in`).
+#[test]
+fn a_move_out_of_an_allocator_that_does_not_wipe_overwrites_what_it_leaves() {
+    let raw = foreign::plain();
+    // SAFETY: `raw` outlives every tree built through it, in this test.
+    let plain = unsafe { Alloc::from_raw(&raw) }.unwrap();
+    let tree = || {
+        let mut map = Map::new_in(plain);
+        map.set_in(secret(), Text::new_in(plain, secret()).unwrap(), plain)
+            .unwrap();
+        Value::from(map)
+    };
+    let rust = Alloc::rust();
+    assert!(seen(|| drop(tree())) >= 2, "the control");
+    assert_eq!(
+        seen(|| drop(tree().into_local().into_alloc(Alloc::wiping()).unwrap())),
+        0
+    );
+    assert_eq!(
+        seen(|| {
+            let moved = tree().into_alloc(rust).unwrap();
+            let mut moved = moved;
+            moved.wipe();
+        }),
+        0
+    );
+    assert_eq!(
+        seen(|| {
+            let mut v = tree();
+            v.make_local_in(rust).unwrap();
+            v.wipe();
+        }),
+        0
+    );
+}
