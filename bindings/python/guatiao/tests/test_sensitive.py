@@ -13,6 +13,7 @@ and keeps it there."""
 from __future__ import annotations
 
 import ctypes
+import threading
 from typing import Protocol
 
 import pytest
@@ -21,6 +22,7 @@ from guatiao import Map, Value, _abi, _lib, wiping_alloc
 from guatiao.kinds import (
     KindProtocol,
     Lent,
+    Taken,
     SensitiveText,
     ValueAnswer,
     _description,
@@ -96,6 +98,9 @@ class Vault(KindProtocol, Protocol, kind="py_vault"):
     @required
     def touch(self, map: Lent[Map]) -> None: ...
 
+    @required
+    def keep(self, value: Taken[Value]) -> None: ...
+
 
 class PlainVault(KindProtocol, Protocol, kind="py_plain_vault"):
     """The same slots, none marked."""
@@ -113,8 +118,15 @@ class PlainVault(KindProtocol, Protocol, kind="py_plain_vault"):
     @required
     def touch(self, map: Lent[Map]) -> None: ...
 
+    @required
+    def keep(self, value: Taken[Value]) -> None: ...
+
 
 class Keeper:
+    # Whether `touch` keeps a slice of the lent map's token, and the slice.
+    peek = False
+    kept: "memoryview | None" = None
+
     def read(self, key: str) -> ValueAnswer:
         return {"key": key, "secret": SECRET}
 
@@ -125,7 +137,12 @@ class Keeper:
         return "keeper"
 
     def touch(self, map: Map) -> None:
-        pass
+        if self.peek:
+            with map["token"].reveal() as view:
+                self.kept = view[:]
+
+    def keep(self, value: Value) -> None:
+        value.close()
 
 
 def test_the_mark_is_not_in_the_floor_hash():
@@ -169,7 +186,7 @@ def test_the_description_says_which_slots_are_sensitive_and_reads_back():
     assert slots["pin"].get("sensitive") is True
     assert "sensitive" not in slots["name"]
     read = kinds_of(document)["py_vault"]
-    assert [m.sensitive for m in read.methods] == [True, True, False, False]
+    assert [m.sensitive for m in read.methods] == [True, True, False, False, False]
     assert read.floor_hash == Vault.kind.floor_hash
     module = generate(document)
     assert "    @sensitive\n    def pin(self) -> SensitiveText" in module
@@ -277,3 +294,82 @@ def test_a_secret_in_a_lent_map_stays_in_the_wiping_allocator():
         plain.close()
     finally:
         _serve.release(raw.ctx)
+
+
+def test_a_value_is_not_handed_over_or_lent_while_a_slice_of_its_reveal_lives():
+    raw = _serve.serve(PlainVault.kind, Keeper())
+    try:
+        vault = PlainVault.kind.bind(raw.table, raw.size, raw.ctx)
+        secret = Value(SECRET, alloc=wiping_alloc())
+        with secret.reveal() as view:
+            kept = view[:]
+        with pytest.raises(BufferError):
+            vault.keep(secret)
+        plain = Value({"user": "alice"})
+        plain.as_map()["token"] = Value(SECRET, alloc=wiping_alloc())
+        with plain.as_map()["token"].reveal() as view:
+            lent = view[:]
+        with pytest.raises(BufferError):
+            vault.touch(plain.as_map())
+        assert kept.tobytes() == SECRET.encode()
+        assert lent.tobytes() == SECRET.encode()
+        kept.release()
+        lent.release()
+        del kept, lent
+        vault.keep(secret)
+        assert secret.is_absent()
+        vault.touch(plain.as_map())
+        plain.close()
+    finally:
+        _serve.release(raw.ctx)
+
+
+def test_a_slice_a_provider_keeps_of_a_lent_argument_reads_its_own_copy():
+    keeper = Keeper()
+    keeper.peek = True
+    raw = _serve.serve(PlainVault.kind, keeper)
+    try:
+        vault = PlainVault.kind.bind(raw.table, raw.size, raw.ctx)
+        plain = Value({"user": "alice"})
+        plain.as_map()["token"] = Value(SECRET, alloc=wiping_alloc())
+        vault.touch(plain.as_map())
+        # The caller's tree goes; what the provider kept is its own.
+        plain.close()
+        assert keeper.kept is not None
+        assert keeper.kept.tobytes() == SECRET.encode()
+        keeper.kept.release()
+        keeper.kept = None
+    finally:
+        _serve.release(raw.ctx)
+
+
+@pytest.mark.parametrize("ending", ["guatiao_value_free", "guatiao_value_wipe"])
+def test_a_reveal_on_another_thread_while_a_value_ends_is_refused(monkeypatch, ending):
+    # The other thread reveals at the one moment that matters: after the
+    # value was checked, before its tree is freed. ctypes lets go of the GIL
+    # around the call, so this is when another thread can run.
+    core = _lib.core()
+    real = getattr(core, ending)
+    secret = Value(SECRET, alloc=wiping_alloc())
+    seen: "list[object]" = []
+
+    def reveal() -> None:
+        try:
+            with secret.reveal() as view:
+                seen.append(view.tobytes())
+        except (BufferError, ValueError) as e:
+            seen.append(type(e))
+
+    def racing(ptr: object) -> int:
+        if not seen:
+            other = threading.Thread(target=reveal)
+            other.start()
+            other.join()
+        return int(real(ptr))
+
+    monkeypatch.setattr(core, ending, racing)
+    if ending == "guatiao_value_free":
+        secret.close()
+    else:
+        secret.wipe()
+    assert seen == [BufferError]
