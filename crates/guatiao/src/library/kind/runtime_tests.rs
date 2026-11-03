@@ -515,6 +515,73 @@ fn call_on(
 
 /// A slot its description marks `sensitive` is answered in the wiping
 /// allocator, and the same slot unmarked in this side's own.
+/// The greeter kind with `greet` and `shout` marked sensitive.
+fn marked_greeter() -> Arc<KindDescription> {
+    let text = include_str!("../../../../../examples/greeter_kind/include/greeter_kind.kinds.json");
+    let mut json: serde_json::Value = serde_json::from_str(text).expect("JSON");
+    let greeter = json["kinds"]
+        .as_array_mut()
+        .expect("kinds")
+        .iter_mut()
+        .find(|k| k["name"] == "greeter")
+        .expect("described");
+    for slot in greeter["slots"].as_array_mut().expect("slots") {
+        if slot["name"] == "greet" || slot["name"] == "shout" {
+            slot["sensitive"] = serde_json::Value::Bool(true);
+        }
+    }
+    Arc::new(KindDescription::from_value(&value_of(greeter)).expect("a description"))
+}
+
+/// A table served at run time answers a sensitive slot in the wiping
+/// allocator, a text answer included, when its caller named none; its
+/// caller keeps a sensitive text answer as a value there, never a
+/// `String`.
+#[test]
+fn a_served_table_answers_a_sensitive_slot_in_the_wiping_allocator() {
+    let serve = Served::default();
+    for (described, wiping) in [(marked_greeter(), true), (kind("greeter"), false)] {
+        let (shout, _) = described.slot("shout").expect("a slot");
+        let mut c = ctx(7);
+        let mut arg = Str::new("ab");
+        let mut out = Text::new("");
+        let mut out_p: *mut Text = &mut out;
+        let args = array(&mut [&mut c, &mut arg, &mut out_p]);
+        // SAFETY: the array of a call to `shout`: ctx, str, out.
+        let status = unsafe { dispatch(&serve, &described, shout, args.as_ptr()) };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(&*out, "AB");
+        assert_eq!(out.alloc().expect("owned").is_wiping(), wiping, "text");
+
+        let (greet, _) = described.slot("greet").expect("a slot");
+        let mut c = ctx(7);
+        let mut arg = Str::new("di");
+        // A carrier naming no allocator: the served side chooses.
+        let mut out = Map::new();
+        out.alloc = core::ptr::null();
+        let mut out_p: *mut Map = &mut out;
+        let mut err = ProviderError::none();
+        let mut err_p: *mut ProviderError = &mut err;
+        let args = array(&mut [&mut c, &mut arg, &mut out_p, &mut err_p]);
+        // SAFETY: the array of a call to `greet`: ctx, str, out, err.
+        let status = unsafe { dispatch(&serve, &described, greet, args.as_ptr()) };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(out.alloc().expect("owned").is_wiping(), wiping, "map");
+    }
+
+    let mechanism = Direct::default();
+    let serve = Arc::new(Served::default());
+    let marked = marked_greeter();
+    let (shout, _) = marked.slot("shout").expect("a slot");
+    let table = ServedTable::new(Arc::clone(&marked), |_| true, serve, &mechanism).expect("built");
+    let caller = Caller::new(marked, &mechanism).expect("prepared");
+    let Ok(Answer::Value(text)) = call_on(&caller, &table, 4, shout, vec![Arg::Str("ab")]) else {
+        panic!("a sensitive text answer is a value");
+    };
+    assert_eq!(TryAsRef::<str>::try_as_ref(&text), Some("AB"));
+    assert!(text.alloc().expect("owned").is_wiping());
+}
+
 #[test]
 fn a_caller_names_the_wiping_allocator_for_a_sensitive_slot() {
     let text = include_str!("../../../../../examples/greeter_kind/include/greeter_kind.kinds.json");
