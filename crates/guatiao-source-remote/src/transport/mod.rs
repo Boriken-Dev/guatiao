@@ -145,6 +145,14 @@ pub trait FrameWrite: Send {
         Ok(())
     }
 
+    /// Tells the writer the largest frame the peer takes (its `max_frame`),
+    /// known once the handshake has agreed it. A message transport whose
+    /// channel bounds a message by one number, both ways, raises it to the
+    /// larger of this and what the reader allows; a stream ignores it.
+    fn set_max_frame(&mut self, bytes: usize) {
+        let _ = bytes;
+    }
+
     /// Ends the link: the peer's reads end, and so do this side's.
     fn shutdown(&mut self) {}
 }
