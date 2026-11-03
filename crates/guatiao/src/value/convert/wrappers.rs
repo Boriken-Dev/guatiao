@@ -18,6 +18,7 @@ use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
 use crate::value::secret::Secret;
 use crate::value::types::{Tag, Text, Value};
+use crate::value::wipe::Wipe;
 
 macro_rules! pointer {
     ($($p:ident),*) => {$(
@@ -71,13 +72,13 @@ where
 }
 
 /// The value it holds, as `T` writes it.
-impl<T: ToValue> ToValue for Secret<T> {
+impl<T: ToValue + Wipe> ToValue for Secret<T> {
     fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         self.expose().to_value_in(alloc)
     }
 }
 
-impl<T: FromValue> FromValue for Secret<T> {
+impl<T: FromValue + Wipe> FromValue for Secret<T> {
     const KINDS: Kinds = T::KINDS;
     fn from_value(value: &Value) -> Result<Secret<T>, MapError> {
         T::from_value(value).map(Secret::new)

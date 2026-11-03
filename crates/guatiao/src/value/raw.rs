@@ -26,7 +26,7 @@
 use core::mem::{align_of, size_of};
 use core::ptr;
 
-use super::alloc::{Alloc, AllocError, Allocator};
+use super::alloc::{Alloc, AllocError, Allocator, wipe};
 use super::types::{Buffer, Entry, List, Map, Text, Value};
 
 /// One of the four owned containers, seen as its four fields.
@@ -208,6 +208,35 @@ pub(crate) unsafe fn reserve<C: Container>(
     Ok(())
 }
 
+/// Overwrites with zeros every byte a text or buffer owns, its whole
+/// capacity. One it does not own (`cap == 0`) is left alone: a literal's
+/// bytes may be read-only.
+pub(crate) fn wipe_bytes<C: Container<Elem = u8>>(c: &mut C) {
+    let (ptr, _len, cap, _stored) = c.parts();
+    if cap > 0 {
+        // SAFETY: `cap > 0` means `ptr` is this container's own block of
+        // `cap` bytes, and `&mut` makes the write unique.
+        unsafe { wipe(ptr, cap) };
+    }
+}
+
+/// Overwrites a `Vec<u8>`'s whole capacity with zeros and empties it.
+pub(crate) fn wipe_vec(v: &mut alloc::vec::Vec<u8>) {
+    let cap = v.capacity();
+    // SAFETY: a `Vec`'s pointer addresses `capacity()` bytes it owns
+    // (dangling and never written when that is 0); writing bytes into the
+    // spare part initialises it, which `u8` allows.
+    unsafe { wipe(v.as_mut_ptr(), cap) };
+    v.clear();
+}
+
+/// Overwrites a scalar with its default as a store the compiler keeps.
+pub(crate) fn wipe_scalar<T: Copy + Default>(x: &mut T) {
+    // SAFETY: `x` is a unique, aligned, live `T`.
+    unsafe { core::ptr::from_mut(x).write_volatile(T::default()) };
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
 /// Moves a container's elements into a block from `alloc`, exactly `len`
 /// long, and frees the old block through the allocator that made it. The
 /// elements move bitwise, so whatever they own stays theirs. An empty
@@ -218,7 +247,7 @@ pub(crate) unsafe fn reserve<C: Container>(
 ///
 /// As [`reserve`].
 pub(crate) unsafe fn move_buffer<C: Container>(c: &mut C, alloc: Alloc) -> Result<(), AllocError> {
-    let (ptr, len, _cap, _stored) = c.parts();
+    let (ptr, len, cap, _stored) = c.parts();
     if len == 0 {
         // SAFETY: the caller's contract; there are no elements to read.
         unsafe { release_buffer(c) };
@@ -230,6 +259,16 @@ pub(crate) unsafe fn move_buffer<C: Container>(c: &mut C, alloc: Alloc) -> Resul
     // SAFETY: the first `len` elements are initialised, the new block has
     // room for them and was just allocated, so the two cannot overlap.
     unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, len) };
+    // Moving into the wiping allocator leaves nothing readable behind: the
+    // block it came from is overwritten before its own allocator frees it.
+    // A block this container does not own (`cap == 0`) is not written.
+    if alloc.is_wiping() && cap > 0 {
+        let old = array_size::<C::Elem>(cap)?;
+        // SAFETY: `cap > 0` means the block is this container's, `old`
+        // bytes long; its elements were just copied out and are not read
+        // again.
+        unsafe { wipe(ptr.cast::<u8>(), old) };
+    }
     // SAFETY: the elements now live in `new_ptr`; only the old block is
     // released, never read again.
     unsafe { release_buffer(c) };

@@ -63,6 +63,17 @@ fn frame(kind: u8, channel: u64, value: Option<&Value>) -> Result<Vec<u8>, Value
     Ok(out)
 }
 
+/// [`send`] into a vector allocated once, at the size the frame takes, as
+/// [`to_bytes_exact`](super::to_bytes_exact) does.
+pub(crate) fn send_exact(channel: u64, value: &Value) -> Result<Vec<u8>, ValueError> {
+    let mut out = Vec::with_capacity(1 + super::len_size(channel) + super::encoded_len(value)?);
+    out.push(VALUE);
+    put_len(&mut out, channel);
+    encode(value, &mut out)?;
+    debug_assert_eq!(out.len(), out.capacity(), "the frame's length was its size");
+    Ok(out)
+}
+
 /// The frame that announces `schema` on `channel`. A later announcement
 /// replaces it.
 pub fn announce(channel: u64, schema: &Value) -> Result<Vec<u8>, ValueError> {

@@ -106,7 +106,15 @@ pub fn bytes_or<'a>(v: Option<&'a Value>, fallback: &'a [u8]) -> &'a [u8] {
 /// **Not a format.** It does not round-trip, nothing parses it, and its
 /// spelling is not a contract. Bytes are a length and a short hex prefix
 /// rather than decoded text.
+///
+/// **A secret is not shown**: a node whose storage lives in
+/// [`Alloc::wiping`](crate::Alloc::wiping), and a map key that does,
+/// print as `[sensitive]`, a container there without its contents.
 pub struct Dump<'a>(pub &'a Value);
+
+/// What a dump prints in place of a node or key that lives in the wiping
+/// allocator.
+const SENSITIVE: &str = "[sensitive]";
 
 impl fmt::Debug for Dump<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -123,6 +131,9 @@ const DUMP_DEPTH: u32 = 32;
 fn write(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result {
     if depth >= DUMP_DEPTH {
         return f.write_str("...");
+    }
+    if v.alloc().is_ok_and(|a| a.is_wiping()) {
+        return f.write_str(SENSITIVE);
     }
     match v.tag() {
         Err(_) => write!(f, "<unknown tag {}>", v.tag),
@@ -170,7 +181,11 @@ fn write(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result {
                 if i > 0 {
                     f.write_str(", ")?;
                 }
-                write!(f, "{key:?}")?;
+                if entry.key.alloc().is_ok_and(|a| a.is_wiping()) {
+                    f.write_str(SENSITIVE)?;
+                } else {
+                    write!(f, "{key:?}")?;
+                }
                 f.write_str(": ")?;
                 write(f, value, depth + 1)?;
             }

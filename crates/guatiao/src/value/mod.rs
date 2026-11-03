@@ -27,13 +27,15 @@ pub mod time;
 pub mod types;
 pub mod visit;
 pub mod wire;
+// Overwriting what a value holds before it is freed.
+pub mod wipe;
 // The whole-tree walks besides drop: a deep copy, and equality.
 pub(crate) mod walk;
 // A stutter to clippy; every file here is named for the type it holds.
 #[allow(clippy::module_inception)]
 pub mod value;
 
-pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
+pub use alloc::{Alloc, AllocError, Allocator, rust_alloc, wiping_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 pub use error::{MAX_DEPTH, ValueError};
 pub use read::{Dump, bool_or, bytes_or, float_or, int_or, str_or};
@@ -41,6 +43,7 @@ pub use secret::Secret;
 pub use span::Span;
 pub use status::Status;
 pub use time::{Date, DateTime, Time, Timestamp};
+pub use wipe::Wipe;
 // `Str` is here because every C signature in `exports` names it; the
 // other views stay behind `types::`, clear of `convert::Bytes`.
 pub use types::{Buffer, Entry, List, Map, Number, Payload, Str, Tag, Text, Value};

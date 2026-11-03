@@ -231,6 +231,70 @@ pub fn to_bytes(value: &Value) -> Result<Vec<u8>, ValueError> {
     Ok(out)
 }
 
+/// [`to_bytes`] into a vector allocated once, at the size the bytes
+/// take: it never grows, so no earlier block of it is left behind, which
+/// is what a caller wiping it afterwards needs.
+pub(crate) fn to_bytes_exact(value: &Value) -> Result<Vec<u8>, ValueError> {
+    let mut out = Vec::with_capacity(encoded_len(value)?);
+    encode(value, &mut out)?;
+    debug_assert_eq!(
+        out.len(),
+        out.capacity(),
+        "encoded_len is the encoding's length"
+    );
+    Ok(out)
+}
+
+/// How many bytes [`encode`] writes for `value`, refusing what it
+/// refuses.
+pub(crate) fn encoded_len(value: &Value) -> Result<usize, ValueError> {
+    let mut n = 0usize;
+    let mut stack = vec![value];
+    while let Some(node) = stack.pop() {
+        n += 1;
+        match node.tag()? {
+            Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL => {}
+            Tag::GUATIAO_BOOL => n += 1,
+            Tag::GUATIAO_NUMBER => {
+                let t = TryAsRef::<Number>::try_as_ref(node).ok_or(ValueError::NotANumber)?;
+                n += len_size(t.len() as u64) + t.len();
+            }
+            Tag::GUATIAO_STRING => {
+                let t = TryAsRef::<Text>::try_as_ref(node).ok_or(ValueError::NotUtf8)?;
+                n += len_size(t.len() as u64) + t.len();
+            }
+            Tag::GUATIAO_BYTES => {
+                let b = TryAsRef::<Buffer>::try_as_ref(node).ok_or(ValueError::WrongKind)?;
+                n += len_size(b.len() as u64) + b.len();
+            }
+            Tag::GUATIAO_LIST => {
+                let l = TryAsRef::<List>::try_as_ref(node).ok_or(ValueError::WrongKind)?;
+                n += len_size(l.len() as u64);
+                stack.extend(l.iter());
+            }
+            Tag::GUATIAO_MAP => {
+                let m = TryAsRef::<Map>::try_as_ref(node).ok_or(ValueError::NotUtf8)?;
+                n += len_size(m.len() as u64);
+                for entry in m.iter() {
+                    n += len_size(entry.key().len() as u64) + entry.key().len();
+                    stack.push(entry.value());
+                }
+            }
+        }
+    }
+    Ok(n)
+}
+
+/// How many bytes [`put_len`] writes for `n`.
+pub(crate) fn len_size(mut n: u64) -> usize {
+    let mut size = 1;
+    while n >= 0x80 {
+        n >>= 7;
+        size += 1;
+    }
+    size
+}
+
 /// Writes one node's tag and body; a container answers what is left of it.
 fn node_into<'a>(node: &'a Value, out: &mut Vec<u8>) -> Result<Option<Left<'a>>, ValueError> {
     let tag = node.tag()?;
@@ -593,6 +657,44 @@ mod tests {
     use alloc::collections::BTreeMap;
 
     use super::{Alloc, Seeded, WireError, decode_seeded, to_bytes_of};
+
+    /// The size counted ahead is the size written, across every kind and
+    /// every length a LEB128 takes one, two or three bytes for.
+    #[test]
+    fn the_exact_encoding_is_the_encoding_at_its_size() {
+        use crate::value::types::{Buffer, List, Map, Number, Text, Value};
+        let mut map = Map::new();
+        map.set("absent", Value::absent());
+        map.set("null", Value::null());
+        map.set("bool", Value::from(true));
+        map.set("number", Number::new("-12.50e3").unwrap());
+        for n in [0usize, 1, 127, 128, 16_383, 16_384] {
+            map.set(&format!("text{n}"), Text::new(&"t".repeat(n)));
+            map.set(&format!("bytes{n}"), Buffer::new(&vec![7u8; n]));
+        }
+        let mut list = List::new();
+        for _ in 0..200 {
+            list.push(Value::from(false));
+        }
+        map.set(&"k".repeat(300), list);
+        let value = Value::from(map);
+        let exact = super::to_bytes_exact(&value).unwrap();
+        assert_eq!(exact, super::to_bytes(&value).unwrap());
+        assert_eq!(exact.len(), exact.capacity());
+        let frame = super::channel::send_exact(u64::MAX, &value).unwrap();
+        assert_eq!(frame, super::channel::send(u64::MAX, &value).unwrap());
+        assert_eq!(frame.len(), frame.capacity());
+        for (n, size) in [
+            (0u64, 1),
+            (127, 1),
+            (128, 2),
+            (16_383, 2),
+            (16_384, 3),
+            (u64::MAX, 10),
+        ] {
+            assert_eq!(super::len_size(n), size, "{n}");
+        }
+    }
 
     /// Seeds that send every key shorter than eight bytes to one hash: the
     /// tree decoder then tells a wide map's keys apart by their bytes.

@@ -20,7 +20,9 @@ use crate::value::error::ValueError;
 use crate::value::raw::{dangling, move_buffer, release_buffer, reserve};
 use crate::value::wire::keys::{ByHash, LINEAR, RESERVE, Seeded};
 
-use super::{List, Payload, Tag, Text, Value, cloned, only_alloc, or_abort, short_form_alloc};
+use super::{
+    List, Payload, Tag, Text, Value, clone_home, cloned, only_alloc, or_abort, short_form_alloc,
+};
 
 /// A borrowed sequence of key/value pairs, in **insertion order**, which
 /// is part of the contract: consumers render maps as forms, print them
@@ -738,7 +740,7 @@ impl Clone for Map {
     /// foreign producer can write. [`clone_in`](Map::clone_in) reports it.
     fn clone(&self) -> Map {
         cloned(
-            self.clone_in(Alloc::rust()),
+            self.clone_in(clone_home(self.alloc)),
             core::alloc::Layout::new::<Entry>(),
         )
     }

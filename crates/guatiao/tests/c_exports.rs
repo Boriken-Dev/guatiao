@@ -364,6 +364,68 @@ fn a_c_caller_moves_an_answer_home_before_the_unload() {
     println!("{}", stdout.trim());
 }
 
+/// A C caller takes the wiping allocator and asks whether a tree lives
+/// there; and an allocator of its own wipes every block, because each one
+/// comes back to its `free` with the size it was allocated with.
+#[test]
+fn a_c_program_wipes_through_the_wiping_allocator_or_its_own() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let include = manifest.join("include");
+    let Some(cc) = c_compiler::find() else {
+        println!("skipped: no C compiler found. See the tests above for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary. Run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+    let host = dir.join(if cfg!(windows) {
+        "guatiao_wiping_host.exe"
+    } else {
+        "guatiao_wiping_host"
+    });
+    let mut compile = c_compiler::command(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-o")
+        .arg(&host)
+        .arg(manifest.join("tests/c_consumer/wiping_host.c"));
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the host did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let run = Command::new(&host)
+        .current_dir(&dir)
+        .output()
+        .expect("the host was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the host failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the host exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}
+
 #[path = "vectors/read.rs"]
 mod vectors;
 

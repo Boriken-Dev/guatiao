@@ -14,7 +14,7 @@ use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, move_buffer, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, cloned, only_alloc, or_abort, short_form_alloc};
+use super::{Payload, Tag, Value, clone_home, cloned, only_alloc, or_abort, short_form_alloc};
 
 /// A borrowed sequence of values, in order.
 #[repr(C)]
@@ -409,7 +409,7 @@ impl Clone for List {
     /// foreign producer can write. [`clone_in`](List::clone_in) reports it.
     fn clone(&self) -> List {
         cloned(
-            self.clone_in(Alloc::rust()),
+            self.clone_in(clone_home(self.alloc)),
             core::alloc::Layout::new::<Value>(),
         )
     }

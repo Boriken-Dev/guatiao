@@ -20,6 +20,7 @@ use crate::schema::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::secret::Secret;
 use crate::value::types::Value;
+use crate::value::wipe::Wipe;
 
 impl Schema for str {
     fn kind(alloc: Alloc) -> KindBuilder {
@@ -59,7 +60,7 @@ impl<T: Schema + ToOwned + ?Sized> Schema for Cow<'_, T> {
 
 /// `T`'s kind with `writeOnly: true` and `x-sensitive: true`, the two
 /// marks `FieldBuilder::sensitive` writes, which redaction honours.
-impl<T: Schema> Schema for Secret<T> {
+impl<T: Schema + Wipe> Schema for Secret<T> {
     fn kind(alloc: Alloc) -> KindBuilder {
         T::kind(alloc)
             .keyword(vocab::WRITE_ONLY, Ok(Value::from(true)))

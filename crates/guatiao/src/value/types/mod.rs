@@ -92,6 +92,21 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
+/// Where `clone()` copies a container that recorded `recorded`: into
+/// [`Alloc::wiping`] when it lives there, so a copy of a secret is wiped
+/// as the original is; into [`Alloc::rust`] otherwise.
+pub(crate) fn clone_home(recorded: *const crate::value::alloc::Allocator) -> Alloc {
+    if recorded.is_null() {
+        return Alloc::rust();
+    }
+    // SAFETY: the address a container recorded is an allocator that
+    // outlives it, by the contract on `Alloc`.
+    match unsafe { Alloc::from_raw(recorded) } {
+        Ok(a) if a.is_wiping() => Alloc::wiping(),
+        _ => Alloc::rust(),
+    }
+}
+
 /// What `Clone` does with a copy `clone_in` refused: an allocation
 /// failure aborts, as the short forms do, and content this build refuses
 /// (an unknown tag, text that is not UTF-8, a number outside the grammar,
@@ -143,7 +158,9 @@ macro_rules! where_it_lives {
 
             /// This, owned in `alloc`: unchanged when everything it owns
             /// already records `alloc`, otherwise copied there and the
-            /// original freed through the allocators it recorded.
+            /// original freed through the allocators it recorded. Into
+            /// [`Alloc::wiping`], the original is overwritten first, so
+            /// the move leaves nothing readable behind.
             ///
             /// # Errors
             ///
@@ -153,7 +170,12 @@ macro_rules! where_it_lives {
                 if $homed(&self, alloc.as_raw()) {
                     return Ok(self);
                 }
-                self.clone_in(alloc)
+                let copy = self.clone_in(alloc);
+                if alloc.is_wiping() {
+                    let mut original = self;
+                    $crate::value::wipe::Wipe::wipe(&mut original);
+                }
+                copy
             }
 
             /// Moves this tree into `alloc` where it stands: every block
