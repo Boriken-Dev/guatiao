@@ -2,6 +2,78 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import 'dart:collection';
+import 'dart:typed_data';
+
+/// The bytes [Ref.reveal] lends its callback: read where they live, in the
+/// tree's own memory, and only while that callback runs.
+///
+/// Every access after it returns throws [StateError]: the memory may have
+/// been freed or moved since. Copying out (`List.of`, `utf8.decode`) makes
+/// a copy Dart keeps and nothing can wipe.
+final class RevealedBytes extends ListBase<int> {
+  RevealedBytes._(this._bytes);
+
+  final Uint8List _bytes;
+  bool _open = true;
+
+  void _check() {
+    if (!_open) {
+      throw StateError(
+        'revealed bytes are read only during the call that lent them',
+      );
+    }
+  }
+
+  @override
+  int get length {
+    _check();
+    return _bytes.length;
+  }
+
+  @override
+  int operator [](int index) {
+    _check();
+    return _bytes[index];
+  }
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('revealed bytes cannot be written');
+
+  @override
+  set length(int length) =>
+      throw UnsupportedError('revealed bytes cannot change length');
+}
+
+/// How many reveals of each owner's tree are running.
+final Expando<int> _revealing = Expando<int>('reveals running');
+
+/// Runs [use] over [view], the bytes of a node of [owner]'s tree, refusing
+/// every change to and free of that tree until it returns.
+R revealBytes<R>(Object owner, Uint8List view, R Function(RevealedBytes) use) {
+  final bytes = RevealedBytes._(view);
+  _revealing[owner] = (_revealing[owner] ?? 0) + 1;
+  try {
+    return use(bytes);
+  } finally {
+    bytes._open = false;
+    final left = _revealing[owner]! - 1;
+    _revealing[owner] = left == 0 ? null : left;
+  }
+}
+
+/// Throws while a reveal of [owner]'s tree runs: changing or freeing the
+/// tree then would move or free the bytes being read.
+void checkUnrevealed(Object owner) {
+  if ((_revealing[owner] ?? 0) > 0) {
+    throw StateError(
+      'a reveal of this value is running: it cannot be changed or freed '
+      'until the call that lent the bytes returns',
+    );
+  }
+}
+
 /// `guatiao_tag`: which arm of a value's payload is live.
 enum Tag {
   absent(0),

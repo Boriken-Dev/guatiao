@@ -16,7 +16,6 @@ library;
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/guatiao.dart';
@@ -81,7 +80,7 @@ final class Keeper implements DartVault {
 bool _holds(Ref ref, String text) =>
     ref.reveal((bytes) => _same(bytes, utf8.encode(text)));
 
-bool _same(Uint8List a, List<int> b) {
+bool _same(List<int> a, List<int> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a[i] != b[i]) return false;
@@ -120,9 +119,13 @@ void main() {
       expect(bytes.length, _secret.length);
       expect(_same(bytes, utf8.encode(_secret)), isTrue);
       expect(() => bytes[0] = 0, throwsUnsupportedError);
-      // An external view: the bytes' own address, not a copy.
-      expect(bytes.offsetInBytes, 0);
-      expect(at, isNot(0));
+      // The tree's own bytes, not a copy: a byte changed where they live
+      // reads back changed.
+      final raw = Pointer<Uint8>.fromAddress(at);
+      final was = raw.value;
+      raw.value = 0x58;
+      expect(bytes[0], 0x58);
+      raw.value = was;
     });
     expect(() => Value({'a': 1}).reveal((_) {}), throwsStateError);
   });
@@ -158,6 +161,26 @@ void main() {
       expect(holder.toString(), isNot(contains('hunter2')));
     }
   });
+
+  test(
+    'revealed bytes are read only during the call, which the value waits for',
+    () {
+      final v = Value.sensitive({'token': _secret, 'user': 'alice'});
+      late List<int> kept;
+      v.asMap()['token']!.reveal((bytes) {
+        kept = bytes;
+        expect(bytes.length, _secret.length);
+        expect(() => v.close(), throwsStateError);
+        expect(() => v.wipe(), throwsStateError);
+        expect(() => v.asMap()['more'] = 'x', throwsStateError);
+        expect(() => v.asMap().remove('user'), throwsStateError);
+      });
+      expect(() => kept[0], throwsStateError);
+      expect(() => kept.length, throwsStateError);
+      v.asMap()['more'] = 'x';
+      v.close();
+    },
+  );
 
   group('a slot its kind marks sensitive', () {
     late DartVaultRemote vault;

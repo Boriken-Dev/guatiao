@@ -18,6 +18,7 @@ import contextlib
 import ctypes
 import decimal
 import math
+import weakref
 from collections.abc import Mapping
 from typing import Any, Iterator, Protocol, Union
 
@@ -297,6 +298,19 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
     raise TypeError(f"cannot convert {type(obj)!r} to a guatiao value")
 
 
+def _revealed(owner: Any, ptr: int, size: int) -> Any:
+    """The `size` bytes at `ptr` as a ctypes array that holds `owner`
+    alive, recorded on `owner` as revealed while it lives: what every
+    view and slice of a reveal refers to."""
+    holder_type: Any = type("_Revealed", (ctypes.c_char * size,), {})
+    holder = holder_type.from_address(ptr)
+    holder.owner = owner
+    reveals = getattr(owner, "_reveals", None)
+    if reveals is not None:
+        reveals[id(holder)] = holder
+    return holder
+
+
 def wiping_alloc() -> "_abi.Alloc":
     """The allocator a secret is built in: every block freed through it is
     overwritten with zeros first, the block a growing string or list leaves
@@ -371,7 +385,12 @@ class Ref:
         a read-only `memoryview` over the tree's own memory, no copy made,
         released when the `with` block ends. A secret read this way is
         wiped with its tree; `bytes(view)` or `str(...)` makes a copy
-        Python keeps and guatiao cannot wipe."""
+        Python keeps and guatiao cannot wipe.
+
+        The view, and every slice taken from it, holds the tree alive: while
+        any of them lives, `close()`, `wipe()` and every change to the tree
+        raise `BufferError`, so none of them can read memory that was
+        freed or moved."""
         node = self._require_node()
         if node.tag in (_abi.Tag.STRING, _abi.Tag.NUMBER):
             storage: Any = node.payload.text
@@ -386,7 +405,7 @@ class Ref:
             finally:
                 view.release()
             return
-        base = memoryview((ctypes.c_char * storage.len).from_address(storage.ptr)).cast("B")
+        base = memoryview(_revealed(self.owner, storage.ptr, storage.len)).cast("B")
         view = base.toreadonly()
         try:
             yield view
@@ -662,6 +681,8 @@ class Value(Ref):
         is absent. `alloc` is reserved, so it cannot be a keyword field."""
         self._raw = _raw if _raw is not None else _abi.Value()
         self._alloc_override = alloc
+        # The holders of views `reveal()` answered that are still alive.
+        self._reveals: "weakref.WeakValueDictionary[int, Any]" = weakref.WeakValueDictionary()
         self._closed = False
         Ref.__init__(self, self, ())
         if obj is _UNSET and not fields:
@@ -681,8 +702,16 @@ class Value(Ref):
         if self._closed:
             raise ValueError("this value is closed")
 
+    def _check_unrevealed(self) -> None:
+        if self._reveals:
+            raise BufferError(
+                "a view reveal() answered, or a slice of one, is still alive: "
+                "release it and drop every slice before changing or freeing this value"
+            )
+
     def _check_writable(self) -> None:
         self._check_open()
+        self._check_unrevealed()
 
     def _ensure_alloc(self) -> "_abi.Alloc":
         if self._alloc_override is not None:
@@ -698,11 +727,13 @@ class Value(Ref):
         afterwards. What a secret built outside the wiping allocator needs
         before it goes; one built there is wiped by `close()` as well."""
         self._check_open()
+        self._check_unrevealed()
         check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
 
     def close(self) -> None:
         if getattr(self, "_closed", True):
             return
+        self._check_unrevealed()
         try:
             _lib.core().guatiao_value_free(ctypes.byref(self._raw))
         finally:
