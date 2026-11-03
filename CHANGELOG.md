@@ -82,7 +82,10 @@ write now.
   as a `Value` rather than a string. Not part of the floor hash: marking a
   slot keeps the kind's hash. Python gains `kinds.sensitive`,
   `kinds.SensitiveText`, `wiping_alloc()`, `Ref.is_sensitive`,
-  `Ref.reveal()` (a read-only `memoryview` over the tree's bytes) and
+  `Ref.reveal()` (a read-only `memoryview` over the tree's bytes, or over
+  a copy in the wiping allocator for an argument a call lends or borrows;
+  closing, wiping, handing over or lending the value is refused while one
+  lives) and
   `Value.wipe()`, and `repr` hides a value in the wiping allocator; Dart
   gains `@sensitive` (`describe.dart`), `Value.sensitive`,
   `Ref.isSensitive`, `Ref.reveal` (`RevealedBytes` over the native or
