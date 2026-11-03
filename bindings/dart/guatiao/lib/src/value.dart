@@ -346,9 +346,11 @@ void writeDartInto(
 ) => _writeDart(raw, obj, alloc);
 
 /// `value`'s tree moved into a new `calloc`ed root the caller owns, and
-/// `value` left absent: what a slot taking a tree is handed. For the kind
-/// runtime; not exported.
+/// `value` left absent: what a slot taking a tree is handed. Throws
+/// [StateError] inside a reveal of `value`, whose bytes the slot may free.
+/// For the kind runtime; not exported.
 Pointer<guatiao_value> moveOutOf(Value value) {
+  checkUnrevealed(value);
   final root = value.rootNode;
   final size = sizeOf<guatiao_value>();
   final out = calloc<guatiao_value>();
@@ -453,8 +455,8 @@ class Ref {
   ///
   /// The [RevealedBytes] are read only during [use], and throw after it;
   /// until it returns, changing or freeing the tree (`close`, `wipe`, a
-  /// store) throws [StateError], so nothing reads memory that was freed or
-  /// moved. Copying out of them (`utf8.decode`, `List.of`) makes a copy
+  /// store, handing it to a kind's slot or lending it to one) throws
+  /// [StateError], so nothing reads memory that was freed or moved. Copying out of them (`utf8.decode`, `List.of`) makes a copy
   /// Dart keeps and nothing can wipe. Throws [StateError] for any other
   /// node.
   R reveal<R>(R Function(RevealedBytes bytes) use) {

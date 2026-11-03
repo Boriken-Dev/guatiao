@@ -7,7 +7,7 @@
 // that document writes.
 
 import 'package:guatiao/describe.dart';
-import 'package:guatiao/guatiao.dart' show MapRef;
+import 'package:guatiao/guatiao.dart' show MapRef, Ref;
 
 /// A store of secrets.
 @KindName('dart_vault')
@@ -31,4 +31,7 @@ abstract interface class Vault {
 
   /// Lent a map, and changes nothing.
   void touch(Lent<MapRef> map);
+
+  /// Handed a value, which it frees.
+  void keep(Taken<Ref> value);
 }

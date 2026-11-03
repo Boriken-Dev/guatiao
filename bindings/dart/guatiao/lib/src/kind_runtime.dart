@@ -787,6 +787,9 @@ final class CallScope extends SlotCall {
     // Throws for a view this binding only borrows: what the callee
     // changes would have nowhere to go.
     ref.owner.allocator;
+    // The callee may grow or replace the tree, and the settle afterwards
+    // moves it: inside a reveal of it, the bytes being read.
+    checkUnrevealed(ref.owner);
     final node = ref.requireNode();
     if (tag != null && node.ref.tag != tag.code) {
       throw ArgumentError('expected a ${tag.name}, got a ${ref.tag.name}');
