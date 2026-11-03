@@ -119,7 +119,7 @@ pub trait Session: Send {
 
 /// A library's manifest in `dir`, by the file name the source lists.
 fn manifest_file(dir: &Path, stem: &str) -> PathBuf {
-    dir.join(format!("{stem}.guatiao.toml"))
+    dir.join(format!("{stem}.guatiao"))
 }
 
 #[test]

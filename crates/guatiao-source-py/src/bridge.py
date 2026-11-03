@@ -146,9 +146,10 @@ def open_library(module_name, version, kinds, paths):
         _drop_modules(roots)
         _release_paths(paths)
         raise
+    # A copy: resolving a path lets another thread run, and import.
     modules = {
         name: module
-        for name, module in sys.modules.items()
+        for name, module in list(sys.modules.items())
         if _under(getattr(module, "__file__", None), roots)
     }
     handle = _next[0]

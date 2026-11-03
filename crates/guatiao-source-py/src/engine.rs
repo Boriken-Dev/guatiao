@@ -88,7 +88,8 @@ fn settings(map: &Map) -> Result<Settings, BridgeError> {
             })
             .transpose()
     };
-    let isolation = match text("isolation")? {
+    let asked = text("isolation")?;
+    let isolation = match asked {
         None => Isolation::Shipped,
         Some(name) => Isolation::parse(name).ok_or_else(|| {
             BridgeError::config(
@@ -97,7 +98,15 @@ fn settings(map: &Map) -> Result<Settings, BridgeError> {
             )
         })?,
     };
-    let home = text("home")?.map(str::to_string);
+    // A relative `home` is this file's: where the program ships it.
+    let beside = crate::exports::own_path()
+        .and_then(|own| std::path::Path::new(&own).parent().map(|d| d.to_path_buf()));
+    let home = text("home")?.map(|home| match &beside {
+        Some(beside) if std::path::Path::new(home).is_relative() => {
+            beside.join(home).display().to_string()
+        }
+        _ => home.to_string(),
+    });
     if let Some(home) = &home {
         if isolation == Isolation::Inherit {
             return Err(BridgeError::config(
@@ -112,5 +121,9 @@ fn settings(map: &Map) -> Result<Settings, BridgeError> {
             ));
         }
     }
-    Ok(Settings { isolation, home })
+    Ok(Settings {
+        isolation,
+        asked: asked.is_some(),
+        home,
+    })
 }
