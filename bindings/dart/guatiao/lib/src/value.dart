@@ -62,6 +62,7 @@ void _writable(Ref ref) {
   if (ref.owner is _BorrowedRoot) {
     throw StateError('a borrowed value is read-only');
   }
+  checkUnrevealed(ref.owner);
 }
 
 // ---- reading, with no library needed ---------------------------------
@@ -448,13 +449,15 @@ class Ref {
   }
 
   /// Calls [use] with this string's, number's or bytes' bytes where they
-  /// live: an unmodifiable view over the tree's own memory, no copy made.
+  /// live, in the tree's own memory, no copy made.
   ///
-  /// The view is valid only during [use]: it points at memory the tree
-  /// frees, and wipes when it lives in the wiping allocator. Copying out
-  /// of it (`utf8.decode`, `Uint8List.fromList`) makes a copy Dart keeps
-  /// and nothing can wipe. Throws [StateError] for any other node.
-  R reveal<R>(R Function(Uint8List bytes) use) {
+  /// The [RevealedBytes] are read only during [use], and throw after it;
+  /// until it returns, changing or freeing the tree (`close`, `wipe`, a
+  /// store) throws [StateError], so nothing reads memory that was freed or
+  /// moved. Copying out of them (`utf8.decode`, `List.of`) makes a copy
+  /// Dart keeps and nothing can wipe. Throws [StateError] for any other
+  /// node.
+  R reveal<R>(R Function(RevealedBytes bytes) use) {
     final found = requireNode();
     final payload = found.ref.payload;
     final (Pointer<Uint8> at, int len) = switch (Tag.fromCode(found.ref.tag)) {
@@ -463,7 +466,7 @@ class Ref {
       _ => throw StateError('only a string, a number or bytes can be revealed'),
     };
     final view = len == 0 ? Uint8List(0) : at.asTypedList(len);
-    return use(view.asUnmodifiableView());
+    return revealBytes(owner, view, use);
   }
 
   bool get isAbsent => tag == Tag.absent;
@@ -984,12 +987,14 @@ class Value extends Ref implements ValueOwner, Finalizable {
   /// afterwards. What a secret built outside the wiping allocator needs
   /// before it goes; one built there is wiped by [close] as well.
   void wipe() {
+    checkUnrevealed(this);
     checkStatus(native.core().bindings.guatiao_value_wipe(rootNode));
   }
 
   /// Frees the tree and the root box. Idempotent.
   void close() {
     if (_closed) return;
+    checkUnrevealed(this);
     _closed = true;
     _finalizer.detach(this);
     native.core().bindings.guatiao_value_free(_raw);

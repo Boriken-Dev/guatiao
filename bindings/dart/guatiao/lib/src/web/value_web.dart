@@ -50,6 +50,7 @@ void _writable(Ref ref) {
   if (ref.owner is _BorrowedRoot) {
     throw StateError('a borrowed value is read-only');
   }
+  checkUnrevealed(ref.owner);
 }
 
 // ---- reading -----------------------------------------------------------
@@ -323,13 +324,13 @@ class Ref {
   }
 
   /// Calls [use] with this string's, number's or bytes' bytes where they
-  /// live: an unmodifiable view over the module's memory, no copy made.
+  /// live, in the module's memory, no copy made.
   ///
-  /// The view is valid only during [use]: it points at memory the tree
-  /// frees, and wipes when it lives in the wiping allocator, and a module
-  /// whose memory grows detaches it. Copying out of it makes a copy Dart
+  /// The [RevealedBytes] are read only during [use], and throw after it;
+  /// until it returns, changing or freeing the tree (`close`, `wipe`, a
+  /// store) throws [StateError]. Copying out of them makes a copy Dart
   /// keeps and nothing can wipe. Throws [StateError] for any other node.
-  R reveal<R>(R Function(Uint8List bytes) use) {
+  R reveal<R>(R Function(RevealedBytes bytes) use) {
     final found = requireNode();
     switch (Tag.fromCode(_tagOf(found))) {
       case Tag.string || Tag.number || Tag.bytes:
@@ -338,7 +339,7 @@ class Ref {
         final view = len == 0 || at.isNull
             ? Uint8List(0)
             : _m.data.buffer.asUint8List(at.value, len);
-        return use(view.asUnmodifiableView());
+        return revealBytes(owner, view, use);
       default:
         throw StateError('only a string, a number or bytes can be revealed');
     }
@@ -799,12 +800,14 @@ class Value extends Ref implements ValueOwner {
   /// afterwards. What a secret built outside the wiping allocator needs
   /// before it goes; one built there is wiped by [close] as well.
   void wipe() {
+    checkUnrevealed(this);
     checkStatus(_m.call('guatiao_value_wipe', [rootNode]));
   }
 
   /// Frees the tree and the root block. Idempotent.
   void close() {
     if (_closed) return;
+    checkUnrevealed(this);
     _closed = true;
     _backstop.detach(this);
     if (!identical(_module, WasmModule.loaded)) return;

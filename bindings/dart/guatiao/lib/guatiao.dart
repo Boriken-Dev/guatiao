@@ -58,4 +58,4 @@ export 'src/time.dart' show TextForm, Unparsed;
 export 'src/value.dart'
     if (dart.library.js_interop) 'src/web/value_web.dart'
     show ListRef, MapRef, Ref, Value, ValueOwner;
-export 'src/value_common.dart' show Absent, Numbers, Tag, absent;
+export 'src/value_common.dart' show Absent, Numbers, RevealedBytes, Tag, absent;

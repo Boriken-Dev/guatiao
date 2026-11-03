@@ -218,3 +218,37 @@ def test_a_secret_copied_into_a_plain_tree_stays_in_the_wiping_allocator():
         assert view.tobytes() == SECRET.encode()
     for v in (plain, items, built, secret):
         v.close()
+
+
+def test_a_revealed_view_keeps_its_bytes_and_refuses_what_would_free_them():
+    v = Value({"token": SECRET, "user": "alice"}, alloc=wiping_alloc())
+    with v.as_map()["token"].reveal() as view:
+        kept = view[0:14]
+        with pytest.raises(BufferError):
+            v.close()
+        with pytest.raises(BufferError):
+            v.wipe()
+        with pytest.raises(BufferError):
+            v.as_map()["more"] = "x"
+        with pytest.raises(BufferError):
+            v.as_map()["user"] = "bob"
+    # A slice outlives the block: the block stays, and the tree with it.
+    with pytest.raises(BufferError):
+        v.close()
+    assert bytes(kept) == SECRET.encode()
+    del kept
+    v.as_map()["user"] = "bob"
+    v.close()
+
+
+def test_a_slice_keeps_the_tree_alive_after_its_value_is_dropped():
+    def a_slice() -> memoryview:
+        v = Value(SECRET, alloc=wiping_alloc())
+        with v.reveal() as view:
+            return view[0:7]
+
+    kept = a_slice()
+    import gc
+
+    gc.collect()
+    assert bytes(kept) == SECRET.encode()[0:7]
