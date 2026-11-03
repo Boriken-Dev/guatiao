@@ -49,6 +49,8 @@ mod entry;
 mod export;
 mod host;
 mod image;
+#[cfg(all(feature = "load", windows))]
+mod imports;
 mod lease;
 #[cfg(feature = "load")]
 mod mapped;

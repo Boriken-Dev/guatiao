@@ -871,7 +871,7 @@ pub(crate) unsafe fn open(
     search: crate::library::registry::ImportSearch,
 ) -> Result<Opened, String> {
     // SAFETY: the caller's side of the contract, stated above.
-    let library = unsafe { map(path, search)? };
+    let library = unsafe { map(path, search, &[])? };
 
     // SAFETY: the symbol either is absent, which is an answer, or has the
     // signature this crate defines for it.
@@ -907,8 +907,20 @@ pub(crate) unsafe fn open(
     }
 }
 
-/// Maps `path`, its imports found as `search` says, or answers why not in
-/// the loader's own words.
+/// Maps `path`, its imports found as `search` says and, when the narrow
+/// search leaves one missing, in `import_dirs`; or answers why not in the
+/// loader's own words.
+///
+/// The file is opened by its absolute path with the narrow search
+/// (`imports::NARROW`). Refused because something it imports is missing
+/// (error 126, which stops the load before any initialiser runs), each
+/// library it imports directly that the narrow search does not hold is
+/// looked for in `import_dirs` and, under [`ImportSearch::Path`], where
+/// Windows' standard search goes after the system directory; each found is
+/// mapped by its full path, and the file opened again with the narrow
+/// search. Every other import is found where the narrow search finds it.
+///
+/// [`ImportSearch::Path`]: crate::library::registry::ImportSearch::Path
 ///
 /// # Safety
 ///
@@ -917,55 +929,86 @@ pub(crate) unsafe fn open(
 pub(crate) unsafe fn map(
     path: &std::path::Path,
     search: crate::library::registry::ImportSearch,
+    import_dirs: &[std::path::PathBuf],
 ) -> Result<libloading::Library, String> {
+    use super::imports::{self, NARROW, Preload};
     use crate::library::registry::ImportSearch;
-    use libloading::os::windows::{
-        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
-        LOAD_WITH_ALTERED_SEARCH_PATH, Library,
-    };
+    use libloading::os::windows::Library;
     /// What Windows answers for a module it did not find: the file, or
     /// something it imports.
     const ERROR_MOD_NOT_FOUND: i32 = 126;
 
-    // Both flags want a fully qualified path.
+    // The narrow search wants a fully qualified path.
     let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     // SAFETY: forwarded.
-    let first = unsafe {
-        Library::load_with_flags(
-            &absolute,
-            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
-        )
-    };
-    let not_found = |e: &libloading::Error| {
-        core::error::Error::source(e)
-            .and_then(|s| s.downcast_ref::<std::io::Error>())
-            .and_then(std::io::Error::raw_os_error)
-            == Some(ERROR_MOD_NOT_FOUND)
-    };
-    let error = match first {
+    let error = match unsafe { Library::load_with_flags(&absolute, NARROW) } {
         Ok(library) => return Ok(library.into()),
         Err(e) => e,
     };
-    if search == ImportSearch::Path && not_found(&error) {
-        // A missing module stops the load before any initialiser runs, so
-        // opening the file again runs nothing twice.
-        // SAFETY: forwarded.
-        return unsafe { Library::load_with_flags(&absolute, LOAD_WITH_ALTERED_SEARCH_PATH) }
-            .map(Into::into)
-            .map_err(|e| loader_words(&e));
-    }
+    let not_found = core::error::Error::source(&error)
+        .and_then(|s| s.downcast_ref::<std::io::Error>())
+        .and_then(std::io::Error::raw_os_error)
+        == Some(ERROR_MOD_NOT_FOUND);
     let mut reason = loader_words(&error);
-    if not_found(&error) && absolute.is_file() {
-        reason.push_str(
-            "; a library it imports is not beside it, beside the host or in the system \
-             directory (the current directory and PATH are searched only under the \
-             import search `path`)",
-        );
+    if !not_found || !absolute.is_file() {
+        return Err(reason);
     }
-    Err(reason)
+    let wide = search == ImportSearch::Path;
+    let elsewhere = match (import_dirs.is_empty(), wide) {
+        (true, false) => {
+            " (a source file's `import_dirs` names more places; the current directory and \
+             PATH are searched only under the import search `path`)"
+        }
+        (false, false) => {
+            " or in `import_dirs` (the current directory and PATH are searched only under \
+             the import search `path`)"
+        }
+        (_, true) => ", in `import_dirs`, the Windows directory, the current directory or PATH",
+    };
+    let missing = imports::missing(&absolute);
+    let places = imports::places(import_dirs, wide);
+    // SAFETY: what the file the caller named imports; nothing is mapped
+    // unless every missing import was found.
+    let preloaded = match unsafe { imports::preload(&absolute, &missing, &places, loader_words) } {
+        Ok(preloaded) => preloaded,
+        Err(Preload::Unfound(names)) => {
+            reason.push_str(&format!(
+                "; it imports {}, not found beside it, beside the host, in the system \
+                 directory{elsewhere}",
+                names.join(", ")
+            ));
+            return Err(reason);
+        }
+        Err(Preload::Refused(why)) => {
+            reason.push_str(&format!("; an import it was missing did not load: {why}"));
+            return Err(reason);
+        }
+    };
+    // SAFETY: forwarded; what it was missing is mapped (or was, by another
+    // thread, since the first try), so the load binds to it and finds
+    // everything else as the first did.
+    match unsafe { Library::load_with_flags(&absolute, NARROW) } {
+        Ok(library) => {
+            // What the file imports stays mapped while the process runs,
+            // as the loader keeps what it maps for a file it opens.
+            core::mem::forget(preloaded);
+            Ok(library.into())
+        }
+        Err(e) if missing.is_empty() => Err(format!(
+            "{}; every library it imports is found, so one of theirs is missing (only what \
+             the file itself imports is looked for elsewhere)",
+            loader_words(&e)
+        )),
+        Err(e) => Err(format!(
+            "{}; after mapping {} first",
+            loader_words(&e),
+            missing.join(", ")
+        )),
+    }
 }
 
-/// Maps `path`; unix has no per-load search, so `search` changes nothing.
+/// Maps `path`; unix has no per-load search, so `search` and
+/// `import_dirs` change nothing.
 ///
 /// # Safety
 ///
@@ -974,6 +1017,7 @@ pub(crate) unsafe fn map(
 pub(crate) unsafe fn map(
     path: &std::path::Path,
     _search: crate::library::registry::ImportSearch,
+    _import_dirs: &[std::path::PathBuf],
 ) -> Result<libloading::Library, String> {
     // SAFETY: forwarded.
     unsafe { libloading::Library::new(path) }.map_err(|e| loader_words(&e))
