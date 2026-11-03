@@ -408,6 +408,25 @@ impl Datagrams for ChannelDatagrams {
     }
 }
 
+/// Refuses a client the listener has decided against after the
+/// handshake: the link's own refusal frame (`BAD_VALUE`, `why` in it), as
+/// the link would send it, then the channel closed with it flushed. The
+/// client reads it as the reply it waits for.
+#[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+pub(super) fn refuse(channel: &dyn Channel, why: &str) {
+    let frame = crate::protocol::Frame::Goodbye {
+        status: guatiao::Status::GUATIAO_ERR_BAD_VALUE.into(),
+        message: why,
+    };
+    let mut out = Vec::new();
+    if frame.encode(&mut out, usize::MAX).is_ok()
+        && let Some(body) = out.get(4..)
+    {
+        let _ = channel.send(body);
+    }
+    channel.close();
+}
+
 /// The two halves of a link over `shared`'s channel: open already
 /// (`open` none), or made by `open` on the first read, which the closer
 /// can cancel by `cancel`.
@@ -461,7 +480,7 @@ impl Refused {
 
 #[cfg(feature = "tls")]
 #[cfg_attr(not(feature = "webtransport"), allow(unused_imports))]
-pub(super) use verified::{Watching, list_permits, server_config};
+pub(super) use verified::{Watching, canonical_list, list_permits, server_config};
 
 #[cfg(feature = "tls")]
 mod verified {
@@ -470,8 +489,8 @@ mod verified {
     use std::io;
     use std::sync::Mutex;
 
-    use coqui_net_acl::Outcome;
-    use coqui_peer_tls::{PeerId, Refusal};
+    use coqui_net_acl::{Acl, Outcome};
+    use coqui_peer_tls::{Digest, PeerId, Refusal};
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::server::ResolvesServerCert;
@@ -592,10 +611,11 @@ mod verified {
     /// listener. Otherwise the list is left out of it, because
     /// coqui-peer-tls would find no addresses and refuse every client: the
     /// listener decides the list's address rules before the handshake and
-    /// its fingerprint rules after it ([`list_permits`]). That would let a
-    /// trust store record a stranger the list forbids as waiting, so a
-    /// store-backed mutual listener whose list names a fingerprint is
-    /// refused here.
+    /// its fingerprint rules after it ([`list_permits`]). A trust store
+    /// would record every stranger without its source, in one bucket
+    /// where strangers evict each other (and a stranger the list forbids
+    /// as waiting), so a store-backed mutual listener is refused here:
+    /// its clients are pinned.
     pub(crate) fn server_config(
         config: &TlsConfig,
         alpn: &[u8],
@@ -605,15 +625,9 @@ mod verified {
         let mut policy = config.tls_policy().clone();
         let mutual = config.is_mutual() && config.proves_peers();
         if !(scoped && mutual) {
-            if mutual
-                && config.records_waiting()
-                && policy
-                    .acl
-                    .as_ref()
-                    .is_some_and(|acl| acl.rules.iter().any(|r| r.fingerprint.is_some()))
-            {
+            if mutual && config.records_waiting() {
                 return Err(crate::transport::tls::invalid(
-                    "a mutual-TLS WebTransport listener backed by a trust store cannot apply a list that names a fingerprint: its handshake has no connection address to decide by, so the store would record a client the list forbids as waiting; pin the clients instead, or drop the fingerprint rules",
+                    "a mutual-TLS WebTransport listener cannot be backed by a trust store: its handshake runs where coqui-peer-tls has no connection address, so the store would record every stranger waiting without its source, in one bucket where strangers evict each other; pin the clients (`pins`) instead",
                 ));
             }
             policy.acl = None;
@@ -629,33 +643,44 @@ mod verified {
         }
     }
 
-    /// Whether the policy's list permits the client that presented
-    /// `chain` (its own certificate first), from `source` to `local`:
-    /// the fingerprint rules of the list, decided after a handshake that
-    /// had no addresses to decide them by. `Ok` where there is no list.
+    /// The policy's list with its fingerprints in canonical form, checked
+    /// once: a rule naming something that is not a SHA-256 fingerprint is
+    /// refused here, as a listener is made. `None` where there is no list.
+    pub(crate) fn canonical_list(config: &TlsConfig) -> io::Result<Option<Arc<Acl>>> {
+        let Some(acl) = &config.tls_policy().acl else {
+            return Ok(None);
+        };
+        let mut acl = acl.clone();
+        acl.canonicalize_fingerprints(|index, text| {
+            text.parse::<PeerId>()
+                .ok()
+                .filter(|id| id.digest() == Digest::Sha256)
+                .map(|id| id.canonical())
+                .ok_or_else(|| {
+                    format!("acl rule {index}: the fingerprint is not a SHA-256 peer id")
+                })
+        })
+        .map_err(crate::transport::tls::invalid)?;
+        Ok(Some(Arc::new(acl)))
+    }
+
+    /// Whether the list permits the client that presented `chain` (its own
+    /// certificate first), from `source` to `local`: the fingerprint rules
+    /// of the list, decided after a handshake that had no addresses to
+    /// decide them by.
     #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
     pub(crate) fn list_permits(
-        config: &TlsConfig,
+        acl: &Acl,
         source: SocketAddr,
         local: SocketAddr,
         chain: Option<&[Vec<u8>]>,
     ) -> io::Result<()> {
-        let Some(acl) = &config.tls_policy().acl else {
-            return Ok(());
-        };
         let denied = |why: String| io::Error::new(io::ErrorKind::PermissionDenied, why);
         let Some(certificate) = chain.and_then(<[Vec<u8>]>::first) else {
             return Err(denied(
                 "the client presented no certificate to decide the list by".to_string(),
             ));
         };
-        let mut acl = acl.clone();
-        acl.canonicalize_fingerprints(|index, text| {
-            text.parse::<PeerId>()
-                .map(|id| id.canonical())
-                .map_err(|_| format!("acl rule {index}: the fingerprint is not a peer id"))
-        })
-        .map_err(crate::transport::tls::invalid)?;
         let decision = acl.decide_peer(source, local, &PeerId::of(certificate).canonical());
         match decision.outcome {
             Outcome::Permit => Ok(()),
@@ -667,6 +692,14 @@ mod verified {
             ))),
         }
     }
+}
+
+/// Whether any rule of `acl` names the address or the port a packet came
+/// to, which a listener bound to a wildcard cannot know.
+pub(super) fn names_local(acl: &coqui_net_acl::Acl) -> bool {
+    acl.rules
+        .iter()
+        .any(|r| r.destination.is_some() || r.port.is_some())
 }
 
 /// Whether a listener of `config` admits a client from `source` by its
@@ -683,8 +716,8 @@ pub(super) fn admits(
     match &config.tls_policy().acl {
         None => true,
         Some(acl) => {
-            let names_local = acl.rules.iter().any(|r| r.destination.is_some());
-            (!names_local || !bound.ip().is_unspecified()) && config.admits(source, bound).is_ok()
+            (!names_local(acl) || !bound.ip().is_unspecified())
+                && config.admits(source, bound).is_ok()
         }
     }
 }

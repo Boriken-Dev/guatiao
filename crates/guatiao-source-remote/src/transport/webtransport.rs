@@ -50,7 +50,8 @@ use url::Url;
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{TlsConfig, host_of, invalid, server_name, unbuilt, words};
 use super::web::{
-    Open, Refused, Shared, Watching, admits, connection, io_error, list_permits, server_config,
+    Open, Refused, Shared, Watching, admits, canonical_list, connection, io_error, list_permits,
+    server_config,
 };
 use super::{Connect, Connection};
 use crate::lock;
@@ -346,6 +347,8 @@ pub struct WtListen {
     presenting: Arc<Presenting>,
     refused: Arc<Refused>,
     config: Arc<TlsConfig>,
+    /// The policy's list, its fingerprints in canonical form.
+    list: Option<Arc<coqui_net_acl::Acl>>,
     bound: SocketAddr,
 }
 
@@ -362,6 +365,9 @@ impl WtListen {
     /// presenting its identity.
     pub fn bind(address: &str, config: &TlsConfig) -> io::Result<WtListen> {
         let address = bind_address(address)?;
+        // A rule naming something that is not a fingerprint is refused
+        // here, as the listener is made.
+        let list = canonical_list(config)?;
         let presenting = Arc::new(Presenting {
             certs: Mutex::new(Certs::new(
                 Arc::new(Presented::of(config.identity().clone())?),
@@ -394,6 +400,7 @@ impl WtListen {
             presenting,
             refused,
             config,
+            list,
             bound,
         })
     }
@@ -461,16 +468,16 @@ impl WtListen {
                     let source = pending.peer_addr();
                     let cancel = pending.canceller();
                     let mutual = self.config.is_mutual() && self.config.proves_peers();
-                    let (config, bound) = (Arc::clone(&self.config), self.bound);
+                    let (list, bound) = (self.list.clone(), self.bound);
                     let open: Open = Box::new(move || {
                         let channel = pending.handshake().map_err(io_error)?;
-                        if mutual {
+                        if let (true, Some(list)) = (mutual, &list) {
                             // The list's fingerprint rules: the handshake had
                             // no addresses to decide them by.
                             if let Err(e) =
-                                list_permits(&config, source, bound, channel.peer_certificates())
+                                list_permits(list, source, bound, channel.peer_certificates())
                             {
-                                coqui_web::Channel::close(&channel);
+                                super::web::refuse(&channel, &e.to_string());
                                 return Err(e);
                             }
                         }
