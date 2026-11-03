@@ -13,6 +13,8 @@
 //! capacity reads initialised bytes (Miri checks that). The tests share
 //! one counter and take a lock around each count.
 
+extern crate alloc;
+
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -460,7 +462,7 @@ mod foreign {
             return core::ptr::null_mut();
         };
         // SAFETY: a non-zero size, which guatiao never asks below.
-        unsafe { std::alloc::alloc(layout).cast() }
+        unsafe { alloc::alloc::alloc(layout).cast() }
     }
 
     unsafe extern "C" fn free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -469,7 +471,7 @@ mod foreign {
             unsafe { p.cast::<u8>().add(i).write_volatile(0) };
         }
         // SAFETY: the block and its layout, as `alloc` made it.
-        unsafe { std::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
+        unsafe { alloc::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
     }
 
     pub fn wiping() -> Allocator {
@@ -484,7 +486,7 @@ mod foreign {
 
     unsafe extern "C" fn plain_free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
         // SAFETY: the block and its layout, as `alloc` made it.
-        unsafe { std::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
+        unsafe { alloc::alloc::dealloc(p.cast(), Layout::from_size_align_unchecked(size, align)) };
     }
 
     /// The same, with a `free` that does not wipe.
