@@ -393,7 +393,7 @@ write now.
   carries.
 - **guatiao-source-remote: a peer is a manifest in a search path.** A
   source configured with `dirs` or `manifests` (instead of `connect` or
-  `child`) reads every `<name>.guatiao.cfg` of `type = "remote"` there
+  `child`) reads every `<name>.guatiao` of `type = "remote"` there
   at each refresh, a peer per manifest: its `name`, `connect`, `trust`,
   `key_file` (beside the manifest; a manifest never holds `key` or
   `token`) and the link's bounds, the rest taken from the source's
@@ -520,7 +520,7 @@ write now.
   module whose exported classes extend `Provider`, implement the kinds
   they list in `static kinds` and refuse with `BadValue`, the Node
   binding's authoring shape, so the same file runs under Node and here;
-  it is described by a `*.guatiao.cfg` manifest of type `js`, with its version and
+  it is described by a `*.guatiao` manifest of type `js`, with its version and
   entry taken from the `package.json` beside it, and its kinds come from
   their `<crate>.kinds.json`. Each library runs in a context of its own,
   and holds only the host objects it was given:
@@ -537,7 +537,7 @@ write now.
   repository, not published) with wasmtime built in: a library is a core
   WebAssembly module speaking guatiao ABI 1 (five exports, five imports,
   every value as its wire encoding in the module's memory), described by a
-  `*.guatiao.cfg` manifest of type `wasm` and its kinds' `<crate>.kinds.json`.
+  `*.guatiao` manifest of type `wasm` and its kinds' `<crate>.kinds.json`.
   Guests in Rust (`guatiao-wasm-guest`) and in Go 1.24 or later (the
   `guest` package, Go's own `wasip1` toolchain), with example greeters in
   both (`examples/wasm_greeter_rust`, `examples/wasm_greeter_go`). A module
@@ -562,7 +562,7 @@ write now.
   source file (`crates/guatiao-source-rhai`, built from this repository, not
   published) with Rhai built in: a library is a script ending in a map of
   providers, whose function members are the kinds' slots and whose other
-  members are their state, described by a `*.guatiao.cfg` manifest of type `rhai`
+  members are their state, described by a `*.guatiao` manifest of type `rhai`
   and the kinds' `<crate>.kinds.json`; its version is the script's
   `const VERSION`, read from the parse. Refresh runs an edited script
   afresh while the old build answers the instances taken from it; limits
@@ -580,7 +580,7 @@ write now.
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a
   library is a Lua module returning a table whose `providers` are tables
   of methods named for the kinds' slots, described by a
-  `*.guatiao.cfg` manifest of type `lua` and its kinds' `<crate>.kinds.json`.
+  `*.guatiao` manifest of type `lua` and its kinds' `<crate>.kinds.json`.
   Refresh runs an edited module afresh while the old build answers the
   instances taken from it; limits stop runaway code (operations, time,
   depth, memory), a `pcall` around it included, and the host carries on.
@@ -1179,7 +1179,7 @@ write now.
   language adds it with `add_source_file` and a configuration naming
   where Python libraries are described (`dirs`, `manifests`) and what to
   put on `sys.path` first (`paths`). Each library is a manifest,
-  `*.guatiao.cfg` of type `python`, naming its `module`, the `kinds` it serves, the
+  `*.guatiao` of type `python`, naming its `module`, the `kinds` it serves, the
   `paths` it imports from, and optionally its `version` (otherwise a
   literal `__version__`, read without importing). Listing imports
   nothing; opening imports the module afresh and refuses one whose name,
@@ -1413,23 +1413,26 @@ write now.
 
 ### Changed
 
-- **Breaking: configuration files are read through anycfg, and a library
-  manifest is `<name>.guatiao.cfg`.** A `.cfg` manifest is TOML unless its
-  first line is `#!toml`, `#!json` or `#!yaml`, which names the format and
-  is not part of the document; a `.guatiao.toml` file is no longer found,
-  and an unknown `#!` name lists the manifest as broken, naming the file.
-  `guatiao_bridge::document` (`formats`, `parse`, `read`) reads `.toml`,
-  `.json`, `.yaml`, `.yml` by extension and `.cfg` by its first line, with
-  anycfg's size limit and error positions; a failure names the file and
-  never quotes the document. `guatiao-remote-server`'s `--acl` and
-  `--policy` files may be YAML or `.cfg` too, and a file with another
-  extension is refused where any other extension used to be read as TOML.
-  guatiao-bridge now depends on anycfg by git revision, which keeps it and
-  the crates built on it from publishing until anycfg is released.
-  *Migration:* rename each `*.guatiao.toml` to `*.guatiao.cfg`; nothing
-  else in a manifest changes. A `--acl` or `--policy` file that is TOML
-  under an extension other than `.toml`, `.json`, `.yaml`, `.yml` or
-  `.cfg` takes `.toml` or `.cfg`.
+- **Breaking: a library manifest is `<name>.guatiao[.<major>[.<minor>]]`
+  and is read through anycfg.** The name is like a versioned shared object
+  (`greeters.guatiao`, `greeters.guatiao.2`, `greeters.guatiao.2.1`; digits
+  only, `greeters.guatiao.bak` and `.guatiao.2.1.3` are not manifests), and
+  a stated `version` must agree with the major (and minor) in the name or the
+  manifest is broken, naming both. A `#!toml`, `#!json` or `#!yaml` first
+  line names the format and is removed, else TOML; the name never chooses it.
+  JSON and YAML are read when guatiao-bridge is built with its new `json`
+  and `yaml` features (off by default; every guatiao source turns them on),
+  and a manifest naming a format not built in is broken, saying so.
+  `manifest::SUFFIX` is gone, and `.guatiao.toml` files are not found.
+  `guatiao-remote-server` reads its `--acl` and `--policy` files through
+  anycfg by extension (`.toml`, `.json`, `.yaml`, `.yml`, and `.cfg` by a
+  first line), so they may be YAML too, and another extension is refused. A
+  failure names the file and the position and never quotes the document.
+  guatiao-bridge and guatiao-source-remote depend on anycfg by git revision,
+  which keeps them from publishing until anycfg is released. *Migration:*
+  rename each `*.guatiao.toml` to `*.guatiao`; nothing else in a manifest
+  changes. A `--acl` or `--policy` file that is TOML under an extension other
+  than `.toml`, `.json`, `.yaml`, `.yml` or `.cfg` takes `.toml` or `.cfg`.
 
 - **guatiao-source-remote: a WebTransport client told `certificate_unknown`
   as its link's first read arrives** is told the server does not trust it,
@@ -1631,12 +1634,12 @@ write now.
   where it was `GUATIAO_ERR_BAD_VALUE` naming transports this build does
   not have: the secure level lives outside this build.
 - **The source crates are `guatiao-source-<kind>`, and a library's
-  manifest is `<name>.guatiao.cfg` with a `type`.** `guatiao-py`,
+  manifest is `<name>.guatiao` with a `type`.** `guatiao-py`,
   `guatiao-js`, `guatiao-lua`, `guatiao-wasm`, `guatiao-rhai` and
   `guatiao-remote` are `guatiao-source-py`, `-js`, `-lua`, `-wasm`,
   `-rhai` and `-remote`, their files `guatiao_source_py.dll`,
   `libguatiao_source_lua.so` and so on; the server is still
-  `guatiao-remote-server`. A manifest is named `<name>.guatiao.cfg`
+  `guatiao-remote-server`. A manifest is named `<name>.guatiao`
   whatever serves it, and its `type` names the source as that source
   declares itself: `python`, `js`, `lua`, `wasm` or `rhai`. A source
   passes over a manifest of another of these types, and reports one with

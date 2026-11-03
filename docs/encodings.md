@@ -613,10 +613,28 @@ and Dart and `kind_descriptions` in Python.
 
 A library one of guatiao's sources serves (a Python module, a JavaScript
 package, a Lua module, a Rhai script, a WebAssembly module) is described
-by a manifest the source reads without running anything: a file named
-`<name>.guatiao.cfg` beside or above the library's code. A first line
-`#!toml`, `#!json` or `#!yaml` names its format and is not part of the
-document; a manifest with no such line is TOML. The examples below are TOML.
+by a manifest the source reads without running anything, beside or above
+the library's code. The examples below are TOML.
+
+**The name** is `<name>.guatiao`, optionally followed by a major and a
+minor, `<name>.guatiao.<major>` or `<name>.guatiao.<major>.<minor>`, like a
+versioned shared object: `greeters.guatiao`, `greeters.guatiao.2`,
+`greeters.guatiao.2.1`. `<name>` is not empty, each number is one or more
+ASCII digits, and the match is case-sensitive. `greeters.guatiao.bak`,
+`greeters.guatiao.2.1.3`, `greeters.guatiao.cfg` and `greeters.guatiao.toml`
+are not manifests. When the manifest states a `version`, its major (and its
+minor, when the name has one) must equal the name's numbers, or the manifest
+is broken, naming both; with no `version`, or no number in the name,
+nothing is compared. The name never chooses the format.
+
+**The format** is read from the first line. After one leading UTF-8 byte
+order mark is skipped, a first line that starts with `#!` names the format
+by its last whitespace-separated word, taken after the last `/` or `\`, with
+leading dots dropped, compared without regard to ASCII case: `toml`, `json`
+or `yaml` (`#!toml`, `#!/usr/bin/env yaml`, `#!.JSON`). That line, and its
+line end, are removed before the rest is parsed. A name that is none of the
+three makes the manifest broken. A document with no such first line is TOML.
+A reader reports a parse error's line counting the removed line as line 1.
 
 ```toml
 type = "python"              # the source that serves it

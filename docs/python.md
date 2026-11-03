@@ -191,7 +191,7 @@ Python it will run with:
 PYO3_PYTHON=python3 cargo build --release --manifest-path crates/guatiao-source-py/Cargo.toml
 ```
 
-Each library beside it gets a manifest, `greeters.guatiao.cfg`:
+Each library beside it gets a manifest, `greeters.guatiao`:
 
 ```toml
 type = "python"                     # the source that serves it
