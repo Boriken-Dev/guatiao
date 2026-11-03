@@ -43,6 +43,32 @@ package's surface. The package asks for Dart 3.10 or newer (Flutter
 dart pub add guatiao_serde
 ```
 
+From git, at one revision of the repository, name both packages and
+override `guatiao`: this package asks for `guatiao` from pub.dev, and pub
+refuses a git `guatiao` beside it unless the root package overrides it.
+`ref` is the full 40-character commit (a branch or a short hash does not
+match the one the packages are resolved at).
+
+```yaml
+dependencies:
+  guatiao:
+    git:
+      url: https://github.com/Boriken-Dev/guatiao
+      ref: 0123456789abcdef0123456789abcdef01234567
+      path: bindings/dart/guatiao
+  guatiao_serde:
+    git:
+      url: https://github.com/Boriken-Dev/guatiao
+      ref: 0123456789abcdef0123456789abcdef01234567
+      path: bindings/dart/guatiao_serde
+dependency_overrides:
+  guatiao:
+    git:
+      url: https://github.com/Boriken-Dev/guatiao
+      ref: 0123456789abcdef0123456789abcdef01234567
+      path: bindings/dart/guatiao
+```
+
 The package drives the `guatiao_serde` shared library, and **its build hook
 builds it**: `flutter build` (or `dart run`, `dart test`, `dart build`)
 runs cargo for the target being built and bundles the library with the
