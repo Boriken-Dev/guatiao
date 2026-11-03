@@ -314,14 +314,18 @@ impl Registry {
     /// Maps a source file and adds the source its `guatiao_source` answers
     /// for `config`, under the file's path, which it answers.
     ///
-    /// `import_dirs`, a list of directories in `config`, is the registry's
-    /// and not handed to the source: on Windows, a library the file
-    /// imports directly and the [import search](Registry::set_import_search)
-    /// does not find beside it, beside the host or in the system directory
-    /// is looked for there, in order, and mapped from the first holding it
-    /// (with what it forwards to beside it), as a Python installation's
-    /// `python3.dll` is for a bridge that imports it. Ignored elsewhere.
-    /// Anything but a list of text is [`SourceError::Config`].
+    /// `import_dirs`, a list of directories in `config` (a relative one is
+    /// the file's directory's), is the registry's and not handed to the
+    /// source: on Windows, a library the file imports directly and the
+    /// [import search](Registry::set_import_search) does not find beside
+    /// it, beside the host, in a directory the process added or in the
+    /// system directory is looked for there, in order, and mapped from the
+    /// first holding it (with what it forwards to beside it), as a Python
+    /// installation's `python3.dll` is for a bridge that imports it.
+    /// **Mapped, it is the process's**: a library loaded later that imports
+    /// the same name binds to it under any search, as to any library the
+    /// process loaded. Ignored elsewhere. Anything but a list of text is
+    /// [`SourceError::Config`].
     ///
     /// **The file is never unmapped**, whatever happens to the libraries it
     /// serves, and it is not a library: it cannot be retired. Mapping it
@@ -333,11 +337,22 @@ impl Registry {
         }
         let host = self.host();
         let mut config = config.clone();
-        let import_dirs = import_dirs(&mut config).map_err(|why| SourceError::Config {
+        let mut import_dirs = import_dirs(&mut config).map_err(|why| SourceError::Config {
             path: path.to_path_buf(),
             key: IMPORT_DIRS.to_string(),
             why: why.to_string(),
         })?;
+        // A relative directory is the source file's, where its files live.
+        let beside = std::path::absolute(path)
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf));
+        if let Some(beside) = beside {
+            for dir in &mut import_dirs {
+                if dir.is_relative() {
+                    *dir = beside.join(&*dir);
+                }
+            }
+        }
         let config = Value::from(config);
         let search = self.import_search();
         let cell =

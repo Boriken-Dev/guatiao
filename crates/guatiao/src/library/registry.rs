@@ -76,7 +76,9 @@ pub enum ImportSearch {
     /// goes after the system directory (the Windows directory, the current
     /// directory, `PATH`), and mapped from the first holding it, with what
     /// it forwards to beside it; everything else the file imports is found
-    /// as under [`Library`](ImportSearch::Library). For a library whose
+    /// as under [`Library`](ImportSearch::Library). What is mapped that
+    /// way stays while the file does, and answers its name to every
+    /// library loaded meanwhile, under either search. For a library whose
     /// imports live elsewhere, such as a Python bridge importing
     /// `python3.dll` from a Python installation on `PATH`.
     Path,

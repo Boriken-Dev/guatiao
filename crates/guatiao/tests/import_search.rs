@@ -13,9 +13,11 @@
 //! later import of its name, and `PATH` and the current directory belong
 //! to the whole process.
 //!
-//! Its own `main` (`harness = false`): `child <library|path> <load|source>
-//! <file> [preload=<file>] [dir=<dir>]` is the child, `dir` a source
-//! file's `import_dirs`; anything else runs every case.
+//! Its own `main` (`harness = false`): `child <library|path>
+//! <load|source|unload> <file> [preload=<file>] [dir=<dir>] [added=<dir>]
+//! [released=<name>]` is the child, `dir` a source file's `import_dirs`,
+//! `added` a directory the host adds with `AddDllDirectory`, `released` a
+//! library `unload` must have let go; anything else runs every case.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -103,6 +105,7 @@ fn child(args: &[String]) {
     };
     let file = Path::new(&args[2]);
     let mut config = Map::new();
+    let mut released = None;
     for extra in &args[3..] {
         if let Some(preload) = extra.strip_prefix("preload=") {
             // SAFETY: the test's own fixture, whose initialisers do nothing.
@@ -112,6 +115,10 @@ fn child(args: &[String]) {
             let mut dirs = List::new();
             dirs.push(dir);
             config.set("import_dirs", dirs);
+        } else if let Some(dir) = extra.strip_prefix("added=") {
+            add_dll_directory(Path::new(dir));
+        } else if let Some(name) = extra.strip_prefix("released=") {
+            released = Some(name.to_string());
         } else {
             panic!("no argument {extra}");
         }
@@ -130,9 +137,59 @@ fn child(args: &[String]) {
             Err(SourceError::Open { reason, .. }) => format!("refused: {}", one_line(&reason)),
             other => format!("unexpected: {other:?}"),
         },
+        "unload" => match registry
+            .load_file(file)
+            .map(|l| l.loaded().map(|l| l.key.to_string()))
+        {
+            Ok(Some(key)) => match registry.unload(&key) {
+                Ok(()) => match released {
+                    Some(name) if still_loaded(&name) => {
+                        format!("refused: {name} is still mapped after the unload")
+                    }
+                    _ => "mapped".to_string(),
+                },
+                Err(e) => format!("unexpected: {e}"),
+            },
+            Err(LoadError::Open { reason, .. }) => format!("refused: {}", one_line(&reason)),
+            other => format!("unexpected: {other:?}"),
+        },
         other => panic!("no action {other}"),
     };
     println!("{answer}");
+}
+
+/// Adds `dir` to the process's DLL search, as a host may.
+#[cfg(windows)]
+fn add_dll_directory(dir: &Path) {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn AddDllDirectory(dir: *const u16) -> *mut core::ffi::c_void;
+    }
+    let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: a NUL-terminated absolute path.
+    let cookie = unsafe { AddDllDirectory(wide.as_ptr()) };
+    assert!(
+        !cookie.is_null(),
+        "AddDllDirectory refused {}",
+        dir.display()
+    );
+}
+
+#[cfg(not(windows))]
+fn add_dll_directory(_: &Path) {
+    panic!("AddDllDirectory is Windows'");
+}
+
+/// Whether a library of this name is still loaded in this process.
+#[cfg(windows)]
+fn still_loaded(name: &str) -> bool {
+    libloading::os::windows::Library::open_already_loaded(name).is_ok()
+}
+
+#[cfg(not(windows))]
+fn still_loaded(_: &str) -> bool {
+    false
 }
 
 /// A reason on one line: dyld's run over several, and the parent reads
@@ -159,6 +216,8 @@ struct Fixtures {
     /// Windows: a second dependency, and a plugin importing both.
     second_dep: Option<PathBuf>,
     plugin_two: Option<PathBuf>,
+    /// Windows: the plugin as a library that loads and may be unloaded.
+    plugin_unloads: Option<PathBuf>,
     /// Windows, where the linker writes forwarders: a library forwarding
     /// the dependency's export, and a plugin importing it from there.
     forwarding: Option<(PathBuf, PathBuf)>,
@@ -248,6 +307,7 @@ impl Fixtures {
                 refusing_dep: None,
                 second_dep: None,
                 plugin_two: None,
+                plugin_unloads: None,
                 forwarding: None,
                 origin_plugin: Some(out),
             };
@@ -266,6 +326,14 @@ impl Fixtures {
             &plugin_two,
             "import_plugin.c",
             &["-DIMPORT_PLUGIN_TWO", &link_to(&dep), &link_to(&second_dep)],
+        );
+        let dir = build.join("unloads");
+        std::fs::create_dir_all(&dir).unwrap();
+        let plugin_unloads = dir.join(dll("import_plugin"));
+        compile(
+            &plugin_unloads,
+            "import_plugin.c",
+            &["-DIMPORT_PLUGIN_LIBRARY", &link_to(&dep)],
         );
         let forwarding_dep = build.join(dll("import_fwd"));
         let dir = build.join("forwarded");
@@ -293,6 +361,7 @@ impl Fixtures {
             refusing_dep: Some(refusing_dep),
             second_dep: Some(second_dep),
             plugin_two: Some(plugin_two),
+            plugin_unloads: Some(plugin_unloads),
             forwarding,
             origin_plugin: None,
         }
@@ -313,6 +382,12 @@ struct Case<'a> {
     cwd: &'a [&'a Path],
     on_path: &'a [&'a Path],
     dirs: &'a [&'a Path],
+    /// `dirs` given relative to the plugin's directory, and placed there.
+    relative_dirs: bool,
+    /// In a directory the host adds with `AddDllDirectory`.
+    added: &'a [&'a Path],
+    /// A library `unload` must have let go.
+    released: Option<&'a str>,
     /// A copy the host loads itself before the plugin, from elsewhere.
     preload: Option<&'a Path>,
 }
@@ -337,7 +412,12 @@ impl Case<'_> {
         let host_dir = place("host", self.host_dir);
         let cwd = place("cwd", self.cwd);
         let on_path = place("path", self.on_path);
-        let dirs = place("dirs", self.dirs);
+        let dirs = if self.relative_dirs {
+            place("plugin/deps", self.dirs)
+        } else {
+            place("dirs", self.dirs)
+        };
+        let added = place("added", self.added);
 
         let host = host_dir.join(format!(
             "import_search_host{}",
@@ -366,8 +446,16 @@ impl Case<'_> {
         if let Some(preload) = self.preload {
             command.arg(format!("preload={}", preload.display()));
         }
-        if !self.dirs.is_empty() {
+        if self.relative_dirs {
+            command.arg("dir=deps");
+        } else if !self.dirs.is_empty() {
             command.arg(format!("dir={}", dirs.display()));
+        }
+        if !self.added.is_empty() {
+            command.arg(format!("added={}", added.display()));
+        }
+        if let Some(name) = self.released {
+            command.arg(format!("released={name}"));
         }
         let out = command.output().expect("the host copy runs");
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -447,6 +535,9 @@ fn windows_cases(f: &Fixtures) -> Vec<String> {
         cwd: &[],
         on_path: &[],
         dirs: &[],
+        relative_dirs: false,
+        added: &[],
+        released: None,
         preload: None,
     };
 
@@ -544,6 +635,48 @@ fn windows_cases(f: &Fixtures) -> Vec<String> {
         );
     }
 
+    // A directory the host added holds one import, PATH the other and a
+    // copy of the first that refuses to start: only the second comes from
+    // PATH, and `import_dirs` holding that copy does not win either.
+    let added = Case {
+        plugin: f.plugin_two.as_deref().expect("built on Windows"),
+        added: &[dep],
+        on_path: &[second, refusing],
+        ..case("added")
+    };
+    added.expect_saying_for(
+        &f.root,
+        "path",
+        &["load", "source"],
+        true,
+        "",
+        &mut failures,
+    );
+    let added_dirs = Case {
+        plugin: f.plugin_two.as_deref().expect("built on Windows"),
+        added: &[dep],
+        dirs: &[second, refusing],
+        ..case("added_dirs")
+    };
+    added_dirs.expect_saying_for(&f.root, "library", &["source"], true, "", &mut failures);
+
+    // `import_dirs` relative to the source file's own directory.
+    let relative = Case {
+        dirs: &[dep],
+        relative_dirs: true,
+        ..case("relative_dirs")
+    };
+    relative.expect_saying_for(&f.root, "library", &["source"], true, "", &mut failures);
+
+    // What a file was missing and was taken from PATH goes with the file.
+    let released = Case {
+        plugin: f.plugin_unloads.as_deref().expect("built on Windows"),
+        on_path: &[dep],
+        released: Some("import_dep.dll"),
+        ..case("released")
+    };
+    released.expect_saying_for(&f.root, "path", &["unload"], true, "", &mut failures);
+
     // Nowhere at all: refused, the reason naming the loader's own words,
     // the import and, under the default, where it did not look.
     let nowhere = case("nowhere");
@@ -569,6 +702,9 @@ fn unix_cases(f: &Fixtures) -> Vec<String> {
         cwd: &[],
         on_path: &[],
         dirs: &[],
+        relative_dirs: false,
+        added: &[],
+        released: None,
         preload: None,
     };
     with_origin.expect(&f.root, "library", true, &mut failures);
