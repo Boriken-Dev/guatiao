@@ -1210,7 +1210,7 @@ hand-written descriptions in this repository already spelled them.
 
 ## Sources
 
-### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao.toml`
+### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao.cfg`
 
 No release carried the source crates or their manifests: this is for a
 checkout, or a pin on a git revision, since `0.0.0-alpha.1`.
@@ -1246,11 +1246,20 @@ kinds = ["greeter"]
 ```
 
 ```toml
-# now: greeters.guatiao.toml
+# now: greeters.guatiao.cfg
 type = "python"
 module = "greeters"
 kinds = ["greeter"]
 ```
+
+The extension is `.cfg` because the file names its own format: a first
+line `#!toml`, `#!json` or `#!yaml` says which and is not part of the
+document, and a manifest without one is TOML. A `.guatiao.toml` file is
+not found. guatiao reads these files through
+[anycfg](https://github.com/jose-pr/anycfg-rs) (`guatiao_bridge::document`),
+as it reads the files `guatiao-remote-server` takes with `--acl` and
+`--policy`: `.toml`, `.json`, `.yaml` and `.yml` by extension, `.cfg` by its
+first line, and no other extension.
 
 The types are `python`, `js`, `lua`, `wasm` and `rhai`
 ([the format](encodings.md#a-library-manifest)). A bridge on
