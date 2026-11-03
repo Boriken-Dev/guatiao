@@ -15,6 +15,23 @@ import 'support.dart';
 void main() {
   setUpAll(setUpLibrary);
 
+  test('a secret lives in the wiping allocator and is never shown', () {
+    final secret = Value.sensitive({'user': 'alice', 'token': 'hunter2'});
+    expect(secret.isSensitive, isTrue);
+    expect(secret.toString(), 'Value([sensitive])');
+    final token = secret.asMap()['token']!;
+    expect(token.isSensitive, isTrue);
+    expect(token.reveal((bytes) => String.fromCharCodes(bytes)), 'hunter2');
+    expect(() => secret.reveal((_) {}), throwsStateError);
+    secret.close();
+    final plain = Value({'user': 'alice'});
+    expect(plain.isSensitive, isFalse);
+    expect(plain.toString(), contains('alice'));
+    plain.wipe();
+    expect(plain.isNull, isTrue);
+    plain.close();
+  });
+
   test('every kind round-trips', () {
     expect(Value.nullValue().toDart(), isNull);
     expect(Value.boolean(true).toDart(), isTrue);

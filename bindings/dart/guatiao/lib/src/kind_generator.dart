@@ -394,7 +394,9 @@ final class _Generator {
     throw FormatException('$where: $t is not a type an argument can have');
   }
 
-  _Answer answer(Object? given, String where) {
+  /// A [sensitive] slot's text answer reaches the caller as a [Value] in
+  /// the wiping allocator, and a tree is moved and kept there.
+  _Answer answer(Object? given, String where, {bool sensitive = false}) {
     if (given == null) return _none;
     final type = (given as Map).cast<String, Object?>();
     final t = type['type'];
@@ -410,6 +412,16 @@ final class _Generator {
       );
     }
     switch (t) {
+      case 'text' when sensitive:
+        imports.add('Value');
+        return const _Answer(
+          pointee: 'guatiao_string',
+          caller: 'Value',
+          callee: 'Object',
+          outSlot: 'c.textOut()',
+          read: 'c.sensitiveTextAnswer(out)',
+          write: 's.sensitiveTextAnswer(out, result);',
+        );
       case 'text':
         return const _Answer(
           pointee: 'guatiao_string',
@@ -426,13 +438,15 @@ final class _Generator {
             : t == 'map'
             ? 'Map'
             : 'List';
+        final mark = sensitive ? 'sensitive: true' : '';
         return _Answer(
           pointee: 'guatiao_$t',
           caller: 'Value',
           callee: t == 'value' ? 'Object?' : 'Object',
-          outSlot: 'c.${t}Out()',
-          read: 'c.${up.toLowerCase()}Answer(out)',
-          write: 's.${up.toLowerCase()}Answer(out, result);',
+          outSlot: 'c.${t}Out($mark)',
+          read: 'c.${up.toLowerCase()}Answer(out${sensitive ? ', $mark' : ''})',
+          write:
+              's.${up.toLowerCase()}Answer(out, result${sensitive ? ', $mark' : ''});',
         );
       case 'object':
         final k = kindRef(type, where);
@@ -563,7 +577,8 @@ final class _Generator {
         for (final (j, a) in (slot['args'] as List? ?? const []).indexed)
           arg((a! as Map).cast<String, Object?>(), j, '$where argument $j'),
       ];
-      final ans = answer(slot['answer'], '$where answer');
+      final sensitive = slot['sensitive'] == true;
+      final ans = answer(slot['answer'], '$where answer', sensitive: sensitive);
       final iface = isRequired ? n : '$n${m[0].toUpperCase()}${m.substring(1)}';
       final c = '_$n${m[0].toUpperCase()}${m.substring(1)}';
       final cParams = [
@@ -589,7 +604,8 @@ final class _Generator {
         ..add('typedef ${c}D = int Function(${dartTypes.join(', ')});');
       slotSpecs.add(
         "KindSlot('$slotName'${isRequired ? ', required: true' : ''}"
-        "${fallible ? ', fallible: true' : ''})",
+        "${fallible ? ', fallible: true' : ''}"
+        "${sensitive ? ', sensitive: true' : ''})",
       );
 
       // The method a provider implements.

@@ -439,6 +439,33 @@ class Ref {
   /// Which arm of this node's payload is live.
   Tag get tag => Tag.fromCode(_tagOf(node())) ?? Tag.absent;
 
+  /// Whether any part of this node's tree lives in the wiping allocator:
+  /// a secret, which [toString] does not show.
+  bool get isSensitive {
+    final found = node();
+    return found != nullptr &&
+        native.core().bindings.guatiao_value_is_sensitive(found);
+  }
+
+  /// Calls [use] with this string's, number's or bytes' bytes where they
+  /// live: an unmodifiable view over the tree's own memory, no copy made.
+  ///
+  /// The view is valid only during [use]: it points at memory the tree
+  /// frees, and wipes when it lives in the wiping allocator. Copying out
+  /// of it (`utf8.decode`, `Uint8List.fromList`) makes a copy Dart keeps
+  /// and nothing can wipe. Throws [StateError] for any other node.
+  R reveal<R>(R Function(Uint8List bytes) use) {
+    final found = requireNode();
+    final payload = found.ref.payload;
+    final (Pointer<Uint8> at, int len) = switch (Tag.fromCode(found.ref.tag)) {
+      Tag.string || Tag.number => (payload.text.ptr, payload.text.len),
+      Tag.bytes => (payload.bytes.ptr, payload.bytes.len),
+      _ => throw StateError('only a string, a number or bytes can be revealed'),
+    };
+    final view = len == 0 ? Uint8List(0) : at.asTypedList(len);
+    return use(view.asUnmodifiableView());
+  }
+
   bool get isAbsent => tag == Tag.absent;
 
   bool get isNull => tag == Tag.nullValue;
@@ -799,6 +826,12 @@ class Value extends Ref implements ValueOwner, Finalizable {
     return Value.fromDart(obj);
   }
 
+  /// A secret: [obj] converted as [Value.fromDart] does, built in the
+  /// wiping allocator, so every block it frees, as it grows and when it is
+  /// closed, is overwritten with zeros first. [obj] itself is Dart's.
+  factory Value.sensitive(Object? obj) =>
+      Value.fromDart(obj, alloc: native.core().wipingAlloc);
+
   /// Converts plain Dart into a new value.
   ///
   /// `null` becomes null, [absent] becomes absent, `bool` a boolean,
@@ -946,6 +979,14 @@ class Value extends Ref implements ValueOwner, Finalizable {
 
   bool get isClosed => _closed;
 
+  /// Overwrites with zeros every byte this tree holds, in whatever
+  /// allocator each part lives, then frees it: this value is null
+  /// afterwards. What a secret built outside the wiping allocator needs
+  /// before it goes; one built there is wiped by [close] as well.
+  void wipe() {
+    checkStatus(native.core().bindings.guatiao_value_wipe(rootNode));
+  }
+
   /// Frees the tree and the root box. Idempotent.
   void close() {
     if (_closed) return;
@@ -956,5 +997,9 @@ class Value extends Ref implements ValueOwner, Finalizable {
   }
 
   @override
-  String toString() => _closed ? 'Value(closed)' : 'Value(${toDart()})';
+  String toString() => _closed
+      ? 'Value(closed)'
+      : isSensitive
+      ? 'Value([sensitive])'
+      : 'Value(${toDart()})';
 }

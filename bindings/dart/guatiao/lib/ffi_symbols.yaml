@@ -10,6 +10,10 @@ files:
         name: guatiao_tag
       c:@F@guatiao_alloc_default:
         name: guatiao_alloc_default
+      c:@F@guatiao_alloc_is_wiping:
+        name: guatiao_alloc_is_wiping
+      c:@F@guatiao_alloc_wiping:
+        name: guatiao_alloc_wiping
       c:@F@guatiao_buffer_push:
         name: guatiao_buffer_push
       c:@F@guatiao_date_add_span:
@@ -168,6 +172,8 @@ files:
         name: guatiao_value_free
       c:@F@guatiao_value_from_walker:
         name: guatiao_value_from_walker
+      c:@F@guatiao_value_is_sensitive:
+        name: guatiao_value_is_sensitive
       c:@F@guatiao_value_list:
         name: guatiao_value_list
       c:@F@guatiao_value_make_local:
@@ -182,6 +188,8 @@ files:
         name: guatiao_value_string
       c:@F@guatiao_value_visit:
         name: guatiao_value_visit
+      c:@F@guatiao_value_wipe:
+        name: guatiao_value_wipe
       c:@F@guatiao_wire_announce:
         name: guatiao_wire_announce
       c:@F@guatiao_wire_close:

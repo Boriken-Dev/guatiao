@@ -32,7 +32,12 @@ const int _header = 8;
 /// One slot of a kind: its name in the table, and whether every table
 /// carries it and whether it can refuse.
 final class KindSlot {
-  const KindSlot(this.name, {this.required = false, this.fallible = false});
+  const KindSlot(
+    this.name, {
+    this.required = false,
+    this.fallible = false,
+    this.sensitive = false,
+  });
 
   /// The slot's field in the C table (`greet_into`).
   final String name;
@@ -42,6 +47,11 @@ final class KindSlot {
 
   /// It ends in `guatiao_provider_error *err`.
   final bool fallible;
+
+  /// Its answer is a secret: a caller names the wiping allocator for it
+  /// and gets it back as a [Value] kept there, a text answer included.
+  /// Not part of the floor hash.
+  final bool sensitive;
 }
 
 /// What an object whose holder destroys it, or a provider instance its
@@ -382,6 +392,11 @@ final Pointer<NativeFunction<_DestroyC>> _destroyShim =
 
 Pointer<guatiao_alloc> get _binding => native.core().alloc;
 
+/// The wiping allocator: a sensitive slot's answer is built and kept there.
+Pointer<guatiao_alloc> get _wiping => native.core().wipingAlloc;
+
+Pointer<guatiao_alloc> _home(bool sensitive) => sensitive ? _wiping : _binding;
+
 /// Whether [alloc] can build: its size covers this build's
 /// `guatiao_alloc`, and both functions are there.
 bool _complete(Pointer<guatiao_alloc> alloc) {
@@ -427,10 +442,11 @@ void _free(Pointer<guatiao_value> node) {
 Pointer<guatiao_value> _homed(
   Pointer<guatiao_value> node, [
   String what = 'the answer',
+  bool sensitive = false,
 ]) {
   final status = native.core().bindings.guatiao_value_make_local(
     node,
-    _binding,
+    _home(sensitive),
   );
   if (status != Status.ok.code) {
     _free(node);
@@ -542,7 +558,11 @@ int get _messageOffset =>
 
 /// Owned text, built through this binding's allocator, written over
 /// [out], which owns nothing.
-void _writeString(Pointer<guatiao_string> out, String text) {
+void _writeString(
+  Pointer<guatiao_string> out,
+  String text, {
+  bool sensitive = false,
+}) {
   final size = sizeOf<guatiao_string>();
   out.cast<Uint8>().asTypedList(size).fillRange(0, size, 0);
   if (text.isEmpty) return;
@@ -551,7 +571,7 @@ void _writeString(Pointer<guatiao_string> out, String text) {
     using((arena) {
       checkStatus(
         native.core().bindings.guatiao_value_string(
-          _binding,
+          _home(sensitive),
           strOf(arena, text).ref,
           node,
         ),
@@ -833,26 +853,27 @@ final class CallScope extends SlotCall {
   }
 
   /// An answer's out slot holding a carrier: it owns nothing and names
-  /// the allocator to build in, this binding's.
-  Pointer<guatiao_map> mapOut() {
+  /// the allocator to build in, this binding's, or for a [sensitive]
+  /// slot the wiping one.
+  Pointer<guatiao_map> mapOut({bool sensitive = false}) {
     final out = arena<guatiao_map>();
-    out.ref.alloc = _binding;
+    out.ref.alloc = _home(sensitive);
     _out = out;
     _outShape = Tag.map;
     return out;
   }
 
-  Pointer<guatiao_list> listOut() {
+  Pointer<guatiao_list> listOut({bool sensitive = false}) {
     final out = arena<guatiao_list>();
-    out.ref.alloc = _binding;
+    out.ref.alloc = _home(sensitive);
     _out = out;
     _outShape = Tag.list;
     return out;
   }
 
-  Pointer<guatiao_value> valueOut() {
+  Pointer<guatiao_value> valueOut({bool sensitive = false}) {
     final out = arena<guatiao_value>();
-    _armOf(out).cast<guatiao_map>().ref.alloc = _binding;
+    _armOf(out).cast<guatiao_map>().ref.alloc = _home(sensitive);
     _out = out;
     _outShape = null;
     return out;
@@ -901,14 +922,34 @@ final class CallScope extends SlotCall {
     );
   }
 
-  Value mapAnswer(Pointer<guatiao_map> out) =>
-      Value.adopt(_homed(_nodeOver(out, Tag.map)));
+  /// The tree answered, kept in this binding's allocator, or for a
+  /// [sensitive] slot moved into and kept in the wiping one.
+  Value mapAnswer(Pointer<guatiao_map> out, {bool sensitive = false}) =>
+      Value.adopt(
+        _homed(_nodeOver(out, Tag.map), 'the answer', sensitive),
+        alloc: _home(sensitive),
+      );
 
-  Value listAnswer(Pointer<guatiao_list> out) =>
-      Value.adopt(_homed(_nodeOver(out, Tag.list)));
+  Value listAnswer(Pointer<guatiao_list> out, {bool sensitive = false}) =>
+      Value.adopt(
+        _homed(_nodeOver(out, Tag.list), 'the answer', sensitive),
+        alloc: _home(sensitive),
+      );
 
-  Value valueAnswer(Pointer<guatiao_value> out) =>
-      Value.adopt(_homed(_nodeOver(out, null)));
+  Value valueAnswer(Pointer<guatiao_value> out, {bool sensitive = false}) =>
+      Value.adopt(
+        _homed(_nodeOver(out, null), 'the answer', sensitive),
+        alloc: _home(sensitive),
+      );
+
+  /// A sensitive slot's text, as a [Value] holding the string in the
+  /// wiping allocator: never a Dart `String`, which nothing can wipe.
+  Value sensitiveTextAnswer(Pointer<guatiao_string> out) {
+    final node = calloc<guatiao_value>();
+    node.ref.tag = Tag.string.code;
+    _copy(_armOf(node), out, sizeOf<guatiao_string>());
+    return Value.adopt(_homed(node, 'the answer', true), alloc: _wiping);
+  }
 
   /// The text answered; the owned string is freed whatever it holds.
   String textAnswer(Pointer<guatiao_string> out) {
@@ -1100,23 +1141,38 @@ final class ServeScope extends SlotCall {
 
   /// The answer, over the carrier in [out]: built in the allocator it
   /// names, or copied there.
-  void mapAnswer(Pointer<guatiao_map> out, Object? result) =>
-      _treeAnswer(out, result, Tag.map);
+  void mapAnswer(
+    Pointer<guatiao_map> out,
+    Object? result, {
+    bool sensitive = false,
+  }) => _treeAnswer(out, result, Tag.map, sensitive);
 
-  void listAnswer(Pointer<guatiao_list> out, Object? result) =>
-      _treeAnswer(out, result, Tag.list);
+  void listAnswer(
+    Pointer<guatiao_list> out,
+    Object? result, {
+    bool sensitive = false,
+  }) => _treeAnswer(out, result, Tag.list, sensitive);
 
-  void valueAnswer(Pointer<guatiao_value> out, Object? result) {
+  void valueAnswer(
+    Pointer<guatiao_value> out,
+    Object? result, {
+    bool sensitive = false,
+  }) {
     final named = _armOf(out).cast<guatiao_map>().ref.alloc;
-    final alloc = _complete(named) ? named : _binding;
+    final alloc = _complete(named) ? named : _home(sensitive);
     final node = _inAlloc(_ownedTree(result, null, alloc), alloc);
     _copy(out, node, sizeOf<guatiao_value>());
     calloc.free(node);
   }
 
-  void _treeAnswer(Pointer<NativeType> out, Object? result, Tag tag) {
+  void _treeAnswer(
+    Pointer<NativeType> out,
+    Object? result,
+    Tag tag,
+    bool sensitive,
+  ) {
     final named = out.cast<guatiao_map>().ref.alloc;
-    final alloc = _complete(named) ? named : _binding;
+    final alloc = _complete(named) ? named : _home(sensitive);
     final node = _inAlloc(_ownedTree(result, tag, alloc), alloc);
     _copy(out, _armOf(node), sizeOf<guatiao_map>());
     calloc.free(node);
@@ -1124,6 +1180,26 @@ final class ServeScope extends SlotCall {
 
   void textAnswer(Pointer<guatiao_string> out, String text) =>
       _writeString(out, text);
+
+  /// A sensitive slot's text, built in the wiping allocator: a `String`
+  /// the method answered (Dart's own, which stays until the collector
+  /// takes it), or a [Ref] to a string it holds natively, copied with no
+  /// `String` between.
+  void sensitiveTextAnswer(Pointer<guatiao_string> out, Object text) {
+    if (text is String) {
+      _writeString(out, text, sensitive: true);
+      return;
+    }
+    if (text is! Ref || text.tag != Tag.string) {
+      throw ArgumentError(
+        'a sensitive text answer is a String or a Value holding one, '
+        'not ${text.runtimeType}',
+      );
+    }
+    final node = _inAlloc(_ownedTree(text, Tag.string, _wiping), _wiping);
+    _copy(out, _armOf(node), sizeOf<guatiao_string>());
+    calloc.free(node);
+  }
 
   /// The answered object: a Dart object implementing [kind], served until
   /// the caller destroys it, or a handle given up.

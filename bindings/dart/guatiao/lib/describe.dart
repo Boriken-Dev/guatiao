@@ -141,6 +141,11 @@ final class FloorHash {
 /// Marks a slot that can refuse (`fallible`).
 const Object fallible = _Mark('fallible');
 
+/// Marks a slot whose answer is a secret (`sensitive`): a caller names the
+/// wiping allocator for it and gets it as a `Value` kept there, a text
+/// answer included. Not part of the floor hash.
+const Object sensitive = _Mark('sensitive');
+
 /// Marks an optional slot: a provider may leave it null.
 const Object optional = _Mark('optional');
 

@@ -39,6 +39,28 @@ class GuatiaoBindings {
   late final _guatiao_alloc_default = _guatiao_alloc_defaultPtr
       .asFunction<int Function(ffi.Pointer<guatiao_alloc>)>();
 
+  bool guatiao_alloc_is_wiping(ffi.Pointer<guatiao_alloc> alloc) {
+    return _guatiao_alloc_is_wiping(alloc);
+  }
+
+  late final _guatiao_alloc_is_wipingPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<guatiao_alloc>)>
+      >('guatiao_alloc_is_wiping');
+  late final _guatiao_alloc_is_wiping = _guatiao_alloc_is_wipingPtr
+      .asFunction<bool Function(ffi.Pointer<guatiao_alloc>)>();
+
+  int guatiao_alloc_wiping(ffi.Pointer<guatiao_alloc> out) {
+    return _guatiao_alloc_wiping(out);
+  }
+
+  late final _guatiao_alloc_wipingPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_alloc>)>
+      >('guatiao_alloc_wiping');
+  late final _guatiao_alloc_wiping = _guatiao_alloc_wipingPtr
+      .asFunction<int Function(ffi.Pointer<guatiao_alloc>)>();
+
   int guatiao_buffer_push(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> node,
@@ -2094,6 +2116,17 @@ class GuatiaoBindings {
         )
       >();
 
+  bool guatiao_value_is_sensitive(ffi.Pointer<guatiao_value> value) {
+    return _guatiao_value_is_sensitive(value);
+  }
+
+  late final _guatiao_value_is_sensitivePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_value_is_sensitive');
+  late final _guatiao_value_is_sensitive = _guatiao_value_is_sensitivePtr
+      .asFunction<bool Function(ffi.Pointer<guatiao_value>)>();
+
   int guatiao_value_list(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
@@ -2242,6 +2275,17 @@ class GuatiaoBindings {
       .asFunction<
         int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_visitor>)
       >();
+
+  int guatiao_value_wipe(ffi.Pointer<guatiao_value> v) {
+    return _guatiao_value_wipe(v);
+  }
+
+  late final _guatiao_value_wipePtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_value_wipe');
+  late final _guatiao_value_wipe = _guatiao_value_wipePtr
+      .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
   int guatiao_wire_announce(
     ffi.Pointer<guatiao_alloc> alloc,

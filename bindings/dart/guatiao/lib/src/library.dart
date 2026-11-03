@@ -323,6 +323,7 @@ class NativeLib {
   final GuatiaoBindings bindings;
 
   Pointer<guatiao_alloc>? _alloc;
+  Pointer<guatiao_alloc>? _wiping;
 
   /// Whether this build exports [name].
   bool provides(String name) => _dylib.providesSymbol(name);
@@ -345,6 +346,22 @@ class NativeLib {
   /// backstop a channel `Receiver` attaches to itself.
   late final Pointer<NativeFinalizerFunction> wireReceiverFreeFinalizer = _dylib
       .lookup<NativeFinalizerFunction>('guatiao_wire_receiver_free');
+
+  /// The wiping allocator, filled by `guatiao_alloc_wiping` once: every
+  /// block freed through it is overwritten with zeros first. Allocated for
+  /// the life of the library and never released, as [alloc] is.
+  Pointer<guatiao_alloc> get wipingAlloc {
+    final cached = _wiping;
+    if (cached != null) return cached;
+    require('guatiao_alloc_wiping');
+    final out = calloc<guatiao_alloc>();
+    final status = bindings.guatiao_alloc_wiping(out);
+    if (status != 0) {
+      calloc.free(out);
+      throw StateError('guatiao_alloc_wiping failed with status $status');
+    }
+    return _wiping = out;
+  }
 
   /// The default allocator, filled by `guatiao_alloc_default` once.
   ///
