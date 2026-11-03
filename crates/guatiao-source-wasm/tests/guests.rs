@@ -119,7 +119,7 @@ fn guest(kinds: &[&str]) -> String {
 /// A library of one module, `bytes`, under `id`.
 fn put(dir: &Path, id: &str, bytes: &[u8], manifest_extra: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao.cfg")),
+        dir.join(format!("{id}.guatiao")),
         format!("type = \"wasm\"\nmodule = \"{id}\"\nkinds = [\"greeter\"]\n{manifest_extra}"),
     )
     .expect("written");
@@ -519,7 +519,7 @@ fn a_call_refused_before_it_runs_leaves_the_guests_objects_alive() {
     let bytes = wat::parse_str(relaying_guest()).expect("the guest parses");
     std::fs::write(dir.join("relaying.wasm"), bytes).expect("written");
     std::fs::write(
-        dir.join("relaying.guatiao.cfg"),
+        dir.join("relaying.guatiao"),
         format!("type = \"wasm\"\nmodule = \"relaying\"\nkinds = [\"relay\"]\n{VERSION}"),
     )
     .expect("written");

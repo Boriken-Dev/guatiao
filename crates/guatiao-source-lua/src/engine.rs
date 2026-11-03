@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Lua as a guatiao-bridge engine: a library is a module returning a
-//! table, its manifest a `*.guatiao.cfg` of type `lua`, its providers the tables
+//! table, its manifest a `*.guatiao` of type `lua`, its providers the tables
 //! of methods under its `providers`, served through tables the bridge
 //! builds from the kinds' descriptions.
 

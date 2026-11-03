@@ -109,7 +109,7 @@ fn scratch(name: &str) -> PathBuf {
 /// A library of one module: `code` is its file, `id` its name.
 fn put(dir: &Path, id: &str, manifest_extra: &str, code: &str) {
     std::fs::write(
-        dir.join(format!("{id}.guatiao.cfg")),
+        dir.join(format!("{id}.guatiao")),
         format!("type = \"rhai\"\nmodule = \"{id}\"\nkinds = [\"greeter\", \"counter\"]\n{manifest_extra}"),
     )
     .expect("written");
@@ -300,7 +300,7 @@ fn a_manifest_in_toml_json_or_yaml_is_served_and_the_old_name_is_not_found() {
         ),
     ];
     for (id, manifest) in &manifests {
-        std::fs::write(dir.join(format!("{id}.guatiao.cfg")), manifest).expect("written");
+        std::fs::write(dir.join(format!("{id}.guatiao")), manifest).expect("written");
         std::fs::write(dir.join(format!("{id}.rhai")), &code).expect("written");
     }
     // The name before manifests became `.cfg` files.
@@ -327,7 +327,7 @@ fn a_manifest_in_toml_json_or_yaml_is_served_and_the_old_name_is_not_found() {
 
     // An unknown format line is listed as refused, naming the file.
     std::fs::write(
-        dir.join("odd.guatiao.cfg"),
+        dir.join("odd.guatiao"),
         format!("#!ini\ntype = \"rhai\"\nmodule = \"odd\"\nkinds = [{kinds}]\n"),
     )
     .expect("written");
@@ -336,7 +336,7 @@ fn a_manifest_in_toml_json_or_yaml_is_served_and_the_old_name_is_not_found() {
         again
             .refused
             .iter()
-            .any(|r| r.reason.contains("odd.guatiao.cfg")),
+            .any(|r| r.reason.contains("odd.guatiao")),
         "{again:?}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -403,7 +403,7 @@ fn an_edit_serves_new_code_and_a_deleted_library_retires() {
     );
 
     drop(new);
-    std::fs::remove_file(dir.join("rhai_edited.guatiao.cfg")).expect("removed");
+    std::fs::remove_file(dir.join("rhai_edited.guatiao")).expect("removed");
     let third = registry.refresh();
     assert_eq!(third.retired.len(), 1, "{third:?}");
     assert_eq!(registry.collect().len(), 1, "closed");

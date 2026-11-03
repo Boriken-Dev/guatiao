@@ -61,7 +61,7 @@ export class Hello extends Provider {
 }
 ```
 
-its manifest beside it, `greeters.guatiao.cfg`:
+its manifest beside it, `greeters.guatiao`:
 
 ```toml
 type = "js"
@@ -102,7 +102,7 @@ holds a greeter that runs under Node and here, and one taking trees.
 | --- | --- |
 | `guatiao_source` | the entry point a host's `add_source_file` calls; declares `source=js` |
 | configuration | `{"dirs": [..], "manifests": [..], "kinds": [..], "limits": {..}}` |
-| `*.guatiao.cfg` | one JavaScript library: `type = "js"`, `name`, `kinds`, optional `version`, `main`, `paths` |
+| `*.guatiao` | one JavaScript library: `type = "js"`, `name`, `kinds`, optional `version`, `main`, `paths` |
 | `guatiao`, `guatiao/kinds`, `guatiao/provide` | in a library: the errors, `kindsOf`, `Provider` |
 | `JsEngine`, `JsValues` | the Rust side: the engine, the value conversion |
 

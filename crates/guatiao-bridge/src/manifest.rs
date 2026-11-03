@@ -4,11 +4,19 @@
 
 //! Manifests: what a library is, read without running it.
 //!
-//! A manifest is a file named `<anything>.guatiao.cfg` ([`SUFFIX`]) beside
-//! or above the library's code, its `type` naming the source that serves
-//! it. A `#!toml`, `#!json` or `#!yaml` first line names the format and is
-//! removed; a manifest with no such line is TOML
-//! ([`document`](crate::document)):
+//! A manifest is a file named `<name>.guatiao`, optionally followed by a
+//! major and a minor, `<name>.guatiao.<major>` or
+//! `<name>.guatiao.<major>.<minor>` (ASCII digits, like a versioned shared
+//! object), beside or above the library's code, its `type` naming the
+//! source that serves it. A `#!toml`, `#!json` or `#!yaml` first line names
+//! the format and is removed; a manifest with no such line is TOML. JSON and
+//! YAML are read when this crate is built with its `json` and `yaml`
+//! features. The name never chooses the format, also when a file is named
+//! explicitly (`find`'s `files`), which is read whatever it is called.
+//!
+//! When the manifest states a `version`, its major (and its minor, when the
+//! name has one) must be the name's numbers, else it is broken, naming both;
+//! with no `version`, or no numbers in the name, nothing is compared.
 //!
 //! ```toml
 //! type = "python"              # the source that serves it: a format's `serves`
@@ -33,8 +41,62 @@ use guatiao::value::convert::TryAsRef;
 
 use crate::config::text_list;
 
-/// What every manifest's file name ends with.
-pub const SUFFIX: &str = ".guatiao.cfg";
+/// The numbers a manifest's file name carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NameNumbers {
+    major: Option<u64>,
+    minor: Option<u64>,
+}
+
+/// Whether `file_name` is `<name>.guatiao[.<major>[.<minor>]]`, and the
+/// numbers it carries. `<name>` is not empty; a number is ASCII digits.
+fn name_numbers(file_name: &str) -> Option<NameNumbers> {
+    let number = |part: &str| -> Option<u64> {
+        if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        part.parse().ok()
+    };
+    let parts: Vec<&str> = file_name.split('.').collect();
+    let n = parts.len();
+    let stem_len = |guatiao_at: usize| {
+        parts[..guatiao_at]
+            .iter()
+            .map(|p| p.len() + 1)
+            .sum::<usize>()
+    };
+    let found = if n >= 4 && parts[n - 3] == "guatiao" {
+        let (major, minor) = (number(parts[n - 2])?, number(parts[n - 1])?);
+        Some((
+            n - 3,
+            NameNumbers {
+                major: Some(major),
+                minor: Some(minor),
+            },
+        ))
+    } else if n >= 3 && parts[n - 2] == "guatiao" && number(parts[n - 1]).is_some() {
+        let major = number(parts[n - 1])?;
+        Some((
+            n - 2,
+            NameNumbers {
+                major: Some(major),
+                minor: None,
+            },
+        ))
+    } else if n >= 2 && parts[n - 1] == "guatiao" {
+        Some((
+            n - 1,
+            NameNumbers {
+                major: None,
+                minor: None,
+            },
+        ))
+    } else {
+        None
+    };
+    let (at, numbers) = found?;
+    (stem_len(at) > 1).then_some(numbers)
+}
 
 /// The `type`s guatiao's own sources serve: each the name its
 /// `guatiao::source!` declares. A `remote` manifest describes a peer, not
@@ -68,7 +130,7 @@ impl ManifestFormat {
             && path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with(SUFFIX))
+                .is_some_and(|n| name_numbers(n).is_some())
     }
 
     /// The types a manifest may name: guatiao's, and this engine's own.
@@ -268,6 +330,34 @@ fn newest_code(
     }
 }
 
+/// Whether the `version` a manifest states is the major (and the minor)
+/// its file name carries, if it carries any.
+fn agrees_with_name(path: &Path, version: &str) -> Result<(), String> {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let Some(NameNumbers { major, minor }) = name_numbers(name) else {
+        return Ok(());
+    };
+    let Some(major) = major else {
+        return Ok(());
+    };
+    let mut numbers = version.split(|c: char| !c.is_ascii_digit());
+    let stated = |part: Option<&str>| part.and_then(|p| p.parse::<u64>().ok());
+    let (stated_major, stated_minor) = (stated(numbers.next()), stated(numbers.next()));
+    let wanted = match minor {
+        Some(minor) => format!("{major}.{minor}"),
+        None => major.to_string(),
+    };
+    let agrees =
+        stated_major == Some(major) && minor.is_none_or(|minor| stated_minor == Some(minor));
+    if agrees {
+        Ok(())
+    } else {
+        Err(format!(
+            "`version` {version} does not agree with the {wanted} in the file name {name}"
+        ))
+    }
+}
+
 /// Reads one manifest, or `None` when its `type` is another source's.
 /// Runs nothing.
 pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
@@ -283,8 +373,7 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
         Err(e) => return broken(format!("{}", modified(path)), e.to_string()),
     };
     let file_stamp = content_stamp(&bytes);
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    let value = match crate::document::parse(name, &bytes) {
+    let value = match crate::document::parse(&bytes) {
         Ok(value) => value,
         Err(e) => return broken(file_stamp, e.to_string()),
     };
@@ -328,6 +417,9 @@ pub fn read(format: &ManifestFormat, path: &Path) -> Option<Found> {
                     .to_string(),
             ),
         };
+        if let Some(version) = &version {
+            agrees_with_name(path, version)?;
+        }
         let kinds = text_list(map, "kinds").map_err(|e| e.to_string())?;
         let mut relative = text_list(map, "paths").map_err(|e| e.to_string())?;
         if relative.is_empty() {
@@ -400,12 +492,12 @@ mod tests {
         let dir = scratch("read");
         std::fs::create_dir_all(dir.join("lib")).unwrap();
         std::fs::write(
-            dir.join("lib").join("one.guatiao.cfg"),
+            dir.join("lib").join("one.guatiao"),
             "type = \"python\"\nmodule = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\n",
         )
         .unwrap();
         std::fs::write(dir.join("lib").join("one.py"), "x = 1\n").unwrap();
-        std::fs::write(dir.join("broken.guatiao.cfg"), "id = \n").unwrap();
+        std::fs::write(dir.join("broken.guatiao"), "id = \n").unwrap();
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 2);
@@ -422,8 +514,7 @@ mod tests {
 
         std::thread::sleep(core::time::Duration::from_millis(20));
         std::fs::write(dir.join("lib").join("one.py"), "x = 2\n").unwrap();
-        let Some(Found::Library(again)) = read(&PY, &dir.join("lib").join("one.guatiao.cfg"))
-        else {
+        let Some(Found::Library(again)) = read(&PY, &dir.join("lib").join("one.guatiao")) else {
             panic!("still a library");
         };
         assert_ne!(
@@ -437,7 +528,7 @@ mod tests {
     #[test]
     fn a_field_of_the_wrong_kind_is_named() {
         let dir = scratch("wrong");
-        let path = dir.join("w.guatiao.cfg");
+        let path = dir.join("w.guatiao");
         std::fs::write(
             &path,
             "type = \"python\"\nmodule = \"w\"\nkinds = \"greeter\"\n",
@@ -454,29 +545,26 @@ mod tests {
     fn another_sources_manifest_is_passed_over_and_a_missing_or_unknown_type_is_named() {
         let dir = scratch("types");
         let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
-        write("mine.guatiao.cfg", "type = \"python\"\nmodule = \"mine\"\n");
-        write(
-            "theirs.guatiao.cfg",
-            "type = \"lua\"\nmodule = \"theirs\"\n",
-        );
-        write("untyped.guatiao.cfg", "module = \"untyped\"\n");
-        write("numbered.guatiao.cfg", "type = 3\nmodule = \"numbered\"\n");
-        write("typo.guatiao.cfg", "type = \"pyhton\"\nmodule = \"typo\"\n");
+        write("mine.guatiao", "type = \"python\"\nmodule = \"mine\"\n");
+        write("theirs.guatiao", "type = \"lua\"\nmodule = \"theirs\"\n");
+        write("untyped.guatiao", "module = \"untyped\"\n");
+        write("numbered.guatiao", "type = 3\nmodule = \"numbered\"\n");
+        write("typo.guatiao", "type = \"pyhton\"\nmodule = \"typo\"\n");
 
         let found = find(&PY, core::slice::from_ref(&dir), &[]);
         assert_eq!(found.len(), 4, "{found:?}");
         assert!(found.iter().any(|f| f.id() == "mine"));
         assert!(!found.iter().any(|f| f.id().contains("theirs")));
-        for file in ["untyped.guatiao.cfg", "numbered.guatiao.cfg"] {
+        for file in ["untyped.guatiao", "numbered.guatiao"] {
             let why = broken_why(&found, file);
             assert!(why.contains("`type` is missing or not text"), "{why}");
             assert!(why.contains("python, js, lua, wasm, rhai"), "{why}");
         }
-        let why = broken_why(&found, "typo.guatiao.cfg");
+        let why = broken_why(&found, "typo.guatiao");
         assert!(why.contains("`type` names none of the sources"), "{why}");
 
-        assert!(read(&PY, &dir.join("theirs.guatiao.cfg")).is_none());
-        let named = find(&PY, &[], &[dir.join("theirs.guatiao.cfg")]);
+        assert!(read(&PY, &dir.join("theirs.guatiao")).is_none());
+        let named = find(&PY, &[], &[dir.join("theirs.guatiao")]);
         assert!(
             named.is_empty(),
             "a file named in `manifests` too: {named:?}"
@@ -493,19 +581,15 @@ mod tests {
             skip_dirs: &[],
         };
         let dir = scratch("own");
-        std::fs::write(
-            dir.join("t.guatiao.cfg"),
-            "type = \"toy\"\nmodule = \"t\"\n",
-        )
-        .unwrap();
-        std::fs::write(dir.join("u.guatiao.cfg"), "module = \"u\"\n").unwrap();
+        std::fs::write(dir.join("t.guatiao"), "type = \"toy\"\nmodule = \"t\"\n").unwrap();
+        std::fs::write(dir.join("u.guatiao"), "module = \"u\"\n").unwrap();
         let found = find(&TOY, core::slice::from_ref(&dir), &[]);
         assert!(
             found
                 .iter()
                 .any(|f| matches!(f, Found::Library(m) if m.id() == "t"))
         );
-        let why = broken_why(&found, "u.guatiao.cfg");
+        let why = broken_why(&found, "u.guatiao");
         assert!(
             why.contains("python, js, lua, wasm, rhai, remote, toy"),
             "{why}"
@@ -514,23 +598,34 @@ mod tests {
     }
 
     const TOML: &str = "type = \"python\"\nmodule = \"m\"\nkinds = [\"greeter\", \"tally\"]\n";
+    #[cfg(feature = "json")]
     const JSON: &str =
         "{\"type\": \"python\", \"module\": \"m\", \"kinds\": [\"greeter\", \"tally\"]}\n";
+    #[cfg(feature = "yaml")]
     const YAML: &str = "type: python\nmodule: m\nkinds:\n  - greeter\n  - tally\n";
 
     #[test]
     fn a_manifest_names_its_format_on_its_first_line_or_is_toml() {
         let dir = scratch("formats");
-        let cases = [
+        #[allow(unused_mut)]
+        let mut cases = vec![
             ("bare", TOML.to_string()),
             ("toml", format!("#!toml\n{TOML}")),
-            ("json", format!("#!json\n{JSON}")),
-            ("yaml", format!("#!yaml\n{YAML}")),
-            ("shebang", format!("#!/usr/bin/env yaml\n{YAML}")),
-            ("bom", format!("\u{feff}#!json\n{JSON}")),
+            ("bom", format!("\u{feff}#!toml\n{TOML}")),
         ];
+        #[cfg(feature = "json")]
+        {
+            cases.push(("json", format!("#!json\n{JSON}")));
+            cases.push(("bomjson", format!("\u{feff}#!json\n{JSON}")));
+        }
+        #[cfg(feature = "yaml")]
+        {
+            cases.push(("yaml", format!("#!yaml\n{YAML}")));
+            cases.push(("shebang", format!("#!/usr/bin/env yaml\n{YAML}")));
+            cases.push(("upper", format!("#!.YAML\n{YAML}")));
+        }
         for (name, text) in &cases {
-            let path = dir.join(format!("{name}{SUFFIX}"));
+            let path = dir.join(format!("{name}.guatiao"));
             std::fs::write(&path, text).unwrap();
             let Some(Found::Library(m)) = read(&PY, &path) else {
                 panic!("{name} is not a library");
@@ -543,41 +638,198 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    fn named(id: &str, version: Option<&str>) -> String {
+        let version = version.map_or(String::new(), |v| format!("version = \"{v}\"\n"));
+        format!("type = \"python\"\nmodule = \"{id}\"\n{version}")
+    }
+
     #[test]
-    fn a_manifest_with_the_old_suffix_is_not_found() {
-        let dir = scratch("old");
-        std::fs::write(dir.join("old.guatiao.toml"), TOML).unwrap();
-        assert!(find(&PY, core::slice::from_ref(&dir), &[]).is_empty());
+    fn a_name_is_guatiao_optionally_followed_by_a_major_and_a_minor() {
+        let dir = scratch("names");
+        let accepted = [
+            "a.guatiao",
+            "a.guatiao.2",
+            "a.guatiao.2.1",
+            "a.guatiao.10.0",
+            "a.b.guatiao.3",
+            "a.guatiao.02",
+        ];
+        let rejected = [
+            "a.guatiao.bak",
+            "a.guatiao.2.1.3",
+            "a.guatiao.cfg",
+            "a.guatiao.toml",
+            "a.guatiao.2.x",
+            "a.guatiao.x.2",
+            "a.guatiao.2.",
+            "a.guatiao..2",
+            "a.guatiao.\u{0663}",
+            "a.guatiao.-1",
+            "a.guatiao.2.1.bak",
+            "guatiao",
+            ".guatiao",
+            "a.guatiao2",
+            "a.GUATIAO",
+        ];
+        for name in accepted.iter().chain(&rejected) {
+            std::fs::write(dir.join(name), named(name, None)).unwrap();
+        }
+        let found: Vec<String> = find(&PY, core::slice::from_ref(&dir), &[])
+            .iter()
+            .map(|f| match f {
+                Found::Library(m) => m.path().file_name().unwrap().to_str().unwrap().to_string(),
+                Found::Broken { path, .. } => {
+                    path.file_name().unwrap().to_str().unwrap().to_string()
+                }
+            })
+            .collect();
+        for name in accepted {
+            assert!(
+                found.iter().any(|f| f == name),
+                "{name} is found: {found:?}"
+            );
+        }
+        for name in rejected {
+            assert!(!found.iter().any(|f| f == name), "{name} is not: {found:?}");
+        }
+        assert_eq!(found.len(), accepted.len(), "{found:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_stated_version_must_match_the_numbers_in_the_name() {
+        let dir = scratch("numbers");
+        let write = |name: &str, version: Option<&str>| {
+            let path = dir.join(name);
+            std::fs::write(&path, named("m", version)).unwrap();
+            path
+        };
+        let is_library = |path: &Path| matches!(read(&PY, path), Some(Found::Library(_)));
+        // The major alone, and the major and minor.
+        assert!(is_library(&write("a.guatiao.2", Some("2.7.1"))));
+        assert!(is_library(&write("b.guatiao.2.7", Some("2.7.1"))));
+        assert!(is_library(&write("c.guatiao.2.7", Some("2.7.0-alpha.1"))));
+        assert!(is_library(&write("d.guatiao.02", Some("2.0.0"))));
+        // No number in the name, or no version stated: nothing to compare.
+        assert!(is_library(&write("e.guatiao", Some("9.9.9"))));
+        assert!(is_library(&write("f.guatiao.3", None)));
+        assert!(is_library(&write("g.guatiao.3.1", None)));
+        // A mismatch is broken and names both.
+        let path = write("h.guatiao.2", Some("3.0.0"));
+        let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
+            panic!("a major that differs is broken");
+        };
+        assert!(
+            why.contains("h.guatiao.2") && why.contains("3.0.0"),
+            "{why}"
+        );
+        assert!(why.contains("`2`") || why.contains(" 2"), "{why}");
+        let path = write("i.guatiao.2.7", Some("2.8.0"));
+        let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
+            panic!("a minor that differs is broken");
+        };
+        assert!(
+            why.contains("i.guatiao.2.7") && why.contains("2.8.0"),
+            "{why}"
+        );
+        let path = write("j.guatiao.2.7", Some("2"));
+        assert!(matches!(read(&PY, &path), Some(Found::Broken { .. })));
+        let path = write("k.guatiao.2", Some("two"));
+        assert!(matches!(read(&PY, &path), Some(Found::Broken { .. })));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn an_unknown_format_line_is_broken_and_names_the_file() {
         let dir = scratch("unknown");
-        let path = dir.join(format!("odd{SUFFIX}"));
+        let path = dir.join("odd.guatiao");
         std::fs::write(&path, format!("#!ini\n{TOML}")).unwrap();
         let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
             panic!("not broken");
         };
-        assert!(why.contains(&format!("odd{SUFFIX}")), "{why}");
+        assert!(why.contains("odd.guatiao"), "{why}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn a_syntax_error_names_the_file_and_the_position_and_quotes_nothing() {
-        let dir = scratch("syntax");
-        let path = dir.join(format!("bad{SUFFIX}"));
-        std::fs::write(
-            &path,
-            "#!json\n{\"type\": \"python\",\n \"secret-value\" 7}\n",
-        )
-        .unwrap();
+    fn broken_text(name: &str, text: &str) -> String {
+        let dir = scratch(name);
+        let path = dir.join(format!("{name}.guatiao"));
+        std::fs::write(&path, text).unwrap();
         let Some(Found::Broken { why, .. }) = read(&PY, &path) else {
-            panic!("not broken");
+            panic!("{name} is not broken");
         };
-        assert!(why.contains(&format!("bad{SUFFIX}")), "{why}");
-        assert!(why.contains("3"), "the line: {why}");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(why.contains(&format!("{name}.guatiao")), "{why}");
+        why
+    }
+
+    #[test]
+    fn a_toml_error_names_the_file_and_the_position_once_and_quotes_nothing() {
+        // The first line is removed and still counted: the mistake is on line 3.
+        let why = broken_text("toml", "#!toml\ntype = \"python\"\nsecret-value 7\n");
+        assert!(why.contains("at line 3, column"), "{why}");
+        assert!(!why.contains("line 2"), "{why}");
         assert!(!why.contains("secret-value"), "{why}");
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn a_json_error_names_the_file_and_the_position_once_and_quotes_nothing() {
+        let why = broken_text(
+            "json",
+            "#!json\n{\"type\": \"python\",\n \"secret-value\" 7}\n",
+        );
+        assert!(why.contains("at line 3, column"), "{why}");
+        assert!(!why.contains("line 2"), "{why}");
+        assert!(!why.contains("secret-value"), "{why}");
+        assert!(!why.contains("column 0"), "{why}");
+
+        // A document that ends where a value is wanted has no column 0.
+        let why = broken_text("eof", "#!json\n{\"type\": \"python\",");
+        assert!(!why.contains("column 0"), "{why}");
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn a_yaml_error_names_the_position_and_quotes_nothing() {
+        let why = broken_text("yaml", "#!yaml\ntype: python\nsecret-value: [1\n");
+        assert!(why.contains("line 3") || why.contains("line 4"), "{why}");
+        assert!(!why.contains("secret-value"), "{why}");
+    }
+
+    #[cfg(not(feature = "yaml"))]
+    #[test]
+    fn a_format_that_is_not_built_in_is_broken_and_says_so() {
+        let why = broken_text("yaml", "#!yaml\ntype: python\nmodule: m\n");
+        assert!(why.contains("not built in"), "{why}");
+    }
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn json_that_is_not_built_in_is_broken_and_says_so() {
+        let why = broken_text("json", "#!json\n{}\n");
+        assert!(why.contains("not built in"), "{why}");
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn a_file_named_explicitly_is_read_whatever_it_is_called_and_the_name_never_picks_the_format() {
+        let dir = scratch("explicit");
+        // The extension says one format and the content another.
+        let toml_named_json = dir.join("x.guatiao.json");
+        std::fs::write(&toml_named_json, TOML).unwrap();
+        let json_named_toml = dir.join("y.guatiao.toml");
+        std::fs::write(&json_named_toml, format!("#!json\n{JSON}")).unwrap();
+        let odd = dir.join("z.manifest");
+        std::fs::write(&odd, TOML).unwrap();
+        let found = find(&PY, &[], &[toml_named_json, json_named_toml, odd]);
+        assert_eq!(found.len(), 3, "{found:?}");
+        assert!(
+            found.iter().all(|f| matches!(f, Found::Library(_))),
+            "{found:?}"
+        );
+        // Found by a scan of the directory, none of the three is a manifest.
+        assert!(find(&PY, core::slice::from_ref(&dir), &[]).is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -4,7 +4,7 @@
 
 //! Rhai as a guatiao-bridge engine: a library is a script whose last
 //! expression is a map of providers, its manifest a
-//! `*.guatiao.cfg` of type `rhai`, each provider a map whose function members are
+//! `*.guatiao` of type `rhai`, each provider a map whose function members are
 //! the slots, served through tables the bridge builds from the kinds'
 //! descriptions.
 
