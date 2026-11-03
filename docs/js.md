@@ -51,7 +51,7 @@ export class Hello extends Provider {
 ```
 
 ```toml
-# greeters.guatiao.cfg
+# greeters.guatiao
 type = "js"                       # the source that serves it
 name = "greeters"                 # the library's id: the package's name
 kinds = ["greeter", "counter"]    # every kind its providers serve

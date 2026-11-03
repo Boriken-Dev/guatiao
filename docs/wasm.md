@@ -149,7 +149,7 @@ the instances taken from it.
 cargo build --release --manifest-path crates/guatiao-source-wasm/Cargo.toml
 ```
 
-A library is a module and a manifest beside it, `greeters.guatiao.cfg`:
+A library is a module and a manifest beside it, `greeters.guatiao`:
 
 ```toml
 type = "wasm"                     # the source that serves it

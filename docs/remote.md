@@ -75,7 +75,7 @@ A peer can be a file, as a library is: a manifest of `type = "remote"`
 names.
 
 ```toml
-# peers/lab-printer.guatiao.cfg
+# peers/lab-printer.guatiao
 type = "remote"
 name = "lab-printer"
 connect = "tcp://192.0.2.5:7000"

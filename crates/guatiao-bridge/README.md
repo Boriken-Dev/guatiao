@@ -22,7 +22,8 @@ value conversion, and nothing else.
   **thread model**: called from any thread, behind the engine's own lock,
   or pinned to one engine thread the bridge starts and queues calls to.
 - **Manifests and stamps** — a library is described by a small file
-  (`<name>.guatiao.cfg`: TOML, or JSON or YAML under a `#!` first line)
+  (`<name>.guatiao[.<major>[.<minor>]]`: TOML, or JSON or YAML under a `#!`
+  first line with the `json` and `yaml` features)
   read without running any code; its stamp follows the manifest and the
   newest code file, so a refresh serves an edit and an old instance keeps
   working on the old build.

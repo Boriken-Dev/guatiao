@@ -31,7 +31,7 @@ A library is a script and a manifest beside it. The manifest says what
 the source reads before running anything:
 
 ```toml
-# greeters.guatiao.cfg
+# greeters.guatiao
 type = "rhai"                 # the source that serves it
 module = "greeters"           # the library's id; the script is greeters.rhai
 kinds = ["greeter"]           # every kind its providers serve
