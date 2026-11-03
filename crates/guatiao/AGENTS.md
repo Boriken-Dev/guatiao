@@ -27,7 +27,8 @@ A C, C++ or Dart consumer reads a whole tree through
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-`load` pulls `libloading`, `object` and `sha2`, and `regex` pulls `regex`.
+`load` pulls `libloading`, `object` and `sha2` (and `winapi-util` on
+Windows), and `regex` pulls `regex`.
 
 ---
 
@@ -2121,20 +2122,33 @@ for provider in reg.all() {                     // best first: reg.all_ranked()
 }
 ```
 
+- **A library file is mapped by its absolute path on every platform**,
+  so a bare name is the file in the current directory, never what the
+  loader's own search finds. The registry keeps no handle on it.
 - **`Loaded::digest` is the SHA-256 of the file the library was mapped
-  from**, read the first time it is asked and then kept, from the file
-  the registry opened just before mapping it and holds while the library
-  is loaded: a file replaced at that path later does not change it.
-  `Ok(None)` for a library from no file (registered, or served by a
-  source); `Err` is the read's I/O error, and a later call reads again.
-  It says what was loaded; a host pinning libraries checks the bytes
-  before it loads them.
+  from, answered only while that file is still the one loaded,
+  unchanged.** At load the registry records the file's identity (device
+  and inode on unix, volume serial and file index on Windows, with its
+  size and last write) from its path just before and just after the
+  mapping, and keeps it only if both agree. The first time a host asks,
+  the file at the absolute path is opened, its identity checked, hashed
+  in full on the calling thread, and checked again; then the digest is
+  kept. A file replaced, renamed over or written since is `Err("the file
+  changed since it was loaded")`, never another file's digest; an
+  identity that could not be recorded is `Err` with why; a read's I/O
+  error is `Err`. Only a success is kept. `Ok(None)` for a library from
+  no file (registered, or served by a source). It says what was loaded;
+  a host pinning libraries checks the bytes before it loads them.
+- **`library_of` matches by the library's lease**, one per library,
+  never by path.
 - **In C, one call**: `guatiao_registry_catalog(reg, &alloc, &out)`, a
   list of maps, best first: the provider map below plus `available`,
   `reason` (only when unavailable), `config` and `meta` (copies, absent
   when undeclared), `library_key`, `library_version`, and `digest`
-  (absent for a library from no file; `digest_error` when the read
-  failed). The caller frees it and may keep it past every library.
+  (absent for a library from no file) or `digest_error` (why there is
+  none). Each library's digest is asked once per call; the first call
+  reads each library file in full on the calling thread. The caller
+  frees the list and may keep it past every library.
 
 ### What things are filed under is the host's choice
 

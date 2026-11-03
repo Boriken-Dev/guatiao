@@ -62,8 +62,9 @@ c-header = ["dep:cbindgen"]
 # that can abort the process. See `src/library/scan.rs`.
 #
 # `sha2` answers `Loaded::digest`: a library file's SHA-256, read only
-# when a host asks for it.
-load = ["dep:libloading", "dep:object", "dep:sha2"]
+# when a host asks for it. `winapi-util` reads a file's volume serial and
+# index on Windows, the identity the digest is checked against.
+load = ["dep:libloading", "dep:object", "dep:sha2", "dep:winapi-util"]
 
 # Enforces a schema's `pattern` in `validate_text` and `validate_value`.
 # Without it the keyword is carried and read but never checked -- a
@@ -86,6 +87,9 @@ object = { version = "0.40", optional = true, default-features = false, features
     "macho",
     "std",
 ] }
+
+[target.'cfg(windows)'.dependencies]
+winapi-util = { version = "0.1", optional = true }
 
 [build-dependencies]
 # Renders `include/guatiao.h`. Optional, and enabled only by `c-header`,
