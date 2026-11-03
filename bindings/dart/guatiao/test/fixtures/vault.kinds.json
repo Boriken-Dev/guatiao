@@ -2,7 +2,7 @@
   "kinds": [
     {
       "name": "dart_vault",
-      "floor_hash": 3115817252,
+      "floor_hash": 3971779361,
       "object": false,
       "doc": "A store of secrets.",
       "slots": [
@@ -53,6 +53,19 @@
             "type": "text"
           },
           "doc": "Not a secret."
+        },
+        {
+          "name": "touch",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "map",
+              "type": "map",
+              "pass": "lent"
+            }
+          ],
+          "doc": "Lent a map, and changes nothing."
         }
       ]
     }

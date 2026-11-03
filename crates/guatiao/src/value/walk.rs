@@ -283,7 +283,23 @@ pub(crate) fn copy_map_exact(map: &Map, alloc: Alloc) -> Result<Map, ValueError>
 /// Allocates nothing for a tree up to [`SHALLOW`] containers deep, judged
 /// on the thread's stack; a deeper one is judged again over a heap stack,
 /// so any depth is answered and none can overflow the thread.
+///
+/// A node that lives in this build's wiping allocator counts as home
+/// whatever `alloc` is: a secret stays there through every move but a kind
+/// answer's, which asks [`recorded_by_exact`].
 pub(crate) fn recorded_by(node: &Value, alloc: *const crate::value::alloc::Allocator) -> bool {
+    value_home(node, Home::keeping(alloc))
+}
+
+/// [`recorded_by`], every node in exactly `alloc`.
+pub(crate) fn recorded_by_exact(
+    node: &Value,
+    alloc: *const crate::value::alloc::Allocator,
+) -> bool {
+    value_home(node, Home::exactly(alloc))
+}
+
+fn value_home(node: &Value, alloc: Home) -> bool {
     shallow(node, alloc, SHALLOW).unwrap_or_else(|| {
         let mut stack = Vec::new();
         homed(node, alloc, &mut stack) && drain(stack, alloc)
@@ -292,6 +308,18 @@ pub(crate) fn recorded_by(node: &Value, alloc: *const crate::value::alloc::Alloc
 
 /// [`recorded_by`] for a map.
 pub(crate) fn map_recorded_by(map: &Map, alloc: *const crate::value::alloc::Allocator) -> bool {
+    map_home(map, Home::keeping(alloc))
+}
+
+/// [`recorded_by_exact`] for a map.
+pub(crate) fn map_recorded_by_exact(
+    map: &Map,
+    alloc: *const crate::value::alloc::Allocator,
+) -> bool {
+    map_home(map, Home::exactly(alloc))
+}
+
+fn map_home(map: &Map, alloc: Home) -> bool {
     shallow_map(map, alloc, SHALLOW).unwrap_or_else(|| {
         let mut stack = Vec::new();
         map_homed(map, alloc, &mut stack) && drain(stack, alloc)
@@ -300,10 +328,52 @@ pub(crate) fn map_recorded_by(map: &Map, alloc: *const crate::value::alloc::Allo
 
 /// [`recorded_by`] for a list.
 pub(crate) fn list_recorded_by(list: &List, alloc: *const crate::value::alloc::Allocator) -> bool {
+    list_home(list, Home::keeping(alloc))
+}
+
+/// [`recorded_by_exact`] for a list.
+pub(crate) fn list_recorded_by_exact(
+    list: &List,
+    alloc: *const crate::value::alloc::Allocator,
+) -> bool {
+    list_home(list, Home::exactly(alloc))
+}
+
+fn list_home(list: &List, alloc: Home) -> bool {
     shallow_list(list, alloc, SHALLOW).unwrap_or_else(|| {
         let mut stack = Vec::new();
         list_homed(list, alloc, &mut stack) && drain(stack, alloc)
     })
+}
+
+/// What a walk counts as a tree's home: the allocator named, and, unless
+/// exact, this build's wiping allocator, where a secret stays.
+#[derive(Clone, Copy)]
+struct Home {
+    alloc: *const crate::value::alloc::Allocator,
+    keeps_secrets: bool,
+}
+
+impl Home {
+    fn keeping(alloc: *const crate::value::alloc::Allocator) -> Home {
+        Home {
+            alloc,
+            keeps_secrets: true,
+        }
+    }
+
+    fn exactly(alloc: *const crate::value::alloc::Allocator) -> Home {
+        Home {
+            alloc,
+            keeps_secrets: false,
+        }
+    }
+
+    /// Whether a container that recorded `recorded` is home.
+    fn holds(self, recorded: *const crate::value::alloc::Allocator) -> bool {
+        is_recorded(recorded, self.alloc)
+            || (self.keeps_secrets && super::types::lives_in_wiping(recorded))
+    }
 }
 
 /// How many containers deep a tree is judged by recursion: deeper than a
@@ -312,11 +382,7 @@ const SHALLOW: usize = 16;
 
 /// [`recorded_by`] by recursion no more than `depth` containers deep, or
 /// `None` for a tree deeper than that.
-fn shallow(
-    node: &Value,
-    alloc: *const crate::value::alloc::Allocator,
-    depth: usize,
-) -> Option<bool> {
+fn shallow(node: &Value, alloc: Home, depth: usize) -> Option<bool> {
     match node.tag() {
         Ok(Tag::GUATIAO_MAP) => match text::<Map>(node) {
             Ok(map) => shallow_map(map, alloc, depth),
@@ -332,29 +398,21 @@ fn shallow(
     }
 }
 
-fn shallow_map(
-    map: &Map,
-    alloc: *const crate::value::alloc::Allocator,
-    depth: usize,
-) -> Option<bool> {
-    if !is_recorded(map.alloc, alloc) {
+fn shallow_map(map: &Map, alloc: Home, depth: usize) -> Option<bool> {
+    if !alloc.holds(map.alloc) {
         return Some(false);
     }
     let below = depth.checked_sub(1)?;
     for entry in map.iter() {
-        if !is_recorded(entry.key.alloc, alloc) || !shallow(&entry.value, alloc, below)? {
+        if !alloc.holds(entry.key.alloc) || !shallow(&entry.value, alloc, below)? {
             return Some(false);
         }
     }
     Some(true)
 }
 
-fn shallow_list(
-    list: &List,
-    alloc: *const crate::value::alloc::Allocator,
-    depth: usize,
-) -> Option<bool> {
-    if !is_recorded(list.alloc, alloc) {
+fn shallow_list(list: &List, alloc: Home, depth: usize) -> Option<bool> {
+    if !alloc.holds(list.alloc) {
         return Some(false);
     }
     let below = depth.checked_sub(1)?;
@@ -368,7 +426,7 @@ fn shallow_list(
 
 /// [`recorded_by`] for a text.
 pub(crate) fn text_recorded_by(text: &Text, alloc: *const crate::value::alloc::Allocator) -> bool {
-    is_recorded(text.alloc, alloc)
+    Home::keeping(alloc).holds(text.alloc)
 }
 
 /// [`recorded_by`] for a buffer.
@@ -376,7 +434,7 @@ pub(crate) fn buffer_recorded_by(
     buffer: &Buffer,
     alloc: *const crate::value::alloc::Allocator,
 ) -> bool {
-    is_recorded(buffer.alloc, alloc)
+    Home::keeping(alloc).holds(buffer.alloc)
 }
 
 /// Whether a container recorded `alloc` itself: the addresses compared,
@@ -388,32 +446,20 @@ fn is_recorded(
     !recorded.is_null() && core::ptr::eq(recorded, alloc)
 }
 
-fn records(found: Result<Alloc, ValueError>, alloc: *const crate::value::alloc::Allocator) -> bool {
-    found.is_ok_and(|a| a.as_raw() == alloc)
-}
-
-fn map_homed<'a>(
-    map: &'a Map,
-    alloc: *const crate::value::alloc::Allocator,
-    stack: &mut Vec<&'a Value>,
-) -> bool {
-    if !is_recorded(map.alloc, alloc) {
+fn map_homed<'a>(map: &'a Map, alloc: Home, stack: &mut Vec<&'a Value>) -> bool {
+    if !alloc.holds(map.alloc) {
         return false;
     }
     for entry in map.iter() {
-        if !is_recorded(entry.key.alloc, alloc) || !child_homed(&entry.value, alloc, stack) {
+        if !alloc.holds(entry.key.alloc) || !child_homed(&entry.value, alloc, stack) {
             return false;
         }
     }
     true
 }
 
-fn list_homed<'a>(
-    list: &'a List,
-    alloc: *const crate::value::alloc::Allocator,
-    stack: &mut Vec<&'a Value>,
-) -> bool {
-    if !is_recorded(list.alloc, alloc) {
+fn list_homed<'a>(list: &'a List, alloc: Home, stack: &mut Vec<&'a Value>) -> bool {
+    if !alloc.holds(list.alloc) {
         return false;
     }
     list.iter().all(|item| child_homed(item, alloc, stack))
@@ -422,11 +468,7 @@ fn list_homed<'a>(
 /// A child judged on the spot when it is a leaf, or left on `stack` when
 /// it is a container: a tree with no nested container is judged without
 /// the stack allocating.
-fn child_homed<'a>(
-    node: &'a Value,
-    alloc: *const crate::value::alloc::Allocator,
-    stack: &mut Vec<&'a Value>,
-) -> bool {
+fn child_homed<'a>(node: &'a Value, alloc: Home, stack: &mut Vec<&'a Value>) -> bool {
     match node.tag() {
         Ok(Tag::GUATIAO_MAP | Tag::GUATIAO_LIST) => {
             stack.push(node);
@@ -437,23 +479,19 @@ fn child_homed<'a>(
 }
 
 /// One node judged, its children left on `stack` for [`drain`].
-fn homed<'a>(
-    node: &'a Value,
-    alloc: *const crate::value::alloc::Allocator,
-    stack: &mut Vec<&'a Value>,
-) -> bool {
+fn homed<'a>(node: &'a Value, alloc: Home, stack: &mut Vec<&'a Value>) -> bool {
     match node.tag() {
         Ok(Tag::GUATIAO_MAP) => text::<Map>(node).is_ok_and(|map| map_homed(map, alloc, stack)),
         Ok(Tag::GUATIAO_LIST) => arm::<List>(node).is_ok_and(|list| list_homed(list, alloc, stack)),
-        Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| is_recorded(t.alloc, alloc)),
-        Ok(Tag::GUATIAO_NUMBER) => arm::<Number>(node).is_ok_and(|n| records(n.alloc(), alloc)),
-        Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| is_recorded(b.alloc, alloc)),
+        Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| alloc.holds(t.alloc)),
+        Ok(Tag::GUATIAO_NUMBER) => arm::<Number>(node).is_ok_and(|n| alloc.holds(n.recorded())),
+        Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| alloc.holds(b.alloc)),
         Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL | Tag::GUATIAO_BOOL) => true,
         Err(_) => false,
     }
 }
 
-fn drain(mut stack: Vec<&Value>, alloc: *const crate::value::alloc::Allocator) -> bool {
+fn drain(mut stack: Vec<&Value>, alloc: Home) -> bool {
     while let Some(node) = stack.pop() {
         if !homed(node, alloc, &mut stack) {
             return false;
@@ -465,7 +503,9 @@ fn drain(mut stack: Vec<&Value>, alloc: *const crate::value::alloc::Allocator) -
 // --- moving a tree's storage, in place ---------------------------------------
 
 /// Moves every block of the tree that `alloc` did not make into one it
-/// did, freeing the old block through its own allocator: a container's
+/// did, overwriting the old block and freeing it through its own
+/// allocator; a block in this build's wiping allocator stays where it is,
+/// a secret kept a secret: a container's
 /// array with its elements moved bitwise, a key's or a leaf's bytes. A
 /// node whose tag this build does not know owns nothing it can see and is
 /// left as it is. One loop over a heap stack, so any depth.
@@ -494,7 +534,7 @@ pub(crate) fn settle_list(list: &mut List, alloc: Alloc) -> Result<(), ValueErro
 
 /// [`settle_value`] for a text.
 pub(crate) fn settle_text(text: &mut Text, alloc: Alloc) -> Result<(), ValueError> {
-    if !is_recorded(text.alloc, alloc.as_raw()) {
+    if !Home::keeping(alloc.as_raw()).holds(text.alloc) {
         text.rehome(alloc)?;
     }
     Ok(())
@@ -502,7 +542,7 @@ pub(crate) fn settle_text(text: &mut Text, alloc: Alloc) -> Result<(), ValueErro
 
 /// [`settle_value`] for a buffer.
 pub(crate) fn settle_buffer(buffer: &mut Buffer, alloc: Alloc) -> Result<(), ValueError> {
-    if !is_recorded(buffer.alloc, alloc.as_raw()) {
+    if !Home::keeping(alloc.as_raw()).holds(buffer.alloc) {
         buffer.rehome(alloc)?;
     }
     Ok(())
@@ -517,7 +557,7 @@ fn settle_array(
     cap: usize,
     alloc: Alloc,
 ) -> bool {
-    !is_recorded(recorded, alloc.as_raw()) || (cap == 0 && len > 0)
+    !Home::keeping(alloc.as_raw()).holds(recorded) || (cap == 0 && len > 0)
 }
 
 fn settle_map_into<'a>(

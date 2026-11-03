@@ -285,7 +285,7 @@ mod slots {
     use core::ffi::c_void;
 
     use guatiao::library::{ProviderError, Remote};
-    use guatiao::{Secret, Text, Value};
+    use guatiao::{Alloc, Map, Secret, Text, Value};
 
     use super::{SECRET, secret, seen};
 
@@ -304,6 +304,8 @@ mod slots {
         fn read(&self) -> Result<Value, ProviderError>;
         fn token(&self) -> Result<Secret<String>, ProviderError>;
         fn store(&self, value: Secret<String>) -> Result<(), ProviderError>;
+        /// Lent a map, and changes nothing.
+        fn touch(&self, map: &mut Map) -> Result<(), ProviderError>;
     }
 
     /// Builds its answers in Rust's allocator, ignoring the carrier: the
@@ -332,6 +334,9 @@ mod slots {
         }
         fn store(&self, value: Secret<String>) -> Result<(), ProviderError> {
             assert_eq!(value.expose().as_bytes(), SECRET);
+            Ok(())
+        }
+        fn touch(&self, _map: &mut Map) -> Result<(), ProviderError> {
             Ok(())
         }
     }
@@ -392,6 +397,29 @@ mod slots {
             seen(|| m.store(Secret::new(String::from(secret()))).unwrap()),
             0
         );
+    }
+
+    /// A map lent `&mut` to a slot is settled after the call; a secret in it
+    /// stays where it lives, in the wiping allocator, whatever the map is.
+    #[test]
+    fn a_secret_in_a_lent_map_stays_in_the_wiping_allocator() {
+        let p = plain();
+        let n = seen(|| {
+            let mut map = Map::new();
+            map.set("user", Text::new("alice"));
+            map.set(
+                "token",
+                Value::from(Text::new_in(Alloc::wiping(), secret()).unwrap()),
+            );
+            p.touch(&mut map).unwrap();
+            let token = map.get("token").unwrap();
+            assert!(token.alloc().unwrap().is_wiping());
+            let tree = Value::from(map);
+            assert!(tree.is_sensitive());
+            assert!(!format!("{:?}", super::Dump(&tree)).contains("hunter2"));
+            drop(tree);
+        });
+        assert_eq!(n, 0);
     }
 }
 
@@ -612,4 +640,32 @@ fn a_copy_of_a_secret_inside_a_plain_tree_stays_in_the_wiping_allocator() {
         drop((v, copies));
     });
     assert_eq!(n, 0);
+}
+
+/// `into_local` and `into_alloc` take a node that lives in this build's
+/// wiping allocator as home: a tree holding a secret is local after
+/// `into_local`, and a second one changes nothing.
+#[test]
+fn a_tree_holding_a_secret_is_local_and_moves_no_more() {
+    let mut map = Map::new();
+    map.set("user", Text::new("alice"));
+    map.set(
+        "token",
+        Value::from(Text::new_in(Alloc::wiping(), secret()).unwrap()),
+    );
+    let v = Value::from(map).into_local();
+    assert!(v.is_local());
+    let at = |v: &Value| {
+        let map: &Map = guatiao::TryAsRef::try_as_ref(v).unwrap();
+        let token: &str = guatiao::TryAsRef::try_as_ref(map.get("token").unwrap()).unwrap();
+        token.as_ptr()
+    };
+    let before = at(&v);
+    let v = v.into_local();
+    assert_eq!(at(&v), before, "a second into_local copied");
+    let v = v.into_alloc(Alloc::rust()).unwrap();
+    assert_eq!(at(&v), before, "into_alloc copied a tree already home");
+    let mut v = v;
+    v.make_local_in(Alloc::rust()).unwrap();
+    assert_eq!(at(&v), before, "make_local_in moved a secret out");
 }

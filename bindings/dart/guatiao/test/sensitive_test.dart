@@ -74,6 +74,9 @@ final class Keeper implements DartVault {
 
   @override
   String label() => 'keeper';
+
+  @override
+  void touch(MapRef map) {}
 }
 
 /// The bytes a [ref] holds, read through its view and compared there.
@@ -208,6 +211,18 @@ void main() {
       expect(every.isSensitive, isTrue);
     });
 
+    test('leaves a secret in a lent map in the wiping allocator', () {
+      final plain = Value({'user': 'alice'});
+      addTearDown(plain.close);
+      final secret = Value.sensitive(_secret);
+      addTearDown(secret.close);
+      plain.asMap()['token'] = secret;
+      vault.touch(plain.asMap());
+      expect(plain.isSensitive, isTrue);
+      expect(_livesInWiping(plain.asMap()['token']!.requireNode()), isTrue);
+      expect(plain.toString(), isNot(contains('hunter2')));
+    });
+
     test('answers text as a Value, never a String', () {
       final Value pin = vault.pin();
       addTearDown(pin.close);
@@ -247,7 +262,7 @@ void main() {
     final slots = ((committed['kinds']! as List).first as Map)['slots'] as List;
     expect(
       [for (final s in slots) (s as Map)['sensitive'] == true],
-      [true, true, true, false],
+      [true, true, true, false, false],
     );
     final unmarked = declarations.replaceAll('  @sensitive\n', '');
     final plain = describeDeclarations(unmarked);
