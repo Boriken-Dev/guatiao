@@ -163,7 +163,7 @@ dependencies = [
 [[package]]
 name = "coqui-web"
 version = "0.0.0-alpha.0"
-source = "git+https://github.com/Boriken-Dev/coqui-web.git?rev=cb420e9574fcde311f7241dd173b35563a085648#cb420e9574fcde311f7241dd173b35563a085648"
+source = "git+https://github.com/Boriken-Dev/coqui-web.git?rev=c476a578510276a591addd4f6f5c9e578791ba11#c476a578510276a591addd4f6f5c9e578791ba11"
 dependencies = [
  "rustls",
  "tokio",

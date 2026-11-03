@@ -35,10 +35,9 @@ python -m http.server 8000
 The certificate is self-signed and valid for under two weeks, which is
 what a browser accepts through `serverCertificateHashes`; no certificate
 authority is involved, and a new one is made at every start.
-`WIRE_PORT` and `WIRE_INTERVAL_MS` change the port and the pace.
-`WIRE_BIND` names the address it listens on (default IPv4, `0.0.0.0`):
-QUIC does not fall back between address families, so a client dialing
-`localhost` that resolves to `::1` needs `WIRE_BIND=::`.
+`WIRE_PORT` and `WIRE_INTERVAL_MS` change the port and the pace. The
+server listens on IPv4; a probe that dials `localhost` tries each address
+the name resolves to, so one that resolves to `::1` first reaches it.
 
 ## What crosses
 

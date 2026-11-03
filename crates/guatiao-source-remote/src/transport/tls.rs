@@ -366,6 +366,13 @@ impl TlsConfig {
         !self.checks_nobody
     }
 
+    /// Whether a client it does not know is recorded as waiting in its
+    /// trust store: no fixed pins, a store.
+    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+    pub(crate) fn records_waiting(&self) -> bool {
+        self.pins.is_empty() && self.store.is_some()
+    }
+
     /// The identity in `dir`'s [`IDENTITY_FILE`] (its certificate's chain
     /// kept), made there when absent (readable by its owner alone on Unix),
     /// and the trust store in `dir` (`peers/accepted`, `peers/waiting`).

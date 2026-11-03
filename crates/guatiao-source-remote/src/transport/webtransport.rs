@@ -16,11 +16,12 @@
 //! no certificate, a native one checks none, and the link's key proof
 //! decides; a page's browser still checks the one it was told to trust.
 //!
-//! coqui-web runs the QUIC handshake and does not report the certificate
-//! a client presented, so a mutual-TLS link cannot complete here: the
-//! listener asks the client for its certificate and refuses one it does
-//! not trust (a browser has none to present), and a link then finds no
-//! peer to name and is refused at the secure level.
+//! At mutual TLS a client presents a certificate, which the channel
+//! reports (`peer_certificates`) once the handshake is through: the link
+//! names the peer by it. The handshake of a connection runs on coqui-web's
+//! threads, where coqui-peer-tls has no connection addresses to decide the
+//! policy's list by, so the list's address rules are decided before the
+//! handshake and its fingerprint rules after it.
 //!
 //! A browser trusts a certificate no authority issued when the page pins
 //! it by its SHA-256 (`serverCertificateHashes`), and only one valid for
@@ -48,7 +49,9 @@ use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
 use super::tls::{TlsConfig, host_of, invalid, server_name, unbuilt, words};
-use super::web::{Open, Refused, Shared, Watching, admits, connection, io_error, server_config};
+use super::web::{
+    Open, Refused, Shared, Watching, admits, connection, io_error, list_permits, server_config,
+};
 use super::{Connect, Connection};
 use crate::lock;
 
@@ -242,20 +245,7 @@ impl WtConnect {
     /// To `url` (`https://host:port/path`), as `config` says (the same
     /// configuration as [`QuicConnect`](super::quic::QuicConnect)'s),
     /// within [`CONNECT_TIMEOUT`].
-    ///
-    /// # Errors
-    ///
-    /// `InvalidInput` for a URL that is not `https://host:port/path`, and
-    /// `Unsupported` for a mutual-TLS configuration: coqui-web does not
-    /// report the certificate a client presented, so a server could not
-    /// name this one. Use server TLS, or `quic://`.
     pub fn new(url: &str, config: &TlsConfig) -> io::Result<WtConnect> {
-        if config.is_mutual() && config.proves_peers() {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "mutual TLS is not available over WebTransport (https://): the server cannot name the client that presented a certificate; use server-tls, or quic://",
-            ));
-        }
         // The URL's host is the name the server's certificate is checked
         // for under roots.
         server_name(host_of(&authority(url)?), config.by_roots())?;
@@ -302,10 +292,13 @@ impl WtConnect {
                 io::ErrorKind::ConnectionRefused,
                 format!("the WebTransport handshake with the server at {addr} did not finish"),
             ),
+            // QUIC's CONNECTION_REFUSED, which a list's refusal is and so is
+            // any server declining a connection: the client cannot tell
+            // which.
             Failure::Permission => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "the server at {addr} refused the WebTransport session: it may not trust this client, {}",
+                    "the WebTransport server at {addr} refused the connection (by its access control list, which does not admit this client's address, or the server refused the connection): this client is {}",
                     self.me
                 ),
             ),
@@ -330,9 +323,8 @@ impl Connect for WtConnect {
         let channel = dialer
             .dial(Kind::WebTransport, &url, self.timeout)
             .map_err(|failure| self.refusal(failure, &watching))?;
-        let shared = Shared::new(true, true);
-        let peer = self.proves.then(|| watching.proven()).flatten();
-        shared.open(Arc::new(channel) as Arc<dyn Channel>, peer);
+        let shared = Shared::new(true, true, self.proves);
+        shared.open(Arc::new(channel) as Arc<dyn Channel>);
         let at = authority(&self.url)?;
         Ok(connection(shared, None, format!("https {at}")))
     }
@@ -342,16 +334,19 @@ impl Connect for WtConnect {
     }
 }
 
-/// A WebTransport listener: HTTP/3 over QUIC, at server TLS or no
-/// security as its configuration says (mutual TLS: see the module's
-/// note). It admits peers by the policy's access control list, every
-/// source when there is none, by address, refusing a peer it denies before
-/// any handshake. A session's handshake, HTTP/3 session and stream run on
-/// the serving thread's first read.
+/// A WebTransport listener: HTTP/3 over QUIC, at mutual TLS, server TLS or
+/// no security as its configuration says. It admits peers by the policy's
+/// access control list, every source when there is none: by address,
+/// refusing a peer it denies before any handshake, and at mutual TLS by
+/// fingerprint once the client's certificate is known, before any frame is
+/// read. A session's handshake, HTTP/3 session and stream run on the
+/// serving thread's first read, which the closer cancels.
 pub struct WtListen {
     listener: Listener,
     presenting: Arc<Presenting>,
     refused: Arc<Refused>,
+    config: Arc<TlsConfig>,
+    bound: SocketAddr,
 }
 
 impl core::fmt::Debug for WtListen {
@@ -377,16 +372,18 @@ impl WtListen {
             config,
             H3,
             Some(Arc::clone(&presenting) as Arc<dyn ResolvesServerCert>),
+            false,
         )?;
         let listener = Listener::bind(address, tls).map_err(io_error)?;
         let bound = listener.local_addr();
         let refused = Arc::new(Refused::default());
         let turned = Arc::clone(&refused);
-        let config = config.clone();
+        let config = Arc::new(config.clone());
+        let judging = Arc::clone(&config);
         let listener = listener
             .with_limits(limits())
             .with_admission(move |source| {
-                let permitted = admits(&config, source, bound);
+                let permitted = admits(&judging, source, bound);
                 if !permitted {
                     turned.add(source);
                 }
@@ -396,6 +393,8 @@ impl WtListen {
             listener,
             presenting,
             refused,
+            config,
+            bound,
         })
     }
 
@@ -459,17 +458,30 @@ impl WtListen {
             }
             match self.listener.next(Some(REPORT_EVERY)) {
                 Ok(pending) => {
+                    let source = pending.peer_addr();
+                    let cancel = pending.canceller();
+                    let mutual = self.config.is_mutual() && self.config.proves_peers();
+                    let (config, bound) = (Arc::clone(&self.config), self.bound);
                     let open: Open = Box::new(move || {
-                        pending
-                            .handshake()
-                            .map(|channel| (Arc::new(channel) as Arc<dyn Channel>, None))
-                            .map_err(io_error)
+                        let channel = pending.handshake().map_err(io_error)?;
+                        if mutual {
+                            // The list's fingerprint rules: the handshake had
+                            // no addresses to decide them by.
+                            if let Err(e) =
+                                list_permits(&config, source, bound, channel.peer_certificates())
+                            {
+                                coqui_web::Channel::close(&channel);
+                                return Err(e);
+                            }
+                        }
+                        Ok(Arc::new(channel) as Arc<dyn Channel>)
                     });
-                    let shared = Shared::new(true, true);
+                    let mutual = self.config.is_mutual() && self.config.proves_peers();
+                    let shared = Shared::new(true, true, mutual);
                     return Ok(Accepted::Connection(connection(
                         shared,
-                        Some(open),
-                        "https".to_string(),
+                        Some((open, cancel)),
+                        format!("https {source}"),
                     )));
                 }
                 Err(Failure::Timeout) => {}

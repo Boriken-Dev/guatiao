@@ -9,29 +9,24 @@
 //! stream).
 //!
 //! A server's channel is made by its first read, on the thread serving
-//! the link, so a peer that connects and stalls holds only that thread.
+//! the link, so a peer that connects and stalls holds only that thread;
+//! the closer cancels a handshake still under way.
 
 #![forbid(unsafe_code)]
 
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::io;
-use std::sync::{Mutex, OnceLock, mpsc};
-use std::thread;
-use std::time::Instant;
+use std::sync::{Mutex, OnceLock};
 
-use coqui_web::{Channel, Failure};
+use coqui_web::{Cancel, Channel, Failure};
 
 use super::{Connection, Datagrams, FrameRead, FrameWrite};
 use crate::lock;
 
-/// What a server's handshake came to: the channel, and the fingerprint of
-/// the certificate the client proved it holds the key of, if one did.
-pub(super) type Opened = io::Result<(Arc<dyn Channel>, Option<String>)>;
-
 /// Opens a server's channel: the handshake coqui-web has not run yet.
-pub(super) type Open = Box<dyn FnOnce() -> Opened + Send>;
+pub(super) type Open = Box<dyn FnOnce() -> io::Result<Arc<dyn Channel>> + Send>;
 
 /// A coqui-web failure as the error kind a link tells apart. A rejected
 /// certificate is `PermissionDenied`, as a refusal is elsewhere.
@@ -53,13 +48,11 @@ pub(super) fn io_error(failure: Failure) -> io::Error {
     io::Error::new(kind, failure.to_string())
 }
 
-/// The peer's address in a `Debug` rendering of coqui-web's pending
-/// connection, for the words a link is named by; `None` when it says none.
-#[cfg(feature = "ws")]
-pub(super) fn source_of(pending: &impl core::fmt::Debug) -> Option<String> {
-    let shown = format!("{pending:?}");
-    let rest = shown.split_once("peer: Some(")?.1;
-    Some(rest.split_once(')')?.0.to_string())
+fn aborted() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::ConnectionAborted,
+        "the link ended before its handshake did",
+    )
 }
 
 /// What a connection's reader, writer and closer share.
@@ -68,111 +61,119 @@ pub(super) struct Shared {
     /// Set by `shutdown` or the closer: the channel closes as it opens,
     /// or at once when it has.
     ended: AtomicBool,
-    /// The server's certificate fingerprint a client verified, canonical.
-    peer: OnceLock<String>,
+    /// Held by `open` and `end` while each sets its own flag and reads the
+    /// other's, so one of them sees the other; it keeps the cancel of a
+    /// server's handshake until the channel is open.
+    order: Mutex<Option<Cancel>>,
+    /// Whether the peer's certificate, as the channel reports it, names
+    /// the peer: false at no security, where nothing is checked.
+    #[cfg_attr(not(feature = "tls"), allow(dead_code))]
+    names_peer: bool,
     /// Whether TLS runs under the channel.
     encrypted: bool,
     /// Whether the channel carries datagrams beside its messages.
     datagrams: bool,
-    /// Wakes the read that waits for a server's handshake, which coqui-web
-    /// bounds but cannot interrupt, when the link ends first.
-    ///
-    /// Also the lock `open` and `end` order themselves by: each sets its
-    /// own flag and reads the other's under it, so one of them sees the
-    /// other.
-    waking: Mutex<Option<mpsc::Sender<Opened>>>,
-    /// What the channel's one message bound is made of.
-    bounds: Mutex<Bounds>,
-}
-
-/// coqui-web bounds a message by one number, both ways. A link has two:
-/// what its reader allows, and what its peer takes. The channel gets the
-/// larger, and the reader and the writer each keep their own check.
-#[derive(Default)]
-struct Bounds {
-    read: usize,
-    send: usize,
-    /// What the channel was last told.
-    applied: usize,
-}
-
-fn aborted() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::ConnectionAborted,
-        "the link ended before its handshake did",
-    )
+    /// The largest message the link's reader allows and its peer takes,
+    /// told to the channel once it is open (0: not yet known).
+    receive: AtomicUsize,
+    send: AtomicUsize,
 }
 
 impl Shared {
-    pub(super) fn new(encrypted: bool, datagrams: bool) -> Arc<Shared> {
+    pub(super) fn new(encrypted: bool, datagrams: bool, names_peer: bool) -> Arc<Shared> {
         Arc::new(Shared {
             channel: OnceLock::new(),
             ended: AtomicBool::new(false),
-            peer: OnceLock::new(),
+            order: Mutex::new(None),
+            names_peer,
             encrypted,
             datagrams,
-            waking: Mutex::new(None),
-            bounds: Mutex::new(Bounds::default()),
+            receive: AtomicUsize::new(0),
+            send: AtomicUsize::new(0),
         })
     }
 
-    /// The channel is open: `peer` is the server's fingerprint a client
-    /// verified.
-    pub(super) fn open(&self, channel: Arc<dyn Channel>, peer: Option<String>) {
-        if let Some(peer) = peer {
-            let _ = self.peer.set(peer);
-        }
+    /// Keeps the cancel of a handshake that has not run, for `end`.
+    fn on_cancel(&self, cancel: Cancel) {
         let ended = {
-            let _order = lock(&self.waking);
+            let mut order = lock(&self.order);
+            if self.ended.load(Ordering::SeqCst) {
+                true
+            } else {
+                *order = Some(cancel.clone());
+                false
+            }
+        };
+        if ended {
+            cancel.cancel();
+        }
+    }
+
+    /// The channel is open.
+    pub(super) fn open(&self, channel: Arc<dyn Channel>) {
+        let ended = {
+            let mut order = lock(&self.order);
+            order.take();
             let _ = self.channel.set(Arc::clone(&channel));
             self.ended.load(Ordering::SeqCst)
         };
-        self.apply_bounds(&channel);
+        self.apply(&channel);
         if ended {
             channel.close();
         }
     }
 
-    /// Tells the channel the larger of the read and send bounds, when it
-    /// has changed.
-    fn bound(&self, read: Option<usize>, send: Option<usize>) {
-        {
-            let mut bounds = lock(&self.bounds);
-            if let Some(read) = read {
-                bounds.read = read;
-            }
-            if let Some(send) = send {
-                bounds.send = send;
-            }
+    /// Tells the channel what the link's reader allows and what its peer
+    /// takes: its bounds on what it receives and on what it sends.
+    fn bound(&self, receive: Option<usize>, send: Option<usize>) {
+        if let Some(receive) = receive {
+            self.receive.store(receive, Ordering::SeqCst);
+        }
+        if let Some(send) = send {
+            self.send.store(send, Ordering::SeqCst);
         }
         if let Some(channel) = self.channel.get() {
-            self.apply_bounds(channel);
+            self.apply(channel);
         }
     }
 
-    fn apply_bounds(&self, channel: &Arc<dyn Channel>) {
-        let mut bounds = lock(&self.bounds);
-        let wanted = bounds.read.max(bounds.send);
-        if wanted != 0 && wanted != bounds.applied {
-            channel.set_max_message(wanted);
-            bounds.applied = wanted;
+    fn apply(&self, channel: &Arc<dyn Channel>) {
+        let receive = self.receive.load(Ordering::SeqCst);
+        if receive != 0 {
+            channel.set_max_receive(receive);
+        }
+        let send = self.send.load(Ordering::SeqCst);
+        if send != 0 {
+            channel.set_max_send(send);
         }
     }
 
-    /// The largest frame the peer takes.
+    /// The largest frame the peer takes (0: not yet known).
     fn send_max(&self) -> usize {
-        lock(&self.bounds).send
+        self.send.load(Ordering::SeqCst)
     }
 
-    /// Ends the channel both ways, however far it has come.
+    /// The fingerprint of the certificate the peer presented and this
+    /// side's TLS accepted, if it names the peer.
+    fn peer_id(&self) -> Option<String> {
+        #[cfg(feature = "tls")]
+        if self.names_peer {
+            let chain = self.channel.get()?.peer_certificates()?;
+            return Some(coqui_peer_tls::PeerId::of(chain.first()?).canonical());
+        }
+        None
+    }
+
+    /// Ends the channel both ways, however far it has come, a handshake
+    /// under way included.
     fn end(&self) {
-        let (waking, channel) = {
-            let mut order = lock(&self.waking);
+        let (cancel, channel) = {
+            let mut order = lock(&self.order);
             self.ended.store(true, Ordering::SeqCst);
             (order.take(), self.channel.get().cloned())
         };
-        if let Some(waking) = waking {
-            let _ = waking.send(Err(aborted()));
+        if let Some(cancel) = cancel {
+            cancel.cancel();
         }
         if let Some(channel) = channel {
             channel.close();
@@ -205,25 +206,15 @@ impl Reader {
     /// The channel, opened by this first call on a server's end.
     fn channel(&mut self) -> io::Result<Option<Arc<dyn Channel>>> {
         if let Some(open) = self.open.take() {
-            // The handshake runs on a thread of its own, so a link that
-            // ends meanwhile is not held for the handshake's bound; the
-            // thread closes what it opens too late.
-            let (tx, rx) = mpsc::channel::<Opened>();
-            *lock(&self.shared.waking) = Some(tx.clone());
             if self.shared.ended() {
                 return Err(aborted());
             }
-            thread::Builder::new()
-                .name("guatiao-web-handshake".to_string())
-                .spawn(move || {
-                    if let Err(mpsc::SendError(Ok((late, _)))) = tx.send(open()) {
-                        late.close();
-                    }
-                })?;
-            let opened = rx.recv().map_err(|_| aborted());
-            lock(&self.shared.waking).take();
-            let (channel, peer) = opened??;
-            self.shared.open(Arc::clone(&channel), peer);
+            match open() {
+                Ok(channel) => self.shared.open(channel),
+                // The closer cancelled it.
+                Err(_) if self.shared.ended() => return Err(aborted()),
+                Err(e) => return Err(e),
+            }
         }
         Ok(self.shared.channel.get().cloned())
     }
@@ -276,7 +267,7 @@ impl FrameRead for Reader {
     }
 
     fn peer_id(&self) -> Option<String> {
-        self.shared.peer.get().cloned()
+        self.shared.peer_id()
     }
 
     fn encrypted(&self) -> bool {
@@ -318,37 +309,24 @@ impl Writer {
                 ),
             ));
         }
-        // coqui-web queues a message and answers `NoProgress` when the
-        // queue is full instead of waiting: the peer is slow, not gone, so
-        // wait for room as a stream's write does, for the link's write
-        // timeout.
-        let until = self.timeout.map(|t| Instant::now() + t);
-        let mut pause = Duration::from_millis(1);
-        loop {
-            match channel.send(message) {
-                Ok(()) => return Ok(()),
-                Err(Failure::NoProgress) if !self.shared.ended() => {
-                    if until.is_some_and(|until| Instant::now() >= until) {
-                        return Err(io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "the peer took nothing of the queued frames within the write timeout",
-                        ));
-                    }
-                    thread::sleep(pause);
-                    pause = (pause * 2).min(Duration::from_millis(20));
+        // coqui-web waits for room in its send queue for the link's write
+        // timeout, as a stream's write waits for the peer.
+        channel
+            .send_timeout(message, self.timeout)
+            .map_err(|failure| match failure {
+                Failure::Protocol => io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "a message the channel does not carry: empty, or over its bound",
+                ),
+                Failure::Timeout => io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "the peer took nothing of the queued frames within the write timeout",
+                ),
+                _ if self.shared.ended() => {
+                    io::Error::new(io::ErrorKind::BrokenPipe, "the link ended")
                 }
-                Err(Failure::Protocol) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "a message the channel does not carry: empty, or over its bound",
-                    ));
-                }
-                Err(_) if self.shared.ended() => {
-                    return Err(io::Error::new(io::ErrorKind::BrokenPipe, "the link ended"));
-                }
-                Err(other) => return Err(io_error(other)),
-            }
-        }
+                other => io_error(other),
+            })
     }
 }
 
@@ -430,10 +408,19 @@ impl Datagrams for ChannelDatagrams {
     }
 }
 
-/// The two halves of a link over `shared`'s channel: open already, or made
-/// by `open` on the first read.
-pub(super) fn connection(shared: Arc<Shared>, open: Option<Open>, peer: String) -> Connection {
+/// The two halves of a link over `shared`'s channel: open already
+/// (`open` none), or made by `open` on the first read, which the closer
+/// can cancel by `cancel`.
+pub(super) fn connection(
+    shared: Arc<Shared>,
+    open: Option<(Open, Cancel)>,
+    peer: String,
+) -> Connection {
     let closing = Arc::clone(&shared);
+    let open = open.map(|(open, cancel)| {
+        shared.on_cancel(cancel);
+        open
+    });
     Connection {
         reader: Box::new(Reader {
             shared: Arc::clone(&shared),
@@ -473,38 +460,33 @@ impl Refused {
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(not(feature = "ws"), allow(unused_imports))]
-pub(super) use verified::{
-    Watching, forget_proven, server_config, server_config_proving, take_proven,
-};
+#[cfg_attr(not(feature = "webtransport"), allow(unused_imports))]
+pub(super) use verified::{Watching, list_permits, server_config};
 
 #[cfg(feature = "tls")]
-#[cfg_attr(not(feature = "ws"), allow(dead_code))]
 mod verified {
     use alloc::sync::Arc;
-    use core::cell::RefCell;
+    use core::net::SocketAddr;
     use std::io;
     use std::sync::Mutex;
 
+    use coqui_net_acl::Outcome;
     use coqui_peer_tls::{PeerId, Refusal};
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::server::ResolvesServerCert;
-    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
     use rustls::{DigitallySignedStruct, DistinguishedName, ServerConfig, SignatureScheme};
 
     use crate::lock;
     use crate::transport::tls::TlsConfig;
 
     /// A client's server verifier, keeping what one connection's handshake
-    /// said: the refusal for the words, and the fingerprint of the
-    /// certificate whose key the server proved. One per connection.
+    /// said, for the words of a refusal. One per connection.
     #[derive(Debug)]
     pub(crate) struct Watching {
         inner: Arc<dyn ServerCertVerifier>,
         refusal: Mutex<Option<Refusal>>,
         failed: Mutex<Option<rustls::Error>>,
-        proven: Mutex<Option<PeerId>>,
     }
 
     impl Watching {
@@ -513,7 +495,6 @@ mod verified {
                 inner,
                 refusal: Mutex::new(None),
                 failed: Mutex::new(None),
-                proven: Mutex::new(None),
             })
         }
 
@@ -536,11 +517,6 @@ mod verified {
                     format!("the TLS handshake with the server at {addr} failed: {other}"),
                 ),
             })
-        }
-
-        /// The server's fingerprint, once it proved it holds the key.
-        pub(crate) fn proven(&self) -> Option<String> {
-            lock(&self.proven).map(|id| id.canonical())
         }
 
         fn run<T>(&self, out: Result<T, rustls::Error>) -> Result<T, rustls::Error> {
@@ -575,14 +551,10 @@ mod verified {
             certificate: &CertificateDer<'_>,
             signed: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            let out = self.run(
+            self.run(
                 self.inner
                     .verify_tls12_signature(message, certificate, signed),
-            );
-            if out.is_ok() {
-                *lock(&self.proven) = Some(PeerId::of(certificate.as_ref()));
-            }
-            out
+            )
         }
 
         fn verify_tls13_signature(
@@ -591,14 +563,10 @@ mod verified {
             certificate: &CertificateDer<'_>,
             signed: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            let out = self.run(
+            self.run(
                 self.inner
                     .verify_tls13_signature(message, certificate, signed),
-            );
-            if out.is_ok() {
-                *lock(&self.proven) = Some(PeerId::of(certificate.as_ref()));
-            }
-            out
+            )
         }
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
@@ -614,155 +582,40 @@ mod verified {
         }
     }
 
-    thread_local! {
-        /// The fingerprint of the certificate a client proved it holds the
-        /// key of, in the handshake this thread is running.
-        static PROVEN: RefCell<Option<PeerId>> = const { RefCell::new(None) };
-    }
-
-    /// Forgets what an earlier handshake on this thread proved.
-    pub(crate) fn forget_proven() {
-        PROVEN.with(|proven| proven.take());
-    }
-
-    /// What the handshake just run on this thread proved of its client.
-    pub(crate) fn take_proven() -> Option<String> {
-        PROVEN.with(|proven| proven.take()).map(|id| id.canonical())
-    }
-
-    /// A server's client verifier that notes the fingerprint of the
-    /// certificate whose key the client proved, on the thread running the
-    /// handshake. coqui-web's WebSocket listener runs a handshake on the
-    /// thread that calls `Pending::handshake`, one thread to a connection,
-    /// and reports no certificate; this is how the link learns who the
-    /// client is.
-    #[derive(Debug)]
-    struct Proving {
-        inner: Arc<dyn ClientCertVerifier>,
-    }
-
-    impl Proving {
-        fn note<T>(
-            out: Result<T, rustls::Error>,
-            certificate: &CertificateDer<'_>,
-        ) -> Result<T, rustls::Error> {
-            if out.is_ok() {
-                PROVEN.with(|proven| *proven.borrow_mut() = Some(PeerId::of(certificate.as_ref())));
-            }
-            out
-        }
-    }
-
-    impl ClientCertVerifier for Proving {
-        fn offer_client_auth(&self) -> bool {
-            self.inner.offer_client_auth()
-        }
-
-        fn client_auth_mandatory(&self) -> bool {
-            self.inner.client_auth_mandatory()
-        }
-
-        fn root_hint_subjects(&self) -> &[DistinguishedName] {
-            self.inner.root_hint_subjects()
-        }
-
-        fn verify_client_cert(
-            &self,
-            certificate: &CertificateDer<'_>,
-            intermediates: &[CertificateDer<'_>],
-            now: UnixTime,
-        ) -> Result<ClientCertVerified, rustls::Error> {
-            self.inner
-                .verify_client_cert(certificate, intermediates, now)
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            message: &[u8],
-            certificate: &CertificateDer<'_>,
-            signed: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Proving::note(
-                self.inner
-                    .verify_tls12_signature(message, certificate, signed),
-                certificate,
-            )
-        }
-
-        fn verify_tls13_signature(
-            &self,
-            message: &[u8],
-            certificate: &CertificateDer<'_>,
-            signed: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Proving::note(
-                self.inner
-                    .verify_tls13_signature(message, certificate, signed),
-                certificate,
-            )
-        }
-
-        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-            self.inner.supported_verify_schemes()
-        }
-
-        fn requires_raw_public_keys(&self) -> bool {
-            self.inner.requires_raw_public_keys()
-        }
-    }
-
-    /// The server configuration of a mutual-TLS WebSocket listener: as
-    /// `config` says (trust, policy), its clients' certificates noted by
-    /// [`take_proven`]. The policy's access control list reads each
-    /// connection's addresses from the scope the caller sets around the
-    /// handshake (`coqui_peer_tls::with_addresses`).
-    pub(crate) fn server_config_proving(
-        config: &TlsConfig,
-        alpn: &[u8],
-    ) -> io::Result<Arc<ServerConfig>> {
-        // rustls skips the client verifier when it resumes a TLS 1.3
-        // session, and with it the noting of who the client is.
-        if config.tls_policy().allow_resumption {
-            return Err(crate::transport::tls::invalid(
-                "a mutual-TLS WebSocket listener names its clients by the certificate they prove, which a resumed session does not present: leave the policy's allow_resumption off",
-            ));
-        }
-        let mut bare = config.tls_policy().clone();
-        bare.acl = None;
-        let verifier = config
-            .client_trust()?
-            .client_cert_verifier_with(&bare)
-            .map_err(|e| crate::transport::tls::unbuilt(&e))?;
-        let verifier = Arc::new(Proving { inner: verifier });
-        coqui_peer_tls::server_config_with_verifier(
-            config.identity(),
-            verifier,
-            &[alpn],
-            config.tls_policy(),
-        )
-        .map(|built| Arc::new(built.config))
-        .map_err(|e| crate::transport::tls::unbuilt(&e))
-    }
-
     /// The server configuration coqui-web's listeners take: `config`'s
     /// identity (or `resolver`'s certificates), policy and trust, naming
-    /// `alpn`. Where no client presents a certificate (server TLS, no
-    /// security) the policy's access control list is left out of the TLS
-    /// configuration: coqui-peer-tls reads each connection's addresses
-    /// from a scope its own accept helpers set, which coqui-web's
-    /// listeners do not, so the listener decides the list by address
-    /// before the handshake instead. Where clients do present one (a
-    /// mutual-TLS WebTransport listener, whose handshake runs on threads
-    /// no scope reaches) the list stays: with no addresses to decide by,
-    /// coqui-peer-tls refuses every client, and none is recorded as
-    /// waiting in a trust store behind the list's back.
+    /// `alpn`.
+    ///
+    /// `scoped` says the handshake runs on a thread the caller gives the
+    /// connection's addresses (`coqui_peer_tls::with_addresses`), so the
+    /// policy's access control list can stay in the TLS: a WebSocket
+    /// listener. Otherwise the list is left out of it, because
+    /// coqui-peer-tls would find no addresses and refuse every client: the
+    /// listener decides the list's address rules before the handshake and
+    /// its fingerprint rules after it ([`list_permits`]). That would let a
+    /// trust store record a stranger the list forbids as waiting, so a
+    /// store-backed mutual listener whose list names a fingerprint is
+    /// refused here.
     pub(crate) fn server_config(
         config: &TlsConfig,
         alpn: &[u8],
         resolver: Option<Arc<dyn ResolvesServerCert>>,
+        scoped: bool,
     ) -> io::Result<Arc<ServerConfig>> {
         let mut policy = config.tls_policy().clone();
-        if !(config.is_mutual() && config.proves_peers()) {
+        let mutual = config.is_mutual() && config.proves_peers();
+        if !(scoped && mutual) {
+            if mutual
+                && config.records_waiting()
+                && policy
+                    .acl
+                    .as_ref()
+                    .is_some_and(|acl| acl.rules.iter().any(|r| r.fingerprint.is_some()))
+            {
+                return Err(crate::transport::tls::invalid(
+                    "a mutual-TLS WebTransport listener backed by a trust store cannot apply a list that names a fingerprint: its handshake has no connection address to decide by, so the store would record a client the list forbids as waiting; pin the clients instead, or drop the fingerprint rules",
+                ));
+            }
             policy.acl = None;
         }
         let built = config.clone().policy(policy).server_naming(alpn)?;
@@ -773,6 +626,45 @@ mod verified {
                 tls.cert_resolver = resolver;
                 Ok(Arc::new(tls))
             }
+        }
+    }
+
+    /// Whether the policy's list permits the client that presented
+    /// `chain` (its own certificate first), from `source` to `local`:
+    /// the fingerprint rules of the list, decided after a handshake that
+    /// had no addresses to decide them by. `Ok` where there is no list.
+    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+    pub(crate) fn list_permits(
+        config: &TlsConfig,
+        source: SocketAddr,
+        local: SocketAddr,
+        chain: Option<&[Vec<u8>]>,
+    ) -> io::Result<()> {
+        let Some(acl) = &config.tls_policy().acl else {
+            return Ok(());
+        };
+        let denied = |why: String| io::Error::new(io::ErrorKind::PermissionDenied, why);
+        let Some(certificate) = chain.and_then(<[Vec<u8>]>::first) else {
+            return Err(denied(
+                "the client presented no certificate to decide the list by".to_string(),
+            ));
+        };
+        let mut acl = acl.clone();
+        acl.canonicalize_fingerprints(|index, text| {
+            text.parse::<PeerId>()
+                .map(|id| id.canonical())
+                .map_err(|_| format!("acl rule {index}: the fingerprint is not a peer id"))
+        })
+        .map_err(crate::transport::tls::invalid)?;
+        let decision = acl.decide_peer(source, local, &PeerId::of(certificate).canonical());
+        match decision.outcome {
+            Outcome::Permit => Ok(()),
+            _ => Err(denied(format!(
+                "the server's access control list refuses this client's certificate (rule {})",
+                decision
+                    .rule_index
+                    .map_or_else(|| "its default".to_string(), |i| i.to_string())
+            ))),
         }
     }
 }
