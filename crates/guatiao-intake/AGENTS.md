@@ -212,8 +212,8 @@ form_for(FormRef, SchemaRef, path, Alloc) -> Option<Result<Value, ValueError>>
                                    // assigned wins; else what the schema implies
 provider_form(Option<&Value>, Option<&Map>, Alloc) -> Result<Option<Value>, ValueError>
                                    // a provider's (schema, meta): meta["form"] wins; else what
-                                   // the schema implies; Ok(None) with neither; WrongKind when
-                                   // meta["form"] or the schema is not a map
+                                   // the schema implies; Ok(None) with neither; what is not a
+                                   // map is skipped, as reading the key by hand skips it
 // C: guatiao_intake_for_schema(schema, alloc, out)
 //    guatiao_intake_form_for(form, schema, path, alloc, out)
 //    guatiao_intake_provider_form(schema, meta, alloc, out)   -- either may be null or ABSENT

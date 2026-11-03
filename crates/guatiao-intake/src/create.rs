@@ -122,33 +122,34 @@ pub fn form_for(
 ///
 /// `schema` and `meta` are what the registry answers for the provider
 /// (`Provider::config_schema` and `Provider::meta`), either one absent.
-/// `Ok(None)` when it declares no form and takes no configuration:
-/// nothing to show. A declared form is not checked against the schema
-/// here; [`check`](crate::check) does that.
+/// **What is malformed is skipped, as a host reading it by hand skips
+/// it** (`meta.get(PROVIDER_FORM_KEY).and_then(FormRef::new)`): a value
+/// under the key that is not a map is no form, and the schema's implied
+/// one is answered; a schema that is not a map implies none. `Ok(None)`
+/// when that leaves nothing to show: no configuration and no form. A
+/// declared form is not checked against the schema here;
+/// [`check`](crate::check) does that.
 ///
 /// **What comes back is owned**, in `alloc`, whichever way it was
 /// reached.
 ///
 /// # Errors
 ///
-/// [`ValueError::WrongKind`] when what `meta` holds under the key is not
-/// a map, or when the schema is not one; an allocator's refusal as
-/// itself.
+/// An allocator's refusal, or a schema nested past the depth bound.
 pub fn provider_form(
     schema: Option<&Value>,
     meta: Option<&Map>,
     alloc: Alloc,
 ) -> Result<Option<Value>, ValueError> {
-    if let Some(declared) = meta.and_then(|m| m.get(crate::PROVIDER_FORM_KEY)) {
-        let form = FormRef::new(declared).ok_or(ValueError::WrongKind)?;
+    let declared = meta
+        .and_then(|m| m.get(crate::PROVIDER_FORM_KEY))
+        .and_then(FormRef::new);
+    if let Some(form) = declared {
         return form.as_value().clone_in(alloc).map(Some);
     }
-    match schema {
+    match schema.and_then(SchemaRef::new) {
         None => Ok(None),
-        Some(schema) => {
-            let schema = SchemaRef::new(schema).ok_or(ValueError::WrongKind)?;
-            for_schema(schema, alloc).map(Some)
-        }
+        Some(schema) => for_schema(schema, alloc).map(Some),
     }
 }
 

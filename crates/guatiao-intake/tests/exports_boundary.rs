@@ -452,15 +452,11 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
             });
         }),
         ("guatiao_intake_provider_form", || {
-            let (schema, meta) = (schema(), V::from(1));
-            // SAFETY: a `meta` that is not a map is the failure under test.
-            leaves_absent(
-                "provider_form",
-                Status::GUATIAO_ERR_WRONG_KIND,
-                |out| unsafe {
-                    guatiao_intake_provider_form(&schema, &meta, Alloc::rust().as_raw(), out)
-                },
-            );
+            let schema = schema();
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("provider_form", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_intake_provider_form(&schema, ptr::null(), ptr::null(), out)
+            });
         }),
         ("guatiao_intake_form_for", || {
             let (schema, form) = (schema(), form());
