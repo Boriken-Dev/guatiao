@@ -88,9 +88,12 @@ write now.
   `Ref.isSensitive`, `Ref.reveal` (`RevealedBytes` over the native or
   module memory, readable during the callback only) and `Value.wipe`,
   and `toString` hides one. A move between allocators overwrites the
-  block it leaves, whatever the target; a copy of a node that lives in
+  block it leaves, whatever the target, and a node in the wiping allocator
+  stays there through `into_local`, `into_alloc`, `make_local_in` and the
+  settle after a lent call; a copy of a node that lives in
   the wiping allocator is made there; tables built at run time honour
-  the mark; `#[sensitive]` refuses a method answering a bare `String`.
+  the mark; `#[sensitive]` refuses a method answering anything but a
+  `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a scalar or nothing.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and

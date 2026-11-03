@@ -186,8 +186,10 @@ let is_map = match value.tag()? {
 *Not released yet: under `[Unreleased]`.* `Secret<T>` overwrites what it
 holds when dropped, so it requires `T: Wipe` and is no longer `Copy`;
 `into_inner` requires `T: Default`. A kind's method marked
-`#[sensitive]` answers `Result<Secret<String>, ProviderError>` or a
-`Value`, not a bare `String`. `Wipe` is implemented for `String`,
+`#[sensitive]` answers a `Secret<_>` (`Result<Secret<String>,
+ProviderError>`), a `Value`, `Map`, `List` or `Text`, a scalar or
+nothing, never a `String`, an `Option<String>` or another type of its
+own: wrap it in `Secret`. `Wipe` is implemented for `String`,
 `Vec<u8>`, `Box<str>`, `Box<[u8]>`, the scalars, `Option<T>`, `Box<T>`
 and guatiao's `Value`, `Text`, `Buffer`, `List` and `Map`.
 

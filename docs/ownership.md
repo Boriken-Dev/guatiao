@@ -304,8 +304,8 @@ for the call, not handed over".
 
 | you have | you want | write | copies |
 | --- | --- | --- | --- |
-| a `Value` you own | it, local | `v.into_local()` | only when some container is not in `Alloc::rust()` |
-| a `Value` you own | it, in `alloc` | `v.into_alloc(alloc)?` | only when some container is not in `alloc` |
+| a `Value` you own | it, local | `v.into_local()` | only when some container is in neither `Alloc::rust()` nor `Alloc::wiping()` |
+| a `Value` you own | it, in `alloc` | `v.into_alloc(alloc)?` | only when some container is in neither `alloc` nor `Alloc::wiping()` |
 | a `&Value` | your own copy | `v.clone()`, `Value::from_value(v)` | always, into `Alloc::rust()`, or into `Alloc::wiping()` for a tree that lives there |
 | a `&Value` | a copy in `alloc` | `v.clone_in(alloc)?` | always |
 | a `&Value` | a copy beside it | `v.clone_in(v.alloc()?)?` | always |
@@ -316,8 +316,8 @@ for the call, not handed over".
 | a kind's answer | it, owned | the returned `Map`/`Value`/`List` | never when the provider builds through `<method>_in`, else once at the proxy |
 | a tree for a kind call | to keep it on the other side | pass `Map`/`Value`/`List` by value | never |
 | a tree for a kind call | to have it read | pass `&Map`/`&Value` | never |
-| a tree for a kind call | to have it changed in place | pass `&mut Map`/`&mut List`/`&mut Value` | never; what the callee built in another allocator is moved into the tree's once |
-| a tree you were lent or that was changed | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts not in `alloc` |
+| a tree for a kind call | to have it changed in place | pass `&mut Map`/`&mut List`/`&mut Value` | never; what the callee built in another allocator is moved into the tree's once, a secret left in `Alloc::wiping()` |
+| a tree you were lent or that was changed | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts in neither `alloc` nor `Alloc::wiping()` |
 | a secret | it, wiped when it goes | build it in `Alloc::wiping()`, or move it there with `into_alloc`/`make_local_in` | as above; what a move leaves behind is overwritten |
 | a sensitive kind slot's answer | it, wiped when it goes | `#[sensitive]` on the method: the proxy names `Alloc::wiping()` | as any answer |
 
@@ -341,10 +341,22 @@ releasing it, and a secret built there leaves nothing readable behind.
   before its own allocator frees it. A target this copy of the library
   does not recognise (another copy's wiping allocator, a C author's own)
   may still be keeping a secret.
+- **A secret stays where it lives**: `into_local`, `into_alloc`,
+  `make_local_in`, `guatiao_value_make_local` and the settle after a
+  call that was lent a tree `&mut` count this copy's wiping allocator as
+  home, so a node there stays there, is still wiped when freed, and a
+  second `into_local()` changes nothing. A kind's answer is the
+  exception (below).
 - **A copy of a secret stays one**: `clone()`, `clone_in` and
   `guatiao_value_clone` make a copy of a node that lives in the wiping
   allocator there, whatever allocator was asked for. A kind's answer is
-  the exception: it moves into exactly the carrier its caller named.
+  the exception (below).
+- **A kind's answer moves into exactly the carrier its caller named**, a
+  secret or not. A slot not marked `#[sensitive]` that answers a secret
+  hands its caller an unwiped copy that `is_sensitive` does not see: the
+  provider's block is overwritten, but the caller's is not wiped when
+  freed. Mark the slot `#[sensitive]` and its caller names the wiping
+  allocator, so the answer stays a secret.
 - **One copy of the library at a time**: `is_sensitive` and the
   `[sensitive]` placeholder know this copy's wiping allocator only, so a
   library printing what the host built in the host's can show it.
@@ -352,9 +364,11 @@ releasing it, and a secret built there leaves nothing readable behind.
   its proxy names it in the carrier unless the caller names another
   (`<method>_in`), and a provider building through `<method>_in`, or a C
   one building in the carrier, puts nothing anywhere else. Such a method
-  answers `Result<Secret<String>, ProviderError>` or a `Value`, never a
-  bare `String`, which its caller could not wipe; the attribute refuses
-  one.
+  answers a `Secret<_>` (`Result<Secret<String>, ProviderError>`), a
+  `Value`, `Map`, `List` or `Text`, a number, a `bool` or nothing, or a
+  `Result` of one; the attribute refuses any other type (`String`,
+  `Option<String>`, `Vec<u8>`, a struct of yours), which its caller could
+  not wipe.
 - `Secret<T>` wipes what it holds when dropped, and `Wipe::wipe` (C
   `guatiao_value_wipe`) overwrites a tree in any allocator.
 - What leaves guatiao's containers (a `String` a caller converts to, a
