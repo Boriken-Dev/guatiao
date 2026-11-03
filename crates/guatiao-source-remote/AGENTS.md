@@ -12,6 +12,13 @@ C), `guatiao-bridge` (kind descriptions and configuration files) and `guatiao-se
 coqui-peer-tls: coqui-net-acl at `=0.0.0-alpha.0`, coqui-peer and coqui-peer-tls at
 `=0.0.0-alpha.1`.
 
+**Not publishable yet.** `ws` and `webtransport` take their channels from
+[coqui-web](https://github.com/Boriken-Dev/coqui-web), a git dependency
+pinned to a revision, and a crate with a git dependency cannot be
+published: this crate waits for coqui-web's first release. coqui-web
+brings tungstenite and wtransport (and mio, tokio) with it; this crate
+names none of them.
+
 | feature | adds |
 | --- | --- |
 | `tcp` | TCP with no TLS: `transport::tcp`, the HMAC-SHA256 key proof (`hmac`, `sha2`, `getrandom`), admission by access control list (`coqui-net-acl`, re-exported as `acl`) |
@@ -20,8 +27,8 @@ coqui-peer-tls: coqui-net-acl at `=0.0.0-alpha.0`, coqui-peer and coqui-peer-tls
 | `quic` | `tls` and `transport::quic`: QUIC, at mutual TLS or no security, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
-| `ws` | `tcp` and `transport::ws`: WebSocket, what a browser opens (`tungstenite`); `ws://` with no TLS, `wss://` over `tls`'s |
-| `webtransport` | `quic` and `transport::webtransport`: WebTransport (HTTP/3 over QUIC), what a browser opens with the server's certificate pinned by its hash (`wtransport` over the same quinn) |
+| `ws` | `tcp` and `transport::ws`: WebSocket, what a browser opens (`coqui-web`, `url`); `ws://` with no TLS and on loopback alone, `wss://` over `tls`'s |
+| `webtransport` | `tls` and `transport::webtransport`: WebTransport (HTTP/3 over QUIC), what a browser opens with the server's certificate pinned by its hash (`coqui-web`, `url`); server TLS or no security, with datagrams |
 | `rdma` | `tcp` and `transport::rdma`: RDMA, experimental, Linux only; libibverbs opened at run time (`libloading`, `libc`, Linux only), so building needs no rdma-core |
 
 ## A host
@@ -107,8 +114,9 @@ once a minute per address, with how often it was held back (past 1024
 addresses in a minute, a new one goes unreported).
 `--security` is none on `--stdio`, `local://` and `shm://` (the only one
 they run) and mutual-tls on the network transports unless told; `ws://`
-and `rdma://` run none alone, `wss://` and `tls://` TLS alone,
-`quic://` and `https://` any. `https://` (WebTransport) presents
+(loopback alone) and `rdma://` run none alone, `wss://` and `tls://` TLS
+alone, `quic://` any, `https://` none or server-tls (mutual-tls starts
+and warns: no link completes, see WebTransport below). `https://` (WebTransport) presents
 certificates it makes, a new one every `ROTATE_EVERY`, unless
 `--identity` (at any security) or `--state-dir` names one; its second stderr line is
 `guatiao-remote-server: certificate hashes sha256:<hex> sha256:<hex>`
@@ -200,14 +208,14 @@ quic::{QuicConnect::new("host:port", &TlsConfig)?.timeout(d), QuicListen::bind(a
 quic::{QuicConnect::trusted("host:port")?, QuicListen::bind_trusted(addr, Acl)?, QuicListen::from_socket_trusted(UdpSocket, Acl)?}   // quic, no security
 quic::QuicListen::accept() -> io::Result<tcp::Accepted>    // the handshake runs on the first read
 webtransport::{WtConnect::new("https://host:port/path", &TlsConfig)?.timeout(d), WtConnect::trusted(url)?}   // webtransport
-webtransport::{WtListen::bind(addr, &TlsConfig)?, WtListen::bind_trusted(addr, Acl)?, from_socket(UdpSocket, &TlsConfig)?, from_socket_trusted(UdpSocket, Acl)?}
+webtransport::{WtListen::bind(addr, &TlsConfig)?, WtListen::bind_trusted(addr, Acl)?}
 webtransport::WtListen::{rotating(self, Duration)?, presenting(self, Identity)?, certificate_hashes()? -> Vec<PeerId>, accept() -> io::Result<tcp::Accepted>}
 webtransport::{ROTATE_EVERY, ROTATE_MAX}                   // six days; six days and 22 hours
 local::{LocalConnect::new(name), LocalListen::bind(name)?.accept()}   // local: a path on Unix, a pipe name on Windows
 shm::{ShmConnect::new(name), ShmListen::bind(name)?.accept(), RING}   // shm: the same names; the rings are mapped on the first read
-ws::{WsConnect::new("ws://host:port/path").timeout(d), WsListen::bind(addr, Acl)?}   // ws
-ws::{WsListen::from_listener(TcpListener, Acl), WsListen::accept() -> io::Result<tcp::Accepted>}
-ws::{WsConnect::new("wss://host:port/path").tls(&TlsConfig)?, WsListen::bind_tls(addr, &TlsConfig)?, WsListen::from_listener_tls(TcpListener, &TlsConfig)?}   // ws + tls
+ws::{WsConnect::new("ws://host:port/path").timeout(d), WsListen::bind(addr, Acl)?}   // ws, loopback alone
+ws::WsListen::accept() -> io::Result<tcp::Accepted>
+ws::{WsConnect::new("wss://host:port/path").tls(&TlsConfig)?, WsListen::bind_tls(addr, &TlsConfig)?}   // ws + tls
 rdma::{RdmaConnect::new("host:port").port(RdmaPort).timeout(d), RdmaListen::bind(addr, Acl)?.port(RdmaPort)}   // rdma
 rdma::{RdmaListen::from_listener(TcpListener, Acl)?, RdmaListen::accept() -> io::Result<tcp::Accepted>}   // set up on the first read
 rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices() -> io::Result<Vec<String>>, RING, SETUP_TIMEOUT}
@@ -221,11 +229,13 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`Accepted::Refused`). A rule naming a fingerprint never matches a peer
   presenting no certificate (no security, server TLS: `decide_anonymous`,
   `Policy::admits_anonymous`); at mutual TLS coqui-peer-tls decides it as
-  the client presents its certificate, before pins or the store (TLS
-  through the handshake's addresses, QUIC and WebTransport through a
+  the client presents its certificate, before pins or the store (TLS and
+  `wss://` through the handshake's addresses, QUIC through a
   configuration built per connection by coqui-peer-tls's
   `ServerConfigs::for_connection`, which shares the listener's sessions
-  and keeps the refusal for the server's words). A listener whose list
+  and keeps the refusal for the server's words). `WsListen` and `WtListen`
+  decide a source's address in coqui-web's admission, before any handshake,
+  and report the sources it turned away as `Accepted::Refused`. A listener whose list
   names something that is not a SHA-256 fingerprint is refused as it is
   made.
 - **Server TLS** (`TlsConfig::server_tls`): a server presents its
@@ -290,22 +300,39 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   certificate it generated and nobody checks either: the list decides
   by address alone, the link's key proof decides the link, and
   `peer_id()` answers `None`.
-- **WebTransport** (`webtransport`): QUIC's TLS, admission, Retry and
-  words, under ALPN `h3`, every session taken whatever its path; one
-  bidirectional stream per session carries the frames as over QUIC, and
-  `datagrams()` are HTTP/3 datagrams. At no security the client
-  presents no certificate and a native one checks none. A browser takes
+- **WebTransport** (`webtransport`, through coqui-web): the session's
+  TLS from the same `TlsConfig` (identity, pins, trust store, roots,
+  policy) under ALPN `h3`, at server TLS or no security; the policy's
+  list decides a source's address in coqui-web's admission, after a
+  Retry proved it, and a source it denies sees a connection that does not
+  open, as from an unreachable server. One bidirectional stream per
+  session carries the frames as over QUIC (coqui-web's own `u32` length
+  framing, the same bytes), and `datagrams()` are HTTP/3 datagrams. At no
+  security the client presents no certificate and a native one checks
+  none. **Mutual TLS is not offered**: coqui-web does not report the
+  certificate a client presented, so `WtConnect::new` refuses a mutual
+  configuration (`Unsupported`) and a mutual `WtListen` (the server
+  binary starts one, and says so) asks every client for a certificate
+  and refuses one that presents none or is not pinned, but a link finds
+  no peer to name and is refused at the secure level. A browser takes
   a certificate pinned by hash only when it is valid for at most 14
   days: `rotating(every)` presents certificates it makes (each valid
   two periods and two hours, the next made a period ahead, a fresh one
   after an idle period), `certificate_hashes()` names the one presented
   and the next. A server's handshake, HTTP/3 session and stream all run
-  on the first read; a client's in `connect`. Chrome 155 refuses a
+  on the first read, on a thread of its own that a `closer` (or
+  `shutdown`) before it is through abandons at once (`ConnectionAborted`;
+  the thread closes what it opens too late, within coqui-web's handshake
+  bound); a client's in `connect`. Chrome 155 refuses a
   pinned certificate with no X.509v3 extension: the ones `rotating`
   makes carry a subjectAltName, a subject key identifier and
   basicConstraints, and one given to `presenting` needs at least one
-  extension.
-  Datagrams (`FrameRead::datagrams`, `Link::datagrams`) are
+  extension. A client's own failure is a failure of the dial: a refused
+  certificate reads as the verifier's words, a server that did not
+  answer as `TimedOut`, a QUIC handshake that did not finish as
+  `ConnectionRefused` (so `GONE`).
+- **QUIC's datagrams, runtime and ends.** Datagrams (`FrameRead::datagrams`,
+  `Link::datagrams`, over QUIC and WebTransport) are
   the payload alone, one QUIC DATAGRAM frame each, lost or whole; before
   the server's handshake `send` is `NotConnected` and `max_size` `None`;
   past `max_size` `InvalidInput`. quinn runs on a 2-thread tokio runtime
@@ -346,26 +373,36 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   closing its end ends that read. **Shared memory** gives the bound to
   the local connection it waits on for the peer's bytes, and its closer
   is that connection's too.
-- **WebSocket** (`ws`): a frame's body is one binary message, with no
-  length in front. `WsListen` admits peers by its access control list as `TcpListen` does;
-  `accept` reads nothing, and a connection answers the HTTP upgrade on
-  its first read, so a client that connects and stalls holds only the
-  thread serving it; a write before the upgrade is refused
-  (`NotConnected`). Any path is accepted; no subprotocol, no extension,
-  the `Origin` header unread (the key proof is the gate). A text
-  message, an unmasked client frame or a message over `max` is an error;
-  a close or a dropped connection ends the reads as a stream's end of
-  file does (tungstenite does not tell a drop inside a message from one
-  between).
-  The reader answers a ping or a close only when the writer is not
-  writing, else on a later read. A frame is copied into a message on its
-  way out. **`wss://`** (with `tls`): `WsConnect::tls` and
-  `WsListen::bind_tls` run the TLS of `tls://` (identity, pins or store,
-  policy and its `acl`, refusals as `BAD_VALUE`) under the upgrade,
-  naming ALPN `http/1.1` and requiring none (a browser offers it or
-  nothing); a server's TLS handshake and upgrade run on its first read.
-  A `wss://` URL without TLS given is `Unsupported`; `ws://` with it,
-  `InvalidInput`.
+- **WebSocket** (`ws`, through coqui-web): a frame's body is one binary
+  message, with no length in front (coqui-web's binary frames). `WsListen`
+  admits peers by its access control list as `TcpListen` does, by address,
+  in coqui-web's admission, and reports the sources it turned away as
+  `Accepted::Refused`; `accept` reads nothing, and a connection answers
+  the HTTP upgrade on its first read, on a thread of its own that a
+  `closer` before it is through abandons at once, so a client that
+  connects and stalls holds only that thread, for coqui-web's handshake
+  bound (10 s); a write before the upgrade is refused (`NotConnected`).
+  **`ws://` is for this machine alone**: coqui-web refuses to listen on,
+  or dial, a plain WebSocket beyond loopback (`PermissionDenied`, naming
+  `wss://`). Any path is accepted, the `Origin` header unread (the key
+  proof is the gate); a text message or a message over `max` ends the
+  channel (`InvalidData`); a close or a dropped connection ends the reads
+  as a stream's end of file does. A message past the largest the link's
+  reader last allowed is refused on the way out too (`InvalidInput`):
+  `set_max_message` bounds both ways. **`wss://`** (with `tls`):
+  `WsConnect::tls` and `WsListen::bind_tls` run the TLS of `tls://`
+  (identity, pins or store, roots, policy and its `acl`, refusals as
+  `BAD_VALUE`) under the upgrade, naming ALPN `http/1.1` and requiring
+  none (a browser offers it or nothing). At mutual TLS the listener's
+  handshake of a connection runs alone on its thread, and a client
+  verifier (`web::Proving`) notes the fingerprint of the certificate the
+  client proved it holds the key of, in a thread-local the thread reads
+  after `Pending::handshake` returns, because coqui-web reports no peer
+  certificate; the list reads the connection's addresses from
+  coqui-peer-tls's `with_addresses` scope around that call. A client's
+  server fingerprint is noted the same way by a per-connection server
+  verifier. A `wss://` URL without TLS given is `Unsupported`; `ws://`
+  with it, `InvalidInput`.
 - **Shared memory**: the client creates the file (`/dev/shm`, else the
   temporary directory; `0600`; removed once mapped on Unix, deleted with
   its last handle on Windows), sends its path once over the local
@@ -421,7 +458,8 @@ a TLS security in a build without `tls`. At server TLS a client names
 `pins`, a store or `roots`, and needs no identity.
 `ws://`, `rdma://`, `local://`, `shm://` and a child run `none` alone,
 `wss://` and `tls://` TLS alone; another is `BAD_VALUE` naming the fix.
-`tcp://`, `quic://` and `https://` run any.
+`tcp://` and `quic://` run any; `https://` none or server-tls (a
+mutual-TLS `https://` connect is `BAD_VALUE` naming the fix).
 `config::{security_of, Security::default_for, Security::trust, acl_of,
 policy_of, roots_of, tls_config_of, token_in}` read those values.
 

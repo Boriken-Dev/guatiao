@@ -1548,6 +1548,38 @@ write now.
   import is not looked for, and a name holding a directory or a drive is
   never looked for. What was mapped is let go with the file. A refusal
   names each import found nowhere.
+- **guatiao-source-remote: WebSocket and WebTransport run on
+  [coqui-web](https://github.com/Boriken-Dev/coqui-web).** Its channels
+  replace the tungstenite and wtransport code in `transport::ws` and
+  `transport::webtransport`, and in `examples/wire_over_webtransport`; the
+  remote protocol, the frames on the wire and the Dart and TypeScript
+  clients are unchanged. **coqui-web is a git dependency, pinned to a
+  revision, until it is released, so `guatiao-source-remote` cannot be
+  published until then.** What changes for a user of the crate:
+  - `ws://` listens and dials on this machine alone (loopback): coqui-web
+    carries no plain WebSocket past it, and a listener on another address
+    or a connect to one is `PermissionDenied` naming `wss://`.
+  - `https://` (WebTransport) runs server TLS and no security. Mutual TLS
+    is not offered there, because coqui-web does not report the
+    certificate a client presented: `WtConnect::new` refuses a mutual-TLS
+    configuration (`BAD_VALUE` in a source file), and a mutual-TLS
+    `WtListen` asks every client for a certificate and refuses one with
+    none or one it does not pin, but no link completes at the secure level
+    (the server binary starts one and says so). Use `quic://` or `tls://`
+    for mutual TLS from a native peer. `wss://` keeps mutual TLS.
+  - A source an access control list denies sees a WebTransport connection
+    that does not open, no longer a refusal (`GONE` rather than
+    `BAD_VALUE`).
+  - `WsListen::from_listener`, `from_listener_tls`, `WtListen::from_socket`
+    and `from_socket_trusted` are gone: coqui-web binds the address itself.
+  - The `webtransport` feature no longer enables `quic`, and `ws` and
+    `webtransport` bring coqui-web (with tungstenite, wtransport, mio and
+    tokio) instead of tungstenite and wtransport directly.
+  - `examples/wire_over_webtransport`: the page opens one bidirectional
+    stream and says hello on it, and the server answers on it, where the
+    server opened a unidirectional stream before; the server listens on
+    IPv4 unless `WIRE_BIND` names an address.
+
 - **guatiao-source-remote: a WebTransport client told `certificate_unknown`
   as its link's first read arrives** is told the server does not trust it,
   in the words a QUIC client hears, rather than that the server ended the
