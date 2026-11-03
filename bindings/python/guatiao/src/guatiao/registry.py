@@ -25,9 +25,11 @@ class ImportSearch(enum.IntEnum):
     #: directory and in directories the process added
     #: (`os.add_dll_directory`); not the current directory or `PATH`.
     LIBRARY = 0
-    #: `LIBRARY`'s directories first; a file they leave an import missing
-    #: for is opened again with Windows' standard search from its own
-    #: directory: the system directories, the current directory and `PATH`.
+    #: `LIBRARY`'s directories first; a library the file imports itself
+    #: that they leave missing is then looked for in a source file's
+    #: `import_dirs`, the Windows directory, the current directory and
+    #: `PATH`, and mapped from there. Everything else it imports is found
+    #: as under `LIBRARY`.
     PATH = 1
 
 

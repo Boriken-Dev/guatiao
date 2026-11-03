@@ -794,6 +794,20 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
         assert_eq!(registry.import_search(), ImportSearch::Path);
     }
 
+    {
+        // MIG-IMPORTDIRS-BEGIN
+        use guatiao::{List, Map};
+
+        let mut config = Map::new();
+        let mut dirs = List::new();
+        // sys.base_prefix: the directory holding python3.dll.
+        dirs.push(r"C:\Python314");
+        // The registry's: the source never sees it.
+        config.set("import_dirs", dirs);
+        // MIG-IMPORTDIRS-END
+        assert!(config.get("import_dirs").is_some());
+    }
+
     for (n, name) in [
         "MIG-UNLOAD",
         "MIG-VIEW",
@@ -803,6 +817,7 @@ fn migrating_the_loader_and_handles() -> Result<(), Box<dyn core::error::Error>>
         "MIG-LOADED",
         "MIG-KEYFIELDS",
         "MIG-IMPORT",
+        "MIG-IMPORTDIRS",
     ]
     .into_iter()
     .enumerate()
@@ -848,7 +863,7 @@ fn migrating_serde_and_intake() -> Result<(), Box<dyn core::error::Error>> {
     // MIG-SPLIT-END
 
     for (n, name) in ["MIG-SYNTAX", "MIG-SPLIT"].into_iter().enumerate() {
-        assert_eq!(rust_block(MIGRATING, 23 + n), marked(name), "{name}");
+        assert_eq!(rust_block(MIGRATING, 24 + n), marked(name), "{name}");
     }
     Ok(())
 }

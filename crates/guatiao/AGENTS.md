@@ -1316,10 +1316,11 @@ reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
 reg.set_priority(id, 10) / reg.priority(id)
-reg.set_import_search(ImportSearch::Path)  // Windows: what files opened from now on import may
-                                           // also come from the current directory and PATH
-                                           // (default Library: beside the file, beside the host,
-                                           // System32, AddDllDirectory dirs); ignored elsewhere
+reg.set_import_search(ImportSearch::Path)  // Windows: what files opened from now on import and
+                                           // is missing may also come from the current directory
+                                           // and PATH (default Library: beside the file, beside
+                                           // the host, System32, AddDllDirectory dirs, a source
+                                           // file's import_dirs); ignored elsewhere
 reg.import_search()                        // ImportSearch
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
 reg.providers_of("acme_net_pve")           // every loaded version of one id (>1 only under %id@%version)
@@ -2058,13 +2059,17 @@ provider map carries its `priority`.
 On Windows a file the registry opens is opened by its path, and what it
 imports is looked for beside it, beside the host's executable, in
 System32 and in `AddDllDirectory` directories (`ImportSearch::Library`,
-the default): never the current directory or `PATH`. `ImportSearch::Path`
-opens a file the default leaves an import missing for again with
-Windows' standard search from its directory (current directory and
-`PATH` included), as a non-Python host adding the Python bridge
-(`python3.dll`) needs. A module already loaded answers an import of its
-name under either. A refusal's reason carries the system's words and,
-under the default, where it did not look. Elsewhere the setting is
+the default): never the current directory or `PATH`. A file refused for
+a missing import has its import table read: each library it imports
+itself that none of those places holds is looked for in a source file's
+`import_dirs` and, under `ImportSearch::Path`, the Windows directory, the
+current directory and `PATH`, in that order; each found is mapped by its
+full path (with what it forwards to beside it, as `python3.dll` forwards
+to `python3XX.dll`), then the file is opened again with the narrow
+search, so everything else it imports comes from where the default finds
+it. A missing import of an import is not looked for. A module already
+loaded answers an import of its name under either. A refusal's reason
+carries the system's words and names each import found nowhere. Elsewhere the setting is
 ignored: on Linux the file's `RUNPATH` (`$ORIGIN`) and `LD_LIBRARY_PATH`
 decide. In C: `guatiao_registry_set_import_search(reg,
 GUATIAO_IMPORT_SEARCH_LIBRARY | GUATIAO_IMPORT_SEARCH_PATH)` (any other
@@ -2306,8 +2311,13 @@ guatiao_source_info **out, guatiao_provider_error *err)` (`SOURCE_SYMBOL`,
 `SourceFn`) and declares `source=<what it serves>` in `guatiao_declares`:
 a scan reports it as `Skipped::Source { serves }` and never loads it.
 `add_source_file` maps it, checks the table's slots lie in its code, and
-**never unmaps it**. `SourceError`: `Open`, `NotASource`, `Refused {
-status, message }`, `Malformed`, `Duplicate`; `.status()` is what it
+**never unmaps it**. The configuration's `import_dirs` (a list of
+directories) is the registry's, taken out before the source sees the
+rest: where, on Windows, a library the file imports itself and the import
+search leaves missing is looked for (see "Where a loaded file's imports
+are found"); ignored elsewhere. `SourceError`: `Open`, `NotASource`,
+`Refused { status, message }`, `Malformed`, `Duplicate`, `Config { path,
+key, why }` (`import_dirs` not a list of text); `.status()` is what it
 crosses C as.
 
 A **watched directory**: each refresh loads a library file that appeared
@@ -2320,8 +2330,9 @@ delete a mapped image but moves one.
 In C: `guatiao_registry_add_source(reg, name, &table, &err)`,
 `guatiao_registry_add_source_file(reg, path, &config, &err)` (`err`
 written empty first; `NOT_FOUND` unmappable, `WRONG_KIND` no
-`guatiao_source` or a config that is not a map, `BAD_VALUE` refused table
-or a name already added, else the source's own status),
+`guatiao_source` or a config that is not a map, `BAD_VALUE` refused table,
+a name already added or `import_dirs` not a list of text, else the
+source's own status),
 `guatiao_registry_watch_dir(reg, dir, rules)`, and
 `guatiao_registry_refresh(reg, &alloc, &answer)`, answering `{"loaded":
 [{"source", "id", "stamp", "key"}…], "retired": […], "skipped": [{"source",

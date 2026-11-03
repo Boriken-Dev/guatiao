@@ -19,10 +19,11 @@ import { Borrowed, Ref, Value, adopt } from './value.js';
  * Where Windows finds what a file a registry opens imports. `'library'`:
  * beside the file, beside the host's executable and in the system
  * directory, not the current directory or `PATH` (the default). `'path'`:
- * those first; a file they leave an import missing for is opened again
- * with Windows' standard search from its own directory (the system
- * directories, the current directory and `PATH`), as a host adding a
- * Python bridge needs.
+ * those first; a library the file imports itself that they leave missing
+ * is then looked for in a source file's `import_dirs`, the Windows
+ * directory, the current directory and `PATH`, and mapped from there, as a
+ * host adding a Python bridge with the Python installation on `PATH`
+ * needs. Everything else it imports is found as under `'library'`.
  */
 export type ImportSearch = 'library' | 'path';
 

@@ -283,10 +283,12 @@ const (
 	// executable, in the system directory and in directories the process
 	// added; not the current directory or PATH. The default.
 	ImportSearchLibrary ImportSearch = 0
-	// ImportSearchPath looks there first; a file left with an import missing
-	// is opened again with Windows' standard search from its own directory
-	// (the system directories, the current directory and PATH), as a Go
-	// host adding a Python bridge needs.
+	// ImportSearchPath looks there first; a library the file imports itself
+	// that is still missing is then looked for in a source file's
+	// import_dirs, the Windows directory, the current directory and PATH,
+	// and mapped from there, as a Go host adding a Python bridge with the
+	// Python installation on PATH needs. Everything else it imports is
+	// found as under ImportSearchLibrary.
 	ImportSearchPath ImportSearch = 1
 )
 

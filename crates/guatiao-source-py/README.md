@@ -45,8 +45,17 @@ decides where one build runs:
 | Linux | `libpython3.X.so` of the Python it was built with | that minor version |
 | macOS | that Python's framework or `libpython3.X.dylib` | that minor version |
 
-On Windows a host that is not Python finds `python3.dll` through `PATH`:
-put the directory holding it (`sys.base_prefix`) there.
+On Windows a host that is not Python names the directory holding
+`python3.dll` (`sys.base_prefix`) in the configuration's `import_dirs`,
+which the registry takes for itself; or it puts that directory on `PATH`
+and sets its registry's import search to `path`.
+
+The interpreter it starts takes nothing from the environment unless told
+to: `isolation` is `shipped` (the default: a `._pth` or `pyvenv.cfg`
+shipped beside the host's executable, and the configuration's `home`),
+`inherit` (`PYTHONPATH`, `PYTHONHOME` and user site-packages as well, as
+a `python` started there would) or `isolated` (only `home` and `paths`).
+A Python host's own interpreter is used as it is.
 
 ## Quick start
 
@@ -91,7 +100,7 @@ holds two libraries and the commands that serve them to the example hosts.
 | Item | What it is |
 | --- | --- |
 | `guatiao_source` | the entry point a host's `add_source_file` calls; answers a `guatiao_source_info` |
-| configuration | `{"dirs": [..], "manifests": [..], "paths": [..]}` |
+| configuration | `{"dirs": [..], "manifests": [..], "paths": [..], "isolation": "shipped", "home": ".."}`, and the registry's `import_dirs` |
 | `*.guatiao` | one Python library: `type = "python"`, `module`, `kinds`, `paths`, optional `version` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-source-py/AGENTS.md)
@@ -107,7 +116,10 @@ GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-source-py
 
 The crate is a workspace of its own, so no other build in the repository
 needs a Python to link against. Its tests add the bridge from a Rust host
-and a C host; the Python suite (`bindings/python/guatiao/tests/test_bridge.py`)
+and a C host, and start it under each `isolation` in a process of its own
+with files and variables planted (`tests/isolation.rs`, using the Python
+whose `python3.dll` is first on `PATH` on Windows, `PYO3_PYTHON` or
+`python3` elsewhere); the Python suite (`bindings/python/guatiao/tests/test_bridge.py`)
 adds it from Python and edits a library under a refresh.
 
 ## License

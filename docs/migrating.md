@@ -768,6 +768,30 @@ setting ([where a library's imports are found](index.md#where-a-librarys-imports
 Shipping what a plugin imports beside it needs nothing. Linux and macOS
 are unchanged.
 
+### `path` maps only what the file itself imports and is missing
+
+Under `path`, a file the default search refuses is no longer opened again
+with Windows' standard search. Each library the file imports itself and
+the default leaves missing is found in the current directory or on `PATH`
+and mapped from there; everything else comes from where the default
+finds it. A plugin whose own import is beside it but whose import's
+import is only on `PATH` is refused: ship that one beside it too. A
+source file whose imports are in one directory, such as the Python
+bridge's, can name it in its configuration and keep the default search:
+
+```rust
+use guatiao::{List, Map};
+
+let mut config = Map::new();
+let mut dirs = List::new();
+// sys.base_prefix: the directory holding python3.dll.
+dirs.push(r"C:\Python314");
+// The registry's: the source never sees it.
+config.set("import_dirs", dirs);
+```
+
+The source no longer receives an `import_dirs` key of its configuration.
+
 ## guatiao-serde
 
 ### Reading a JSON number exactly is its own feature
@@ -1127,6 +1151,15 @@ call guatiao_intake_use_library(dir)
 
 ## Python and Dart
 
+### Python: a kind's slot named `close` is the slot
+
+A kind may have a slot named `close`, and `python -m guatiao.kinds`
+writes it as it is. On a `kinds.Object` whose kind has one, `close()`
+calls the slot; end the object with `destroy()` or a `with` block. An
+object whose kind has no `close` slot closes as before. A module written
+with a renamed slot (`close_`) keeps working; writing it again names the
+slot `close`.
+
 ### `create` checks the configuration first
 
 `Registry.create` validates the configuration against the provider's
@@ -1209,6 +1242,15 @@ is its C name in camelCase (`greet_into` is `greetInto`), as the
 hand-written descriptions in this repository already spelled them.
 
 ## Sources
+
+### The Python bridge's interpreter takes nothing from the environment
+
+The interpreter guatiao-source-py starts in a host that is not Python no
+longer reads `PYTHONPATH`, `PYTHONHOME`, the other `PYTHON*` variables or
+user site-packages. Put what a library needs on the configuration's
+`paths`, name the installation in `home`, or ship a `._pth` or
+`pyvenv.cfg` beside the host's executable; `"isolation": "inherit"` in
+the configuration starts it as before. A Python host is unchanged.
 
 ### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao`
 
