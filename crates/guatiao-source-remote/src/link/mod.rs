@@ -818,7 +818,7 @@ impl Link {
 
     fn start(
         reader: Box<dyn FrameRead>,
-        writer: Box<dyn FrameWrite>,
+        mut writer: Box<dyn FrameWrite>,
         closer: Option<Box<dyn Fn() + Send + Sync>>,
         peer: String,
         options: &LinkOptions,
@@ -827,6 +827,7 @@ impl Link {
     ) -> Link {
         let peer_id = reader.peer_id();
         let datagrams = reader.datagrams();
+        writer.set_max_frame(theirs.max_frame);
         let gate = Gate::new(writer);
         let buffers = Arc::clone(gate.buffers());
         // The peer's calls, and the large buffers they leave, are this

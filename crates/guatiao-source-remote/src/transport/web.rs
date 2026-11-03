@@ -19,6 +19,7 @@ use core::time::Duration;
 use std::io;
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
+use std::time::Instant;
 
 use coqui_web::{Channel, Failure};
 
@@ -75,7 +76,24 @@ pub(super) struct Shared {
     datagrams: bool,
     /// Wakes the read that waits for a server's handshake, which coqui-web
     /// bounds but cannot interrupt, when the link ends first.
+    ///
+    /// Also the lock `open` and `end` order themselves by: each sets its
+    /// own flag and reads the other's under it, so one of them sees the
+    /// other.
     waking: Mutex<Option<mpsc::Sender<Opened>>>,
+    /// What the channel's one message bound is made of.
+    bounds: Mutex<Bounds>,
+}
+
+/// coqui-web bounds a message by one number, both ways. A link has two:
+/// what its reader allows, and what its peer takes. The channel gets the
+/// larger, and the reader and the writer each keep their own check.
+#[derive(Default)]
+struct Bounds {
+    read: usize,
+    send: usize,
+    /// What the channel was last told.
+    applied: usize,
 }
 
 fn aborted() -> io::Error {
@@ -94,6 +112,7 @@ impl Shared {
             encrypted,
             datagrams,
             waking: Mutex::new(None),
+            bounds: Mutex::new(Bounds::default()),
         })
     }
 
@@ -103,25 +122,65 @@ impl Shared {
         if let Some(peer) = peer {
             let _ = self.peer.set(peer);
         }
-        let _ = self.channel.set(Arc::clone(&channel));
-        if self.ended.load(Ordering::Acquire) {
+        let ended = {
+            let _order = lock(&self.waking);
+            let _ = self.channel.set(Arc::clone(&channel));
+            self.ended.load(Ordering::SeqCst)
+        };
+        self.apply_bounds(&channel);
+        if ended {
             channel.close();
         }
     }
 
-    /// Ends the channel both ways, however far it has come.
-    fn end(&self) {
-        self.ended.store(true, Ordering::Release);
-        if let Some(waking) = lock(&self.waking).take() {
-            let _ = waking.send(Err(aborted()));
+    /// Tells the channel the larger of the read and send bounds, when it
+    /// has changed.
+    fn bound(&self, read: Option<usize>, send: Option<usize>) {
+        {
+            let mut bounds = lock(&self.bounds);
+            if let Some(read) = read {
+                bounds.read = read;
+            }
+            if let Some(send) = send {
+                bounds.send = send;
+            }
         }
         if let Some(channel) = self.channel.get() {
+            self.apply_bounds(channel);
+        }
+    }
+
+    fn apply_bounds(&self, channel: &Arc<dyn Channel>) {
+        let mut bounds = lock(&self.bounds);
+        let wanted = bounds.read.max(bounds.send);
+        if wanted != 0 && wanted != bounds.applied {
+            channel.set_max_message(wanted);
+            bounds.applied = wanted;
+        }
+    }
+
+    /// The largest frame the peer takes.
+    fn send_max(&self) -> usize {
+        lock(&self.bounds).send
+    }
+
+    /// Ends the channel both ways, however far it has come.
+    fn end(&self) {
+        let (waking, channel) = {
+            let mut order = lock(&self.waking);
+            self.ended.store(true, Ordering::SeqCst);
+            (order.take(), self.channel.get().cloned())
+        };
+        if let Some(waking) = waking {
+            let _ = waking.send(Err(aborted()));
+        }
+        if let Some(channel) = channel {
             channel.close();
         }
     }
 
     fn ended(&self) -> bool {
-        self.ended.load(Ordering::Acquire)
+        self.ended.load(Ordering::SeqCst)
     }
 
     fn channel(&self) -> io::Result<&Arc<dyn Channel>> {
@@ -185,7 +244,7 @@ impl FrameRead for Reader {
             return Ok(false);
         };
         if self.max != max {
-            channel.set_max_message(max);
+            self.shared.bound(Some(max), None);
             self.max = max;
         }
         match channel.receive(self.timeout) {
@@ -235,6 +294,8 @@ impl FrameRead for Reader {
 
 struct Writer {
     shared: Arc<Shared>,
+    /// How long a write waits for a peer slow to take what is queued.
+    timeout: Option<Duration>,
 }
 
 /// The body of a frame the link built: the frame without its length.
@@ -247,14 +308,47 @@ fn body(frame: &[u8]) -> io::Result<&[u8]> {
 impl Writer {
     fn send(&self, message: &[u8]) -> io::Result<()> {
         let channel = self.shared.channel()?;
-        channel.send(message).map_err(|failure| match failure {
-            Failure::Protocol => io::Error::new(
+        let send_max = self.shared.send_max();
+        if send_max != 0 && message.len() > send_max {
+            return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "a message the channel does not carry: empty, or over its bound",
-            ),
-            _ if self.shared.ended() => io::Error::new(io::ErrorKind::BrokenPipe, "the link ended"),
-            other => io_error(other),
-        })
+                format!(
+                    "a frame of {} bytes, past the {send_max} the peer takes",
+                    message.len()
+                ),
+            ));
+        }
+        // coqui-web queues a message and answers `NoProgress` when the
+        // queue is full instead of waiting: the peer is slow, not gone, so
+        // wait for room as a stream's write does, for the link's write
+        // timeout.
+        let until = self.timeout.map(|t| Instant::now() + t);
+        let mut pause = Duration::from_millis(1);
+        loop {
+            match channel.send(message) {
+                Ok(()) => return Ok(()),
+                Err(Failure::NoProgress) if !self.shared.ended() => {
+                    if until.is_some_and(|until| Instant::now() >= until) {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "the peer took nothing of the queued frames within the write timeout",
+                        ));
+                    }
+                    thread::sleep(pause);
+                    pause = (pause * 2).min(Duration::from_millis(20));
+                }
+                Err(Failure::Protocol) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "a message the channel does not carry: empty, or over its bound",
+                    ));
+                }
+                Err(_) if self.shared.ended() => {
+                    return Err(io::Error::new(io::ErrorKind::BrokenPipe, "the link ended"));
+                }
+                Err(other) => return Err(io_error(other)),
+            }
+        }
     }
 }
 
@@ -273,6 +367,15 @@ impl FrameWrite for Writer {
 
     fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
         frames.iter().try_for_each(|frame| self.send(body(frame)?))
+    }
+
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
+        self.timeout = timeout;
+        Ok(())
+    }
+
+    fn set_max_frame(&mut self, bytes: usize) {
+        self.shared.bound(None, Some(bytes));
     }
 
     fn shutdown(&mut self) {
@@ -338,7 +441,10 @@ pub(super) fn connection(shared: Arc<Shared>, open: Option<Open>, peer: String) 
             timeout: None,
             max: 0,
         }),
-        writer: Box::new(Writer { shared }),
+        writer: Box::new(Writer {
+            shared,
+            timeout: None,
+        }),
         peer,
         closer: Some(Box::new(move || closing.end())),
     }
