@@ -394,11 +394,16 @@ def test_a_providers_form_is_its_own_else_the_one_its_schema_implies():
 
     assert intake.provider_form(None, None) is None
     assert intake.provider_form(None, {"other": 1}) is None
-    with pytest.raises(WrongKind):
-        intake.provider_form(schema, {intake.PROVIDER_FORM_KEY: ["not", "a", "form"]})
+
+    # What is not a form is skipped, as reading the key by hand skips it.
+    form = intake.provider_form(schema, {intake.PROVIDER_FORM_KEY: ["not", "a", "form"]})
+    assert form is not None
+    with form:
+        assert form.to_python() == made
+    assert intake.provider_form(None, {intake.PROVIDER_FORM_KEY: "a form"}) is None
 
 
-def test_every_listed_provider_has_its_form_without_being_built():
+def test_a_catalog_entry_gives_each_provider_its_form():
     from guatiao.registry import Registry
 
     directory = os.environ["GUATIAO_LIBRARY"]
