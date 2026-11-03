@@ -8,9 +8,13 @@
 
 #![cfg(all(feature = "ws", feature = "tls"))]
 
+extern crate alloc;
+
 mod common;
 
+use alloc::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use greeter_kind::Greeter;
 use guatiao::library::Registry;
@@ -18,7 +22,7 @@ use guatiao::value::convert::TryAsRef;
 use guatiao_source_remote::transport::tcp::Accepted;
 use guatiao_source_remote::transport::tls::{Identity, TlsConfig, TrustStore};
 use guatiao_source_remote::transport::ws::{WsConnect, WsListen};
-use guatiao_source_remote::{LinkOptions, RemoteSource, Server, Trust};
+use guatiao_source_remote::{Link, LinkOptions, RemoteSource, Server, Trust};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -31,19 +35,32 @@ fn scratch(name: &str) -> PathBuf {
 
 /// A `wss://` server on loopback as `config` says; its address.
 fn listen(config: &TlsConfig, server: Server) -> String {
+    listen_keeping(config, server).0
+}
+
+/// The links a server has taken, newest last.
+type Links = Arc<Mutex<Vec<Arc<Link>>>>;
+
+/// As [`listen`], and the links the server takes.
+fn listen_keeping(config: &TlsConfig, server: Server) -> (String, Links) {
     let listener = WsListen::bind_tls("127.0.0.1:0", config).unwrap();
     let address = listener.local_addr().unwrap().to_string();
+    let links: Links = Arc::default();
+    let kept = Arc::clone(&links);
     std::thread::spawn(move || {
         while let Ok(accepted) = listener.accept() {
             if let Accepted::Connection(conn) = accepted {
                 let server = server.clone();
+                let kept = Arc::clone(&kept);
                 std::thread::spawn(move || {
-                    let _ = server.serve(conn);
+                    if let Ok(link) = server.serve(conn) {
+                        kept.lock().unwrap().push(link);
+                    }
                 });
             }
         }
     });
-    address
+    (address, links)
 }
 
 fn secure_server() -> Server {
@@ -87,8 +104,9 @@ fn greeting(registry: &Registry) -> String {
 fn pinned_ends_link_over_wss_and_each_knows_the_other() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
     let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
+    let client_fingerprint = client_id.fingerprint().canonical();
     let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
-    let address = listen(&server, secure_server());
+    let (address, served) = listen_keeping(&server, secure_server());
     let source = source(&address, &client);
     let (registry, refused) = refresh(&source);
     assert!(refused.is_empty(), "{refused:?}");
@@ -100,6 +118,18 @@ fn pinned_ends_link_over_wss_and_each_knows_the_other() {
         Some(server_id.fingerprint().canonical().as_str())
     );
     assert!(link.peer().starts_with("wss 127.0.0.1:"), "{}", link.peer());
+    // The server names the client by the certificate it proved: the point
+    // of noting it on the handshake's own thread.
+    common::eventually("the server holds the link", || {
+        !served.lock().unwrap().is_empty()
+    });
+    let named: Vec<_> = served
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|l| l.peer_id().map(str::to_string))
+        .collect();
+    assert_eq!(named, [Some(client_fingerprint)]);
 }
 
 #[test]
@@ -224,4 +254,76 @@ fn a_server_the_client_does_not_pin_is_refused_as_a_trust_failure() {
     let e = server_tls_source(&address, &client).link().unwrap_err();
     assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
     assert!(e.message().contains("not pinned"), "{}", e.message());
+}
+
+/// TLS 1.3 resumption skips the client's certificate, which the listener
+/// names the client by: a mutual listener that allows resumption is
+/// refused when it binds, one at server TLS is not.
+#[test]
+fn a_mutual_listener_does_not_allow_resumption_it_could_not_name() {
+    use guatiao_source_remote::transport::tls::Policy;
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let mut resuming = Policy::modern();
+    resuming.allow_resumption = true;
+    let mutual = TlsConfig::new(server_id.clone())
+        .pins([client_id.fingerprint()])
+        .policy(resuming.clone());
+    let e = WsListen::bind_tls("127.0.0.1:0", &mutual).unwrap_err();
+    assert!(e.to_string().contains("resumption"), "{e}");
+    let server_tls = TlsConfig::new(server_id).server_tls().policy(resuming);
+    WsListen::bind_tls("127.0.0.1:0", &server_tls).unwrap();
+}
+
+/// An access control list rule that names the address a client came to is
+/// decided by the address the listener is bound to, and refuses only when
+/// that is a wildcard.
+#[test]
+fn a_rule_naming_the_local_address_decides_by_the_bound_address() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::Policy;
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let client = TlsConfig::new(client_id.clone()).pins([server_id.fingerprint()]);
+    let attempt = |destination: &str| {
+        let mut rule = Rule::new(Action::Permit, "any".parse().unwrap());
+        rule.destination = Some(destination.parse().unwrap());
+        let mut acl = Acl::default();
+        acl.push(rule);
+        let mut policy = Policy::modern();
+        policy.acl = Some(acl);
+        let server = TlsConfig::new(server_id.clone())
+            .pins([client_id.fingerprint()])
+            .policy(policy);
+        let address = listen(&server, secure_server());
+        source(&address, &client).link().map(|_| ())
+    };
+    attempt("127.0.0.1/32").expect("the address it is bound to");
+    // The control: the same rule for an address it is not bound to.
+    assert!(attempt("192.0.2.1/32").is_err());
+}
+
+/// A fingerprint the list denies is refused, and one it does not name is
+/// not: the listener decides by the certificate the client proved.
+#[test]
+fn a_fingerprint_the_list_denies_is_refused_and_another_is_not() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::Policy;
+    let server_id = Identity::generate().unwrap();
+    let (denied, allowed) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
+    deny.fingerprint = Some(denied.fingerprint().canonical());
+    let mut acl = Acl::default();
+    acl.push(deny);
+    acl.push(Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap()));
+    let mut policy = Policy::modern();
+    policy.acl = Some(acl);
+    let server = TlsConfig::new(server_id.clone())
+        .pins([denied.fingerprint(), allowed.fingerprint()])
+        .policy(policy);
+    let address = listen(&server, secure_server());
+    let link = |id: &Identity| {
+        let client = TlsConfig::new(id.clone()).pins([server_id.fingerprint()]);
+        source(&address, &client).link().map(|_| ())
+    };
+    link(&allowed).expect("a client the list does not deny");
+    assert!(link(&denied).is_err(), "a client the list denies");
 }

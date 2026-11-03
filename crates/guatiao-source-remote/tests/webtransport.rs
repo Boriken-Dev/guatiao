@@ -10,6 +10,8 @@
 
 #![cfg(feature = "webtransport")]
 
+extern crate alloc;
+
 mod common;
 
 use core::time::Duration;
@@ -136,11 +138,50 @@ fn server_tls_ends_link_and_the_client_knows_the_server() {
     assert!(link.datagrams().is_some());
 }
 
+/// How a raw WebTransport client, one that is not a guatiao link and so
+/// presents what the test gives it, fares against a listener.
+#[derive(Debug, PartialEq)]
+enum Reached {
+    /// The handshake held and the listener went on waiting for the link's
+    /// first frame.
+    Held,
+    /// The listener ended it, in the handshake or just after.
+    Refused,
+}
+
+/// A client with `id` as its certificate (none: as a browser) pinning the
+/// server `pin`, dialling `at`.
+fn raw(id: Option<&Identity>, pin: PeerId, at: &str) -> Reached {
+    use coqui_peer_tls::{Pins, Policy, Trust as Pinned};
+    use coqui_web::{Channel, Dialer, Kind};
+    let trust = Pinned::Pinned(Pins::fixed([pin]));
+    let built = match id {
+        Some(id) => coqui_peer_tls::client_config_with(id, &trust, &[b"h3"], &Policy::modern()),
+        None => {
+            coqui_peer_tls::client_config_without_identity_with(&trust, &[b"h3"], &Policy::modern())
+        }
+    }
+    .unwrap();
+    let mut dialer =
+        coqui_web::webtransport::Dialer::with_tls(alloc::sync::Arc::new(built.config)).unwrap();
+    let url = url::Url::parse(&url(at)).unwrap();
+    match dialer.dial(Kind::WebTransport, &url, Duration::from_secs(5)) {
+        // TLS 1.3 lets a client finish before the server has judged its
+        // certificate: the refusal then arrives as the first read.
+        Ok(channel) => match channel.receive(Some(Duration::from_secs(2))) {
+            Err(coqui_web::Failure::Timeout) => Reached::Held,
+            _ => Reached::Refused,
+        },
+        Err(_) => Reached::Refused,
+    }
+}
+
 /// coqui-web does not report the certificate a client presented, so mutual
 /// TLS is not offered over WebTransport: a client configuration asking
 /// for it is refused, and a listener configured for it asks every client
-/// for a certificate, refusing one that presents none (a browser) or one
-/// it does not pin.
+/// for a certificate, holding one it pins and refusing one that presents
+/// none (a browser) or one it does not pin. Both ends are at mutual TLS:
+/// the clients here are raw channels presenting what each case names.
 #[test]
 fn mutual_tls_is_not_offered_over_webtransport() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
@@ -153,15 +194,58 @@ fn mutual_tls_is_not_offered_over_webtransport() {
         WtListen::bind("127.0.0.1:0", &server).unwrap(),
         common::server(LinkOptions::new(Trust::Secure)),
     );
-    // A client presenting no certificate, as a browser does.
-    let browser = TlsConfig::without_identity()
-        .unwrap()
-        .pins([server_id.fingerprint()]);
-    let source = RemoteSource::new(
-        Box::new(WtConnect::new(&url(&at), &browser).unwrap()),
-        LinkOptions::new(Trust::ServerTls).key(KEY),
+    let pin = server_id.fingerprint();
+    // The control: a client it pins is held.
+    assert_eq!(raw(Some(&client_id), pin, &at), Reached::Held);
+    assert_eq!(raw(None, pin, &at), Reached::Refused, "no certificate");
+    let stranger = Identity::generate().unwrap();
+    assert_eq!(
+        raw(Some(&stranger), pin, &at),
+        Reached::Refused,
+        "not pinned"
     );
-    assert!(source.link().is_err());
+}
+
+/// A store keeps waiting only a stranger its access control list could
+/// admit. The list stays in a mutual WebTransport listener's TLS: with no
+/// addresses to decide it by, it refuses every client, and the store
+/// records none (a control without the list shows the store does record).
+#[test]
+fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::{Policy, TrustStore};
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("webtransport_waiting");
+    let _ = std::fs::remove_dir_all(&base);
+    let listening = |dir: &str, acl: Option<Acl>| {
+        let dir = base.join(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut policy = Policy::modern();
+        policy.acl = acl;
+        let server = TlsConfig::open(&dir).unwrap().policy(policy);
+        let at = spawn(
+            WtListen::bind("127.0.0.1:0", &server).unwrap(),
+            common::server(LinkOptions::new(Trust::Secure)),
+        );
+        (at, server.fingerprint(), TrustStore::open(&dir).unwrap())
+    };
+    let stranger = Identity::generate().unwrap();
+
+    // Every source is deferred to a fingerprint rule that is not the stranger's.
+    let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
+    only.fingerprint = Some(Identity::generate().unwrap().fingerprint().canonical());
+    let mut acl = Acl::default();
+    acl.push(only);
+    let (at, pin, store) = listening("listed", Some(acl));
+    assert_eq!(raw(Some(&stranger), pin, &at), Reached::Refused);
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(store.waiting().unwrap().is_empty(), "the list forbids it");
+
+    let (at, pin, store) = listening("unlisted", None);
+    let _ = raw(Some(&stranger), pin, &at);
+    common::eventually("a stranger no list forbids waits", || {
+        !store.waiting().unwrap().is_empty()
+    });
+    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
