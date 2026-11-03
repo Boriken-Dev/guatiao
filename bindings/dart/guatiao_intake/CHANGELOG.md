@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The form a provider is shown with**: `providerForm(schema, meta)`
+  answers its own form under `meta['form']`, else the one its schema
+  implies, else `null`, skipping what is malformed; it takes the `config`
+  and `meta` of a `Registry.catalog()` entry as they are.
 - **A build hook that builds the library from source**: the crate
   `guatiao-intake`, with cargo, for the target being built, bundled with the
   app; nothing when package:guatiao's hook builds the application's own

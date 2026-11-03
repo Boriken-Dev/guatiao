@@ -263,6 +263,21 @@ class Registry implements Finalizable {
     );
   });
 
+  /// Every provider of every loaded library, best first, with what a
+  /// settings screen shows about each, and **none of them built**: what
+  /// [providers] holds plus `available` (asked now) and `reason` when it
+  /// cannot run, `config` (its schema) and `meta` when it declares them,
+  /// `library_key`, `library_version`, and `digest` (`sha256:` and the hex
+  /// of the file its library was mapped from, while that file is still
+  /// the one loaded, unchanged; absent for a library from no file) or
+  /// `digest_error` saying why not. The first call reads each library
+  /// file in full. `providerForm(entry['config'], entry['meta'])` in
+  /// `package:guatiao_intake` answers the form to show it with.
+  List<Map<String, Object?>> catalog() => _answerRows(
+    (reg, alloc, out) =>
+        native.core().bindings.guatiao_registry_catalog(reg, alloc, out),
+  );
+
   /// Every provider that can actually serve `kind` right now.
   List<Map<String, Object?>> available([String kind = '']) => using((arena) {
     final view = strOf(arena, kind).ref;

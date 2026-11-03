@@ -734,6 +734,33 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_registry_catalog(
+    ffi.Pointer<guatiao_registry> reg,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_registry_catalog(reg, alloc, out);
+  }
+
+  late final _guatiao_registry_catalogPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_catalog');
+  late final _guatiao_registry_catalog = _guatiao_registry_catalogPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_registry_collect(
     ffi.Pointer<guatiao_registry> reg,
     ffi.Pointer<guatiao_alloc> alloc,

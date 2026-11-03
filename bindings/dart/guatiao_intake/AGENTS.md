@@ -78,6 +78,12 @@ intake.formFor(formDoc, schema, 'path');   // a Value to close, or null
   `x-section`, ids only, plus each member's own form.
 - `Value? formFor(Ref form, Ref schema, String path, {alloc})`: the form
   for the field at `path`, assigned or implied.
+- `Value? providerForm(Object? schema, Object? meta, {alloc})`: the form a
+  provider is shown with, its own under `meta[providerFormKey]` or else
+  the one `schema` implies; `null` when it has neither. Each argument is
+  a `Ref`, plain Dart data (an entry of `Registry.catalog()` holds plain
+  maps) or `null`; what is not a map is skipped, as reading the key by
+  hand skips it.
 
 ## The flat store
 
