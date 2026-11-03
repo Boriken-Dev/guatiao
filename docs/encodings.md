@@ -744,6 +744,7 @@ key_file = "lab-printer.key"     # the pre-shared key, relative to this file
 | `identity_file`, `state_dir` | text, relative to the manifest's directory: the identity this host presents to the peer over TLS, a PEM file or a directory holding `identity.pem` |
 | `timeout_ms`, `max_frame`, `max_calls` | whole numbers: a call's wait (`0` for as long as the link lives) and the link's bounds |
 | `rdma_device` | text: the RDMA device `rdma://` goes through |
+| `plain_beyond_loopback` | boolean: `true` lets a `ws://` `connect` name a host beyond this machine, with nothing encrypted (default `false`) |
 
 Nothing else: a manifest naming `key` or `token` is refused, since a
 secret in a search path is a credential anyone reading the directory

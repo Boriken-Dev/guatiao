@@ -1556,39 +1556,39 @@ write now.
   clients are unchanged. **coqui-web is a git dependency, pinned to a
   revision, until it is released, so `guatiao-source-remote` cannot be
   published until then.** What changes for a user of the crate:
-  - `ws://` listens and dials on this machine alone (loopback): coqui-web
-    carries no plain WebSocket past it, and a listener on another address
-    or a connect to one is `PermissionDenied` naming `wss://`.
-  - `https://` (WebTransport) runs server TLS and no security. Mutual TLS
-    is not offered there, because coqui-web does not report the
-    certificate a client presented: `WtConnect::new` refuses a mutual-TLS
-    configuration (`BAD_VALUE` in a source file), and a mutual-TLS
-    `WtListen` asks every client for a certificate and refuses one with
-    none or one it does not pin, but no link completes at the secure level
-    (the server binary starts one and says so). Use `quic://` or `tls://`
-    for mutual TLS from a native peer. `wss://` keeps mutual TLS.
-  - A source an access control list denies sees a WebTransport connection
-    that does not open, no longer a refusal (`GONE` rather than
-    `BAD_VALUE`).
-  - A WebTransport server's link is named `https`, with no address, in
-    `Link::peer()`: coqui-web gives a session no peer address.
-  - coqui-web bounds a message by one number, both ways. A WebSocket or
-    WebTransport channel's bound is the larger of the link's `max_frame`
-    (what it reads) and the peer's (what it may send), so an answer larger
-    than this side's own `max_frame` crosses as it does over `tcp://`; the
-    reader still refuses a frame past its own `max_frame`, but the channel
-    may buffer one message up to the larger bound first. A write that finds
-    coqui-web's send queue full waits for the link's write timeout instead
-    of ending the link. `FrameWrite::set_max_frame` is new, a default that
-    does nothing.
-  - A mutual-TLS `wss://` listener whose policy allows resumption is
-    refused when it binds (a resumed TLS 1.3 session presents no
-    certificate to name the client by). A list rule naming the local
-    address or port is decided by the address the listener is bound to, and
-    refuses every client only on a wildcard bind. A mutual-TLS
-    `WtListen` keeps the policy's list in its TLS, which with no addresses
-    to decide by refuses every client, so no stranger is recorded as
-    waiting in a trust store behind the list's back.
+  - `ws://` listens and dials on this machine alone (loopback) unless
+    named: coqui-web carries no plain WebSocket past it, and a listener on
+    another address or a connect to one is `PermissionDenied` naming
+    `wss://` and the setting below.
+  - A plain `ws://` beyond loopback is a named weakening, off by default:
+    `plain_beyond_loopback = true` in a source file or a peer manifest,
+    `--plain-beyond-loopback` on `guatiao-remote-server`,
+    `WsListen::bind_beyond_loopback` and `WsConnect::beyond_loopback` in
+    Rust. `RemoteSource::weakened()` lists it and the server says it at
+    start. `weakened()` is now built with `ws` as well as `tls`, and its
+    items are `coqui_peer::Weakening` (the type the TLS ones are).
+  - Mutual TLS runs over `wss://` and `https://`: coqui-web reports the
+    certificate each side presented (`Channel::peer_certificates`, a
+    resumed TLS 1.3 session's included), and `Link::peer_id()` names the
+    peer by it. A WebTransport server's link is named `https <address>`.
+    The list's fingerprint rules for a WebTransport client are decided once
+    its certificate is known and before any frame is read, and a
+    store-backed mutual WebTransport listener whose list names a
+    fingerprint is refused when it binds (pin the clients instead).
+  - A source an access control list denies, or any connection a
+    WebTransport server declines, is QUIC's CONNECTION_REFUSED to its
+    client, which reports it as "refused the connection (by its access
+    control list, or the server refused the connection)" (`BAD_VALUE`).
+  - A write to a WebSocket or WebTransport channel waits for room for the
+    link's write timeout, as a stream's does, and a handshake under way is
+    cancelled by the link's closer. coqui-web bounds what a channel reads
+    and what it sends apart (the link's `max_frame` and the peer's), so an
+    answer larger than this side's own `max_frame` crosses as it does over
+    `tcp://`. `FrameWrite::set_max_frame` is new, a default that does
+    nothing.
+  - A list rule naming the local address or port is decided over `wss://` by
+    the address the listener is bound to, and refuses every client only on
+    a wildcard bind.
   - `WsListen::from_listener`, `from_listener_tls`, `WtListen::from_socket`
     and `from_socket_trusted` are gone: coqui-web binds the address itself.
   - The `webtransport` feature no longer enables `quic`, and `ws` and
@@ -1597,7 +1597,7 @@ write now.
   - `examples/wire_over_webtransport`: the page opens one bidirectional
     stream and says hello on it, and the server answers on it, where the
     server opened a unidirectional stream before; the server listens on
-    IPv4 unless `WIRE_BIND` names an address.
+    IPv4, and a probe dialing `localhost` falls back to it.
 
 - **guatiao-source-remote: a WebTransport client told `certificate_unknown`
   as its link's first read arrives** is told the server does not trust it,

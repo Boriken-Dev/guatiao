@@ -38,6 +38,7 @@ configuration map:
 | --- | --- |
 | `connect` | `tcp://host:port` (`tls://host:port` the same, TLS required); `quic://host:port` (QUIC); `ws://host:port/path` and `wss://host:port/path` (WebSocket, without and with TLS); `local://name` (a Unix socket's path, or a named pipe's name on Windows); `shm://name` (shared memory beside that); `rdma://host:port` (RDMA, experimental, Linux only) |
 | `rdma_device` | the RDMA device `rdma://` goes through (default: the first listed) |
+| `plain_beyond_loopback` | `true` lets a `ws://` URL name a host beyond this machine, with nothing encrypted (default `false`): a weakening of `none`, listed by `RemoteSource::weakened()` |
 | `child` | instead of `connect`: a list, the server program and its arguments, run with the link on its stdin and stdout |
 | `security` | `none`, `server-tls` or `mutual-tls` ([Security](#security)): `mutual-tls` on a network unless named; a child, `local://` and `shm://` run `none` alone |
 | `key`, `key_file` | the pre-shared key: text, or a file's bytes; proved both ways with `none`, and at server TLS when the server asks for it |
@@ -155,8 +156,11 @@ The server listens with `--listen ws://127.0.0.1:PORT --security none`,
 as `tcp://` does with no TLS: peers admitted by address range, the key
 proved both ways, no encryption. coqui-web, which carries the
 WebSocket, listens and dials a plain `ws://` on this machine alone
-(loopback); a page on another machine reaches the server over `wss://`
-or `https://`. A link's security is one choice, the
+(loopback) unless told otherwise (`--plain-beyond-loopback`, the
+`plain_beyond_loopback` key, `WsListen::bind_beyond_loopback`: nothing is
+encrypted beyond this machine, a weakening the server says at start and
+`RemoteSource::weakened()` lists); a page on another machine reaches the
+server over `wss://` or `https://`. A link's security is one choice, the
 same as everywhere ([Security](#security)), mutual TLS unless named, and
 the URL must agree with it: `ws://` runs `none` alone, `wss://` the two
 TLS modes. A call is typed by the description the
@@ -517,9 +521,9 @@ Where a URL says whether it runs TLS, it must agree with the security:
 | `tcp://` | plain TCP | TLS over TCP | TLS over TCP (default) |
 | `tls://` | refused | TLS over TCP | TLS over TCP (default) |
 | `quic://` | QUIC, no certificate checked | QUIC | QUIC (default) |
-| `ws://` | WebSocket, on this machine alone | refused: use `wss://` | refused: use `wss://` |
+| `ws://` | WebSocket, on this machine alone unless `plain_beyond_loopback` | refused: use `wss://` | refused: use `wss://` |
 | `wss://` | refused: use `ws://` | WebSocket over TLS | WebSocket over TLS (default) |
-| `https://` | WebTransport, no certificate asked of the client | WebTransport | a connect is refused (`BAD_VALUE`): coqui-web does not report a client's certificate; name `server-tls`, or use `quic://`. A server (`--security mutual-tls`) still starts, with a warning, asks clients for a certificate and refuses the ones that present none or are not pinned, but no link completes |
+| `https://` | WebTransport, no certificate asked of the client | WebTransport | WebTransport (default) |
 | `rdma://` | RDMA | refused | refused |
 | `local://`, `shm://`, a child | the default | refused | refused |
 
@@ -826,19 +830,20 @@ HTTP/3 session over QUIC, what a browser opens with `new
 WebTransport(url)`. It runs the session's TLS through coqui-web (the
 configuration's identity, pins, roots, policy, and the list's address
 rules, with a Retry proving a source's address before the list decides)
-under HTTP/3's application protocol `h3`, at server TLS or none. A
-source the list denies sees a QUIC connection that does not open, as it
-would from an unreachable server. A
+under HTTP/3's application protocol `h3`, at mutual TLS, server TLS or
+none: a native peer at mutual TLS presents its certificate, which the
+channel reports, and each end names the other by its fingerprint
+(`Link::peer_id()`). The list's fingerprint rules are decided once the
+certificate is known and before any frame is read; a store-backed mutual
+listener whose list names a fingerprint is refused when it binds (pin the
+clients instead). A source the list denies, or any connection the server
+declines, is QUIC's CONNECTION_REFUSED, and the client says it was
+"refused the connection (by its access control list, or the server
+refused the connection)": it cannot tell which. A
 page uses server TLS (the key or a token inside the link) or none (the
 key alone); mutual TLS needs its browser to present a client
 certificate, which Chrome did not to a profile holding none (whether it
-presents one a user installed is not measured), and coqui-web, which
-runs the session's TLS, does not report the certificate a client
-presented: a listener configured for mutual TLS (the server starts and
-says so) asks every client for one and refuses a client with none, but
-no link completes at the secure level, and `WtConnect::new` refuses a
-mutual-TLS configuration. Use server TLS here, or `quic://` for mutual
-TLS. A session carries one bidirectional stream with the frames
+presents one a user installed is not measured). A session carries one bidirectional stream with the frames
 exactly as over TCP; the server takes every session, whatever its path,
 and does not read the `Origin` a browser sends. Datagrams are the
 session's (HTTP/3 datagrams): `Link::datagrams()` as over QUIC, and a
