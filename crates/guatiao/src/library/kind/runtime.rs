@@ -1099,7 +1099,7 @@ unsafe fn answer(
 ) -> Status {
     let written = answered.and_then(|a| {
         // SAFETY: forwarded.
-        unsafe { write_answer(s.answer(), a, out) }
+        unsafe { write_answer(s.answer(), s.sensitive(), a, out) }
     });
     match written {
         Ok(status) => status,
@@ -1201,25 +1201,44 @@ unsafe fn write_scalar(
 /// As [`answer`].
 unsafe fn write_answer(
     ty: Option<&AnswerType>,
+    sensitive: bool,
     a: Answer,
     out: *mut c_void,
 ) -> Result<Status, ProviderError> {
     let Some(ty) = ty else {
         return Ok(Status::GUATIAO_OK);
     };
+    // Where a sensitive slot's answer goes when its caller named nothing.
+    let fallback = if sensitive {
+        Alloc::wiping()
+    } else {
+        Alloc::rust()
+    };
     // SAFETY (every arm): the caller's contract.
     unsafe {
         Ok(match ty {
             AnswerType::Scalar(scalar) => write_scalar(*scalar, a, out)?,
             AnswerType::Text => {
-                let text = match a {
+                let mut text = match a {
                     Answer::Text(t) => t,
-                    Answer::Value(v) => {
-                        String::from_value(&v).map_err(|_| wrong(&Answer::Value(v), "text"))?
+                    Answer::Value(mut v) => {
+                        let read = String::from_value(&v);
+                        if sensitive {
+                            crate::value::Wipe::wipe(&mut v);
+                        }
+                        read.map_err(|_| wrong(&Answer::Value(v), "text"))?
                     }
                     other => return Err(wrong(&other, "text")),
                 };
-                write_out(out.cast::<Text>(), Text::new(&text))
+                let answered = if sensitive {
+                    sensitive_text(&text)
+                } else {
+                    Text::new(&text)
+                };
+                if sensitive {
+                    crate::value::Wipe::wipe(&mut text);
+                }
+                write_out(out.cast::<Text>(), answered)
             }
             AnswerType::Tree(Tree::Map) => {
                 let map = match a {
@@ -1231,7 +1250,7 @@ unsafe fn write_answer(
                 if out.is_null() {
                     return Ok(Status::GUATIAO_ERR_NULL);
                 }
-                let home = return_alloc(out.cast_const().cast::<Map>());
+                let home = return_alloc_or(out.cast_const().cast::<Map>(), fallback);
                 write_out(out.cast::<Map>(), map_ret(map, home)?)
             }
             AnswerType::Tree(Tree::List) => {
@@ -1244,7 +1263,7 @@ unsafe fn write_answer(
                 if out.is_null() {
                     return Ok(Status::GUATIAO_ERR_NULL);
                 }
-                let home = return_alloc(out.cast_const().cast::<List>());
+                let home = return_alloc_or(out.cast_const().cast::<List>(), fallback);
                 write_out(out.cast::<List>(), list_ret(list, home)?)
             }
             AnswerType::Tree(Tree::Value) => {
@@ -1264,7 +1283,7 @@ unsafe fn write_answer(
                 if out.is_null() {
                     return Ok(Status::GUATIAO_ERR_NULL);
                 }
-                let home = return_alloc(out.cast_const().cast::<Value>());
+                let home = return_alloc_or(out.cast_const().cast::<Value>(), fallback);
                 write_out(out.cast::<Value>(), value_ret(value, home)?)
             }
             AnswerType::Object { .. } => match a {
@@ -1953,6 +1972,11 @@ impl Out {
             Out::Usize(n) => Answer::Uint(n as u64),
             Out::F32(f) => Answer::Float(f.into()),
             Out::F64(f) => Answer::Float(f),
+            // A sensitive slot's text stays a value in the wiping
+            // allocator: a `String` would be beyond any wipe.
+            Out::Text(t) if home.is_wiping() => {
+                Answer::Value(value_ret(Value::from(text_ret(t)?), home)?)
+            }
             Out::Text(t) => Answer::Text(text_ret(t)?.to_string()),
             Out::Value(v) => Answer::Value(value_ret(v, home)?),
             Out::Map(m) => Answer::Map(map_ret(m, home)?),
