@@ -2,24 +2,33 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Serves WebTransport on `https://localhost:4433` (or `WIRE_PORT`): to each
-//! session it opens one stream, announces the schema on channel 1, then
-//! sends a value every `WIRE_INTERVAL_MS` (default 1000).
+//! Serves WebTransport on UDP port 4433 (`WIRE_PORT`; `WIRE_BIND` the address) through
+//! coqui-web: to each session that opens its stream and says hello it
+//! announces the schema on channel 1, then sends a value every
+//! `WIRE_INTERVAL_MS` (default 1000). Each channel frame is one coqui-web
+//! message.
 //!
 //! The certificate is self-signed and short-lived, which a browser accepts
 //! only by its SHA-256 (`serverCertificateHashes`); the hash is printed at
 //! start.
 
+extern crate alloc;
+
+use alloc::sync::Arc;
 use core::error::Error;
+use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
+use coqui_peer_tls::{Identity, Policy};
+use coqui_web::Channel;
+use coqui_web::webtransport::{Listener, Pending};
 use guatiao::value::wire::channel;
-use wire_over_webtransport::{CHANNEL, delimited, nth, schema};
-use wtransport::endpoint::IncomingSession;
-use wtransport::tls::Sha256DigestFmt;
-use wtransport::{Endpoint, Identity, ServerConfig};
+use wire_over_webtransport::{CHANNEL, nth, schema};
 
 type Failure = Box<dyn Error + Send + Sync>;
+
+/// A browser takes a certificate pinned by its hash for at most 14 days.
+const VALID_FOR: Duration = Duration::from_secs(10 * 24 * 3600);
 
 fn env_u64(name: &str, default: u64) -> u64 {
     std::env::var(name)
@@ -28,50 +37,61 @@ fn env_u64(name: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Failure> {
-    let port = env_u64("WIRE_PORT", 4433) as u16;
+fn main() -> Result<(), Failure> {
+    let port = u16::try_from(env_u64("WIRE_PORT", 4433))?;
     let interval = Duration::from_millis(env_u64("WIRE_INTERVAL_MS", 1000));
 
-    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])?;
-    let hash = identity.certificate_chain().as_slice()[0].hash();
-    let hex: String = hash.as_ref().iter().map(|b| format!("{b:02x}")).collect();
-    println!("certificate-sha256={hex}");
+    let identity = Identity::generate_valid_for(VALID_FOR)?;
+    let hash = identity.fingerprint();
+    println!("certificate-sha256={}", hash.hex());
+    let bytes: Vec<String> = hash.as_bytes().iter().map(u8::to_string).collect();
     println!(
-        "serverCertificateHashes: [{{ algorithm: \"sha-256\", value: new Uint8Array({}) }}]",
-        hash.fmt(Sha256DigestFmt::BytesArray)
+        "serverCertificateHashes: [{{ algorithm: \"sha-256\", value: new Uint8Array([{}]) }}]",
+        bytes.join(", ")
     );
 
-    let config = ServerConfig::builder()
-        .with_bind_default(port)
-        .with_identity(identity)
-        .keep_alive_interval(Some(Duration::from_secs(3)))
-        .build();
-    let server = Endpoint::server(config)?;
-    println!("listening on https://localhost:{port}");
+    let tls =
+        coqui_peer_tls::server_config_without_client_auth_with(&identity, &[], &Policy::modern())?
+            .config;
+    // QUIC does not fall back between address families, and a socket
+    // bound to `::` takes IPv4 clients only where the system makes it
+    // dual-stack: `WIRE_BIND=::` serves IPv6 (`localhost` may resolve to
+    // it), the default serves IPv4.
+    let bind: IpAddr = match std::env::var("WIRE_BIND") {
+        Ok(text) => text.parse()?,
+        Err(_) => Ipv4Addr::UNSPECIFIED.into(),
+    };
+    let listener = Listener::bind(SocketAddr::new(bind, port), Arc::new(tls))
+        .map_err(|e| format!("cannot listen on UDP {bind}:{port}: {e}"))?;
+    println!("listening on https://{bind}:{port}");
 
     loop {
-        let incoming = server.accept().await;
-        tokio::spawn(async move {
-            if let Err(e) = serve(incoming, interval).await {
+        let pending = listener.next(None).map_err(|e| e.to_string())?;
+        std::thread::spawn(move || {
+            if let Err(e) = serve(pending, interval) {
                 eprintln!("session ended: {e}");
             }
         });
     }
 }
 
-async fn serve(incoming: IncomingSession, interval: Duration) -> Result<(), Failure> {
-    let request = incoming.await?;
-    let connection = request.accept().await?;
-    let mut stream = connection.open_uni().await?.await?;
-    stream
-        .write_all(&delimited(&channel::announce(CHANNEL, &schema())?))
-        .await?;
+/// One session: the page's hello, the schema, then a value per interval
+/// until the page goes.
+fn serve(pending: Pending, interval: Duration) -> Result<(), Failure> {
+    let channel = pending.handshake().map_err(|e| e.to_string())?;
+    // A stream is seen by the server once its opener has sent on it.
+    channel
+        .receive(Some(Duration::from_secs(10)))
+        .map_err(|e| e.to_string())?
+        .ok_or("the page closed before it said hello")?;
+    channel
+        .send(&channel::announce(CHANNEL, &schema())?)
+        .map_err(|e| e.to_string())?;
     for n in 1.. {
-        stream
-            .write_all(&delimited(&channel::send(CHANNEL, &nth(n))?))
-            .await?;
-        tokio::time::sleep(interval).await;
+        channel
+            .send(&channel::send(CHANNEL, &nth(n))?)
+            .map_err(|e| e.to_string())?;
+        std::thread::sleep(interval);
     }
     Ok(())
 }
