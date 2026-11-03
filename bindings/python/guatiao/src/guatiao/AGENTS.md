@@ -97,6 +97,16 @@ with Registry("my-host", "1.0") as reg:
     instance.close()
 ```
 
+`catalog()` is everything a settings screen shows about every provider
+of every loaded library, best first, and **builds none**: a list of
+dicts, each what `providers()` holds plus `available` (asked now) and
+`reason` when it cannot run, `config` (its schema) and `meta` when it
+declares them, `library_key`, `library_version`, and `digest`
+(`"sha256:"` and the hex of the file its library was mapped from, read
+the first time any call asks; absent for a library from no file,
+`digest_error` when the read failed). The form to show each with is
+`guatiao_intake.provider_form(entry.get("config"), entry.get("meta"))`.
+
 Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries()`,
 `provider(key)`, `available(kind)`, `provider_available(key)`,
 `keyed_by`/`libraries_keyed_by`, `set_priority`/`priority`,

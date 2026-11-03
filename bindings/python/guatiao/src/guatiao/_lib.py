@@ -258,6 +258,11 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         "load",
     ),
+    "guatiao_registry_catalog": (
+        [c_void_p, _P(Alloc), _P(Value)],
+        c_uint32,
+        "load",
+    ),
     "guatiao_registry_provider": (
         [c_void_p, Str, _P(Alloc), _P(Value)],
         c_uint32,

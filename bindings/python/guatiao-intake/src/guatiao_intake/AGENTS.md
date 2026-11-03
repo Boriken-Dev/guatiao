@@ -56,6 +56,12 @@ intake.form_for(form_doc, schema, "path")  # a Value, or None
 - `form_for(form, schema, path, *, alloc=None) -> Value | None`: the
   form for the field at `path`, assigned or implied; `None` when the path
   names no field, or one with no members and no form.
+- `provider_form(schema, meta, *, alloc=None) -> Value | None`: the form
+  a provider is shown with, its own under `meta[PROVIDER_FORM_KEY]` or
+  else the one `schema` implies; `None` when it has neither. Each of
+  `schema` and `meta` is a `Value`, a `Ref`, a plain dict (an entry of
+  `guatiao.Registry.catalog()` holds dicts) or `None`; `WrongKind` when
+  what `meta` holds under the key is not a map.
 
 ## The flat store
 
@@ -98,4 +104,13 @@ with reg.provider_meta("acme_dialer") as meta:   # None when it declares no meta
     schema = reg.provider_config("acme_dialer")
     assert intake.check(schema, form) is None
     intake.layout(schema, form)
+```
+
+Every provider a registry loaded, each with the form to show it with,
+none of them built:
+
+```python
+for entry in reg.catalog():
+    form = intake.provider_form(entry.get("config"), entry.get("meta"))
+    # None: nothing to configure; otherwise a Value to close
 ```

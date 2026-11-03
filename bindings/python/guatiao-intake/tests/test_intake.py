@@ -7,6 +7,8 @@ and a form built as plain Python dicts."""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import guatiao_intake as intake
@@ -360,3 +362,56 @@ def test_a_store_that_is_not_text_to_text_is_a_type_error_in_every_form():
         # Nothing stored is not a malformed store.
         with Value.from_python({}) as empty:
             assert intake.unflatten(schema, "host", empty) is None
+
+
+def test_a_providers_form_is_its_own_else_the_one_its_schema_implies():
+    schema = {
+        "type": "object",
+        "properties": {
+            "user": {"type": "string", "x-section": "account"},
+            "token": {"type": "string", "x-sensitive": True},
+        },
+    }
+    declared = {"sections": [{"id": "account", "title": "Account"}]}
+
+    form = intake.provider_form(schema, {intake.PROVIDER_FORM_KEY: declared, "other": 1})
+    assert form is not None
+    with form:
+        assert form.to_python() == declared
+
+    form = intake.provider_form(schema, None)
+    assert form is not None
+    with form:
+        made = form.to_python()
+        assert made["sections"] == [{"id": "account"}]
+        assert made["fields"]["token"]["widget"] == "password"
+
+    # Meta without a form is the same as no meta; Values work as dicts do.
+    with Value.from_python(schema) as held, Value.from_python({"other": 1}) as meta:
+        form = intake.provider_form(held, meta)
+        assert form is not None
+        form.close()
+
+    assert intake.provider_form(None, None) is None
+    assert intake.provider_form(None, {"other": 1}) is None
+    with pytest.raises(WrongKind):
+        intake.provider_form(schema, {intake.PROVIDER_FORM_KEY: ["not", "a", "form"]})
+
+
+def test_every_listed_provider_has_its_form_without_being_built():
+    from guatiao.registry import Registry
+
+    directory = os.environ["GUATIAO_LIBRARY"]
+    if not os.path.isdir(directory):
+        directory = os.path.dirname(directory)
+    with Registry("form-host", "1.0") as reg:
+        reg.scan_dir(directory, rules="kind=greeter")
+        catalog = {entry["id"]: entry for entry in reg.catalog()}
+        shouter = catalog["derived_greeter_shouter"]
+        form = intake.provider_form(shouter.get("config"), shouter.get("meta"))
+        assert form is not None
+        with form, Value.from_python(shouter["config"]) as schema:
+            assert [s["id"] for s in form.to_python()["sections"]] == ["words", "volume"]
+            assert intake.check(schema, form) is None
+        hello = catalog["derived_greeter_hello"]
+        assert intake.provider_form(hello.get("config"), hello.get("meta")) is None
