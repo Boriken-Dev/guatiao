@@ -55,6 +55,21 @@ fn every() -> Vec<Over> {
     all
 }
 
+/// Whether a link over `over` can name a client by the certificate it
+/// presented, which mutual TLS needs: coqui-web does not report one for a
+/// WebTransport session, so those links run at server TLS.
+fn names_clients(over: Over) -> bool {
+    match over {
+        Over::Tcp => true,
+        #[cfg(feature = "quic")]
+        Over::Quic => true,
+        #[cfg(feature = "ws")]
+        Over::Wss => true,
+        #[cfg(feature = "webtransport")]
+        Over::Wt => false,
+    }
+}
+
 /// A directory of its own under the target's scratch space, emptied.
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -294,7 +309,7 @@ fn a_chained_identity_is_presented_whole_on_every_transport() {
     )
     .unwrap();
     let client = TlsConfig::new(client_id).roots(Roots::bundle_file(&bundle));
-    for over in every() {
+    for over in every().into_iter().filter(|over| names_clients(*over)) {
         let port = listen_as(over, &server, LinkOptions::new(Trust::Secure));
         let source = RemoteSource::new(
             connect(over, "localhost", port, &client),

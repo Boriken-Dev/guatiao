@@ -103,54 +103,65 @@ fn pair(server: &TlsConfig, client: &TlsConfig) -> (Connection, Connection) {
 }
 
 #[test]
-fn pinned_ends_link_at_mutual_tls_and_each_knows_the_other() {
-    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
-    let client = TlsConfig::new(client_id.clone()).pins([server_id.fingerprint()]);
+fn server_tls_ends_link_and_the_client_knows_the_server() {
+    let server_id = Identity::generate().unwrap();
+    let server = TlsConfig::new(server_id.clone()).server_tls();
+    let client = TlsConfig::without_identity()
+        .unwrap()
+        .pins([server_id.fingerprint()]);
     let listener = WtListen::bind("127.0.0.1:0", &server).unwrap();
     assert_eq!(
         listener.certificate_hashes().unwrap(),
         vec![server_id.fingerprint()],
         "not rotating: the configuration's identity alone"
     );
-    let at = spawn(listener, common::server(LinkOptions::new(Trust::Secure)));
+    let at = spawn(
+        listener,
+        common::server(LinkOptions::new(Trust::ServerTls).key(KEY)),
+    );
     let source = RemoteSource::new(
         Box::new(WtConnect::new(&url(&at), &client).unwrap()),
-        LinkOptions::new(Trust::Secure),
+        LinkOptions::new(Trust::ServerTls).key(KEY),
     );
     let (registry, refused) = refresh(&source);
     assert!(refused.is_empty(), "{refused:?}");
     assert_eq!(greeting(&registry), "hello, webtransport");
     let link = source.link().unwrap();
-    assert_eq!(link.trust(), Trust::Secure);
+    assert_eq!(link.trust(), Trust::ServerTls);
     assert_eq!(
         link.peer_id(),
         Some(server_id.fingerprint().canonical().as_str())
     );
-    assert!(
-        link.peer().starts_with("https 127.0.0.1:"),
-        "{}",
-        link.peer()
-    );
+    assert!(link.peer().starts_with("https "), "{}", link.peer());
     assert!(link.datagrams().is_some());
 }
 
+/// coqui-web does not report the certificate a client presented, so mutual
+/// TLS is not offered over WebTransport: a client configuration asking
+/// for it is refused, and a listener configured for it asks every client
+/// for a certificate, refusing one that presents none (a browser) or one
+/// it does not pin.
 #[test]
-fn a_client_the_server_does_not_pin_is_refused_as_a_trust_failure() {
+fn mutual_tls_is_not_offered_over_webtransport() {
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let server =
-        TlsConfig::new(server_id.clone()).pins([Identity::generate().unwrap().fingerprint()]);
-    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
+    let asked = TlsConfig::new(client_id.clone()).pins([server_id.fingerprint()]);
+    let e = WtConnect::new(&url("127.0.0.1:1"), &asked).unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::Unsupported, "{e}");
+
+    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
     let at = spawn(
         WtListen::bind("127.0.0.1:0", &server).unwrap(),
         common::server(LinkOptions::new(Trust::Secure)),
     );
+    // A client presenting no certificate, as a browser does.
+    let browser = TlsConfig::without_identity()
+        .unwrap()
+        .pins([server_id.fingerprint()]);
     let source = RemoteSource::new(
-        Box::new(WtConnect::new(&url(&at), &client).unwrap()),
-        LinkOptions::new(Trust::Secure),
+        Box::new(WtConnect::new(&url(&at), &browser).unwrap()),
+        LinkOptions::new(Trust::ServerTls).key(KEY),
     );
-    let e = source.link().unwrap_err();
-    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(source.link().is_err());
 }
 
 #[test]
@@ -191,85 +202,9 @@ fn no_security_links_by_the_key_alone_and_the_list_decides_by_address() {
         ),
         LinkOptions::new(Trust::Trusted).key(KEY),
     );
-    let e = denied.link().unwrap_err();
-    assert_eq!(
-        e.status,
-        Status::GUATIAO_ERR_BAD_VALUE,
-        "a source the list denies is refused, not gone: {e:?}"
-    );
-}
-
-#[test]
-fn a_fingerprint_the_list_denies_is_refused_in_the_handshake() {
-    use guatiao_source_remote::acl::{Acl, Action, Rule};
-    use guatiao_source_remote::transport::tls::Policy;
-    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let mut deny = Rule::new(Action::Deny, "0.0.0.0/0".parse().unwrap());
-    deny.fingerprint = Some(client_id.fingerprint().canonical());
-    let mut acl = Acl::default();
-    acl.push(deny);
-    acl.push(Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap()));
-    let mut policy = Policy::modern();
-    policy.acl = Some(acl);
-    let server = TlsConfig::new(server_id.clone())
-        .pins([client_id.fingerprint()])
-        .policy(policy);
-    let client = TlsConfig::new(client_id).pins([server_id.fingerprint()]);
-    let at = spawn(
-        WtListen::bind("127.0.0.1:0", &server).unwrap(),
-        common::server(LinkOptions::new(Trust::Secure)),
-    );
-    let source = RemoteSource::new(
-        Box::new(WtConnect::new(&url(&at), &client).unwrap()),
-        LinkOptions::new(Trust::Secure),
-    );
-    let e = source.link().unwrap_err();
-    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{}", e.message());
-}
-
-/// A store keeps waiting only a stranger its access control list could
-/// admit: one whose fingerprint no rule permits from its address is
-/// refused as it presents its certificate, so no operator is offered it.
-#[test]
-fn a_stranger_the_list_will_never_admit_is_not_kept_waiting() {
-    use guatiao_source_remote::acl::{Acl, Action, Rule};
-    use guatiao_source_remote::transport::tls::{Policy, TrustStore};
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("webtransport")
-        .join("never_admitted");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let (admitted, never) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    // Every source is deferred to the fingerprint rule.
-    let mut only = Rule::new(Action::Permit, "any".parse().unwrap());
-    only.fingerprint = Some(admitted.fingerprint().canonical());
-    let mut acl = Acl::default();
-    acl.push(only);
-    let mut policy = Policy::modern();
-    policy.acl = Some(acl);
-    let server = TlsConfig::open(&dir).unwrap().policy(policy);
-    let at = spawn(
-        WtListen::bind("127.0.0.1:0", &server).unwrap(),
-        common::server(LinkOptions::new(Trust::Secure)),
-    );
-    let link = |id: Identity| {
-        let client = TlsConfig::new(id).pins([server.fingerprint()]);
-        RemoteSource::new(
-            Box::new(WtConnect::new(&url(&at), &client).unwrap()),
-            LinkOptions::new(Trust::Secure),
-        )
-        .link()
-    };
-    assert!(link(never).is_err());
-    // The stranger the list names waits for an operator to accept it.
-    assert!(link(admitted.clone()).is_err());
-    let store = TrustStore::open(&dir).unwrap();
-    common::eventually("the stranger the list names waits", || {
-        !store.waiting().unwrap().is_empty()
-    });
-    let waiting: Vec<PeerId> = store.waiting().unwrap().into_iter().map(|w| w.id).collect();
-    assert_eq!(waiting, [admitted.fingerprint()]);
-    let _ = std::fs::remove_dir_all(&dir);
+    // The refusal is a QUIC connection that never opens: coqui-web does
+    // not tell it from an unreachable server.
+    assert!(denied.link().is_err());
 }
 
 #[test]
@@ -356,9 +291,11 @@ fn a_listener_presents_the_identity_it_is_given_at_no_security() {
 
 #[test]
 fn datagrams_cross_beside_the_frames() {
-    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
-    let server = TlsConfig::new(server_id.clone()).pins([client_id.fingerprint()]);
-    let client = TlsConfig::new(client_id.clone()).pins([server_id.fingerprint()]);
+    let server_id = Identity::generate().unwrap();
+    let server = TlsConfig::new(server_id.clone()).server_tls();
+    let client = TlsConfig::without_identity()
+        .unwrap()
+        .pins([server_id.fingerprint()]);
     let (mut c, mut s) = pair(&server, &client);
     let (cd, sd) = (c.reader.datagrams().unwrap(), s.reader.datagrams().unwrap());
     assert!(cd.max_size().unwrap() > 1000);
@@ -375,10 +312,6 @@ fn datagrams_cross_beside_the_frames() {
     assert_eq!(sd.recv(Some(Duration::from_millis(50))).unwrap(), None);
     let e = cd.send(&vec![0; 64 << 10]).unwrap_err();
     assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput);
-    assert_eq!(
-        s.reader.peer_id(),
-        Some(client_id.fingerprint().canonical())
-    );
     c.writer.write_frame(&frame(b"after")).unwrap();
     let mut buf = Vec::new();
     assert!(s.reader.read_frame(&mut buf, 1 << 10).unwrap());
@@ -492,11 +425,11 @@ fn the_server_binary_serves_webtransport_and_writes_the_hashes_a_page_pins() {
     assert_eq!(greeting(&registry), "hello, webtransport");
 }
 
-/// A client checking the server's certificate as a browser does
-/// (wtransport's `ServerHashVerification`: the hash, a validity of at most
-/// 14 days, ECDSA P-256) reaches a rotating listener.
+/// A client checking the server's certificate as a browser does (the hash,
+/// a validity of at most 14 days, ECDSA P-256) reaches a rotating listener.
 #[test]
 fn a_client_pinning_by_hash_as_a_browser_does_reaches_a_rotating_listener() {
+    use coqui_web::{CertificatePin, Dialer as _, Kind};
     let config = TlsConfig::new(Identity::generate().unwrap()).server_tls();
     let listener = WtListen::bind("127.0.0.1:0", &config)
         .unwrap()
@@ -507,31 +440,13 @@ fn a_client_pinning_by_hash_as_a_browser_does_reaches_a_rotating_listener() {
         listener,
         common::server(LinkOptions::new(Trust::ServerTls).key(KEY)),
     );
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    let digests: Vec<wtransport::tls::Sha256Digest> = hashes
+    let pins: Vec<CertificatePin> = hashes
         .iter()
-        .map(|h| {
-            let hex = h.canonical();
-            let hex = hex.strip_prefix("sha256:").unwrap();
-            let bytes: Vec<u8> = (0..32)
-                .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
-                .collect();
-            wtransport::tls::Sha256Digest::new(bytes.try_into().unwrap())
-        })
+        .map(|h| h.canonical().parse().unwrap())
         .collect();
-    rt.block_on(async {
-        let config = wtransport::ClientConfig::builder()
-            .with_bind_default()
-            .with_server_certificate_hashes(digests)
-            .build();
-        let endpoint = wtransport::Endpoint::client(config).unwrap();
-        let conn = tokio::time::timeout(Duration::from_secs(10), endpoint.connect(url(&at)))
-            .await
-            .expect("in time")
-            .expect("the session opens");
-        let (_send, _recv) = conn.open_bi().await.unwrap().await.unwrap();
-    });
+    let mut dialer = coqui_web::webtransport::Dialer::pinned(&pins).unwrap();
+    let url = url::Url::parse(&url(&at)).unwrap();
+    dialer
+        .dial(Kind::WebTransport, &url, Duration::from_secs(10))
+        .expect("the session opens");
 }
