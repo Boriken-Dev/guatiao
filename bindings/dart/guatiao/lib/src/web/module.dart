@@ -116,6 +116,7 @@ final class WasmModule {
   final Map<String, JSFunction?> _functions = <String, JSFunction?>{};
   ByteData? _view;
   Address? _alloc;
+  Address? _wiping;
 
   static WasmModule? _loaded;
 
@@ -304,6 +305,17 @@ final class WasmModule {
     final at = alloc(allocSize, wordSize);
     checkStatus(call('guatiao_alloc_default', [at]));
     return _alloc = at;
+  }
+
+  /// The module's wiping allocator, filled by `guatiao_alloc_wiping` once
+  /// and kept for the module's life: every block freed through it is
+  /// overwritten with zeros first.
+  Address get wipingAlloc {
+    final cached = _wiping;
+    if (cached != null) return cached;
+    final at = alloc(allocSize, wordSize);
+    checkStatus(call('guatiao_alloc_wiping', [at]));
+    return _wiping = at;
   }
 }
 

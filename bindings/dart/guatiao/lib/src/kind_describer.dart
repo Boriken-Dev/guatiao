@@ -622,7 +622,7 @@ final class _Describer {
           refuse(t.at, '$where: two arguments are $name');
         }
       }
-      var fallibleMark = false, optionalMark = false;
+      var fallibleMark = false, optionalMark = false, sensitiveMark = false;
       for (final a in m.marks) {
         if (a.argument != null) refuse(a.at, '@${a.name} takes no argument');
         switch (a.name) {
@@ -630,10 +630,13 @@ final class _Describer {
             fallibleMark = true;
           case 'optional':
             optionalMark = true;
+          case 'sensitive':
+            sensitiveMark = true;
           default:
             refuse(
               a.at,
-              '@${a.name} is not a mark of a slot (@fallible, @optional)',
+              '@${a.name} is not a mark of a slot '
+              '(@fallible, @optional, @sensitive)',
             );
         }
       }
@@ -647,6 +650,7 @@ final class _Describer {
       };
       final answer = this.answer(m.answer, where);
       if (answer != null) slot['answer'] = answer;
+      if (sensitiveMark) slot['sensitive'] = true;
       if (m.doc != null) slot['doc'] = m.doc;
       slots.add(slot);
     }

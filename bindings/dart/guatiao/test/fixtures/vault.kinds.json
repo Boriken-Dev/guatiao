@@ -1,0 +1,60 @@
+{
+  "kinds": [
+    {
+      "name": "dart_vault",
+      "floor_hash": 3115817252,
+      "object": false,
+      "doc": "A store of secrets.",
+      "slots": [
+        {
+          "name": "read",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "key",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "value"
+          },
+          "sensitive": true,
+          "doc": "A secret, as a tree."
+        },
+        {
+          "name": "every",
+          "required": true,
+          "fallible": true,
+          "args": [],
+          "answer": {
+            "type": "map"
+          },
+          "sensitive": true,
+          "doc": "Secrets by name."
+        },
+        {
+          "name": "pin",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "text"
+          },
+          "sensitive": true,
+          "doc": "A secret, as text."
+        },
+        {
+          "name": "label",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "Not a secret."
+        }
+      ]
+    }
+  ]
+}
