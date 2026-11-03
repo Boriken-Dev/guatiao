@@ -40,7 +40,12 @@ pyo3 = { version = "0.30", default-features = false, features = ["abi3-py39"] }
 libc = "0.2"
 
 [dev-dependencies]
-guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load", "provider"] }
+
+# A process per case: the interpreter and its environment are the process's.
+[[test]]
+name = "isolation"
+harness = false
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

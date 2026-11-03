@@ -33,10 +33,9 @@ fn bridge(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     Ok(kept.bind(py).clone())
 }
 
-/// Starts or joins the interpreter, puts `paths` on `sys.path` and points
-/// the binding at `own` (this file) unless the host chose a library.
+/// Puts `paths` on `sys.path` of the started interpreter and points the
+/// binding at `own` (this file) unless the host chose a library.
 pub(crate) fn start(paths: &[String], own: Option<&str>) -> Result<(), String> {
-    Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         crate::stack::fit(py);
         bridge(py)?.getattr("setup")?.call1((paths.to_vec(), own))?;

@@ -33,3 +33,7 @@ mod exports;
 // found at run time. The other module with `unsafe`.
 #[allow(unsafe_code)]
 mod stack;
+// Starting the interpreter under the configuration's `isolation`:
+// libpython's configuration functions, found at run time.
+#[allow(unsafe_code)]
+mod start;

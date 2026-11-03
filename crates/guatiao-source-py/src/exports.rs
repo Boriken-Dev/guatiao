@@ -46,7 +46,7 @@ pub(crate) fn own_path() -> Option<String> {
 
 /// Where libpython is mapped from: the object holding one of its functions.
 #[cfg(unix)]
-fn python_path() -> Option<String> {
+pub(crate) fn python_path() -> Option<String> {
     os::own_path(pyo3::ffi::Py_IsInitialized as *const c_void)
 }
 
