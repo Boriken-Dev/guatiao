@@ -533,13 +533,8 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     // `tests/kind_glue_probes.rs`.
 
     let sensitive = sensitive_mark(&f.attrs)?;
-    if sensitive && matches!(ret, RetKind::Text) {
-        return Err(syn::Error::new_spanned(
-            &sig.output,
-            "a `#[sensitive]` slot cannot answer a `String`: its caller would hold a copy \
-             nothing wipes; answer `Result<Secret<String>, ProviderError>`, or a `Value` built \
-             through the carrier",
-        ));
+    if sensitive {
+        sensitive_answer(&ret, &sig.output, roots)?;
     }
     let signature = normalised_signature(sig, roots);
     Ok(MethodPlan {
@@ -861,6 +856,38 @@ fn ret_kind(output: &ReturnType, roots: Roots<'_>) -> syn::Result<(RetKind, bool
         return Ok((plain_ret(ok, roots)?, true));
     }
     Ok((plain_ret(ty, roots)?, false))
+}
+
+/// Refuses an answer a `#[sensitive]` slot's caller could not wipe: only
+/// `Secret<_>`, a `Value`, `Map`, `List` or `Text` (which live in the carrier
+/// named), a scalar or nothing, or a `Result` of one, is answered.
+fn sensitive_answer(ret: &RetKind, output: &ReturnType, roots: Roots<'_>) -> syn::Result<()> {
+    let refused = match ret {
+        RetKind::Unit | RetKind::Scalar(_) | RetKind::Value | RetKind::Map | RetKind::List => {
+            return Ok(());
+        }
+        RetKind::Owned(ty) => match ty {
+            Type::Path(p)
+                if p.qself.is_none()
+                    && (roots.names_guatiao(&p.path, "Secret")
+                        || roots.guatiao(&p.path) == Some("Text")) =>
+            {
+                return Ok(());
+            }
+            _ => quote!(#ty).to_string(),
+        },
+        RetKind::Text => String::from("String"),
+        RetKind::Object(_) => String::from("an object"),
+    };
+    Err(syn::Error::new_spanned(
+        output,
+        format!(
+            "a `#[sensitive]` slot cannot answer `{refused}`: its caller would hold a copy \
+             nothing wipes. It answers a `Secret<_>` (`Result<Secret<String>, ProviderError>`), \
+             a `Value`, `Map`, `List` or `Text` built through the carrier, a number, a `bool` or \
+             nothing, or a `Result` of one"
+        ),
+    ))
 }
 
 fn plain_ret(ty: &Type, roots: Roots<'_>) -> syn::Result<RetKind> {
@@ -2691,15 +2718,43 @@ mod tests {
             ),
             (
                 "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> String; }",
-                "cannot answer a `String`",
+                "cannot answer `String`",
             ),
             (
                 "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<String, ProviderError>; }",
                 "Secret<String>",
             ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<Option<String>, ProviderError>; }",
+                "cannot answer `Option < String >`",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<Vec<u8>, ProviderError>; }",
+                "cannot answer `Vec < u8 >`",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<Login, ProviderError>; }",
+                "cannot answer `Login`",
+            ),
+            (
+                "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<other::Secret<String>, ProviderError>; }",
+                "cannot answer `other :: Secret < String >`",
+            ),
         ] {
             let err = expand_str("", item).expect_err(item);
             assert!(err.contains(why), "{item}: {err}");
+        }
+        for item in [
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<Secret<String>, ProviderError>; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<::guatiao::Secret<Vec<u8>>, ProviderError>; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Result<Text, ProviderError>; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> Map; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> List; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> u32; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self) -> bool; }",
+            "pub trait V: Send + Sync { #[sensitive] fn pin(&self, v: Secret<String>) -> Result<(), ProviderError>; }",
+        ] {
+            expand_str("", item).expect(item);
         }
     }
 
