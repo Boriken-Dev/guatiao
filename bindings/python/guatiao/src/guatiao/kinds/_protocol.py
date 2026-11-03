@@ -62,9 +62,14 @@ MapAnswer = Union[Map, Mapping[str, Any]]
 ListAnswer = Union[List, Sequence[Any]]
 #: What a slot answering a value may return: a `Ref`, or plain data.
 ValueAnswer = Union[Ref, None, bool, int, float, str, bytes, Sequence[Any], Mapping[str, Any]]
+#: What a `@sensitive` slot answering text gives and gets: a provider may
+#: return a `str` (or a `Value` holding the string), and a caller gets a
+#: `Value` holding it in the wiping allocator, never a `str`.
+SensitiveText = Union[str, Value]
 
 _REQUIRED = "__guatiao_required__"
 _FALLIBLE = "__guatiao_fallible__"
+_SENSITIVE = "__guatiao_sensitive__"
 
 
 def required(fn: F) -> F:
@@ -78,6 +83,15 @@ def fallible(fn: F) -> F:
     """Marks a slot that can fail: its C prototype ends with a
     `guatiao_provider_error *err`, and a Rust method answers `Result`."""
     setattr(fn, _FALLIBLE, True)
+    return fn
+
+
+def sensitive(fn: F) -> F:
+    """Marks a slot whose answer is a secret: a caller names the wiping
+    allocator for it, and gets a tree or a string back as a `Value` kept
+    there (`Ref.reveal()` reads it without a copy). Not part of the floor
+    hash."""
+    setattr(fn, _SENSITIVE, True)
     return fn
 
 
@@ -125,7 +139,7 @@ def _shape(annotation: Any, *, answer: bool, where: str) -> Any:
     if answer:
         if base is None or base is type(None):
             return None
-        if base is str:
+        if base is str or base == SensitiveText:
             return shapes.TEXT
         if base in (Map, MapAnswer):
             return shapes.MAP
@@ -213,6 +227,7 @@ class KindProtocol(Protocol):
                     required=bool(getattr(fn, _REQUIRED, False)),
                     arg_names=params,
                     doc=inspect.cleandoc(fn.__doc__) if fn.__doc__ else None,
+                    sensitive=bool(getattr(fn, _SENSITIVE, False)),
                 )
             )
             stubs[attr] = fn

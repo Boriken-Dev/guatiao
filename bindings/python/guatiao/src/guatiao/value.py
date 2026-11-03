@@ -14,6 +14,7 @@ loaded `guatiao` library.
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import decimal
 import math
@@ -296,6 +297,16 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
     raise TypeError(f"cannot convert {type(obj)!r} to a guatiao value")
 
 
+def wiping_alloc() -> "_abi.Alloc":
+    """The allocator a secret is built in: every block freed through it is
+    overwritten with zeros first, the block a growing string or list leaves
+    behind included. `Value(secret, alloc=wiping_alloc())` builds there; a
+    slot its kind marks sensitive answers there. Python's own `str` and
+    `bytes` are not guatiao's to wipe: read a secret with `Ref.reveal()`
+    rather than `to_python()`."""
+    return _lib.core().wiping_alloc
+
+
 class _Owner(Protocol):
     """What a `Ref` walks from: a root node, and whether and how it may
     be read and changed. A `Value` is one; so is every view a call or a
@@ -346,6 +357,42 @@ class Ref:
     @property
     def tag(self) -> int:
         return _tag_of(self._node())
+
+    @property
+    def is_sensitive(self) -> bool:
+        """Whether any part of this node's tree lives in the wiping
+        allocator: a secret, which `repr` does not show."""
+        node = self._node()
+        return node is not None and bool(_lib.core().guatiao_value_is_sensitive(ctypes.byref(node)))
+
+    @contextlib.contextmanager
+    def reveal(self) -> Iterator[memoryview]:
+        """The bytes of this string, number or bytes node where they live:
+        a read-only `memoryview` over the tree's own memory, no copy made,
+        released when the `with` block ends. A secret read this way is
+        wiped with its tree; `bytes(view)` or `str(...)` makes a copy
+        Python keeps and guatiao cannot wipe."""
+        node = self._require_node()
+        if node.tag in (_abi.Tag.STRING, _abi.Tag.NUMBER):
+            storage: Any = node.payload.text
+        elif node.tag == _abi.Tag.BYTES:
+            storage = node.payload.bytes
+        else:
+            raise TypeError("only a string, a number or bytes can be revealed")
+        if storage.len == 0:
+            view = memoryview(b"")
+            try:
+                yield view
+            finally:
+                view.release()
+            return
+        base = memoryview((ctypes.c_char * storage.len).from_address(storage.ptr)).cast("B")
+        view = base.toreadonly()
+        try:
+            yield view
+        finally:
+            view.release()
+            base.release()
 
     def is_absent(self) -> bool:
         return self.tag == _abi.Tag.ABSENT
@@ -405,6 +452,8 @@ class Ref:
 
     def __repr__(self) -> str:
         try:
+            if self.is_sensitive:
+                return "<guatiao.Ref [sensitive]>"
             return f"<guatiao.Ref {self.to_python()!r}>"
         except Exception:
             return "<guatiao.Ref>"
@@ -643,6 +692,14 @@ class Value(Ref):
     def _clone_alloc(self) -> "_abi.Alloc":
         return self._ensure_alloc()
 
+    def wipe(self) -> None:
+        """Overwrites with zeros every byte this tree holds, in whatever
+        allocator each part lives, then frees it: this value is null
+        afterwards. What a secret built outside the wiping allocator needs
+        before it goes; one built there is wiped by `close()` as well."""
+        self._check_open()
+        check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
+
     def close(self) -> None:
         if getattr(self, "_closed", True):
             return
@@ -754,6 +811,8 @@ class Value(Ref):
         if self._closed:
             return "<guatiao.Value closed>"
         try:
+            if self.is_sensitive:
+                return "<guatiao.Value [sensitive]>"
             return f"<guatiao.Value {self.to_python()!r}>"
         except Exception:
             return "<guatiao.Value>"

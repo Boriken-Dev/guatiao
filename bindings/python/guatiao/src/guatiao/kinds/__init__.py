@@ -63,11 +63,13 @@ from ._protocol import (
     Lent,
     ListAnswer,
     MapAnswer,
+    SensitiveText,
     Taken,
     ValueAnswer,
     fallible,
     kind_of,
     required,
+    sensitive,
 )
 from ._description import describe_kinds, generate, kinds_of
 from ._spec import Kind, Method, Object, Remote, live_objects
@@ -79,6 +81,8 @@ __all__ = [
     "Taken",
     "required",
     "fallible",
+    "sensitive",
+    "SensitiveText",
     "kind_of",
     "MapAnswer",
     "ListAnswer",
