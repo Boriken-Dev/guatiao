@@ -273,6 +273,12 @@ fn a_mutual_tls_server_refuses_a_client_with_no_certificate() {
 #[test]
 fn a_server_tls_server_refuses_a_client_asking_mutual_tls() {
     for over in every() {
+        // A WebTransport client asking mutual TLS is refused before it
+        // connects: `mutual_tls_is_not_offered_over_webtransport`.
+        #[cfg(feature = "webtransport")]
+        if matches!(over, Over::Wt) {
+            continue;
+        }
         let (address, server, _) = device(over, LinkOptions::new(Trust::ServerTls).key(KEY));
         // A client holding an identity the server never asks for, at the
         // secure level: the trust levels differ.
