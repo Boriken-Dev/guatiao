@@ -45,7 +45,7 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
   --range CIDR          admit peers from this address range (repeatable): a
                         permit rule of the access control list, which denies
                         what no rule permits
-  --acl PATH            the access control list, a TOML or JSON file
+  --acl PATH            the access control list, a TOML, JSON, YAML or CFG file
                         ([[rule]] action, source, destination, port,
                         fingerprint; default); none needs it or --range
   --key-file PATH       the pre-shared key clients prove (none, server-tls)
@@ -64,8 +64,8 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         next) here, again at every new certificate
   --pin FINGERPRINT     TLS: trust this client (repeatable); with any, the
                         trust store no longer decides
-  --policy PATH         TLS: the TLS policy, a TOML or JSON file (default
-                        modern, TLS 1.3 only); its [acl] is the access
+  --policy PATH         TLS: the TLS policy, a TOML, JSON, YAML or CFG file
+                        (default modern, TLS 1.3 only); its [acl] is the access
                         control list
   --waiting             list the clients waiting in --state-dir, then exit
   --accept FINGERPRINT  accept a waiting client in --state-dir, then exit
@@ -216,20 +216,60 @@ fn parse() -> Result<Args, String> {
     Ok(a)
 }
 
-/// A TOML or JSON file as a value: JSON when its name ends in `.json`.
+/// A configuration file as a value, through anycfg: `.toml`, `.json`,
+/// `.yaml` and `.yml` by extension, `.cfg` by a `#!` first line, else TOML.
 #[cfg(feature = "tcp")]
 fn document(path: &std::path::Path) -> Result<Value, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let how = guatiao_serde::Presentation::new();
-    let read = if path
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("json"))
-    {
-        guatiao_serde::text::json::from_str(&text, Alloc::rust(), how)
-    } else {
-        guatiao_serde::text::toml::from_str(&text, Alloc::rust(), how)
-    };
-    read.map_err(|e| format!("{}: {e}", path.display()))
+    guatiao_bridge::document::read(path)
+}
+
+#[cfg(all(test, feature = "tcp"))]
+mod document_tests {
+    use super::document;
+
+    fn write(dir: &std::path::Path, name: &str, text: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn a_document_is_read_by_extension_or_by_its_first_line() {
+        let dir = std::env::temp_dir().join(format!("guatiao-server-doc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let files = [
+            write(&dir, "a.toml", "port = 7\nname = \"x\"\n"),
+            write(&dir, "b.json", "{\"port\": 7, \"name\": \"x\"}"),
+            write(&dir, "c.yaml", "port: 7\nname: x\n"),
+            write(&dir, "d.yml", "port: 7\nname: x\n"),
+            write(&dir, "e.cfg", "port = 7\nname = \"x\"\n"),
+            write(&dir, "f.cfg", "#!json\n{\"port\": 7, \"name\": \"x\"}"),
+            write(&dir, "g.cfg", "#!yaml\nport: 7\nname: x\n"),
+        ];
+        for path in &files {
+            let value = document(path).unwrap_or_else(|e| panic!("{e}"));
+            let map: &guatiao::Map = guatiao::value::convert::TryAsRef::try_as_ref(&value)
+                .unwrap_or_else(|| panic!("{} is not a map", path.display()));
+            assert_eq!(
+                map.get("name")
+                    .and_then(guatiao::value::convert::TryAsRef::<str>::try_as_ref),
+                Some("x"),
+                "{}",
+                path.display()
+            );
+        }
+        let other = write(&dir, "h.conf", "port = 7\n");
+        let why = document(&other).unwrap_err();
+        assert!(why.contains("h.conf"), "{why}");
+        let broken = write(&dir, "i.json", "{\"secret-value\" 7}");
+        let why = document(&broken).unwrap_err();
+        assert!(
+            why.contains("i.json") && !why.contains("secret-value"),
+            "{why}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 fn config_map(json: Option<&str>) -> Result<Map, String> {
