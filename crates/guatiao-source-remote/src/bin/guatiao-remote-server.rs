@@ -59,6 +59,9 @@ guatiao-remote-server --state-dir DIR (--waiting | --accept FINGERPRINT)
                         https:// presents certificates it makes itself, a
                         new one every six days, which a page pins by hash,
                         unless this or --state-dir names one
+  --plain-beyond-loopback
+                        ws://: listen on any address, not on this machine alone,
+                        with nothing encrypted (a weakening, said at start)
   --hashes-file PATH    https://: write the hashes a page pins (a JSON list
                         of sha256:<hex>, the certificate presented and the
                         next) here, again at every new certificate
@@ -98,6 +101,7 @@ struct Args {
     state_dir: Option<PathBuf>,
     identity: Option<PathBuf>,
     hashes_file: Option<PathBuf>,
+    plain_beyond_loopback: bool,
     pins: Vec<String>,
     policy: Option<PathBuf>,
     waiting: bool,
@@ -127,6 +131,7 @@ fn parse() -> Result<Args, String> {
         state_dir: None,
         identity: None,
         hashes_file: None,
+        plain_beyond_loopback: false,
         pins: Vec::new(),
         policy: None,
         waiting: false,
@@ -165,6 +170,7 @@ fn parse() -> Result<Args, String> {
             "--state-dir" => a.state_dir = Some(need(&mut it, &flag)?.into()),
             "--identity" => a.identity = Some(need(&mut it, &flag)?.into()),
             "--hashes-file" => a.hashes_file = Some(need(&mut it, &flag)?.into()),
+            "--plain-beyond-loopback" => a.plain_beyond_loopback = true,
             "--pin" => a.pins.push(need(&mut it, &flag)?),
             "--policy" => a.policy = Some(need(&mut it, &flag)?.into()),
             "--waiting" => a.waiting = true,
@@ -487,6 +493,11 @@ fn run() -> Result<(), String> {
         return Err(format!(
             "{scheme} runs on this machine with no TLS, and --security is {}: leave it out",
             security.name()
+        ));
+    }
+    if a.plain_beyond_loopback && scheme != "ws" {
+        return Err(format!(
+            "--plain-beyond-loopback is for ws://, which listens on this machine alone unless told: {scheme}:// has no such limit"
         ));
     }
     match (scheme.as_str(), security) {
@@ -985,11 +996,21 @@ fn serve_ws(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
     use guatiao_source_remote::transport::ws::WsListen;
     let acl = trusted_acl(&front.server, "ws", a)?;
     let said = listing(&acl);
-    let listener = WsListen::bind(address, acl).map_err(|e| e.to_string())?;
+    let listener = if a.plain_beyond_loopback {
+        WsListen::bind_beyond_loopback(address, acl)
+    } else {
+        WsListen::bind(address, acl)
+    }
+    .map_err(|e| e.to_string())?;
     eprintln!(
         "guatiao-remote-server: serving ws://{} admitting {said}",
         listener.local_addr().map_err(|e| e.to_string())?,
     );
+    if listener.plain_beyond_loopback() {
+        eprintln!(
+            "guatiao-remote-server: weaker than modern: plain_beyond_loopback = true (modern: false)"
+        );
+    }
     serve_accepted(front, || listener.accept())
 }
 
@@ -1186,7 +1207,6 @@ fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
                 w.setting, w.value, w.strict
             );
         }
-        names_no_client(&front.server);
         listener
     };
     let listener = match (&a.identity, &a.state_dir) {
@@ -1246,19 +1266,6 @@ fn publish_hashes(
     );
     *said = hashes;
     Ok(())
-}
-
-/// Says what mutual TLS means over WebTransport: coqui-web does not report
-/// the certificate a client presented, so the listener refuses clients it
-/// does not trust in the handshake but no link can complete at the secure
-/// level.
-#[cfg(feature = "webtransport")]
-fn names_no_client(server: &Server) {
-    if server.options().trust() == Trust::Secure {
-        eprintln!(
-            "guatiao-remote-server: warning: https:// at mutual TLS cannot name the client that presented a certificate, so no link completes at the secure level; use --security server-tls, or tls://, wss:// or quic://"
-        );
-    }
 }
 
 #[cfg(all(feature = "ws", feature = "tls"))]

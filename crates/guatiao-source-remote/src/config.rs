@@ -9,6 +9,7 @@
 //! | --- | --- |
 //! | `connect` | `tcp://host:port`, `quic://host:port` (QUIC), `ws://host:port/path` and `wss://host:port/path` (WebSocket, as a browser connects, without and with TLS), `https://host:port/path` (WebTransport, HTTP/3 over QUIC, as a browser connects), `tls://host:port` (TCP with TLS), `local://name` (a socket path on Unix, a pipe name on Windows), `shm://name` (shared memory beside that), `rdma://host:port` (RDMA, experimental, Linux only), or for a child `child` instead |
 //! | `rdma_device` | the RDMA device `rdma://` goes through (default: the first) |
+//! | `plain_beyond_loopback` | `true` lets a `ws://` URL name a host beyond this machine, with nothing encrypted (default `false`): a weakening of the `none` security, listed by `RemoteSource::weakened` |
 //! | `child` | a list: the program and its arguments, served on its stdio |
 //! | `security` | `none`, `server-tls` or `mutual-tls`: none on a child, `local://` and `shm://` (the only one they run), mutual TLS on every network transport unless told |
 //! | `key`, `key_file` | the pre-shared key, as text or a file's bytes: proved both ways with `none`, and at server TLS when the server asks for it |
@@ -33,7 +34,7 @@
 //! ```
 //!
 //! It may also name `timeout_ms`, `max_frame`, `max_calls`,
-//! `rdma_device`, and for TLS `token_file`, `pins`, `roots`, `policy`,
+//! `rdma_device`, `plain_beyond_loopback`, and for TLS `token_file`, `pins`, `roots`, `policy`,
 //! `identity_file` and `state_dir` (paths relative to it), and nothing
 //! else: never `key` or `token` (a secret in a search path), never `child`
 //! (a manifest names a peer that listens).
@@ -260,23 +261,50 @@ pub fn policy_of(value: &guatiao::Value) -> Result<crate::transport::tls::Policy
     guatiao_serde::adapt::from_value(value).map_err(|e| refused(format!("not a TLS policy: {e}")))
 }
 
-/// Every setting looser than the modern policy in the TLS policy a
-/// configuration names (TLS 1.2 among them, its access control list's
-/// default included), when its link runs TLS; empty under the modern
-/// policy, and at no security, where no TLS policy applies.
-#[cfg(feature = "tls")]
-pub(crate) fn weakened_in(map: &Map) -> Vec<crate::transport::tls::Weakening> {
+/// Whether a configuration lets a `ws://` URL name a host beyond this
+/// machine (`plain_beyond_loopback`, default false).
+#[cfg(feature = "ws")]
+fn plain_beyond_loopback_in(map: &Map) -> Result<bool, ProviderError> {
+    match map.get("plain_beyond_loopback") {
+        None => Ok(false),
+        Some(v) => {
+            bool::from_value(v).map_err(|_| refused("`plain_beyond_loopback` is not true or false"))
+        }
+    }
+}
+
+/// Every setting looser than strict in a configuration: in the TLS policy
+/// it names (TLS 1.2 among them, its access control list's default
+/// included), when its link runs TLS, and a plain `ws://` allowed beyond
+/// this machine. Empty under the modern policy, and at no security, where
+/// no TLS policy applies.
+#[cfg(any(feature = "tls", feature = "ws"))]
+pub(crate) fn weakened_in(map: &Map) -> Vec<coqui_peer::Weakening> {
     let scheme = match text(map, "connect") {
         Ok(Some(connect)) => connect.split_once("://").map_or("", |(scheme, _)| scheme),
         _ => "child",
     };
+    #[allow(unused_mut)]
+    let mut weakened = Vec::new();
+    #[cfg(feature = "tls")]
     match (security_in(map, scheme), map.get("policy")) {
-        (Ok(Security::None) | Err(_), _) | (_, None) => Vec::new(),
-        (Ok(_), Some(policy)) => policy_of(policy).map_or_else(
+        (Ok(Security::None) | Err(_), _) | (_, None) => {}
+        (Ok(_), Some(policy)) => weakened.extend(policy_of(policy).map_or_else(
             |_| Vec::new(),
             |p| p.weakened_against(&crate::transport::tls::Policy::modern()),
-        ),
+        )),
     }
+    #[cfg(feature = "ws")]
+    if scheme == "ws" && plain_beyond_loopback_in(map).unwrap_or(false) {
+        weakened.push(coqui_peer::Weakening::new(
+            "plain_beyond_loopback",
+            "true",
+            "false",
+        ));
+    }
+    #[cfg(not(feature = "ws"))]
+    let _ = scheme;
+    weakened
 }
 
 /// The authorities `roots` names: `platform`, or a CA bundle's path,
@@ -453,10 +481,11 @@ pub fn client_of(map: &Map) -> Result<(Box<dyn Connect>, LinkOptions), ProviderE
             if security != Security::None {
                 return Err(plain_only(scheme, security));
             }
-            Ok((
-                Box::new(crate::transport::ws::WsConnect::new(connect)),
-                options_of(map, trust)?,
-            ))
+            let mut connect = crate::transport::ws::WsConnect::new(connect);
+            if plain_beyond_loopback_in(map)? {
+                connect = connect.beyond_loopback();
+            }
+            Ok((Box::new(connect), options_of(map, trust)?))
         }
         #[cfg(feature = "ws")]
         "wss" => match security {
@@ -532,6 +561,7 @@ const PEER_KEYS: &[&str] = &[
     "max_frame",
     "max_calls",
     "rdma_device",
+    "plain_beyond_loopback",
     "pins",
     "roots",
     "policy",

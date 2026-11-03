@@ -75,8 +75,8 @@ struct Peer {
     /// within it.
     generations: Arc<AtomicU64>,
     /// The settings of its TLS policy looser than the modern one.
-    #[cfg(feature = "tls")]
-    weakened: Vec<crate::transport::tls::Weakening>,
+    #[cfg(any(feature = "tls", feature = "ws"))]
+    weakened: Vec<coqui_peer::Weakening>,
 }
 
 /// Peers' providers, served to a host's registry: one peer, or every peer
@@ -243,7 +243,7 @@ impl Peer {
             listed: Mutex::new(None),
             opened: Mutex::new(BTreeMap::new()),
             generations,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "ws"))]
             weakened: Vec::new(),
         }
     }
@@ -252,7 +252,7 @@ impl Peer {
     fn configured(self, map: &Map) -> Peer {
         let _ = map;
         Peer {
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "ws"))]
             weakened: config::weakened_in(map),
             ..self
         }
@@ -784,16 +784,17 @@ impl RemoteSource {
         }
     }
 
-    /// Every setting looser than the modern policy (TLS 1.3 only) in the
-    /// TLS policy a configuration or a peer manifest names, by peer: its
-    /// name, or empty for the one peer of a `connect` or `child`
-    /// configuration. What a host shows or logs, as
+    /// Every setting looser than strict in a configuration or a peer
+    /// manifest, by peer: the TLS policy's looser than modern (TLS 1.3
+    /// only), and a plain `ws://` allowed beyond this machine
+    /// (`plain_beyond_loopback`). A peer's name, or empty for the one peer
+    /// of a `connect` or `child` configuration. What a host shows or logs, as
     /// `guatiao-remote-server` prints its own. Described peers are those
     /// the last refresh found. Empty when every peer is held to the modern
     /// policy, and for a source made by [`RemoteSource::new`], whose
     /// `TlsConfig::weakened` its host holds already.
-    #[cfg(feature = "tls")]
-    pub fn weakened(&self) -> Vec<(String, crate::transport::tls::Weakening)> {
+    #[cfg(any(feature = "tls", feature = "ws"))]
+    pub fn weakened(&self) -> Vec<(String, coqui_peer::Weakening)> {
         let each = |name: &str, peer: &Peer| {
             peer.weakened
                 .iter()
