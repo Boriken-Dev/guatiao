@@ -7,9 +7,13 @@
 
 #![forbid(unsafe_code)]
 
+use guatiao::Map;
+use guatiao::value::convert::TryAsRef;
 use guatiao_bridge::{
     BridgeError, Config, Engine, Manifest, ManifestFormat, Opened, ThreadModel, text_list,
 };
+
+use crate::start::{Isolation, Settings, StartError};
 
 /// The one interpreter this file keeps for the program: started (or
 /// joined, in a Python host) when the source is added, never finalised.
@@ -29,10 +33,19 @@ impl Engine for Python {
         skip_dirs: &["__pycache__"],
     };
 
-    /// Puts the configuration's `paths` first on `sys.path` and points the
-    /// binding at this file's own exports.
+    /// Starts the interpreter under the configuration's `isolation` and
+    /// `home` (or joins a Python host's), puts its `paths` first on
+    /// `sys.path` and points the binding at this file's own exports.
     fn start(config: &Config) -> Result<Python, BridgeError> {
+        let settings = settings(config.map())?;
         let paths = text_list(config.map(), "paths")?;
+        crate::start::start(&settings).map_err(|e| match e {
+            StartError::Started(why) => BridgeError::Config {
+                key: "isolation".to_string(),
+                why,
+            },
+            StartError::Failed(why) => BridgeError::Unavailable(why),
+        })?;
         crate::bridge::start(&paths, crate::exports::own_path().as_deref())
             .map_err(BridgeError::Unavailable)?;
         Ok(Python)
@@ -62,4 +75,42 @@ impl Engine for Python {
     fn close(&self, library: i64) {
         crate::bridge::close(library);
     }
+}
+
+/// `isolation` (`shipped` unless given) and `home`, which `inherit` does
+/// not take: there the environment's `PYTHONHOME` decides.
+fn settings(map: &Map) -> Result<Settings, BridgeError> {
+    let text = |key: &str| -> Result<Option<&str>, BridgeError> {
+        map.get(key)
+            .map(|v| {
+                TryAsRef::<str>::try_as_ref(v)
+                    .ok_or_else(|| BridgeError::config(key, "is not text"))
+            })
+            .transpose()
+    };
+    let isolation = match text("isolation")? {
+        None => Isolation::Shipped,
+        Some(name) => Isolation::parse(name).ok_or_else(|| {
+            BridgeError::config(
+                "isolation",
+                format!("is `{name}`, not `shipped`, `inherit` or `isolated`"),
+            )
+        })?,
+    };
+    let home = text("home")?.map(str::to_string);
+    if let Some(home) = &home {
+        if isolation == Isolation::Inherit {
+            return Err(BridgeError::config(
+                "home",
+                "is not taken under the isolation `inherit`, which leaves it to the environment",
+            ));
+        }
+        if !std::path::Path::new(home).is_dir() {
+            return Err(BridgeError::config(
+                "home",
+                format!("names no directory: {home}"),
+            ));
+        }
+    }
+    Ok(Settings { isolation, home })
 }
