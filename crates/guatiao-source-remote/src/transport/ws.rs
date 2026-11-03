@@ -2,388 +2,70 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! WebSocket (RFC 6455) over TCP, what a browser can open: `ws://` with no
-//! TLS, and `wss://` over the TLS of the `tls` transport (feature `tls`).
-//! Each frame's body is one binary message, with no length in front; the
-//! listener admits peers by an access control list as [`TcpListen`] and
-//! `TlsListen` do.
+//! WebSocket (RFC 6455), what a browser can open, through coqui-web:
+//! `ws://` with no TLS, on loopback only, and `wss://` over a server
+//! certificate (feature `tls`). Each frame's body is one binary message,
+//! with no length in front. A listener admits peers by an access control
+//! list as [`TcpListen`](super::tcp::TcpListen) does, by address, before
+//! the upgrade; a connection upgrades on its first read, on the thread
+//! serving it.
+//!
+//! coqui-web runs the TLS of a `wss://` link itself, from a rustls
+//! configuration. It does not report the certificate a client presented,
+//! so a mutual-TLS listener notes it as the handshake verifies it: the
+//! handshake of a connection runs on a thread of its own, and a verifier
+//! that records what the client proved there tells the link whose
+//! connection it is.
 
 #![forbid(unsafe_code)]
 
 use alloc::sync::Arc;
 use core::net::SocketAddr;
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
-use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Mutex, TryLockError};
+use std::io;
 
-use tungstenite::protocol::{Role, WebSocketConfig};
-use tungstenite::{Message, WebSocket};
+use coqui_net_acl::{Acl, Outcome};
+use coqui_web::websocket::{Dialer as WsDialer, Frames, Listener};
+use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
+use url::Url;
 
-use coqui_net_acl::Acl;
+use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
+use super::web::{Open, Refused, Shared, connection, io_error, source_of};
+use super::{Connect, Connection};
 
-use super::tcp::{Accepted, CONNECT_TIMEOUT, TcpListen};
-#[cfg(feature = "tls")]
-use super::tls::{TlsConfig, TlsConnect, TlsDuplex, TlsListen};
-use super::{Connect, Connection, FrameRead, FrameWrite};
+/// How often a listener looks up from waiting for a connection to report
+/// the sources its list turned away.
+const REPORT_EVERY: Duration = Duration::from_millis(100);
 
-/// The byte stream under the WebSocket: a TCP socket, or a TLS session
-/// over one.
-#[derive(Clone)]
-enum Raw {
-    Plain(Arc<TcpStream>),
-    #[cfg(feature = "tls")]
-    Tls(Arc<TlsDuplex>),
+fn invalid(why: impl core::fmt::Display) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
 }
 
-impl Raw {
-    fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Raw::Plain(s) => (&**s).read(buf),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.read(buf),
-        }
-    }
-
-    fn write_all(&self, buf: &[u8]) -> io::Result<()> {
-        match self {
-            Raw::Plain(s) => (&**s).write_all(buf),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.write_all(buf),
-        }
-    }
-
-    fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        match self {
-            Raw::Plain(s) => s.set_read_timeout(timeout),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.set_read_timeout(timeout),
-        }
-    }
-
-    fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        match self {
-            Raw::Plain(s) => s.set_write_timeout(timeout),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.set_write_timeout(timeout),
-        }
-    }
-
-    /// Ends the stream both ways, telling a TLS peer when `cleanly`.
-    fn shutdown(&self, cleanly: bool) {
-        #[cfg(not(feature = "tls"))]
-        let _ = cleanly;
-        match self {
-            Raw::Plain(s) => super::tcp::shut(s),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) if cleanly => t.close(),
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.shut(),
-        }
-    }
-
-    fn peer_id(&self) -> Option<String> {
-        match self {
-            Raw::Plain(_) => None,
-            #[cfg(feature = "tls")]
-            Raw::Tls(t) => t.peer_id(),
-        }
-    }
-
-    fn encrypted(&self) -> bool {
-        !matches!(self, Raw::Plain(_))
-    }
+/// The bounds of a link's channel: coqui-web's, with the largest message
+/// a link allows set by the link as it reads.
+fn limits() -> Limits {
+    Limits::default()
 }
 
-/// The stream both halves use. Every write goes out whole under one lock:
-/// tungstenite hands a write only whole frames, so the reader's pongs and
-/// close replies never land inside a frame the writer is sending.
-#[derive(Clone)]
-struct Socket {
-    raw: Raw,
-    writing: Arc<Mutex<()>>,
-    /// The reader's: a write that finds the writer busy answers
-    /// `WouldBlock` having written nothing, and tungstenite sends the
-    /// reply on a later read, so the reader never waits behind a writer
-    /// that waits for the peer to read.
-    yields: bool,
-}
-
-impl Read for Socket {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.raw.read(buf)
-    }
-}
-
-impl Write for Socket {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let taken = if self.yields {
-            self.writing.try_lock()
-        } else {
-            self.writing.lock().map_err(TryLockError::from)
-        };
-        let _whole = match taken {
-            Ok(guard) => guard,
-            Err(TryLockError::Poisoned(p)) => p.into_inner(),
-            Err(TryLockError::WouldBlock) => return Err(io::ErrorKind::WouldBlock.into()),
-        };
-        self.raw.write_all(buf)?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-fn config() -> WebSocketConfig {
-    // Each frame goes out as soon as it is written; the link batches.
-    WebSocketConfig::default().write_buffer_size(0)
-}
-
-fn io_error(e: tungstenite::Error) -> io::Error {
-    match e {
-        tungstenite::Error::Io(e) => e,
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
-            io::ErrorKind::BrokenPipe.into()
-        }
-        tungstenite::Error::Capacity(why) => {
-            io::Error::new(io::ErrorKind::InvalidData, why.to_string())
-        }
-        other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
-    }
-}
-
-/// What the reading half holds: the server's end upgrades on its first
-/// read, when the client's HTTP request is due.
-enum Reading {
-    Upgrade,
-    Open(Box<WebSocket<Socket>>),
-    Ended,
-}
-
-struct WsReader {
-    reading: Reading,
-    socket: Socket,
-    open: Arc<AtomicBool>,
-    /// Set once the peer's close has arrived (and been answered): the
-    /// writer then sends nothing more, its own close included.
-    closed: Arc<AtomicBool>,
-}
-
-impl WsReader {
-    fn ws(&mut self) -> io::Result<Option<&mut WebSocket<Socket>>> {
-        if matches!(self.reading, Reading::Upgrade) {
-            let ws = tungstenite::accept_with_config(self.socket.clone(), Some(config())).map_err(
-                |e| match e {
-                    tungstenite::HandshakeError::Failure(e) => io_error(e),
-                    tungstenite::HandshakeError::Interrupted(_) => io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "the client's WebSocket upgrade did not arrive in time",
-                    ),
-                },
-            )?;
-            let mut ws = Box::new(ws);
-            ws.get_mut().yields = true;
-            self.reading = Reading::Open(ws);
-            self.open.store(true, Ordering::Release);
-        }
-        Ok(match &mut self.reading {
-            Reading::Open(ws) => Some(&mut **ws),
-            _ => None,
-        })
-    }
-}
-
-impl FrameRead for WsReader {
-    fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
-        self.read_frame_in(buf, max, &mut |_| Vec::new())
-    }
-
-    fn read_frame_in(
-        &mut self,
-        buf: &mut Vec<u8>,
-        max: usize,
-        room: &mut dyn FnMut(usize) -> Vec<u8>,
-    ) -> io::Result<bool> {
-        let Some(ws) = self.ws()? else {
-            return Ok(false);
-        };
-        ws.set_config(|c| {
-            c.max_message_size = Some(max);
-            c.max_frame_size = Some(max);
-        });
-        loop {
-            match ws.read() {
-                Ok(Message::Binary(body)) => {
-                    if buf.capacity() < body.len() {
-                        *buf = room(body.len());
-                    }
-                    buf.clear();
-                    buf.extend_from_slice(&body);
-                    return Ok(true);
-                }
-                Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)) => {}
-                Ok(Message::Text(_)) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "a text message: frames are binary",
-                    ));
-                }
-                Ok(Message::Close(_)) => {
-                    // The reply to the close goes out now, not on a next read.
-                    let _ = ws.flush();
-                    self.closed.store(true, Ordering::Release);
-                    self.reading = Reading::Ended;
-                    return Ok(false);
-                }
-                // A dropped connection ends the link as a stream's end of
-                // file does; tungstenite does not say where it fell.
-                Err(
-                    tungstenite::Error::ConnectionClosed
-                    | tungstenite::Error::AlreadyClosed
-                    | tungstenite::Error::Protocol(
-                        tungstenite::error::ProtocolError::ResetWithoutClosingHandshake,
-                    ),
-                ) => {
-                    self.reading = Reading::Ended;
-                    return Ok(false);
-                }
-                Err(tungstenite::Error::Capacity(_)) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("a message over the {max} bytes allowed"),
-                    ));
-                }
-                Err(e) => return Err(io_error(e)),
-            }
-        }
-    }
-
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
-        self.socket.raw.set_read_timeout(timeout)
-    }
-
-    fn peer_id(&self) -> Option<String> {
-        self.socket.raw.peer_id()
-    }
-
-    fn encrypted(&self) -> bool {
-        self.socket.raw.encrypted()
-    }
-}
-
-struct WsWriter {
-    ws: WebSocket<Socket>,
-    socket: Socket,
-    open: Arc<AtomicBool>,
-    closed: Arc<AtomicBool>,
-}
-
-impl WsWriter {
-    fn send(&mut self, body: tungstenite::Bytes) -> io::Result<()> {
-        if !self.open.load(Ordering::Acquire) {
-            return Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "the WebSocket upgrade has not happened: a server's end reads first",
-            ));
-        }
-        if self.closed.load(Ordering::Acquire) {
-            return Err(io::Error::new(
-                io::ErrorKind::BrokenPipe,
-                "the peer closed the WebSocket",
-            ));
-        }
-        self.ws.write(Message::Binary(body)).map_err(io_error)
-    }
-}
-
-/// The body of a frame the link built: the frame without its length.
-fn body(frame: &[u8]) -> io::Result<&[u8]> {
-    frame
-        .get(4..)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "a frame without its length"))
-}
-
-impl FrameWrite for WsWriter {
-    fn write_frame(&mut self, frame: &[u8]) -> io::Result<()> {
-        self.send(tungstenite::Bytes::copy_from_slice(body(frame)?))?;
-        self.ws.flush().map_err(io_error)
-    }
-
-    fn write_frame_parts(&mut self, head: &[u8], tail: &[u8]) -> io::Result<()> {
-        let head = body(head)?;
-        let mut joined = Vec::with_capacity(head.len() + tail.len());
-        joined.extend_from_slice(head);
-        joined.extend_from_slice(tail);
-        self.send(joined.into())?;
-        self.ws.flush().map_err(io_error)
-    }
-
-    fn write_frames(&mut self, frames: &[&[u8]]) -> io::Result<()> {
-        for frame in frames {
-            self.send(tungstenite::Bytes::copy_from_slice(body(frame)?))?;
-        }
-        self.ws.flush().map_err(io_error)
-    }
-
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
-        self.socket.raw.set_write_timeout(timeout)
-    }
-
-    fn shutdown(&mut self) {
-        if self.open.load(Ordering::Acquire) && !self.closed.load(Ordering::Acquire) {
-            let _ = self.ws.close(None);
-            let _ = self.ws.flush();
-        }
-        self.socket.raw.shutdown(true);
-    }
-}
-
-fn shared(stream: TcpStream) -> io::Result<Socket> {
-    stream.set_nodelay(true)?;
-    Ok(over(Raw::Plain(Arc::new(stream))))
-}
-
-fn over(raw: Raw) -> Socket {
-    Socket {
-        raw,
-        writing: Arc::new(Mutex::new(())),
-        yields: false,
-    }
-}
-
-fn connection(socket: Socket, peer: String, reading: Reading, role: Role) -> Connection {
-    let open = Arc::new(AtomicBool::new(matches!(reading, Reading::Open(_))));
-    let closed = Arc::new(AtomicBool::new(false));
-    let closing = socket.raw.clone();
-    Connection {
-        reader: Box::new(WsReader {
-            reading,
-            socket: socket.clone(),
-            open: Arc::clone(&open),
-            closed: Arc::clone(&closed),
-        }),
-        writer: Box::new(WsWriter {
-            ws: WebSocket::from_raw_socket(socket.clone(), role, Some(config())),
-            socket,
-            open,
-            closed,
-        }),
-        peer,
-        closer: Some(Box::new(move || closing.shutdown(false))),
-    }
-}
-
-/// Connects to a WebSocket URL: `ws://host:port/path`, or
+/// Connects to a WebSocket URL: `ws://host:port/path` (loopback only), or
 /// `wss://host:port/path` once given TLS (`WsConnect::tls`).
 #[derive(Clone)]
 pub struct WsConnect {
     url: String,
     timeout: Duration,
     #[cfg(feature = "tls")]
-    tls: Option<TlsConnect>,
+    tls: Option<Wss>,
+}
+
+/// What a `wss://` connect dials with: the client configuration, the
+/// verifier it checks the server by.
+#[cfg(feature = "tls")]
+#[derive(Clone)]
+struct Wss {
+    config: Arc<rustls::ClientConfig>,
+    verifier: Arc<dyn rustls::client::danger::ServerCertVerifier>,
+    /// Whether the server's certificate is checked.
+    proves: bool,
 }
 
 impl core::fmt::Debug for WsConnect {
@@ -403,17 +85,32 @@ impl WsConnect {
         }
     }
 
-    /// Over TLS as `config` says (a `wss://` URL): mutual or server TLS,
-    /// the server known by its pins, the trust store or the roots (for the
-    /// URL's host). The TLS offers HTTP's application protocol, as a
-    /// browser does, and requires none.
+    /// Over TLS as `config` says (a `wss://` URL): the server known by its
+    /// pins, the trust store or the roots (for the URL's host). The TLS
+    /// offers HTTP's application protocol, as a browser does, and requires
+    /// none.
     #[cfg(feature = "tls")]
-    pub fn tls(mut self, config: &TlsConfig) -> io::Result<WsConnect> {
-        self.tls = Some(TlsConnect::for_websocket(config)?);
-        if config.by_roots() {
-            super::tls::server_name(super::tls::host_of(&self.address()?), true)?;
+    pub fn tls(mut self, config: &super::tls::TlsConfig) -> io::Result<WsConnect> {
+        let verifier = config
+            .server_trust()?
+            .server_cert_verifier_with(config.tls_policy())
+            .map_err(|e| super::tls::unbuilt(&e))?;
+        self.tls = Some(Wss {
+            config: config.client_naming(super::tls::WEBSOCKET_ALPN)?,
+            verifier,
+            proves: config.proves_peers(),
+        });
+        let url = self.parsed()?;
+        if let Some(host) = url.host_str() {
+            super::tls::server_name(host.trim_matches(['[', ']']), config.by_roots())?;
         }
         Ok(self)
+    }
+
+    /// Within `timeout` as a whole: the connection, the TLS and the upgrade.
+    pub fn timeout(mut self, timeout: Duration) -> WsConnect {
+        self.timeout = timeout;
+        self
     }
 
     fn encrypted(&self) -> bool {
@@ -423,28 +120,18 @@ impl WsConnect {
         false
     }
 
-    /// Within `timeout` per address tried, and again for the upgrade.
-    pub fn timeout(mut self, timeout: Duration) -> WsConnect {
-        self.timeout = timeout;
-        self
-    }
-
-    fn address(&self) -> io::Result<String> {
-        let invalid = |why: &str| io::Error::new(io::ErrorKind::InvalidInput, why.to_string());
-        let uri: tungstenite::http::Uri = self
-            .url
-            .parse()
-            .map_err(|_| invalid(&format!("`{}` is not a URL", self.url)))?;
-        let port = match (uri.scheme_str(), self.encrypted()) {
-            (Some("ws"), false) => 80,
-            (Some("wss"), true) => 443,
-            (Some("ws"), true) => {
-                return Err(invalid(&format!(
+    fn parsed(&self) -> io::Result<Url> {
+        let url =
+            Url::parse(&self.url).map_err(|_| invalid(format!("`{}` is not a URL", self.url)))?;
+        match (url.scheme(), self.encrypted()) {
+            ("ws", false) | ("wss", true) => {}
+            ("ws", true) => {
+                return Err(invalid(format!(
                     "`{}` carries no TLS, and this connect was given TLS: connect to wss://",
                     self.url
                 )));
             }
-            (Some("wss"), false) => {
+            ("wss", false) => {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
                     if cfg!(feature = "tls") {
@@ -455,73 +142,95 @@ impl WsConnect {
                 ));
             }
             _ => {
-                return Err(invalid(&format!(
+                return Err(invalid(format!(
                     "`{}` is not a ws:// or wss:// URL",
                     self.url
                 )));
             }
-        };
-        let host = uri
-            .host()
-            .ok_or_else(|| invalid(&format!("`{}` names no host", self.url)))?;
-        let host = host.trim_start_matches('[').trim_end_matches(']');
-        let port = uri.port_u16().unwrap_or(port);
-        Ok(if host.contains(':') {
-            format!("[{host}]:{port}")
-        } else {
-            format!("{host}:{port}")
-        })
+        }
+        if url.host_str().is_none() {
+            return Err(invalid(format!("`{}` names no host", self.url)));
+        }
+        Ok(url)
+    }
+
+    /// A dial's failure in words a person can act on; `rejection` is the
+    /// refusal of the server's certificate, when there was one.
+    fn refused(&self, failure: Failure, url: &Url, rejection: Option<io::Error>) -> io::Error {
+        if let Some(rejection) = rejection {
+            return rejection;
+        }
+        let addr = format!(
+            "{}:{}",
+            url.host_str().unwrap_or_default(),
+            url.port_or_known_default().unwrap_or_default()
+        );
+        match failure {
+            Failure::Permission if !self.encrypted() => io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "`ws://` reaches only this machine (loopback), and {addr} is not: connect to wss://"
+                ),
+            ),
+            Failure::Timeout => io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("the WebSocket server at {addr} did not answer in time"),
+            ),
+            Failure::PathLost => io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("the WebSocket server at {addr} did not accept the connection"),
+            ),
+            other => io_error(other),
+        }
     }
 }
 
 impl Connect for WsConnect {
     fn connect(&self) -> io::Result<Connection> {
-        let address = self.address()?;
-        let (stream, addr) = super::tcp::dial(&address, self.timeout)?;
-        let socket = shared(stream)?;
+        let url = self.parsed()?;
+        let mut dialer = WsDialer::new()
+            .with_frames(Frames::Binary)
+            .with_limits(limits());
         #[cfg(feature = "tls")]
-        let socket = match (&self.tls, socket.raw) {
-            (Some(tls), Raw::Plain(stream)) => {
-                let stream = Arc::try_unwrap(stream).map_err(|_| {
-                    io::Error::other("the socket is shared before its TLS handshake")
-                })?;
-                over(Raw::Tls(Arc::new(
-                    tls.clone().timeout(self.timeout).duplex(
-                        stream,
-                        addr,
-                        super::tls::host_of(&address),
-                    )?,
-                )))
-            }
-            (_, raw) => over(raw),
+        let watching = self.tls.as_ref().map(|wss| {
+            // One verifier for this connection, so what it saw is this
+            // connection's.
+            let watching = super::web::Watching::new(Arc::clone(&wss.verifier));
+            let mut config = (*wss.config).clone();
+            config.dangerous().set_certificate_verifier(
+                Arc::clone(&watching) as Arc<dyn rustls::client::danger::ServerCertVerifier>
+            );
+            dialer = core::mem::take(&mut dialer).with_tls(Arc::new(config));
+            watching
+        });
+        #[cfg(feature = "tls")]
+        let rejected = || {
+            let host = url.host_str().unwrap_or_default().trim_matches(['[', ']']);
+            let addr = format!("{host}:{}", url.port_or_known_default().unwrap_or_default());
+            watching.as_ref().and_then(|w| w.rejection(&addr, host))
         };
-        socket.raw.set_read_timeout(Some(self.timeout))?;
-        socket.raw.set_write_timeout(Some(self.timeout))?;
-        let (ws, _) = tungstenite::client::client_with_config(
-            self.url.as_str(),
-            socket.clone(),
-            Some(config()),
-        )
-        .map_err(|e| match e {
-            tungstenite::HandshakeError::Failure(e) => io_error(e),
-            tungstenite::HandshakeError::Interrupted(_) => io::Error::new(
-                io::ErrorKind::TimedOut,
-                "the server's WebSocket upgrade did not arrive in time",
-            ),
-        })?;
-        socket.raw.set_read_timeout(None)?;
-        socket.raw.set_write_timeout(None)?;
-        // The handshake's object reads on: it holds what arrived past the
-        // upgrade.
-        let mut ws = Box::new(ws);
-        ws.get_mut().yields = true;
+        #[cfg(not(feature = "tls"))]
+        let rejected = || None;
+        let channel = dialer
+            .dial(Kind::WebSocket, &url, self.timeout)
+            .map_err(|failure| self.refused(failure, &url, rejected()))?;
+        let shared = Shared::new(self.encrypted(), false);
+        #[cfg(feature = "tls")]
+        let peer = self
+            .tls
+            .as_ref()
+            .filter(|wss| wss.proves)
+            .and_then(|_| watching.as_ref().and_then(|w| w.proven()));
+        #[cfg(not(feature = "tls"))]
+        let peer = None;
+        shared.open(Arc::new(channel) as Arc<dyn Channel>, peer);
         let scheme = if self.encrypted() { "wss" } else { "ws" };
-        Ok(connection(
-            socket,
-            format!("{scheme} {addr}"),
-            Reading::Open(ws),
-            Role::Client,
-        ))
+        let at = format!(
+            "{}:{}",
+            url.host_str().unwrap_or_default(),
+            url.port_or_known_default().unwrap_or_default()
+        );
+        Ok(connection(shared, None, format!("{scheme} {at}")))
     }
 
     fn describe(&self) -> String {
@@ -530,93 +239,180 @@ impl Connect for WsConnect {
 }
 
 /// A WebSocket listener that admits peers by an access control list, as
-/// [`TcpListen`] does. A connection upgrades on its first read, on the
-/// thread serving it, so a client that connects and stalls holds only
-/// that thread; a write before then is refused.
-#[derive(Debug)]
+/// [`TcpListen`](super::tcp::TcpListen) does, or by a TLS configuration's
+/// (`bind_tls`). It reads nothing from a connection it hands over: the
+/// upgrade, and over TLS the handshake before it, run on the first read,
+/// so a client that connects and stalls holds only the thread serving it,
+/// for the handshake's bound; a write before then is refused.
 pub struct WsListen {
-    under: Under,
+    listener: Listener,
+    refused: Arc<Refused>,
+    encrypted: bool,
+    /// Whether clients present a certificate, which a link names them by.
+    #[cfg(feature = "tls")]
+    mutual: bool,
+    /// The address it listens on, which the list's rules can name.
+    #[cfg(feature = "tls")]
+    bound: SocketAddr,
 }
 
-#[derive(Debug)]
-enum Under {
-    Tcp(TcpListen),
-    #[cfg(feature = "tls")]
-    Tls(TlsListen),
+impl core::fmt::Debug for WsListen {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("WsListen")
+            .field("addr", &self.listener.local_addr().ok())
+            .field("encrypted", &self.encrypted)
+            .finish()
+    }
+}
+
+/// A bind's failure in words: coqui-web refuses a plain listener beyond
+/// loopback.
+fn bind_failed(failure: Failure, address: SocketAddr, tls: bool) -> io::Error {
+    match failure {
+        Failure::Permission if !tls => io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "ws:// listens on loopback only, and {address} is not: listen on wss:// to be reached from another machine"
+            ),
+        ),
+        other => io_error(other),
+    }
 }
 
 impl WsListen {
-    /// Binds `address` (a wildcard included), admitting the peers `acl`
-    /// permits.
+    /// Binds `address`, which must be loopback (coqui-web carries no
+    /// plain WebSocket past this machine: use [`bind_tls`](Self::bind_tls)
+    /// beyond it), admitting the peers `acl` permits.
     pub fn bind(address: &str, acl: Acl) -> io::Result<WsListen> {
+        let address = bind_address(address)?;
+        let listener = Listener::bind(address, None).map_err(|f| bind_failed(f, address, false))?;
+        let bound = listener.local_addr().map_err(io_error)?;
+        let refused = Arc::new(Refused::default());
+        let turned = Arc::clone(&refused);
+        let listener = listener
+            .with_frames(Frames::Binary)
+            .with_limits(limits())
+            .with_admission(move |source| {
+                // A peer proving no identity: a rule naming a fingerprint
+                // never matches it.
+                let permitted = acl.decide_anonymous(source, bound).outcome == Outcome::Permit;
+                if !permitted {
+                    turned.add(source);
+                }
+                permitted
+            });
         Ok(WsListen {
-            under: Under::Tcp(TcpListen::bind(address, acl)?),
+            listener,
+            refused,
+            encrypted: false,
+            #[cfg(feature = "tls")]
+            mutual: false,
+            #[cfg(feature = "tls")]
+            bound,
         })
     }
 
-    /// A listener the caller bound itself, under the same gate.
-    pub fn from_listener(listener: TcpListener, acl: Acl) -> WsListen {
-        WsListen {
-            under: Under::Tcp(TcpListen::from_listener(listener, acl)),
-        }
-    }
-
-    /// Binds `address` for `wss://`: mutual TLS as `config` says (its
-    /// identity, its pins or trust store, its policy, whose `acl` admits
-    /// peers as [`TlsListen`] does). The TLS names HTTP's application
-    /// protocol, as a browser offers it, and requires none.
+    /// Binds `address` for `wss://`: the TLS `config` says (its identity,
+    /// its policy, whose `acl` admits peers by address before the
+    /// handshake). The TLS names HTTP's application protocol, as a browser
+    /// offers it, and requires none. A mutual-TLS configuration asks the
+    /// client for a certificate, trusts it as the configuration says, and
+    /// names it to the link.
     #[cfg(feature = "tls")]
-    pub fn bind_tls(address: &str, config: &TlsConfig) -> io::Result<WsListen> {
-        WsListen::from_listener_tls(
-            TcpListener::bind(super::tcp::bind_address(address)?)?,
-            config,
-        )
-    }
-
-    /// A listener the caller bound itself, for `wss://`.
-    #[cfg(feature = "tls")]
-    pub fn from_listener_tls(listener: TcpListener, config: &TlsConfig) -> io::Result<WsListen> {
+    pub fn bind_tls(address: &str, config: &super::tls::TlsConfig) -> io::Result<WsListen> {
+        let address = bind_address(address)?;
+        let mutual = config.is_mutual() && config.proves_peers();
+        let tls = if mutual {
+            super::web::server_config_proving(config, super::tls::WEBSOCKET_ALPN)?
+        } else {
+            super::web::server_config(config, super::tls::WEBSOCKET_ALPN, None)?
+        };
+        let listener =
+            Listener::bind(address, Some(tls)).map_err(|f| bind_failed(f, address, true))?;
+        let bound = listener.local_addr().map_err(io_error)?;
+        let refused = Arc::new(Refused::default());
+        let turned = Arc::clone(&refused);
+        let config = config.clone();
+        let listener = listener
+            .with_frames(Frames::Binary)
+            .with_limits(limits())
+            .with_admission(move |source| {
+                let permitted = super::web::admits(&config, source, bound);
+                if !permitted {
+                    turned.add(source);
+                }
+                permitted
+            });
         Ok(WsListen {
-            under: Under::Tls(TlsListen::for_websocket(listener, config)?),
+            listener,
+            refused,
+            encrypted: true,
+            mutual,
+            bound,
         })
     }
 
     /// Where it listens.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        match &self.under {
-            Under::Tcp(tcp) => tcp.local_addr(),
-            #[cfg(feature = "tls")]
-            Under::Tls(tls) => tls.local_addr(),
-        }
+        self.listener.local_addr().map_err(io_error)
     }
 
-    /// The next connection, or a peer the list denies, closed unread. Over
-    /// TLS, the handshake runs on the connection's first read, before its
-    /// upgrade.
+    /// The next connection, or a peer the list denies. The upgrade is not
+    /// read: it runs on the connection's first read.
     pub fn accept(&self) -> io::Result<Accepted> {
-        let (socket, peer) = match &self.under {
-            Under::Tcp(tcp) => match tcp.accept_stream()? {
-                Ok((stream, peer)) => (shared(stream)?, format!("ws {peer}")),
-                Err(refused) => return Ok(Accepted::Refused(refused)),
-            },
-            #[cfg(feature = "tls")]
-            Under::Tls(tls) => match tls.accept_duplex()? {
-                Ok((duplex, peer)) => (over(Raw::Tls(Arc::new(duplex))), format!("wss {peer}")),
-                Err(refused) => return Ok(Accepted::Refused(refused)),
-            },
-        };
-        Ok(Accepted::Connection(connection(
-            socket,
-            peer,
-            Reading::Upgrade,
-            Role::Server,
-        )))
+        loop {
+            if let Some(source) = self.refused.take() {
+                return Ok(Accepted::Refused(source));
+            }
+            match self.listener.next(Some(REPORT_EVERY)) {
+                Ok(pending) => {
+                    let scheme = if self.encrypted { "wss" } else { "ws" };
+                    let peer = match source_of(&pending) {
+                        Some(source) => format!("{scheme} {source}"),
+                        None => scheme.to_string(),
+                    };
+                    #[cfg(feature = "tls")]
+                    let (mutual, bound) = (self.mutual, self.bound);
+                    let source = source_of(&pending).and_then(|s| s.parse::<SocketAddr>().ok());
+                    let open: Open = Box::new(move || {
+                        // At mutual TLS the handshake runs on this thread,
+                        // alone: the client it proves is this connection's,
+                        // and the list reads this connection's addresses.
+                        #[cfg(feature = "tls")]
+                        if mutual {
+                            super::web::forget_proven();
+                            let channel =
+                                coqui_peer_tls::with_addresses(source, Some(bound), || {
+                                    pending.handshake()
+                                })
+                                .map_err(io_error)?;
+                            return Ok((
+                                Arc::new(channel) as Arc<dyn Channel>,
+                                super::web::take_proven(),
+                            ));
+                        }
+                        #[cfg(not(feature = "tls"))]
+                        let _ = source;
+                        pending
+                            .handshake()
+                            .map(|channel| (Arc::new(channel) as Arc<dyn Channel>, None))
+                            .map_err(io_error)
+                    });
+                    let shared = Shared::new(self.encrypted, false);
+                    return Ok(Accepted::Connection(connection(shared, Some(open), peer)));
+                }
+                Err(Failure::Timeout) => {}
+                Err(failure) => return Err(io_error(failure)),
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
 
     fn listener() -> WsListen {
         let mut acl = Acl::default();
@@ -634,24 +430,17 @@ mod tests {
         }
     }
 
-    /// A client's frame: `op`, FIN when `fin`, masked as RFC 6455 requires.
-    fn masked(op: u8, fin: bool, payload: &[u8]) -> Vec<u8> {
-        let key = [0x37, 0xfa, 0x21, 0x3d];
-        let mut out = vec![if fin { 0x80 | op } else { op }];
-        let n = payload.len();
-        if n < 126 {
-            out.push(0x80 | n as u8);
-        } else {
-            out.push(0x80 | 126);
-            out.extend_from_slice(&(n as u16).to_be_bytes());
-        }
-        out.extend_from_slice(&key);
-        out.extend(payload.iter().enumerate().map(|(i, b)| b ^ key[i % 4]));
-        out
-    }
-
-    /// Sends RFC 6455's sample upgrade and answers the response's head.
-    fn upgrade(raw: &mut TcpStream) -> String {
+    #[test]
+    fn a_browser_upgrade_is_answered_on_the_first_read() {
+        let l = listener();
+        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        // Accepting reads nothing: a client that says nothing holds no one.
+        let Connection { mut reader, .. } = accepted(&l);
+        let serving = std::thread::spawn(move || {
+            let mut frame = Vec::new();
+            reader.read_frame(&mut frame, 1 << 10)
+        });
         raw.write_all(
             b"GET /chat HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n\
               Connection: keep-alive, Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
@@ -664,157 +453,16 @@ mod tests {
             raw.read_exact(&mut byte).unwrap();
             head.push(byte[0]);
         }
-        String::from_utf8(head).unwrap()
-    }
-
-    fn bytes(raw: &mut TcpStream, n: usize) -> Vec<u8> {
-        let mut out = vec![0; n];
-        raw.read_exact(&mut out).unwrap();
-        out
-    }
-
-    #[test]
-    fn a_browser_upgrade_is_answered_on_the_first_read_and_its_messages_arrive_whole() {
-        let l = listener();
-        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
-        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        // Accepting reads nothing: a client that says nothing holds no one.
-        let Connection {
-            mut reader,
-            mut writer,
-            ..
-        } = accepted(&l);
-        let (tx, rx) = std::sync::mpsc::channel();
-        let serving = std::thread::spawn(move || {
-            let mut frame = Vec::new();
-            for _ in 0..2 {
-                assert!(reader.read_frame(&mut frame, 1 << 10).unwrap());
-                tx.send(frame.clone()).unwrap();
-            }
-            reader.read_frame(&mut frame, 1 << 10)
-        });
-        let head = upgrade(&mut raw);
+        let head = String::from_utf8(head).unwrap();
         assert!(head.starts_with("HTTP/1.1 101"), "{head}");
         assert!(
             head.contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="),
             "RFC 6455's sample answer: {head}"
         );
-        // A ping between the fragments of one message.
-        raw.write_all(&masked(0x2, false, b"hel")).unwrap();
-        raw.write_all(&masked(0x9, true, b"p")).unwrap();
-        raw.write_all(&masked(0x0, true, b"lo")).unwrap();
-        raw.write_all(&masked(0x2, true, b"x")).unwrap();
-        let got = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-        assert_eq!(got, b"hello");
-        assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), b"x");
-        assert_eq!(bytes(&mut raw, 3), [0x8a, 1, b'p'], "the pong, unmasked");
-        writer.write_frame(&[3, 0, 0, 0, 1, 2, 3]).unwrap();
-        assert_eq!(
-            bytes(&mut raw, 5),
-            [0x82, 3, 1, 2, 3],
-            "a frame is its body"
-        );
-        raw.write_all(&masked(0x1, true, b"text")).unwrap();
-        let ended = serving.join().unwrap().unwrap_err();
-        assert_eq!(ended.kind(), io::ErrorKind::InvalidData, "{ended}");
-    }
-
-    #[test]
-    fn a_reader_answering_a_ping_never_waits_for_a_busy_writer() {
-        let l = listener();
-        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
-        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        #[allow(irrefutable_let_patterns)]
-        let Under::Tcp(tcp) = &l.under else {
-            unreachable!("a plain listener")
-        };
-        let (stream, _) = tcp.accept_stream().unwrap().unwrap();
-        let socket = shared(stream).unwrap();
-        let writing = Arc::clone(&socket.writing);
-        let mut conn = connection(socket, "test".into(), Reading::Upgrade, Role::Server);
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut frame = Vec::new();
-            while let Ok(true) = conn.reader.read_frame(&mut frame, 1 << 10) {
-                if tx.send(frame.clone()).is_err() {
-                    break;
-                }
-            }
-        });
-        upgrade(&mut raw);
-        {
-            // A writer inside a write the peer is not taking in.
-            let _busy = writing.lock().unwrap();
-            raw.write_all(&masked(0x9, true, b"p")).unwrap();
-            raw.write_all(&masked(0x2, true, b"a")).unwrap();
-            let got = rx.recv_timeout(Duration::from_secs(5));
-            assert_eq!(got.as_deref(), Ok(&b"a"[..]), "the reader read on");
-        }
-        raw.write_all(&masked(0x2, true, b"b")).unwrap();
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), b"b");
-        assert_eq!(bytes(&mut raw, 3), [0x8a, 1, b'p'], "the pong, once free");
-    }
-
-    #[test]
-    fn a_close_ends_the_reads_and_is_answered() {
-        let l = listener();
-        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
-        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        let mut conn = accepted(&l);
-        let serving = std::thread::spawn(move || {
-            let mut frame = Vec::new();
-            conn.reader.read_frame(&mut frame, 1 << 10)
-        });
-        upgrade(&mut raw);
-        raw.write_all(&masked(0x8, true, &1000u16.to_be_bytes()))
+        // A close ends the reads cleanly.
+        raw.write_all(&[0x88, 0x82, 1, 2, 3, 4, 0x03 ^ 1, 0xe8 ^ 2])
             .unwrap();
-        assert!(!serving.join().unwrap().unwrap(), "a close is a clean end");
-        assert_eq!(bytes(&mut raw, 1), [0x88], "the close is answered");
-    }
-
-    #[test]
-    fn after_the_peers_close_is_answered_nothing_more_is_sent() {
-        let l = listener();
-        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
-        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        let Connection {
-            mut reader,
-            mut writer,
-            ..
-        } = accepted(&l);
-        let serving = std::thread::spawn(move || {
-            let mut frame = Vec::new();
-            let ended = reader.read_frame(&mut frame, 1 << 10);
-            (ended, reader)
-        });
-        upgrade(&mut raw);
-        raw.write_all(&masked(0x8, true, &1000u16.to_be_bytes()))
-            .unwrap();
-        let (ended, _reader) = serving.join().unwrap();
-        assert!(!ended.unwrap(), "a close is a clean end");
-        assert_eq!(bytes(&mut raw, 4), [0x88, 2, 0x03, 0xe8], "answered");
-        // A frame the link queued, then the link's own end.
-        let e = writer.write_frame(&[1, 0, 0, 0, 9]).unwrap_err();
-        assert_eq!(e.kind(), io::ErrorKind::BrokenPipe, "{e}");
-        writer.shutdown();
-        let mut rest = Vec::new();
-        let _ = raw.read_to_end(&mut rest);
-        assert!(rest.is_empty(), "sent after the close: {rest:?}");
-    }
-
-    #[test]
-    fn an_unmasked_client_frame_is_refused() {
-        let l = listener();
-        let mut raw = TcpStream::connect(l.local_addr().unwrap()).unwrap();
-        raw.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        let mut conn = accepted(&l);
-        let serving = std::thread::spawn(move || {
-            let mut frame = Vec::new();
-            conn.reader.read_frame(&mut frame, 1 << 10)
-        });
-        upgrade(&mut raw);
-        raw.write_all(&[0x82, 1, 7]).unwrap();
-        assert!(serving.join().unwrap().is_err());
+        assert!(!serving.join().unwrap().unwrap());
     }
 
     #[test]
@@ -843,11 +491,12 @@ mod tests {
         let reading = std::thread::spawn(move || {
             let mut frame = Vec::new();
             let mut got = Vec::new();
-            for _ in 0..4 {
+            for _ in 0..3 {
                 assert!(server.reader.read_frame(&mut frame, 2 << 20).unwrap());
                 got.push(frame.clone());
             }
             tx.send(got).unwrap();
+            server.writer.write_frame(&[2, 0, 0, 0, 4, 5]).unwrap();
             let over = server.reader.read_frame(&mut frame, 1 << 10);
             (server, over)
         });
@@ -855,26 +504,25 @@ mod tests {
         assert!(client.peer.starts_with("ws 127.0.0.1:"), "{}", client.peer);
         client
             .writer
-            .write_frames(&[&[1, 0, 0, 0, 1], &[0, 0, 0, 0], &[2, 0, 0, 0, 2, 3]])
+            .write_frames(&[&[1, 0, 0, 0, 1], &[2, 0, 0, 0, 2, 3]])
             .unwrap();
-        let tail = vec![0xab; 1 << 20];
+        let tail = vec![0xab; 512 << 10];
         let len = u32::try_from(1 + tail.len()).unwrap();
         let mut head = len.to_le_bytes().to_vec();
         head.push(7);
         client.writer.write_frame_parts(&head, &tail).unwrap();
         let got = rx.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(got[0], [1]);
-        assert!(got[1].is_empty());
-        assert_eq!(got[2], [2, 3]);
-        assert_eq!(got[3].len(), 1 + tail.len());
-        assert_eq!(got[3][0], 7);
-        client.writer.write_frame(&[0u8; 4 + 2048]).unwrap();
-        let (mut server, over) = reading.join().unwrap();
-        assert_eq!(over.unwrap_err().kind(), io::ErrorKind::InvalidData);
-        server.writer.write_frame(&[2, 0, 0, 0, 4, 5]).unwrap();
+        assert_eq!(got[1], [2, 3]);
+        assert_eq!(got[2].len(), 1 + tail.len());
+        assert_eq!(got[2][0], 7);
         let mut back = Vec::new();
-        assert!(client.reader.read_frame(&mut back, 1 << 10).unwrap());
+        assert!(client.reader.read_frame(&mut back, 1 << 20).unwrap());
         assert_eq!(back, [4, 5]);
+        // A message past the bound the reader set ends the channel.
+        client.writer.write_frame(&[0u8; 4 + 2048]).unwrap();
+        let (_server, over) = reading.join().unwrap();
+        assert_eq!(over.unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]
@@ -884,5 +532,12 @@ mod tests {
         assert_eq!(kind("http://127.0.0.1:1/"), io::ErrorKind::InvalidInput);
         assert_eq!(kind("tcp://127.0.0.1:1"), io::ErrorKind::InvalidInput);
         assert_eq!(kind("not a url"), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn plain_websocket_is_for_this_machine_alone() {
+        let e = WsListen::bind("0.0.0.0:0", Acl::default()).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{e}");
+        assert!(e.to_string().contains("loopback"), "{e}");
     }
 }

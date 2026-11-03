@@ -1186,6 +1186,7 @@ fn serve_wt(front: &alloc::sync::Arc<Front>, address: &str, a: &Args) -> Result<
                 w.setting, w.value, w.strict
             );
         }
+        names_no_client(&front.server);
         listener
     };
     let listener = match (&a.identity, &a.state_dir) {
@@ -1245,6 +1246,19 @@ fn publish_hashes(
     );
     *said = hashes;
     Ok(())
+}
+
+/// Says what mutual TLS means over WebTransport: coqui-web does not report
+/// the certificate a client presented, so the listener refuses clients it
+/// does not trust in the handshake but no link can complete at the secure
+/// level.
+#[cfg(feature = "webtransport")]
+fn names_no_client(server: &Server) {
+    if server.options().trust() == Trust::Secure {
+        eprintln!(
+            "guatiao-remote-server: warning: https:// at mutual TLS cannot name the client that presented a certificate, so no link completes at the secure level; use --security server-tls, or tls://, wss:// or quic://"
+        );
+    }
 }
 
 #[cfg(all(feature = "ws", feature = "tls"))]

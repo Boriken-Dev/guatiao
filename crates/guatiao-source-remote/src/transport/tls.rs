@@ -766,9 +766,6 @@ struct Pending {
     config: Arc<ServerConfig>,
     source: SocketAddr,
     local: SocketAddr,
-    /// Whether the client must have agreed on [`ALPN`]; a browser's
-    /// WebSocket offers HTTP's, or nothing.
-    alpn: bool,
     /// Whether the client presents a certificate: false at server TLS.
     mutual: bool,
 }
@@ -808,9 +805,7 @@ impl Pending {
                 "the client presented no certificate",
             ));
         }
-        if self.alpn
-            && let Err(e) = check_alpn(&session)
-        {
+        if let Err(e) = check_alpn(&session) {
             core.shut();
             return Err(e);
         }
@@ -947,64 +942,6 @@ impl Write for TlsWrite {
     }
 }
 
-/// A TLS session as one byte stream several threads share, what a
-/// WebSocket runs over: the link's reader reads (and a server's first read
-/// runs the handshake), any thread writes whole buffers.
-#[cfg(feature = "ws")]
-pub(crate) struct TlsDuplex {
-    core: Arc<Core>,
-    /// Only the reading thread takes it.
-    read: Mutex<TlsRead>,
-}
-
-#[cfg(feature = "ws")]
-impl TlsDuplex {
-    fn new(core: Core, pending: Option<Pending>) -> TlsDuplex {
-        let core = Arc::new(core);
-        TlsDuplex {
-            read: Mutex::new(TlsRead {
-                core: Arc::clone(&core),
-                pending,
-                raw: vec![0; RAW_READ],
-                fed: 0,
-                filled: 0,
-                ended: false,
-            }),
-            core,
-        }
-    }
-
-    pub(crate) fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        lock(&self.read).read(buf)
-    }
-
-    pub(crate) fn write_all(&self, buf: &[u8]) -> io::Result<()> {
-        self.core.send(&[buf]).map_err(|e| self.core.explain(e))
-    }
-
-    pub(crate) fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.core.socket.set_read_timeout(timeout)
-    }
-
-    pub(crate) fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.core.socket.set_write_timeout(timeout)
-    }
-
-    /// Tells the peer the session ends, then ends the socket.
-    pub(crate) fn close(&self) {
-        self.core.close();
-    }
-
-    /// Ends the socket both ways with nothing more said.
-    pub(crate) fn shut(&self) {
-        self.core.shut();
-    }
-
-    pub(crate) fn peer_id(&self) -> Option<String> {
-        self.core.peer.get().cloned()
-    }
-}
-
 fn connection(core: Core, pending: Option<Pending>, peer: String) -> io::Result<Connection> {
     let core = Arc::new(core);
     let closing = Arc::clone(&core);
@@ -1043,8 +980,6 @@ pub struct TlsConnect {
     config: Arc<ClientConfig>,
     me: String,
     timeout: Duration,
-    /// Whether the server must agree on [`ALPN`].
-    alpn: bool,
     /// Whether roots verify the server, so the name dialled matters.
     by_roots: bool,
 }
@@ -1070,21 +1005,6 @@ impl TlsConnect {
             config: config.client()?,
             me: config.me(),
             timeout: CONNECT_TIMEOUT,
-            alpn: true,
-            by_roots: config.by_roots(),
-        })
-    }
-
-    /// The TLS under a WebSocket's upgrade: as [`new`](TlsConnect::new),
-    /// offering HTTP's application protocol, none required.
-    #[cfg(feature = "ws")]
-    pub(crate) fn for_websocket(config: &TlsConfig) -> io::Result<TlsConnect> {
-        Ok(TlsConnect {
-            address: String::new(),
-            config: config.client_naming(WEBSOCKET_ALPN)?,
-            me: config.me(),
-            timeout: CONNECT_TIMEOUT,
-            alpn: false,
             by_roots: config.by_roots(),
         })
     }
@@ -1132,19 +1052,6 @@ impl TlsConnect {
         connection(core, None, format!("tls {addr}"))
     }
 
-    /// The TLS over `socket`, connected to `addr` dialled as `host`, under
-    /// a WebSocket.
-    #[cfg(feature = "ws")]
-    pub(crate) fn duplex(
-        &self,
-        socket: TcpStream,
-        addr: SocketAddr,
-        host: &str,
-    ) -> io::Result<TlsDuplex> {
-        let core = self.established(socket, addr, host)?;
-        Ok(TlsDuplex::new(core, None))
-    }
-
     /// Runs the client's handshake over `socket`, dialled as `host`, within
     /// the timeout.
     fn established(&self, mut socket: TcpStream, addr: SocketAddr, host: &str) -> io::Result<Core> {
@@ -1157,9 +1064,7 @@ impl TlsConnect {
         let until = Instant::now() + self.timeout;
         let established = coqui_peer::drive_stream_until(handshake, &mut socket, until)
             .map_err(|e| handshake_failed(e, |e| self.refusal(e, addr, &name)))?;
-        if self.alpn {
-            check_alpn(&established.session)?;
-        }
+        check_alpn(&established.session)?;
         let core = Core::new(socket, Some(self.me.clone()));
         core.open(established.session, Some(&established.peer));
         Ok(core)
@@ -1188,8 +1093,6 @@ pub struct TlsListen {
     config: Arc<ServerConfig>,
     /// What decides a source by its address as it is accepted.
     admitting: Box<TlsConfig>,
-    /// Whether clients must agree on [`ALPN`].
-    alpn: bool,
 }
 
 impl core::fmt::Debug for TlsListen {
@@ -1213,22 +1116,6 @@ impl TlsListen {
             listener,
             config: config.server()?,
             admitting: Box::new(config.clone()),
-            alpn: true,
-        })
-    }
-
-    /// The TLS under a WebSocket's upgrade: as
-    /// [`from_listener`](TlsListen::from_listener), naming HTTP's
-    /// application protocol, none required of the client.
-    #[cfg(feature = "ws")]
-    pub(crate) fn for_websocket(
-        listener: TcpListener,
-        config: &TlsConfig,
-    ) -> io::Result<TlsListen> {
-        Ok(TlsListen {
-            config: config.server_naming(WEBSOCKET_ALPN)?,
-            alpn: false,
-            ..TlsListen::from_listener(listener, config)?
         })
     }
 
@@ -1262,19 +1149,9 @@ impl TlsListen {
             config: Arc::clone(&self.config),
             source,
             local,
-            alpn: self.alpn,
             mutual: self.admitting.is_mutual(),
         };
         Ok(Ok((Core::new(socket, None), pending, source)))
-    }
-
-    /// The next connection as the TLS under a WebSocket, its handshake run
-    /// by the first read.
-    #[cfg(feature = "ws")]
-    pub(crate) fn accept_duplex(&self) -> io::Result<Result<(TlsDuplex, SocketAddr), SocketAddr>> {
-        Ok(self
-            .accept_pending()?
-            .map(|(core, pending, source)| (TlsDuplex::new(core, Some(pending)), source)))
     }
 }
 

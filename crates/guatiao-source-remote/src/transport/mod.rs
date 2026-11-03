@@ -7,8 +7,8 @@
 //! A byte stream (TCP, a Unix socket, a pipe, a child's stdio, a shared
 //! memory ring, a QUIC stream) carries each frame behind its `u32` length,
 //! as the link builds it; a message transport (a WebSocket) carries the
-//! body alone, one frame per message. QUIC also carries [`Datagrams`]
-//! beside the frames.
+//! body alone, one frame per message. QUIC and WebTransport also carry
+//! [`Datagrams`] beside the frames.
 
 #![deny(unsafe_code)]
 
@@ -33,6 +33,8 @@ pub mod stream;
 pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(any(feature = "ws", feature = "webtransport"))]
+mod web;
 #[cfg(feature = "webtransport")]
 pub mod webtransport;
 #[cfg(feature = "ws")]

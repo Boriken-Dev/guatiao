@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Mutual TLS under a WebSocket (`wss://`): the TLS of `tls://` (pins, the
-//! trust store, refusals) with the WebSocket's upgrade inside it, as a
-//! browser holding a client certificate would connect.
+//! TLS under a WebSocket (`wss://`) through coqui-web: mutual TLS (pins,
+//! the trust store, refusals) with the WebSocket's upgrade inside it, as a
+//! browser holding a client certificate would connect, and server TLS.
 
 #![cfg(all(feature = "ws", feature = "tls"))]
 
@@ -172,4 +172,56 @@ fn a_configuration_names_a_wss_peer() {
     assert_eq!(registry.offers::<dyn Greeter>().count(), 0);
     assert!(!refused.is_empty());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+const KEY: &[u8] = b"test-key";
+
+/// A source over `wss://` at server TLS: the client holds no certificate.
+fn server_tls_source(address: &str, config: &TlsConfig) -> RemoteSource {
+    RemoteSource::new(
+        Box::new(
+            WsConnect::new(&format!("wss://{address}/remote"))
+                .tls(config)
+                .unwrap(),
+        ),
+        LinkOptions::new(Trust::ServerTls).key(KEY),
+    )
+}
+
+#[test]
+fn server_tls_ends_link_over_wss_and_the_client_knows_the_server() {
+    let server_id = Identity::generate().unwrap();
+    let server = TlsConfig::new(server_id.clone()).server_tls();
+    let client = TlsConfig::without_identity()
+        .unwrap()
+        .pins([server_id.fingerprint()]);
+    let address = listen(
+        &server,
+        common::server(LinkOptions::new(Trust::ServerTls).key(KEY)),
+    );
+    let source = server_tls_source(&address, &client);
+    let (registry, refused) = refresh(&source);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(greeting(&registry), "hello, wss");
+    let link = source.link().unwrap();
+    assert_eq!(link.trust(), Trust::ServerTls);
+    assert_eq!(
+        link.peer_id(),
+        Some(server_id.fingerprint().canonical().as_str())
+    );
+}
+
+#[test]
+fn a_server_the_client_does_not_pin_is_refused_as_a_trust_failure() {
+    let server = TlsConfig::new(Identity::generate().unwrap()).server_tls();
+    let client = TlsConfig::without_identity()
+        .unwrap()
+        .pins([Identity::generate().unwrap().fingerprint()]);
+    let address = listen(
+        &server,
+        common::server(LinkOptions::new(Trust::ServerTls).key(KEY)),
+    );
+    let e = server_tls_source(&address, &client).link().unwrap_err();
+    assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
+    assert!(e.message().contains("not pinned"), "{}", e.message());
 }
