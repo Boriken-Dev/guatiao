@@ -973,8 +973,8 @@ pub(crate) unsafe fn map(
         Ok(preloaded) => preloaded,
         Err(Preload::Unfound(names)) => {
             reason.push_str(&format!(
-                "; it imports {}, not found beside it, beside the host, in the system \
-                 directory{elsewhere}",
+                "; it imports {}, not found beside it, beside the host, in a directory the \
+                 process added, in the system directory{elsewhere}",
                 names.join(", ")
             ));
             return Err(reason);
@@ -989,9 +989,9 @@ pub(crate) unsafe fn map(
     // everything else as the first did.
     match unsafe { Library::load_with_flags(&absolute, NARROW) } {
         Ok(library) => {
-            // What the file imports stays mapped while the process runs,
-            // as the loader keeps what it maps for a file it opens.
-            core::mem::forget(preloaded);
+            // The file holds what it imports for itself now, and lets it
+            // go when it is unmapped.
+            drop(preloaded);
             Ok(library.into())
         }
         Err(e) if missing.is_empty() => Err(format!(

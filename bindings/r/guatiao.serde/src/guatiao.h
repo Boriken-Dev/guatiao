@@ -2141,12 +2141,14 @@ guatiao_status guatiao_registry_add_source(struct guatiao_registry *reg,
  [`guatiao_registry_refresh`].
 
  `config` is a map the source reads (null is an empty one), less
- `import_dirs`, which the registry takes: a list of directories where,
- on Windows, a library the file imports itself and the import search
- does not find beside it, beside the host or in the system directory is
- looked for, in order, and mapped from the first holding it (with what
- it forwards to beside it, as `python3.dll` forwards to
- `python3XX.dll`). Ignored elsewhere. `err` is written empty first and,
+ `import_dirs`, which the registry takes: a list of directories (a
+ relative one is the file's directory's) where, on Windows, a library
+ the file imports itself and the import search does not find beside it,
+ beside the host, in a directory the process added or in the system
+ directory is looked for, in order, and mapped from the first holding it
+ (with what it forwards to beside it, as `python3.dll` forwards to
+ `python3XX.dll`). Once mapped it is the process's: a library loaded
+ later that imports the same name binds to it. Ignored elsewhere. `err` is written empty first and,
  on a refusal, carries words to free like any text:
  `GUATIAO_ERR_NOT_FOUND` when the file cannot be mapped (the words name
  an import nowhere found), `GUATIAO_ERR_WRONG_KIND` when it exports no

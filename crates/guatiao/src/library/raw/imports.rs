@@ -21,7 +21,8 @@
 use std::path::{Path, PathBuf};
 
 use libloading::os::windows::{
-    LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, Library,
+    LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, Library,
 };
 
 /// The search every file is opened with first.
@@ -59,7 +60,7 @@ fn direct_imports(file: &Path) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for import in imports.into_iter().flatten() {
         let name = String::from_utf8_lossy(import.library()).into_owned();
-        if !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+        if plain(&name) && !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
             names.push(name);
         }
     }
@@ -102,7 +103,7 @@ fn forwarded(file: &Path) -> Vec<String> {
         if !name.contains('.') {
             name.push_str(".dll");
         }
-        if !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+        if plain(&name) && !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
             names.push(name);
         }
     }
@@ -127,6 +128,13 @@ fn loaded_from(name: &str) -> Option<PathBuf> {
     (len > 0 && len < buffer.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buffer[..len])))
 }
 
+/// Whether `name` is a file name and nothing more: a name a file records
+/// with a directory or a drive in it would be looked for there instead of
+/// where the search goes.
+fn plain(name: &str) -> bool {
+    !name.is_empty() && !name.contains(['\\', '/', ':'])
+}
+
 /// Whether a library of this name is already loaded, or is an API set the
 /// system answers itself.
 fn answered(name: &str) -> bool {
@@ -137,10 +145,25 @@ fn answered(name: &str) -> bool {
     Library::open_already_loaded(name).is_ok()
 }
 
-/// What `file` imports directly that is not already loaded and not beside
-/// it, beside the host or in the system directory. A directory the process
-/// added is not looked in: an import found only there is named here,
-/// though the loader would have found it.
+/// Whether the loader finds `name` beside the host, in a directory the
+/// process added or in the system directory, asked for it as data: mapped
+/// as a resource, which runs nothing, and let go at once.
+fn found_by_loader(name: &str) -> bool {
+    // SAFETY: a data file's mapping runs no code of it.
+    unsafe {
+        Library::load_with_flags(
+            name,
+            LOAD_LIBRARY_AS_IMAGE_RESOURCE
+                | LOAD_LIBRARY_AS_DATAFILE
+                | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
+    }
+    .is_ok()
+}
+
+/// What `file` imports directly that is not already loaded, not beside it
+/// and not where the loader's default directories (the host's, those the
+/// process added, the system's) hold it.
 pub(super) fn missing(file: &Path) -> Vec<String> {
     let mut places: Vec<PathBuf> = Vec::new();
     places.extend(file.parent().map(Path::to_path_buf));
@@ -152,7 +175,11 @@ pub(super) fn missing(file: &Path) -> Vec<String> {
     places.extend(system_path(GetSystemDirectoryW));
     direct_imports(file)
         .into_iter()
-        .filter(|name| !answered(name) && !places.iter().any(|dir| dir.join(name).is_file()))
+        .filter(|name| {
+            !answered(name)
+                && !places.iter().any(|dir| dir.join(name).is_file())
+                && !found_by_loader(name)
+        })
         .collect()
 }
 
@@ -257,4 +284,25 @@ pub(super) unsafe fn preload(
         }
     }
     Ok(mapped)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plain;
+
+    #[test]
+    fn only_a_bare_file_name_is_looked_for() {
+        assert!(plain("python3.dll"));
+        assert!(plain("api-ms-win-crt-runtime-l1-1-0.dll"));
+        for name in [
+            "",
+            r"C:\evil\x.dll",
+            "..\\x.dll",
+            "sub/x.dll",
+            "D:x.dll",
+            r"\\host\share\x.dll",
+        ] {
+            assert!(!plain(name), "{name}");
+        }
+    }
 }
