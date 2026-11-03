@@ -427,6 +427,7 @@ fn leaves_absent(name: &str, status: Status, call: impl FnOnce(*mut Value) -> St
 fn out_parameter_cases() -> Vec<(&'static str, fn())> {
     use guatiao_intake::exports::{
         guatiao_intake_check, guatiao_intake_for_schema, guatiao_intake_form_for,
+        guatiao_intake_provider_form,
     };
     vec![
         ("guatiao_intake_check", || {
@@ -449,6 +450,17 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
             leaves_absent("for_schema", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
                 guatiao_intake_for_schema(&schema, ptr::null(), out)
             });
+        }),
+        ("guatiao_intake_provider_form", || {
+            let (schema, meta) = (schema(), V::from(1));
+            // SAFETY: a `meta` that is not a map is the failure under test.
+            leaves_absent(
+                "provider_form",
+                Status::GUATIAO_ERR_WRONG_KIND,
+                |out| unsafe {
+                    guatiao_intake_provider_form(&schema, &meta, Alloc::rust().as_raw(), out)
+                },
+            );
         }),
         ("guatiao_intake_form_for", || {
             let (schema, form) = (schema(), form());

@@ -114,6 +114,35 @@ guatiao_status guatiao_intake_for_schema(const guatiao_value *schema,
                                          guatiao_value *out);
 
 /*
+ The form a provider's settings are shown with: **the one it declares**
+ in its `meta` under `"form"` (`GUATIAO_INTAKE_PROVIDER_FORM_KEY`),
+ **or the one its configuration schema implies** when it declares none,
+ as `guatiao_intake_for_schema` makes it.
+
+ `schema` and `meta` are what the registry answers for the provider:
+ `guatiao_registry_provider_config` and `guatiao_registry_provider_meta`,
+ or the `config` and `meta` of one map `guatiao_registry_catalog` lists.
+ Either may be null, or ABSENT. **A provider with neither a form nor a
+ schema is not an error**: `out` stays ABSENT and the status is
+ `GUATIAO_OK`, since there is nothing to configure. A declared form is
+ not checked against the schema here; `guatiao_intake_check` does that.
+
+ `GUATIAO_ERR_WRONG_KIND` when `meta` is not a map, what it holds under
+ the key is not one, or `schema` is not one. `out` receives a value the
+ **caller owns**, whichever way it was reached, and frees with
+ `guatiao_value_free`.
+
+ # Safety
+
+ `schema` and `meta` are null or address values, and `out` addresses
+ writable storage for one value.
+ */
+guatiao_status guatiao_intake_provider_form(const guatiao_value *schema,
+                                            const guatiao_value *meta,
+                                            const guatiao_alloc *alloc,
+                                            guatiao_value *out);
+
+/*
  The form to show the field at `path` with: **the one the form
  assigns, or the one its schema implies**.
 

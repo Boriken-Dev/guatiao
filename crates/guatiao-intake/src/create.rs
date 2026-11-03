@@ -114,6 +114,44 @@ pub fn form_for(
     for_field(crate::flat::resolve(schema, path)?, alloc)
 }
 
+/// The form a provider's settings are shown with: **the one it declares**
+/// in its `meta` under [`PROVIDER_FORM_KEY`](crate::PROVIDER_FORM_KEY),
+/// **or the one its configuration schema implies** ([`for_schema`]) when
+/// it declares none. The question a settings screen asks of every
+/// provider a registry lists, before any is built.
+///
+/// `schema` and `meta` are what the registry answers for the provider
+/// (`Provider::config_schema` and `Provider::meta`), either one absent.
+/// `Ok(None)` when it declares no form and takes no configuration:
+/// nothing to show. A declared form is not checked against the schema
+/// here; [`check`](crate::check) does that.
+///
+/// **What comes back is owned**, in `alloc`, whichever way it was
+/// reached.
+///
+/// # Errors
+///
+/// [`ValueError::WrongKind`] when what `meta` holds under the key is not
+/// a map, or when the schema is not one; an allocator's refusal as
+/// itself.
+pub fn provider_form(
+    schema: Option<&Value>,
+    meta: Option<&Map>,
+    alloc: Alloc,
+) -> Result<Option<Value>, ValueError> {
+    if let Some(declared) = meta.and_then(|m| m.get(crate::PROVIDER_FORM_KEY)) {
+        let form = FormRef::new(declared).ok_or(ValueError::WrongKind)?;
+        return form.as_value().clone_in(alloc).map(Some);
+    }
+    match schema {
+        None => Ok(None),
+        Some(schema) => {
+            let schema = SchemaRef::new(schema).ok_or(ValueError::WrongKind)?;
+            for_schema(schema, alloc).map(Some)
+        }
+    }
+}
+
 /// One level, bounded: a schema whose members nest each other past the
 /// bound is refused rather than followed.
 fn build(schema: SchemaRef<'_>, alloc: Alloc, depth: u32) -> Result<Value, ValueError> {

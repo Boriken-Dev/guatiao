@@ -4,6 +4,7 @@ pub mod guatiao_intake::create
 pub fn guatiao_intake::create::for_field(guatiao::schema::read::FieldRef<'_>, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
 pub fn guatiao_intake::create::for_schema(guatiao::schema::read::SchemaRef<'_>, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao_intake::create::form_for(guatiao_intake::FormRef<'_>, guatiao::schema::read::SchemaRef<'_>, &str, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
+pub fn guatiao_intake::create::provider_form(core::option::Option<&guatiao::value::value::Value>, core::option::Option<&guatiao::value::types::map::Map>, guatiao::value::alloc::Alloc) -> core::result::Result<core::option::Option<guatiao::value::value::Value>, guatiao::value::error::ValueError>
 pub mod guatiao_intake::declare
 pub trait guatiao_intake::declare::FormBuilder: guatiao::schema::build::Extras
 pub fn guatiao_intake::declare::FormBuilder::section(self, &str) -> Self
@@ -33,6 +34,7 @@ pub mod guatiao_intake::exports
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_form_for(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_is_visible(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut bool) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_layout(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_provider_form(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao_intake::exports_flat
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flat_keys(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -444,6 +446,7 @@ pub fn guatiao_intake::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) 
 pub fn guatiao_intake::is_visible(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>, &str, &guatiao::value::value::Value) -> core::result::Result<bool, guatiao_intake::FormError>
 pub fn guatiao_intake::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>
 pub fn guatiao_intake::layout<'a>(guatiao::schema::read::SchemaRef<'a>, guatiao_intake::FormRef<'a>) -> alloc::vec::Vec<guatiao_intake::Group<'a>>
+pub fn guatiao_intake::provider_form(core::option::Option<&guatiao::value::value::Value>, core::option::Option<&guatiao::value::types::map::Map>, guatiao::value::alloc::Alloc) -> core::result::Result<core::option::Option<guatiao::value::value::Value>, guatiao::value::error::ValueError>
 pub fn guatiao_intake::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao_intake::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a>, &str, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<guatiao::schema::read::FieldRef<'a>, guatiao::schema::ValidationError>
 pub fn guatiao_intake::split(&str) -> core::option::Option<(&str, alloc::borrow::Cow<'_, str>)>
