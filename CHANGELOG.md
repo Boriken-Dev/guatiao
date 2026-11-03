@@ -64,6 +64,29 @@ write now.
   a remote's own; on a `kinds.Object` whose kind has one, `close()` calls
   the slot. `kinds.Object.destroy()` ends an object whatever its kind,
   as leaving a `with` block does.
+- **A secret is wiped where guatiao keeps it.** The wiping allocator
+  (`guatiao_alloc_wiping`, Rust `Alloc::wiping()` and `wiping_alloc()`)
+  overwrites every block with zeros before it releases it: a tree freed,
+  the block a growing string or list leaves behind, the source of a move
+  into it. A tree that lives there clones into it, and `Dump` prints
+  `[sensitive]` for it; `guatiao_value_is_sensitive` (Rust
+  `Value::is_sensitive`) asks whether any part of a tree lives there,
+  `guatiao_alloc_is_wiping` whether an allocator is it, and
+  `guatiao_value_wipe` (Rust `Wipe`) overwrites a tree in any allocator
+  and frees it. The C wire exports encode into the wiping allocator
+  without leaving a copy of the bytes behind.
+- **A kind's slot can be marked sensitive.** `#[sensitive]` on a method of
+  `#[guatiao::kind]`, `"sensitive": true` in its description: a caller
+  names the wiping allocator for the answer (Rust's proxy, the run-time
+  tables, Python and Dart), and a Python or Dart caller gets a text answer
+  as a `Value` rather than a string. Not part of the floor hash: marking a
+  slot keeps the kind's hash. Python gains `kinds.sensitive`,
+  `kinds.SensitiveText`, `wiping_alloc()`, `Ref.is_sensitive`,
+  `Ref.reveal()` (a read-only `memoryview` over the tree's bytes) and
+  `Value.wipe()`, and `repr` hides a value in the wiping allocator; Dart
+  gains `@sensitive` (`describe.dart`), `Value.sensitive`,
+  `Ref.isSensitive`, `Ref.reveal` (an unmodifiable view over the native
+  or module memory) and `Value.wipe`, and `toString` hides one.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and
@@ -1468,6 +1491,11 @@ write now.
   in the current directory on Linux, macOS and FreeBSD too, as it already
   did on Windows, rather than whatever the loader's own search
   (`LD_LIBRARY_PATH`, the system directories) finds under that name.
+- **`Secret<T>` wipes what it holds when dropped**, through the new
+  `Wipe` trait (implemented for `String`, `Vec<u8>`, `Box<str>`,
+  `Box<[u8]>`, the scalars, `Option`, `Box` and guatiao's containers):
+  `Secret<T>` now requires `T: Wipe`, is no longer `Copy`, and
+  `into_inner` requires `T: Default`.
 - **Breaking: a library manifest is `<name>.guatiao[.<major>[.<minor>]]`
   and is read through anycfg.** The name is like a versioned shared object
   (`greeters.guatiao`, `greeters.guatiao.2`, `greeters.guatiao.2.1`; digits

@@ -306,7 +306,7 @@ for the call, not handed over".
 | --- | --- | --- | --- |
 | a `Value` you own | it, local | `v.into_local()` | only when some container is not in `Alloc::rust()` |
 | a `Value` you own | it, in `alloc` | `v.into_alloc(alloc)?` | only when some container is not in `alloc` |
-| a `&Value` | your own copy | `v.clone()`, `Value::from_value(v)` | always, into `Alloc::rust()` |
+| a `&Value` | your own copy | `v.clone()`, `Value::from_value(v)` | always, into `Alloc::rust()`, or into `Alloc::wiping()` for a tree that lives there |
 | a `&Value` | a copy in `alloc` | `v.clone_in(alloc)?` | always |
 | a `&Value` | a copy beside it | `v.clone_in(v.alloc()?)?` | always |
 | a `Map`, `List`, `Text` or `Buffer` | a `Value` | `Value::from(c)` | never |
@@ -318,12 +318,45 @@ for the call, not handed over".
 | a tree for a kind call | to have it read | pass `&Map`/`&Value` | never |
 | a tree for a kind call | to have it changed in place | pass `&mut Map`/`&mut List`/`&mut Value` | never; what the callee built in another allocator is moved into the tree's once |
 | a tree you were lent or that was changed | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts not in `alloc` |
+| a secret | it, wiped when it goes | build it in `Alloc::wiping()`, or move it there with `into_alloc`/`make_local_in` | as above; what a move leaves behind is overwritten |
+| a sensitive kind slot's answer | it, wiped when it goes | `#[sensitive]` on the method: the proxy names `Alloc::wiping()` | as any answer |
 
 `Map`, `List`, `Text` and `Buffer` answer `is_local()`, `into_local()`,
 `into_alloc(alloc)` and `make_local_in(alloc)` the same way.
 
+## Secrets: where a value lives decides whether it is wiped
+
+Every block guatiao releases goes back through the allocator that made
+it, with its size: when a tree is freed, when a string, bytes, list or
+map grows and leaves its old block, and when a tree moves elsewhere. So
+**the allocator is where wiping lives**: `Alloc::wiping()` (C
+`guatiao_alloc_wiping`) overwrites each block with zeros before
+releasing it, and a secret built there leaves nothing readable behind.
+
+- Build a secret there from its first byte. A node built in another
+  allocator and stored into a wiping tree keeps its own; moving a tree
+  into the wiping allocator (`into_alloc`, `make_local_in`,
+  `guatiao_value_make_local`) overwrites what it leaves behind.
+- A tree that lives there `clone()`s into it; `into_local()` moves it
+  into `Alloc::rust()`, which does not wipe.
+- A kind's method marked `#[sensitive]` answers in the wiping allocator:
+  its proxy names it in the carrier unless the caller names another
+  (`<method>_in`), and a provider building through `<method>_in`, or a C
+  one building in the carrier, puts nothing anywhere else.
+- `Secret<T>` wipes what it holds when dropped, and `Wipe::wipe` (C
+  `guatiao_value_wipe`) overwrites a tree in any allocator.
+- What leaves guatiao's containers (a `String` a caller converts to, a
+  language's own string) is out of reach: see each language's page.
+
 ## From C
 
+- **A secret goes in the wiping allocator**, `guatiao_alloc_wiping(&a)`,
+  or in your own whose `free` overwrites the `size` bytes it is given:
+  guatiao hands every block back with its size, the one a growing string
+  leaves included. `guatiao_value_wipe` overwrites a tree in any
+  allocator and frees it; `guatiao_value_is_sensitive` says whether a tree
+  holds anything in the wiping allocator, which is what to ask before
+  printing it.
 - **An answer is built in the allocator you carry in.** Before calling a
   slot whose out parameter is a `guatiao_value *`, `guatiao_map *` or
   `guatiao_list *`, initialise it: an empty map or list (`len` and `cap`

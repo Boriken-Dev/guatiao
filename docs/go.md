@@ -325,6 +325,14 @@ called; without one it declines the host rather than aborting it. Its
 `unload` always refuses, so a host never unmaps it: the Go runtime inside
 it cannot be unloaded.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A Go `string` read out of it cannot
+be wiped: it is immutable. A `[]byte` copied out can be zeroed, though a
+copy the runtime made while it moved or grew it cannot;
+`guatiao_value_wipe` overwrites a tree you hold in another allocator.
+
 ## Threads
 
 A slot a Go provider or object serves runs on the thread that calls it,

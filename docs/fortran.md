@@ -197,6 +197,13 @@ library opens its own guatiao as any program using the binding does, and
 it is never unmapped: its `unload` refuses, since a Fortran runtime linked
 into it keeps state no host can see.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A `character` buffer you copy it into
+is yours, and you can overwrite it before it goes;
+`guatiao_value_wipe` overwrites a tree you hold in another allocator.
+
 ## Threads
 
 A slot a Fortran provider or object serves runs on the thread that calls

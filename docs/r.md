@@ -160,6 +160,14 @@ The same holds for time: `span()` and `exact_length()` take a unit past
 `time_parse("span", ...)` and `read_length()` answer one rather than
 refusing it.
 
+## Secrets
+
+A secret built in the wiping allocator (`guatiao_alloc_wiping`) is
+overwritten when guatiao frees it. A character value read out of it
+cannot be wiped: R keeps every string in its global cache, shared and
+kept. A `raw` vector can be zeroed; `guatiao_value_wipe` overwrites a
+tree you hold in another allocator.
+
 ## Threads
 
 R code runs only on R's main thread. A slot an R provider or object

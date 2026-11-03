@@ -387,7 +387,8 @@ Defaulting getters, mirroring the header's `static inline` helpers:
 `bool_or`, `int_or`, `float_or`, `str_or`, `bytes_or`. Iteration is the
 containers': `map.iter()`, `map.keys()`, `map.values()`, `list.iter()`.
 Structural comparison is `PartialEq` on both the node and the container.
-`Dump(&v)` is a bounded `Debug` tree for diagnostics.
+`Dump(&v)` is a bounded `Debug` tree for diagnostics; a node or key in
+`Alloc::wiping()` prints `[sensitive]`.
 
 **Numbers are the exact text that declared them.** `1.10` reads back as
 `1.10`, a 200-digit integer survives, and `u64::MAX` crosses as itself.
@@ -1150,21 +1151,28 @@ does the same and follows local `$ref`s itself; `GUATIAO_ERR_WRONG_KIND`
 for a schema that is not a map, `GUATIAO_ERR_BAD_VALUE` for a placeholder
 that is not UTF-8.
 
-**`Secret<T>`** (`guatiao::Secret`) holds a value nobody prints. It
-crosses as `T` (same value, same reader); its schema is `T`'s plus
-`writeOnly: true` and `x-sensitive: true`, so `redact`, `is_sensitive`
-and the form a schema implies all treat it as a secret. `Debug` and
-`Display` print `[redacted]` whatever it holds.
+**`Secret<T: Wipe>`** (`guatiao::Secret`) holds a value nobody prints,
+and wipes it when dropped. It crosses as `T` (same value, same reader);
+its schema is `T`'s plus `writeOnly: true` and `x-sensitive: true`, so
+`redact`, `is_sensitive` and the form a schema implies all treat it as a
+secret. `Debug` and `Display` print `[redacted]` whatever it holds.
 
 ```rust
 Secret::new(value: T) -> Secret<T>;  Secret::from(value)
-secret.expose() -> &T;  secret.into_inner() -> T
-// Clone, Copy, Default, PartialEq, Eq, Hash where T has them
+secret.expose() -> &T;  secret.into_inner() -> T   // T: Default; wiping it is yours
+// Clone, Default, PartialEq, Eq, Hash where T has them; not Copy
 ```
 
-`==` is `T`'s own, not constant-time, and nothing is wiped on drop: a
-moved value, a grown `String` and a value tree each hold copies this type
-cannot reach, so it does not pretend to.
+Dropped, it calls `T::wipe`. **`Wipe`** (`guatiao::Wipe`, `fn wipe(&mut
+self)`) overwrites every byte a value holds with zeros, volatile and
+fenced, then leaves it empty: `String` and `Vec<u8>` (the whole
+capacity), `Box<str>`, `Box<[u8]>`, the scalars, `Option<T>`, `Box<T>`,
+and `Value`, `Text`, `Buffer`, `List`, `Map` (every text, number, bytes
+and key at any depth, whatever allocator each lives in; a value becomes
+null). It reaches only what the value holds now: a `String` that grew
+before it was wrapped left earlier blocks unwiped. A tree built in
+`Alloc::wiping()` has no such blocks (below). `==` is `T`'s own, not
+constant-time.
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
 error never quotes the value it refused** — a field may be sensitive —
@@ -2538,6 +2546,14 @@ library three ways:
   calls `<method>`, whose answer the proxy copies once. Implement
   `<method>` as `self.<method>_in(.., Alloc::rust())`. A host wanting an
   answer in its own arena calls `<method>_in(.., arena)` on the proxy.
+- **`#[sensitive]` on a method** of `#[guatiao::kind]` marks its answer a
+  secret: the proxy's `<method>` names `Alloc::wiping()` in the carrier
+  (and builds the arguments it converts there), a shim with no carrier
+  builds there, a `String` answer is built there, and the description
+  says `"sensitive": true`. Not hashed: `FLOOR_HASH` is the same with or
+  without it. A provider building through `<method>_in`, or one whose
+  answer is moved there, leaves no copy behind; what it keeps of its own
+  is its own.
 
 ```rust
 fn load(&self) -> Result<Map, ProviderError> { self.load_in(Alloc::rust()) }
@@ -2863,6 +2879,32 @@ An implementer must guarantee, and `struct_size` cannot express:
 
 `Alloc::rust()` is the crate's own, borrowed from a constant.
 `rust_alloc()` is a `const fn` returning the vtable, for a `static`.
+
+**`Alloc::wiping()`** (C `guatiao_alloc_wiping`, vtable `wiping_alloc()`)
+is Rust's global allocator with a `free` that overwrites every block with
+zeros, volatile and fenced, before releasing it. Since every block goes
+back through the allocator that made it, with its size, a tree built
+there leaves nothing readable behind: freed, grown (the old block), or
+moved into another allocator (the source). Moving a tree **into** it
+(`into_alloc`, `make_local_in`, `guatiao_value_make_local`) overwrites
+what the move leaves in the other allocator. A tree whose root lives
+there `clone()`s into it; `into_local()` moves it to `Alloc::rust()`.
+The promise is per buffer: a node built elsewhere and stored into a
+wiping tree keeps its own allocator.
+
+```rust
+Alloc::wiping() -> Alloc;  alloc.is_wiping() -> bool   // this build's wiping allocator only
+value.is_sensitive() -> bool                           // any buffer of the tree lives there
+```
+
+`Dump` prints `[sensitive]` for a node or key living there. C:
+`guatiao_alloc_wiping(out)`, `guatiao_alloc_is_wiping(alloc)`,
+`guatiao_value_is_sensitive(value)`, and `guatiao_value_wipe(v)`
+(overwrite every byte a tree owns, in any allocator, free it, leave
+null). An allocator of a C caller's own wipes the same way if its `free`
+overwrites the `size` it is given. `guatiao_wire_encode` and
+`guatiao_wire_send` into the wiping allocator size their bytes exactly
+and wipe them after the copy.
 
 ---
 

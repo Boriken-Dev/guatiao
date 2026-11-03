@@ -241,6 +241,33 @@ Python example hosts. `guatiao-source-py` is CPython as the engine of a
 [language bridge](language-bridges.md): the manifests, stamps and refresh
 are the bridge's.
 
+## Secrets
+
+A secret lives in the wiping allocator, which overwrites every block
+before releasing it:
+
+```python
+from guatiao import Value, wiping_alloc
+
+token = Value({"user": "alice", "token": "t0ken"}, alloc=wiping_alloc())
+repr(token)                                   # '<guatiao.Value [sensitive]>'
+with token.as_map()["token"].reveal() as view:  # a read-only memoryview, no copy
+    use(view)
+token.close()                                 # overwritten, then freed
+```
+
+- `Ref.is_sensitive` says whether any part of a tree lives there;
+  `repr` then shows `[sensitive]`. `Value.wipe()` overwrites a tree in
+  any allocator and frees it.
+- A slot its kind marks `@sensitive` (`kinds.sensitive`, or
+  `"sensitive": true` in the description) answers a `Value` kept in the
+  wiping allocator, a text answer included (`kinds.SensitiveText`), never
+  a `str`.
+- **What Python cannot wipe**: a `str` or `bytes`. `to_python()`,
+  `bytes(view)` or `str(...)` makes one, and Python keeps it until it
+  collects it, possibly interned; a provider's own `str` is the same. Keep
+  a secret in a `Value` and read it through `reveal()`.
+
 ## What Python cannot do
 
 - **Run a kind's default body.** A Rust caller runs one for a slot a

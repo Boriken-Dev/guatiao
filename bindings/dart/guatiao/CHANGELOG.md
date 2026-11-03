@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   its availability and reason, configuration schema, `meta`, library key
   and version, and the library file's `digest` (or a `digest_error`
   saying why there is none). `Unsupported` on the web.
+- **Secrets kept where they are wiped.** `Value.sensitive(obj)` builds in
+  the library's wiping allocator, which overwrites every block before
+  releasing it; `Ref.isSensitive`, `Ref.reveal` (an unmodifiable view over
+  the tree's own bytes) and `Value.wipe()`; `toString` shows
+  `Value([sensitive])` for a value holding anything there. A slot a kind
+  marks sensitive (`@sensitive` in `describe.dart`, `"sensitive": true` in
+  a description, `KindSlot.sensitive`) answers a `Value` kept in the
+  wiping allocator, a text answer included.
 - **A page's WebTransport datagrams**: `link.datagrams` (`RemoteDatagrams`,
   `null` over a WebSocket) sends and receives the session's datagrams
   beside the calls (`send`, `maxSize`, `received`). `RemoteChannel` gains
