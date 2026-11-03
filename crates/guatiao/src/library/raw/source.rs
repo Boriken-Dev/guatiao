@@ -356,9 +356,11 @@ pub(crate) fn open_source_file(
     host: Host,
     config: &Value,
     search: crate::library::registry::ImportSearch,
+    import_dirs: &[std::path::PathBuf],
 ) -> Result<Arc<SourceCell>, SourceFileError> {
     // SAFETY: naming a file is choosing to run it.
-    let library = unsafe { super::image::map(path, search) }.map_err(SourceFileError::Open)?;
+    let library =
+        unsafe { super::image::map(path, search, import_dirs) }.map_err(SourceFileError::Open)?;
     // SAFETY: the symbol is absent, which is an answer, or has the
     // signature this crate defines for it.
     let entry = match unsafe { library.get::<SourceFn>(SOURCE_SYMBOL) } {

@@ -5,16 +5,17 @@
 //! Where the loader looks for what a library file imports.
 //!
 //! `tests/c_consumer/import_plugin.c` imports `import_dep.c`. Each case
-//! places the two files, starts a copy of this binary in a host directory
-//! of its own with the current directory and `PATH` the case chooses, and
-//! has it load the plugin as a library and add it as a source file under
-//! one [`ImportSearch`]. What the child prints says whether the file
-//! mapped. A process per case, because a library a process loaded answers
-//! every later import of its name, and `PATH` and the current directory
-//! belong to the whole process.
+//! places the files, starts a copy of this binary in a host directory of
+//! its own with the current directory and `PATH` the case chooses, and has
+//! it load the plugin as a library and add it as a source file under one
+//! [`ImportSearch`]. What the child prints says whether the file mapped. A
+//! process per case, because a library a process loaded answers every
+//! later import of its name, and `PATH` and the current directory belong
+//! to the whole process.
 //!
 //! Its own `main` (`harness = false`): `child <library|path> <load|source>
-//! <file> [preload]` is the child; anything else runs every case.
+//! <file> [preload=<file>] [dir=<dir>]` is the child, `dir` a source
+//! file's `import_dirs`; anything else runs every case.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,8 +23,8 @@ use std::process::Command;
 #[path = "support/c_compiler.rs"]
 mod c_compiler;
 
-use guatiao::Map;
 use guatiao::library::{ImportSearch, LoadError, Loading, Registry, Skipped, SourceError};
+use guatiao::{List, Map};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -41,16 +42,17 @@ fn main() {
         println!("skipped: the import search cases cover Windows, Linux, FreeBSD and macOS");
         return;
     }
+    let mut failures = config_cases();
     let Some(cc) = c_compiler::find() else {
         println!("skipped: no C compiler found (as c_library.rs)");
         return;
     };
     let fixtures = Fixtures::build(&cc);
-    let failures = if cfg!(windows) {
+    failures.extend(if cfg!(windows) {
         windows_cases(&fixtures)
     } else {
         unix_cases(&fixtures)
-    };
+    });
     if failures.is_empty() {
         // Each case copied this binary: the copies go once nothing failed.
         let _ = std::fs::remove_dir_all(&fixtures.root);
@@ -63,6 +65,34 @@ fn main() {
     }
 }
 
+/// `import_dirs` that is not a list of text is refused before the file is
+/// opened, and is not the source's to see.
+fn config_cases() -> Vec<String> {
+    let mut failures = Vec::new();
+    let mut registry = Registry::new("import_search", "1.0");
+    for (value, says) in [
+        (guatiao::Value::from("dir"), "is not a list of directories"),
+        (
+            guatiao::Value::from({
+                let mut list = List::new();
+                list.push(3_i64);
+                list
+            }),
+            "holds something that is not text",
+        ),
+    ] {
+        let mut config = Map::new();
+        config.set("import_dirs", value);
+        match registry.add_source_file(Path::new("no-such-source"), &config) {
+            Err(e @ SourceError::Config { .. })
+                if e.to_string().contains(says)
+                    && e.status() == guatiao::Status::GUATIAO_ERR_BAD_VALUE => {}
+            other => failures.push(format!("import_dirs refused saying {says:?}: {other:?}")),
+        }
+    }
+    failures
+}
+
 /// The child: one load or one source, under one search, printed as
 /// `mapped` or `refused: <reason>`.
 fn child(args: &[String]) {
@@ -72,10 +102,19 @@ fn child(args: &[String]) {
         other => panic!("no search {other}"),
     };
     let file = Path::new(&args[2]);
-    if let Some(preload) = args.get(3) {
-        // SAFETY: the test's own fixture, whose initialisers do nothing.
-        let library = unsafe { libloading::Library::new(preload) }.expect("the preload maps");
-        core::mem::forget(library);
+    let mut config = Map::new();
+    for extra in &args[3..] {
+        if let Some(preload) = extra.strip_prefix("preload=") {
+            // SAFETY: the test's own fixture, whose initialisers do nothing.
+            let library = unsafe { libloading::Library::new(preload) }.expect("the preload maps");
+            core::mem::forget(library);
+        } else if let Some(dir) = extra.strip_prefix("dir=") {
+            let mut dirs = List::new();
+            dirs.push(dir);
+            config.set("import_dirs", dirs);
+        } else {
+            panic!("no argument {extra}");
+        }
     }
     let mut registry = Registry::new("import_search", "1.0");
     registry.set_import_search(search);
@@ -86,7 +125,7 @@ fn child(args: &[String]) {
             Err(LoadError::Open { reason, .. }) => format!("refused: {}", one_line(&reason)),
             other => format!("unexpected: {other:?}"),
         },
-        "source" => match registry.add_source_file(file, &Map::new()) {
+        "source" => match registry.add_source_file(file, &config) {
             Err(SourceError::Refused { .. }) => "mapped".to_string(),
             Err(SourceError::Open { reason, .. }) => format!("refused: {}", one_line(&reason)),
             other => format!("unexpected: {other:?}"),
@@ -114,8 +153,15 @@ fn dll(stem: &str) -> String {
 struct Fixtures {
     root: PathBuf,
     dep: PathBuf,
-    refusing_dep: Option<PathBuf>,
     plugin: PathBuf,
+    /// Windows: the dependency again, its initialiser refusing.
+    refusing_dep: Option<PathBuf>,
+    /// Windows: a second dependency, and a plugin importing both.
+    second_dep: Option<PathBuf>,
+    plugin_two: Option<PathBuf>,
+    /// Windows, where the linker writes forwarders: a library forwarding
+    /// the dependency's export, and a plugin importing it from there.
+    forwarding: Option<(PathBuf, PathBuf)>,
     /// Unix: the plugin whose run path is its own directory (`$ORIGIN`,
     /// `@loader_path` on macOS).
     origin_plugin: Option<PathBuf>,
@@ -130,7 +176,7 @@ impl Fixtures {
         let build = root.join("build");
         std::fs::create_dir_all(&build).unwrap();
 
-        let compile = |out: &Path, source: &str, extra: &[&str]| {
+        let try_compile = |out: &Path, source: &str, extra: &[&str]| -> Result<(), String> {
             let mut command = c_compiler::command(cc);
             command.args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]);
             if !cfg!(windows) {
@@ -144,11 +190,27 @@ impl Fixtures {
                 .arg(sources.join(source))
                 .args(extra);
             let done = command.output().expect("the compiler runs");
-            assert!(
-                done.status.success(),
-                "{source} did not build:\n{}",
-                String::from_utf8_lossy(&done.stderr)
-            );
+            if done.status.success() {
+                Ok(())
+            } else {
+                Err(String::from_utf8_lossy(&done.stderr).into_owned())
+            }
+        };
+        let compile = |out: &Path, source: &str, extra: &[&str]| {
+            if let Err(why) = try_compile(out, source, extra) {
+                panic!("{source} did not build:\n{why}");
+            }
+        };
+        // clang names the import library after the DLL, `.lib`; a MinGW
+        // compiler writes none and links the DLL itself.
+        let link_to = |dll: &Path| -> String {
+            let implib = dll.with_extension("lib");
+            let link = if implib.is_file() {
+                implib
+            } else {
+                dll.to_path_buf()
+            };
+            link.to_str().unwrap().to_string()
         };
 
         let dep = build.join(dll("import_dep"));
@@ -162,22 +224,8 @@ impl Fixtures {
             &[]
         };
         compile(&dep, "import_dep.c", dep_args);
-        let refusing_dep = cfg!(windows).then(|| {
-            let dir = build.join("refusing");
-            std::fs::create_dir_all(&dir).unwrap();
-            let out = dir.join(dll("import_dep"));
-            compile(&out, "import_dep.c", &["-DIMPORT_DEP_REFUSES"]);
-            out
-        });
         let plugin = build.join(dll("import_plugin"));
-        let origin_plugin = if cfg!(windows) {
-            // clang names the import library after the DLL, `.lib`; a MinGW
-            // compiler writes none and links the DLL itself.
-            let implib = dep.with_extension("lib");
-            let link = if implib.is_file() { &implib } else { &dep };
-            compile(&plugin, "import_plugin.c", &[link.to_str().unwrap()]);
-            None
-        } else {
+        if !cfg!(windows) {
             let link = format!("-L{}", build.display());
             compile(&plugin, "import_plugin.c", &[&link, "-limport_dep"]);
             let dir = build.join("origin");
@@ -193,28 +241,78 @@ impl Fixtures {
                 "import_plugin.c",
                 &[&link, "-limport_dep", own_directory],
             );
-            Some(out)
+            return Fixtures {
+                root,
+                dep,
+                plugin,
+                refusing_dep: None,
+                second_dep: None,
+                plugin_two: None,
+                forwarding: None,
+                origin_plugin: Some(out),
+            };
+        }
+        compile(&plugin, "import_plugin.c", &[&link_to(&dep)]);
+        let dir = build.join("refusing");
+        std::fs::create_dir_all(&dir).unwrap();
+        let refusing_dep = dir.join(dll("import_dep"));
+        compile(&refusing_dep, "import_dep.c", &["-DIMPORT_DEP_REFUSES"]);
+        let second_dep = build.join(dll("import_dep2"));
+        compile(&second_dep, "import_dep.c", &["-DIMPORT_DEP_SECOND"]);
+        let dir = build.join("two");
+        std::fs::create_dir_all(&dir).unwrap();
+        let plugin_two = dir.join(dll("import_plugin"));
+        compile(
+            &plugin_two,
+            "import_plugin.c",
+            &["-DIMPORT_PLUGIN_TWO", &link_to(&dep), &link_to(&second_dep)],
+        );
+        let forwarding_dep = build.join(dll("import_fwd"));
+        let dir = build.join("forwarded");
+        std::fs::create_dir_all(&dir).unwrap();
+        let plugin_forwarded = dir.join(dll("import_plugin"));
+        let forwarding = try_compile(&forwarding_dep, "import_dep.c", &["-DIMPORT_DEP_FORWARDS"])
+            .and_then(|()| {
+                try_compile(
+                    &plugin_forwarded,
+                    "import_plugin.c",
+                    &[&link_to(&forwarding_dep)],
+                )
+            });
+        let forwarding = match forwarding {
+            Ok(()) => Some((forwarding_dep, plugin_forwarded)),
+            Err(why) => {
+                println!("skipped: the forwarding cases; this linker wrote no forwarder:\n{why}");
+                None
+            }
         };
         Fixtures {
             root,
             dep,
-            refusing_dep,
             plugin,
-            origin_plugin,
+            refusing_dep: Some(refusing_dep),
+            second_dep: Some(second_dep),
+            plugin_two: Some(plugin_two),
+            forwarding,
+            origin_plugin: None,
         }
     }
 }
 
-/// One placement of the files, and the answers expected under it.
+/// One placement of the files, and the answers expected under it. Each
+/// file is copied under its own name.
+#[derive(Clone, Copy)]
 struct Case<'a> {
     name: &'static str,
     plugin: &'a Path,
-    /// Copies of the dependency: beside the plugin, beside the host, in
-    /// the current directory, in a directory on `PATH`.
-    beside: Option<&'a Path>,
-    host_dir: Option<&'a Path>,
-    cwd: Option<&'a Path>,
-    on_path: Option<&'a Path>,
+    /// Beside the plugin, beside the host, in the current directory, in a
+    /// directory on `PATH`, in a directory the source's `import_dirs`
+    /// names (added only when it holds something).
+    beside: &'a [&'a Path],
+    host_dir: &'a [&'a Path],
+    cwd: &'a [&'a Path],
+    on_path: &'a [&'a Path],
+    dirs: &'a [&'a Path],
     /// A copy the host loads itself before the plugin, from elsewhere.
     preload: Option<&'a Path>,
 }
@@ -225,21 +323,21 @@ impl Case<'_> {
     fn run(&self, root: &Path, search: &str, action: &str) -> Result<Option<String>, String> {
         let dir = root.join(format!("{}-{search}-{action}", self.name));
         assert!(!dir.exists(), "two cases are named {}", self.name);
-        let place = |sub: &str, file: Option<&Path>, name: &str| -> PathBuf {
+        let place = |sub: &str, files: &[&Path]| -> PathBuf {
             let at = dir.join(sub);
             std::fs::create_dir_all(&at).unwrap();
-            if let Some(file) = file {
-                std::fs::copy(file, at.join(name)).unwrap();
+            for file in files {
+                std::fs::copy(file, at.join(file.file_name().unwrap())).unwrap();
             }
             at
         };
-        let dep_name = dll("import_dep");
-        let plugin_dir = place("plugin", self.beside, &dep_name);
+        let plugin_dir = place("plugin", self.beside);
         let plugin = plugin_dir.join(dll("import_plugin"));
         std::fs::copy(self.plugin, &plugin).unwrap();
-        let host_dir = place("host", self.host_dir, &dep_name);
-        let cwd = place("cwd", self.cwd, &dep_name);
-        let on_path = place("path", self.on_path, &dep_name);
+        let host_dir = place("host", self.host_dir);
+        let cwd = place("cwd", self.cwd);
+        let on_path = place("path", self.on_path);
+        let dirs = place("dirs", self.dirs);
 
         let host = host_dir.join(format!(
             "import_search_host{}",
@@ -266,7 +364,10 @@ impl Case<'_> {
             .current_dir(&cwd)
             .env(variable, std::env::join_paths(paths).unwrap());
         if let Some(preload) = self.preload {
-            command.arg(preload);
+            command.arg(format!("preload={}", preload.display()));
+        }
+        if !self.dirs.is_empty() {
+            command.arg(format!("dir={}", dirs.display()));
         }
         let out = command.output().expect("the host copy runs");
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -287,17 +388,18 @@ impl Case<'_> {
         }
     }
 
-    /// Checks the answer under one search, for both actions; a refusal's
+    /// Checks the answer under one search, for each action; a refusal's
     /// reason must contain `says`.
-    fn expect_saying(
+    fn expect_saying_for(
         &self,
         root: &Path,
         search: &str,
+        actions: &[&str],
         mapped: bool,
         says: &str,
         failures: &mut Vec<String>,
     ) {
-        for action in ["load", "source"] {
+        for action in actions {
             let what = format!("{} under {search} ({action})", self.name);
             match self.run(root, search, action) {
                 Ok(None) if mapped => {}
@@ -316,6 +418,17 @@ impl Case<'_> {
         }
     }
 
+    fn expect_saying(
+        &self,
+        root: &Path,
+        search: &str,
+        mapped: bool,
+        says: &str,
+        failures: &mut Vec<String>,
+    ) {
+        self.expect_saying_for(root, search, &["load", "source"], mapped, says, failures);
+    }
+
     fn expect(&self, root: &Path, search: &str, mapped: bool, failures: &mut Vec<String>) {
         self.expect_saying(root, search, mapped, "", failures);
     }
@@ -323,20 +436,23 @@ impl Case<'_> {
 
 fn windows_cases(f: &Fixtures) -> Vec<String> {
     let mut failures = Vec::new();
-    let refusing = f.refusing_dep.as_deref();
+    let dep: &Path = &f.dep;
+    let refusing: &Path = f.refusing_dep.as_deref().expect("built on Windows");
+    let second: &Path = f.second_dep.as_deref().expect("built on Windows");
     let case = |name| Case {
         name,
         plugin: &f.plugin,
-        beside: None,
-        host_dir: None,
-        cwd: None,
-        on_path: None,
+        beside: &[],
+        host_dir: &[],
+        cwd: &[],
+        on_path: &[],
+        dirs: &[],
         preload: None,
     };
 
     // A plugin shipped in a directory of its own beside what it imports.
     let beside = Case {
-        beside: Some(&f.dep),
+        beside: &[dep],
         ..case("beside")
     };
     beside.expect(&f.root, "library", true, &mut failures);
@@ -345,13 +461,13 @@ fn windows_cases(f: &Fixtures) -> Vec<String> {
     // What it imports is only in the current directory, or only on PATH:
     // found only when the host names `path`.
     let cwd = Case {
-        cwd: Some(&f.dep),
+        cwd: &[dep],
         ..case("cwd")
     };
     cwd.expect(&f.root, "library", false, &mut failures);
     cwd.expect(&f.root, "path", true, &mut failures);
     let on_path = Case {
-        on_path: Some(&f.dep),
+        on_path: &[dep],
         ..case("on_path")
     };
     on_path.expect(&f.root, "library", false, &mut failures);
@@ -359,12 +475,12 @@ fn windows_cases(f: &Fixtures) -> Vec<String> {
 
     // Beside the host's executable, or already loaded by the host.
     let host_dir = Case {
-        host_dir: Some(&f.dep),
+        host_dir: &[dep],
         ..case("host_dir")
     };
     host_dir.expect(&f.root, "library", true, &mut failures);
     let preloaded = Case {
-        preload: Some(&f.dep),
+        preload: Some(dep),
         ..case("preloaded")
     };
     preloaded.expect(&f.root, "library", true, &mut failures);
@@ -372,34 +488,87 @@ fn windows_cases(f: &Fixtures) -> Vec<String> {
     // A copy beside the plugin wins over copies in the current directory
     // and on PATH, under either search.
     let beside_wins = Case {
-        beside: Some(&f.dep),
-        cwd: refusing,
-        on_path: refusing,
+        beside: &[dep],
+        cwd: &[refusing],
+        on_path: &[refusing],
         ..case("beside_wins")
     };
     beside_wins.expect(&f.root, "library", true, &mut failures);
     beside_wins.expect(&f.root, "path", true, &mut failures);
 
-    // Nowhere at all: refused, the reason naming the loader's own words
-    // and, under the default, where it did not look.
+    // Only what is missing comes from the wider search: one import beside
+    // the host, the other only on PATH, a copy of the first that refuses
+    // to start in the current directory and on PATH. Windows' standard
+    // search would take the first from the current directory.
+    let only_the_missing = Case {
+        plugin: f.plugin_two.as_deref().expect("built on Windows"),
+        host_dir: &[dep],
+        on_path: &[second, refusing],
+        cwd: &[refusing],
+        ..case("only_the_missing")
+    };
+    only_the_missing.expect(&f.root, "path", true, &mut failures);
+    only_the_missing.expect_saying(&f.root, "library", false, "import_dep2.dll", &mut failures);
+
+    // A source file's `import_dirs`: looked in for a missing import under
+    // either search, before anything `path` adds.
+    let in_dirs = Case {
+        dirs: &[dep],
+        on_path: &[refusing],
+        ..case("in_dirs")
+    };
+    for search in ["library", "path"] {
+        in_dirs.expect_saying_for(&f.root, search, &["source"], true, "", &mut failures);
+    }
+    // A library loaded from there that forwards to another beside it, as
+    // `python3.dll` does to `python3XX.dll`.
+    if let Some((forwarding, plugin)) = &f.forwarding {
+        let forwarded = Case {
+            plugin,
+            dirs: &[forwarding, dep],
+            ..case("forwarded")
+        };
+        forwarded.expect_saying_for(&f.root, "library", &["source"], true, "", &mut failures);
+        let not_given = Case {
+            plugin,
+            cwd: &[forwarding, dep],
+            ..case("forwarded_not_given")
+        };
+        not_given.expect_saying_for(
+            &f.root,
+            "library",
+            &["source"],
+            false,
+            "import_fwd.dll",
+            &mut failures,
+        );
+    }
+
+    // Nowhere at all: refused, the reason naming the loader's own words,
+    // the import and, under the default, where it did not look.
     let nowhere = case("nowhere");
     nowhere.expect_saying(&f.root, "library", false, "PATH", &mut failures);
     nowhere.expect_saying(&f.root, "path", false, "os error 126", &mut failures);
+    let nowhere_named = case("nowhere_named");
+    nowhere_named.expect_saying(&f.root, "library", false, "import_dep.dll", &mut failures);
+    nowhere_named.expect_saying(&f.root, "path", false, "import_dep.dll", &mut failures);
     failures
 }
 
 fn unix_cases(f: &Fixtures) -> Vec<String> {
     let mut failures = Vec::new();
     let origin = f.origin_plugin.as_deref().expect("built on unix");
+    let dep: &Path = &f.dep;
     // Its own directory in its run path (`$ORIGIN`, `@loader_path`): found
     // there, either way.
     let with_origin = Case {
         name: "origin",
         plugin: origin,
-        beside: Some(&f.dep),
-        host_dir: None,
-        cwd: None,
-        on_path: None,
+        beside: &[dep],
+        host_dir: &[],
+        cwd: &[],
+        on_path: &[],
+        dirs: &[],
         preload: None,
     };
     with_origin.expect(&f.root, "library", true, &mut failures);
@@ -416,19 +585,27 @@ fn unix_cases(f: &Fixtures) -> Vec<String> {
     // Nor in the current directory; the loader's variable is searched.
     let in_cwd = Case {
         name: "cwd",
-        beside: None,
-        cwd: Some(&f.dep),
+        beside: &[],
+        cwd: &[dep],
         ..without
     };
     in_cwd.expect(&f.root, "library", false, &mut failures);
     in_cwd.expect(&f.root, "path", false, &mut failures);
     let on_library_path = Case {
         name: "loader_variable",
-        cwd: None,
-        on_path: Some(&f.dep),
+        cwd: &[],
+        on_path: &[dep],
         ..in_cwd
     };
     on_library_path.expect(&f.root, "library", true, &mut failures);
     on_library_path.expect(&f.root, "path", true, &mut failures);
+    // A source file's `import_dirs` changes nothing here either.
+    let in_dirs = Case {
+        name: "in_dirs",
+        on_path: &[],
+        dirs: &[dep],
+        ..on_library_path
+    };
+    in_dirs.expect_saying_for(&f.root, "library", &["source"], false, "", &mut failures);
     failures
 }

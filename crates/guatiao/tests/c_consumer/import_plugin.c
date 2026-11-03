@@ -7,6 +7,8 @@
  * maps only where the loader finds that library. Its entry point declines
  * every host and its source refuses every configuration: the answer a
  * host gets back says the file mapped, and nothing else is needed.
+ *
+ * With IMPORT_PLUGIN_TWO it imports `import_dep2` as well.
  */
 
 #include "guatiao.h"
@@ -20,10 +22,16 @@
 #endif
 
 IMPORT int import_dep_mark(void);
+#if defined(IMPORT_PLUGIN_TWO)
+IMPORT int import_dep_second_mark(void);
+#endif
 
 EXPORT const guatiao_library_info *guatiao_library_entry(const guatiao_host_info *host) {
   (void)host;
   (void)import_dep_mark();
+#if defined(IMPORT_PLUGIN_TWO)
+  (void)import_dep_second_mark();
+#endif
   return NULL;
 }
 

@@ -1011,13 +1011,20 @@ pub unsafe extern "C" fn guatiao_registry_add_source(
 /// it is not a library: no key retires it. Nothing is opened until
 /// [`guatiao_registry_refresh`].
 ///
-/// `config` is a map the source reads (null is an empty one). `err` is
-/// written empty first and, on a refusal, carries words to free like any
-/// text: `GUATIAO_ERR_NOT_FOUND` when the file cannot be mapped,
-/// `GUATIAO_ERR_WRONG_KIND` when it exports no `guatiao_source` or
-/// `config` is not a map, `GUATIAO_ERR_BAD_VALUE` for a table the checks
-/// refuse or a source already added, and the source's own status when it
-/// refuses the configuration.
+/// `config` is a map the source reads (null is an empty one), less
+/// `import_dirs`, which the registry takes: a list of directories where,
+/// on Windows, a library the file imports itself and the import search
+/// does not find beside it, beside the host or in the system directory is
+/// looked for, in order, and mapped from the first holding it (with what
+/// it forwards to beside it, as `python3.dll` forwards to
+/// `python3XX.dll`). Ignored elsewhere. `err` is written empty first and,
+/// on a refusal, carries words to free like any text:
+/// `GUATIAO_ERR_NOT_FOUND` when the file cannot be mapped (the words name
+/// an import nowhere found), `GUATIAO_ERR_WRONG_KIND` when it exports no
+/// `guatiao_source` or `config` is not a map, `GUATIAO_ERR_BAD_VALUE` for
+/// `import_dirs` that is not a list of text, a table the checks refuse or
+/// a source already added, and the source's own status when it refuses the
+/// configuration.
 ///
 /// **Mapping a file runs its static initialisers**, which may do
 /// anything. Name files you are willing to run.
@@ -1696,9 +1703,12 @@ pub unsafe extern "C" fn guatiao_registry_priority(reg: *const HostRegistry, id:
 /// directory or on `PATH`. The default.
 pub const GUATIAO_IMPORT_SEARCH_LIBRARY: u32 = 0;
 /// [`guatiao_registry_set_import_search`]: the directories of
-/// `GUATIAO_IMPORT_SEARCH_LIBRARY` first; a file they leave an import
-/// missing for is opened again with Windows' standard search from its own
-/// directory, which reaches the current directory and `PATH`.
+/// `GUATIAO_IMPORT_SEARCH_LIBRARY` first; a library the file imports
+/// itself that they leave missing is then looked for in a source file's
+/// `import_dirs` and where Windows' standard search goes after the system
+/// directory (the Windows directory, the current directory, `PATH`), and
+/// mapped from the first holding it. Everything else the file imports is
+/// found as under `GUATIAO_IMPORT_SEARCH_LIBRARY`.
 pub const GUATIAO_IMPORT_SEARCH_PATH: u32 = 1;
 
 /// Sets where the loader finds the libraries a file this registry opens

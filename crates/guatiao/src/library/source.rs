@@ -130,6 +130,16 @@ pub enum SourceError {
         /// The name.
         name: String,
     },
+    /// A key of the configuration the registry reads itself holds what it
+    /// cannot take: `import_dirs` that is not a list of text.
+    Config {
+        /// The file.
+        path: PathBuf,
+        /// The key.
+        key: String,
+        /// What is wrong with it.
+        why: String,
+    },
 }
 
 impl core::fmt::Display for SourceError {
@@ -155,6 +165,9 @@ impl core::fmt::Display for SourceError {
                 )
             }
             SourceError::Duplicate { name } => write!(f, "a source named {name} is already added"),
+            SourceError::Config { path, key, why } => {
+                write!(f, "{}: `{key}` {why}", path.display())
+            }
         }
     }
 }
@@ -168,11 +181,32 @@ impl SourceError {
             SourceError::Open { .. } => Status::GUATIAO_ERR_NOT_FOUND,
             SourceError::NotASource { .. } => Status::GUATIAO_ERR_WRONG_KIND,
             SourceError::Refused { status, .. } => *status,
-            SourceError::Malformed { .. } | SourceError::Duplicate { .. } => {
-                Status::GUATIAO_ERR_BAD_VALUE
-            }
+            SourceError::Malformed { .. }
+            | SourceError::Duplicate { .. }
+            | SourceError::Config { .. } => Status::GUATIAO_ERR_BAD_VALUE,
         }
     }
+}
+
+/// The key of a source file's configuration the registry takes for itself.
+const IMPORT_DIRS: &str = "import_dirs";
+
+/// Takes `import_dirs` out of a source file's configuration: the
+/// directories in it, or why they are not.
+fn import_dirs(config: &mut Map) -> Result<Vec<PathBuf>, &'static str> {
+    use crate::value::convert::TryAsRef;
+    use crate::value::types::List;
+    let Some(value) = config.remove(IMPORT_DIRS) else {
+        return Ok(Vec::new());
+    };
+    let list: &List = TryAsRef::try_as_ref(&value).ok_or("is not a list of directories")?;
+    list.iter()
+        .map(|item| {
+            TryAsRef::<str>::try_as_ref(item)
+                .map(PathBuf::from)
+                .ok_or("holds something that is not text")
+        })
+        .collect()
 }
 
 fn rejected(name: &str, why: Rejected) -> SourceError {
@@ -280,6 +314,15 @@ impl Registry {
     /// Maps a source file and adds the source its `guatiao_source` answers
     /// for `config`, under the file's path, which it answers.
     ///
+    /// `import_dirs`, a list of directories in `config`, is the registry's
+    /// and not handed to the source: on Windows, a library the file
+    /// imports directly and the [import search](Registry::set_import_search)
+    /// does not find beside it, beside the host or in the system directory
+    /// is looked for there, in order, and mapped from the first holding it
+    /// (with what it forwards to beside it), as a Python installation's
+    /// `python3.dll` is for a bridge that imports it. Ignored elsewhere.
+    /// Anything but a list of text is [`SourceError::Config`].
+    ///
     /// **The file is never unmapped**, whatever happens to the libraries it
     /// serves, and it is not a library: it cannot be retired. Mapping it
     /// runs its static initialisers, so name files you are willing to run.
@@ -289,23 +332,30 @@ impl Registry {
             return Err(SourceError::Duplicate { name });
         }
         let host = self.host();
-        let config = Value::from(config.clone());
-        let search = self.import_search();
-        let cell = open_source_file(path, host, &config, search).map_err(|e| match e {
-            SourceFileError::Open(reason) => SourceError::Open {
-                path: path.to_path_buf(),
-                reason,
-            },
-            SourceFileError::NotASource => SourceError::NotASource {
-                path: path.to_path_buf(),
-            },
-            SourceFileError::Refused(status, message) => SourceError::Refused {
-                name: name.clone(),
-                status,
-                message,
-            },
-            SourceFileError::Rejected(why) => rejected(&name, why),
+        let mut config = config.clone();
+        let import_dirs = import_dirs(&mut config).map_err(|why| SourceError::Config {
+            path: path.to_path_buf(),
+            key: IMPORT_DIRS.to_string(),
+            why: why.to_string(),
         })?;
+        let config = Value::from(config);
+        let search = self.import_search();
+        let cell =
+            open_source_file(path, host, &config, search, &import_dirs).map_err(|e| match e {
+                SourceFileError::Open(reason) => SourceError::Open {
+                    path: path.to_path_buf(),
+                    reason,
+                },
+                SourceFileError::NotASource => SourceError::NotASource {
+                    path: path.to_path_buf(),
+                },
+                SourceFileError::Refused(status, message) => SourceError::Refused {
+                    name: name.clone(),
+                    status,
+                    message,
+                },
+                SourceFileError::Rejected(why) => rejected(&name, why),
+            })?;
         self.keep_source(cell)?;
         Ok(name)
     }

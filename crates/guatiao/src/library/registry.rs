@@ -65,16 +65,20 @@ pub enum ImportSearch {
     /// (`AddDllDirectory`), and nothing else: not the current directory,
     /// not `PATH`. Windows' `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
     /// LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, what Python's `ctypes` loads a
-    /// library by path with.
+    /// library by path with. A source file's `import_dirs`
+    /// ([`add_source_file`](Registry::add_source_file)) are looked in for
+    /// what these leave missing.
     #[default]
     Library,
-    /// [`Library`](ImportSearch::Library)'s directories first; a file
-    /// they leave an import missing for is opened again with Windows'
-    /// standard search from its own directory: the system directories,
-    /// the current directory and `PATH` (not the host's directory or the
-    /// added ones, which the first search covered). For a library whose
+    /// [`Library`](ImportSearch::Library)'s directories first. A library
+    /// the file imports itself that they leave missing is then looked for
+    /// in a source file's `import_dirs` and where Windows' standard search
+    /// goes after the system directory (the Windows directory, the current
+    /// directory, `PATH`), and mapped from the first holding it, with what
+    /// it forwards to beside it; everything else the file imports is found
+    /// as under [`Library`](ImportSearch::Library). For a library whose
     /// imports live elsewhere, such as a Python bridge importing
-    /// `python3.dll` from the Python installation.
+    /// `python3.dll` from a Python installation on `PATH`.
     Path,
 }
 
