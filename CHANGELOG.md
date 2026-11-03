@@ -1572,9 +1572,14 @@ write now.
     resumed TLS 1.3 session's included), and `Link::peer_id()` names the
     peer by it. A WebTransport server's link is named `https <address>`.
     The list's fingerprint rules for a WebTransport client are decided once
-    its certificate is known and before any frame is read, and a
-    store-backed mutual WebTransport listener whose list names a
-    fingerprint is refused when it binds (pin the clients instead).
+    its certificate is known and before any frame is read, and a client it
+    denies is told so (`BAD_VALUE`). A mutual WebTransport listener backed
+    by a trust store is refused when it binds, since its handshake has no
+    connection address to record a waiting client under (pin the clients
+    instead), and a client TLS itself refuses is reported by coqui-web as a
+    lost path and told `GONE`. A wildcard plain `ws://` listener refuses a
+    client on a list rule naming the address or port it came to, as the TLS
+    listeners do.
   - A source an access control list denies, or any connection a
     WebTransport server declines, is QUIC's CONNECTION_REFUSED to its
     client, which reports it as "refused the connection (by its access
