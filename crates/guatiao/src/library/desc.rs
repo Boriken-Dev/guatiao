@@ -719,9 +719,12 @@ pub struct SourceInfo {
     /// program reads instead, keys of the source's choosing.
     ///
     /// Answer the whole set each time: a refresh reports a note the first
-    /// time it appears and not again while it stays. `out` arrives holding
-    /// a carrier, as `list`'s does. A non-OK status is reported by the
-    /// refresh as a refusal. Null for a source with nothing to say.
+    /// time it appears and not again while it stays. A note is known by its
+    /// subject, text and detail, so keep them stable (no counters or times):
+    /// one that changes is told again. `out` arrives holding a carrier, as
+    /// `list`'s does. A non-OK status is reported by the refresh as a
+    /// refusal and leaves the notes told standing. Null for a source with
+    /// nothing to say.
     pub notes: Option<unsafe extern "C" fn(ctx: *mut c_void, out: *mut List) -> Status>,
 }
 

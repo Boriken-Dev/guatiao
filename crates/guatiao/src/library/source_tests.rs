@@ -466,6 +466,45 @@ fn a_panic_while_telling_notes_is_refused_and_the_refresh_goes_on() {
 }
 
 #[test]
+fn a_failed_answer_leaves_the_notes_told_as_they_were() {
+    let shelf = Arc::new(Shelf::default());
+    *shelf.notes.lock().unwrap() = vec![Note::new("", "the shelf is dusty")];
+    let mut registry = a_registry_with(&shelf);
+    assert_eq!(
+        noted(&registry.refresh()),
+        [("shelf", "", "the shelf is dusty")]
+    );
+
+    *shelf.hoarse.lock().unwrap() = Some("the shelf lost its voice".to_string());
+    assert_eq!(registry.refresh().refused.len(), 1);
+    *shelf.hoarse.lock().unwrap() = None;
+    *shelf.tongue_tied.lock().unwrap() = true;
+    assert_eq!(registry.refresh().refused.len(), 1);
+    *shelf.tongue_tied.lock().unwrap() = false;
+
+    let back = registry.refresh();
+    assert!(
+        back.is_empty(),
+        "the note stood all along, told once: {back:?}"
+    );
+}
+
+#[test]
+fn a_note_answered_twice_at_once_is_told_once() {
+    let shelf = Arc::new(Shelf::default());
+    *shelf.notes.lock().unwrap() = vec![
+        Note::new("", "the shelf is dusty"),
+        Note::new("", "the shelf is dusty"),
+    ];
+    let mut registry = a_registry_with(&shelf);
+    assert_eq!(
+        noted(&registry.refresh()),
+        [("shelf", "", "the shelf is dusty")]
+    );
+    assert!(registry.refresh().is_empty());
+}
+
+#[test]
 fn a_source_failing_to_tell_its_notes_is_refused_in_its_words() {
     let shelf = Arc::new(Shelf::default());
     shelf.put("a", "1");

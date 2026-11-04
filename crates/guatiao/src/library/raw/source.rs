@@ -150,32 +150,26 @@ impl SourceCell {
         Ok(read_candidates(&list))
     }
 
-    /// What the source wants its host to see now, and a sentence for each
-    /// entry of its answer that is not a note, or for a failed answer.
-    pub(crate) fn notes(&self) -> (Vec<Note>, Vec<String>) {
+    /// What the source wants its host to see now, with a sentence for each
+    /// entry of its answer that is not a note; or why it gave no answer.
+    pub(crate) fn notes(&self) -> Result<(Vec<Note>, Vec<String>), String> {
         let list = match &self.imp {
             SourceImpl::Rust(source) => {
                 return match catch_unwind(AssertUnwindSafe(|| source.notes())) {
-                    Ok(Ok(notes)) => (notes, Vec::new()),
-                    Ok(Err(e)) => (
-                        Vec::new(),
-                        vec![format!(
-                            "the source could not tell its notes: {}",
-                            e.message()
-                        )],
-                    ),
+                    Ok(Ok(notes)) => Ok((notes, Vec::new())),
+                    Ok(Err(e)) => Err(format!(
+                        "the source could not tell its notes: {}",
+                        e.message()
+                    )),
                     Err(payload) => {
                         core::mem::forget(payload);
-                        (
-                            Vec::new(),
-                            vec!["the source panicked while telling its notes".to_string()],
-                        )
+                        Err("the source panicked while telling its notes".to_string())
                     }
                 };
             }
             SourceImpl::Table(table) => {
                 let Some(notes) = table.notes else {
-                    return (Vec::new(), Vec::new());
+                    return Ok((Vec::new(), Vec::new()));
                 };
                 let mut out = <List as crate::library::kind::Carrier>::carrier(Alloc::rust());
                 let status = crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || {
@@ -186,15 +180,12 @@ impl SourceCell {
                 });
                 if status != Status::GUATIAO_OK {
                     drop(out);
-                    return (
-                        Vec::new(),
-                        vec![format!("the source could not tell its notes ({status:?})")],
-                    );
+                    return Err(format!("the source could not tell its notes ({status:?})"));
                 }
                 out
             }
         };
-        read_notes(&list)
+        Ok(read_notes(&list))
     }
 
     /// Opens the candidate `id`, listed under `stamp`.
@@ -614,10 +605,21 @@ mod tests {
         assert!(wrong[0].starts_with("note 2 "), "{wrong:?}");
     }
 
+    unsafe extern "C" fn notes_refused(_: *mut c_void, _: *mut List) -> Status {
+        Status::GUATIAO_ERR_GONE
+    }
+
+    /// A table with no `notes` slot answers no notes, and one whose slot
+    /// refuses is a failed answer, not an empty one: the registry keeps
+    /// the notes it has told.
     #[test]
-    fn a_table_without_a_notes_slot_has_nothing_to_say() {
-        let cell = SourceCell::table("s", &a_table(size_of::<SourceInfo>())).expect("a table");
-        let (notes, wrong) = cell.notes();
-        assert!(notes.is_empty() && wrong.is_empty());
+    fn a_tables_notes_slot_is_absent_or_answers() {
+        let silent = SourceCell::table("s", &a_table(size_of::<SourceInfo>())).expect("a table");
+        assert_eq!(silent.notes(), Ok((Vec::new(), Vec::new())));
+        let mut refusing = a_table(size_of::<SourceInfo>());
+        refusing.notes = Some(notes_refused);
+        let refusing = SourceCell::table("s", &refusing).expect("a table");
+        let failed = refusing.notes().expect_err("a failed answer");
+        assert!(failed.contains("could not tell its notes"), "{failed}");
     }
 }
