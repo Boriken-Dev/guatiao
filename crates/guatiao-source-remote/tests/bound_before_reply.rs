@@ -49,6 +49,14 @@ impl FrameRead for Reading {
             .push(format!("{} raises to {bytes}", self.side));
         self.inner.set_max_frame(bytes);
     }
+
+    fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{} stages {messages} then {bytes}", self.side));
+        self.inner.set_max_frame_after(messages, bytes)
+    }
 }
 
 struct Writing {
@@ -179,4 +187,33 @@ fn a_server_that_reads_a_proof_raises_its_bound_only_after_it() {
         reads_before, 2,
         "the HELLO and the PROOF are read before the bound is raised: {log:?}"
     );
+}
+
+/// Where a PROOF is read, the server stages its bound (the PROOF small,
+/// what follows large) before its WELCOME goes, which is before the client
+/// can send either.
+#[cfg(feature = "tcp")]
+#[test]
+fn a_server_that_reads_a_proof_stages_its_bound_before_the_welcome() {
+    let log: Log = Arc::default();
+    let (host_end, server_end) = memory::pair();
+    let key = b"a key both ends hold".as_slice();
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(key));
+    let served = {
+        let log = Arc::clone(&log);
+        let server = server.clone();
+        std::thread::spawn(move || server.serve(watched(server_end, &log, "server")))
+    };
+    let source = RemoteSource::new(
+        Box::new(Once(Mutex::new(Some(watched(host_end, &log, "client"))))),
+        LinkOptions::new(Trust::Trusted).key(key),
+    );
+    let _link = source.link().expect("the link is made");
+    let _served = served.join().unwrap().expect("the server's link is made");
+
+    let log = log.lock().unwrap().clone();
+    let at = |what: &str| log.iter().position(|e| e == what);
+    let staged = at("server stages 1 then 67108864").unwrap_or_else(|| panic!("{log:?}"));
+    let welcome = at("server writes").expect("a welcome");
+    assert!(staged < welcome, "staged before the WELCOME goes: {log:?}");
 }

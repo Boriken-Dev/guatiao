@@ -276,6 +276,20 @@ impl FrameRead for Reader {
         self.fixed = true;
     }
 
+    fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
+        let Some(channel) = self.shared.channel.get() else {
+            return false;
+        };
+        if channel.set_max_receive_after(messages, bytes).is_err() {
+            return false;
+        }
+        // The channel judges by position from here on: this reader no longer
+        // sets the bound as it reads.
+        self.max = bytes;
+        self.fixed = true;
+        true
+    }
+
     fn peer_id(&self) -> Option<String> {
         self.shared.peer_id()
     }
