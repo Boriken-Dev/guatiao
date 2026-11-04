@@ -52,6 +52,9 @@ final Expando<int> _revealing = Expando<int>('reveals running');
 /// How many calls each owner's tree is lent to.
 final Expando<int> _lending = Expando<int>('lends running');
 
+/// How many calls each owner's tree is borrowed by.
+final Expando<int> _borrowing = Expando<int>('borrows running');
+
 /// Runs [use] over [view], the bytes of a node of [owner]'s tree, refusing
 /// every change to and free of that tree until it returns. Throws while
 /// the tree is lent to a call, which may change it under the bytes.
@@ -85,8 +88,14 @@ void checkUnrevealed(Object owner) {
   }
   if ((_lending[owner] ?? 0) > 0) {
     throw StateError(
-      'this value is lent to a call: it cannot be changed, freed or lent '
-      'again until the call returns',
+      'this value is lent to a call: it cannot be changed, freed, lent '
+      'again or borrowed until the call returns',
+    );
+  }
+  if ((_borrowing[owner] ?? 0) > 0) {
+    throw StateError(
+      'this value is borrowed by a call: it cannot be changed, freed or '
+      'lent until the call returns',
     );
   }
 }
@@ -100,6 +109,24 @@ void markLent(Object owner) {
 void unmarkLent(Object owner) {
   final left = (_lending[owner] ?? 1) - 1;
   _lending[owner] = left == 0 ? null : left;
+}
+
+/// Marks [owner]'s tree borrowed by a call until [unmarkBorrowed]:
+/// throws while it is lent to one, which may change it under the call.
+void markBorrowed(Object owner) {
+  if ((_lending[owner] ?? 0) > 0) {
+    throw StateError(
+      'this value is lent to a call: it cannot be borrowed until the call '
+      'returns',
+    );
+  }
+  _borrowing[owner] = (_borrowing[owner] ?? 0) + 1;
+}
+
+/// Ends what [markBorrowed] began.
+void unmarkBorrowed(Object owner) {
+  final left = (_borrowing[owner] ?? 1) - 1;
+  _borrowing[owner] = left == 0 ? null : left;
 }
 
 /// `guatiao_tag`: which arm of a value's payload is live.

@@ -762,6 +762,11 @@ final class CallScope extends SlotCall {
     final Ref ref;
     if (value is Ref) {
       ref = value;
+      // Read for the call: a tree this call also lends is refused, and so
+      // are changing, freeing and lending it until the call returns.
+      final owner = ref.owner;
+      markBorrowed(owner);
+      after(() => unmarkBorrowed(owner));
     } else {
       final built = Value.fromDart(value);
       after(built.close);
@@ -790,7 +795,7 @@ final class CallScope extends SlotCall {
     // The callee may grow or replace the tree, and the settle afterwards
     // moves it: inside a reveal of it, the bytes being read. Until the call
     // ends, a reveal or change of it (a provider holding the value) is
-    // refused as well.
+    // refused as well, and so are borrowing it and lending it again.
     final owner = ref.owner;
     checkUnrevealed(owner);
     markLent(owner);
@@ -979,14 +984,28 @@ final class CallScope extends SlotCall {
   /// Ends the call: copies out-buffers back, frees what it built, and
   /// frees what was to be handed over if the call never happened.
   void close() {
-    if (!_called) {
-      for (final undo in _given.reversed) {
-        undo();
+    try {
+      if (!_called) {
+        Object? failure;
+        for (final undo in _given.reversed) {
+          try {
+            undo();
+          } on Object catch (e) {
+            failure ??= e;
+          }
+        }
+        _given.clear();
+        if (failure != null) throw failure;
       }
-      _given.clear();
+    } finally {
+      // Whatever an undo threw, the lent trees are settled and every mark
+      // the call set is lifted.
+      try {
+        _settleLent();
+      } finally {
+        _end();
+      }
     }
-    _settleLent();
-    _end();
   }
 }
 

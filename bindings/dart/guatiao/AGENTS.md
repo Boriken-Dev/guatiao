@@ -742,8 +742,12 @@ other.wipe();                                          // any Value: overwritten
   while `use` runs, `close()`, `wipe()`, handing the value to a kind's
   slot, lending it to one and every change to it throw `StateError`; a
   reveal through `Ref.borrowedFrom(v, ..)` counts against `v`. While a
-  value is lent to a call, a reveal of it, a change, `close()`, `wipe()`
-  and another lend throw `StateError`. One isolate runs one call at a
+  value is lent to a call, a reveal of it, a change, `close()`, `wipe()`,
+  another lend and a borrow throw `StateError`; while a call borrows it, a
+  change, `close()`, `wipe()` and a lend do. So one call never has a value
+  lent and borrowed, or lent twice (`remote.f(v, v)` for a slot
+  `f(&mut Map, &Map)` throws before the call), nor a node of it and the
+  value itself. One isolate runs one call at a
   time, so two `close()`s cannot interleave: nothing more is needed there. `StateError` for any other node.
 - `Ref.isSensitive`; `toString` of a `Value` holding anything in the
   wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites
