@@ -287,3 +287,88 @@ case("follows the files of a watched directory", with_examples({
   expect_equal(length(reg$libraries()), 0)
   reg$close()
 }))
+
+# SHA-256 of a file as hex: base R from 4.5, else the platform's tool.
+file_sha256 <- function(path) {
+  if (exists("sha256sum", envir = asNamespace("tools"), inherits = FALSE)) {
+    return(unname(get("sha256sum", envir = asNamespace("tools"))(path)))
+  }
+  out <- if (nzchar(Sys.which("sha256sum"))) system2("sha256sum", shQuote(path), stdout = TRUE)
+    else system2("shasum", c("-a", "256", shQuote(path)), stdout = TRUE)
+  sub(" .*", "", out[1L])
+}
+
+# The catalog library written in C, in a directory of its own, as a scan
+# finds it; NULL without a compiler.
+build_catalog_library <- function() {
+  dir <- scratch("catalog")
+  file <- build_c(file.path(C_CONSUMER, "catalog_library.c"), dir, "r_catalog_library", file = lib_file("r_catalog_library"))
+  if (is.null(file)) NULL else list(dir = dir, file = file)
+}
+
+case("the catalog lists every provider of a directory and builds none", with_library({
+  built <- build_catalog_library()
+  if (is.null(built) || is.null(fixture())) {
+    absent_greeter("c_catalog", "no C compiler: the catalog library is not built")
+  } else {
+    reg <- registry("catalog-host", "1.0")
+    report <- reg$scan_dir(built$dir)
+    expect_true(length(report$failed) == 0 && length(report$loaded) == 1)
+    list_ <- reg$catalog()
+    catalog <- setNames(list_, vapply(list_, function(e) e$id, ""))
+    expect_equal(sort(names(catalog)), c("catalog_configured", "catalog_implied", "catalog_plain", "catalog_unavailable"))
+    digest <- paste0("sha256:", file_sha256(built$file))
+
+    configured <- catalog[["catalog_configured"]]
+    expect_equal(unlist(configured$kinds), "counter")
+    expect_equal(configured$display_name, "Configured, with a form")
+    expect_equal(configured$version, "2.0")
+    expect_equal(configured$library, "catalog_library")
+    expect_equal(configured$library_version, "1.0")
+    expect_equal(configured$digest, digest)
+    expect_true(isTRUE(configured$available) && is.null(configured[["reason"]]))
+    expect_equal(unlist(configured$config$required), c("host", "port"))
+    expect_equal(configured$meta$form$sections[[1]]$title, "Network")
+
+    implied <- catalog[["catalog_implied"]]
+    expect_equal(implied$version, "1.0")
+    expect_true(is.null(implied[["meta"]]))
+    expect_true(isTRUE(implied$config$properties$token[["x-sensitive"]]))
+
+    unavailable <- catalog[["catalog_unavailable"]]
+    expect_true(identical(unavailable$available, FALSE))
+    expect_equal(unavailable$reason, "no device here")
+    expect_true(is.null(unavailable[["config"]]) && identical(unavailable$has_config, FALSE))
+    expect_true(isTRUE(catalog[["catalog_plain"]]$available))
+
+    # Listing asked the library for nothing: its count says so, and so does
+    # its refusal of the first instance asked for afterwards.
+    expect_equal(fx("fx_catalog_built", built$file), 0L)
+    e <- expect_error(reg$create("catalog_configured", list(host = "localhost", port = 8080L)), "guatiao_error")
+    expect_true(grepl("built nothing: the first create this library was asked", conditionMessage(e), fixed = TRUE),
+      conditionMessage(e))
+    expect_equal(fx("fx_catalog_built", built$file), 1L)
+    reg$close()
+  }
+}))
+
+case("a catalog names why a library has no digest", with_library({
+  built <- build_catalog_library()
+  if (is.null(built)) {
+    absent_greeter("c_catalog", "no C compiler: the catalog library is not built")
+  } else {
+    reg <- registry("catalog-host", "1.0")
+    reg$load_file(built$file)
+    # Another file at the path, before anything asked: renaming a mapped
+    # file works on every platform, where overwriting one does not.
+    file.rename(built$file, file.path(built$dir, "moved_away.bin"))
+    writeLines("not the library", built$file)
+    catalog <- reg$catalog()
+    expect_equal(length(catalog), 4L)
+    for (entry in catalog) {
+      expect_true(is.null(entry[["digest"]]))
+      expect_equal(entry$digest_error, "the file changed since it was loaded")
+    }
+    reg$close()
+  }
+}))

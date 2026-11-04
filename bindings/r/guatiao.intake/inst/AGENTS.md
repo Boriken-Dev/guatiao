@@ -39,6 +39,7 @@ intake_is_visible(schema, form, "key", values)
 intake_at(value, "agent[1].name")           # a view, or NULL
 intake_for_schema(schema)                   # a value
 intake_form_for(form, schema, "path")       # a value, or NULL
+intake_provider_form(schema, meta)          # a value, or NULL: a provider's own form, else the one its schema implies
 intake_resolve(schema, "auth.password")     # a view, or NULL
 intake_flat_keys(schema, "auth")            # character vector
 intake_flatten(schema, "auth", value)       # named character vector

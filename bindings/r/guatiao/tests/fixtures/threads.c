@@ -400,3 +400,12 @@ SEXP fx_shelf(SEXP path, SEXP op, SEXP arg) {
   f(Rf_asInteger(arg));
   return R_NilValue;
 }
+
+/* How many times any `create` of the catalog library was called. */
+SEXP fx_catalog_built(SEXP path) {
+  void *p = open_symbol(path, "catalog_built");
+  if (!p) Rf_error("no such control");
+  int (*f)(void);
+  memcpy(&f, &p, sizeof f);
+  return Rf_ScalarInteger(f());
+}

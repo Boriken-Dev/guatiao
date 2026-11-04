@@ -5,6 +5,7 @@
 \alias{intake_at}
 \alias{intake_for_schema}
 \alias{intake_form_for}
+\alias{intake_provider_form}
 \alias{intake_resolve}
 \alias{intake_flat_keys}
 \alias{intake_flatten}
@@ -18,6 +19,7 @@ intake_is_visible(schema, form, key, values)
 intake_at(value, path)
 intake_for_schema(schema)
 intake_form_for(form, schema, path)
+intake_provider_form(schema, meta)
 intake_resolve(schema, key)
 intake_flat_keys(schema, key)
 intake_flatten(schema, key, value)
@@ -26,6 +28,7 @@ intake_provider_form_key
 }
 \arguments{
 \item{schema, form, value, values}{Values, views or R data.}
+\item{meta}{A provider's \code{meta}: a value, a view, R data or \code{NULL}.}
 \item{key}{A field's key (for the flat projection, its flat key).}
 \item{path}{A path in the intake grammar: \code{agent[1].name}, \code{env[a.b]}.}
 \item{store}{A named character vector or list of strings: flat keys to text.}
@@ -38,6 +41,10 @@ intake_provider_form_key
 (a copy when the argument was R data), or \code{NULL}.
 \code{intake_for_schema}: a value. \code{intake_form_for} and
 \code{intake_unflatten}: a value, or \code{NULL} for nothing there.
+\code{intake_provider_form}: the form a provider declares in its \code{meta} under
+\code{intake_provider_form_key}, else the one its \code{schema} implies (a value),
+or \code{NULL} when it declares none and takes no configuration; what is not a
+map is skipped.
 \code{intake_flat_keys}: a character vector. \code{intake_flatten}: a named
 character vector. \code{intake_provider_form_key}: \code{"form"}, the key
 of a provider's meta holding its form (a registry's \code{provider_meta()}).

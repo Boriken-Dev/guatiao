@@ -101,3 +101,39 @@ case("the flat projection", with_library({
   close(schema)
   expect_error(value_data(host), "guatiao_closed")
 }))
+
+case("a provider's form is its own, else the one its schema implies", with_library({
+  schema <- list(type = "object", properties = list(
+    user = list(type = "string", `x-section` = "account"),
+    token = list(type = "string", `x-sensitive` = TRUE)))
+  declared <- list(sections = list(list(id = "account", title = "Account")))
+
+  form <- intake_provider_form(schema, setNames(list(declared, 1L), c(intake_provider_form_key, "other")))
+  expect_true(!is.null(form))
+  expect_equal(value_data(form), declared)
+  close(form)
+
+  form <- intake_provider_form(schema, NULL)
+  made <- value_data(form)
+  expect_equal(made$sections, list(list(id = "account")))
+  expect_equal(made$fields$token$widget, "password")
+  close(form)
+
+  # Meta without a form is the same as none; values work as R data does.
+  held <- value(schema)
+  meta <- value(list(other = 1L))
+  form <- intake_provider_form(held, meta)
+  expect_equal(value_data(form), made)
+  close(form)
+  close(held)
+  close(meta)
+
+  expect_true(is.null(intake_provider_form(NULL, NULL)))
+  expect_true(is.null(intake_provider_form(NULL, list(other = 1L))))
+
+  # What is not a form is skipped, as reading the key by hand skips it.
+  form <- intake_provider_form(schema, setNames(list(list("not", "a", "form")), intake_provider_form_key))
+  expect_equal(value_data(form), made)
+  close(form)
+  expect_true(is.null(intake_provider_form(NULL, setNames(list("a form"), intake_provider_form_key))))
+}))

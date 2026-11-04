@@ -54,6 +54,10 @@
       "Every provider serving kind (every one when empty), best first."
       .Call(C_registry_query, .gt_reg(.self), 1L, kind)
     },
+    catalog = function() {
+      "Every provider of every loaded library, best first, none built: providers() plus available, reason, config, meta, library_key, library_version, and digest or digest_error. The first call reads each library file."
+      .Call(C_registry_query, .gt_reg(.self), 6L, "")
+    },
     available = function(kind = "") {
       "Every provider serving kind that can run here now, best first."
       .Call(C_registry_query, .gt_reg(.self), 2L, kind)

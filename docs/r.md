@@ -86,6 +86,12 @@ every answer that is data is plain R data. A remote checks its registry
 or instance on every call; a refusal signals a `guatiao_error` carrying
 the provider's status and words.
 
+A settings screen lists every provider of every loaded library at once,
+none of them built, with `reg$catalog()` (a list of lists, best first: what
+`reg$providers()` holds plus availability, `config`, `meta`, the library's
+`digest` or a `digest_error`), and takes the form to show one with
+`intake_provider_form(entry[["config"]], entry[["meta"]])` of `guatiao.intake`.
+
 ## As a provider
 
 ```r

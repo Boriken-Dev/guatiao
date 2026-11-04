@@ -106,6 +106,8 @@ SEXP C_registry_query(SEXP x, SEXP what, SEXP arg) {
   guatiao_status st;
   if (w == 0) {
     st = GT_CORE_FN(guatiao_registry_libraries)(reg, &gt_binding_alloc, &out);
+  } else if (w == 6) {
+    st = GT_CORE_FN(guatiao_registry_catalog)(reg, &gt_binding_alloc, &out);
   } else {
     guatiao_str a = gt_str_arg(arg, "the kind or key");
     switch (w) {
