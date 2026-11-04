@@ -62,6 +62,9 @@ value its wire encoding (`guatiao::value::wire`) in the module's memory.
 | `guatiao_guest_declare` | `() -> i32` | the declaration through `answer`; a status |
 | `guatiao_guest_call` | `(object: i32, target: i64, request: i32, len: i32) -> i32` | a status |
 | `guatiao_guest_release` | `(object: i64)` | optional: an object it answered was destroyed |
+| `guatiao_guest_create` | `(provider: i64, config: i32, len: i32) -> i32` | needed by a provider declaring `config`: an instance from a configuration; a status |
+| `guatiao_guest_destroy` | `(instance: i64)` | optional: an instance it built was dropped |
+| `guatiao_guest_available` | `(provider: i64) -> i32` | needed by a provider declaring `may_be_unavailable`: whether it runs; a status |
 | `_initialize` | `()` | optional, called first |
 
 | import (`guatiao`) | signature | |
@@ -73,7 +76,7 @@ value its wire encoding (`guatiao::value::wire`) in the module's memory.
 | `drop` | `(handle: i64)` | lets go of an object handed over |
 
 - **A call**: `object` 0 → `target` is the provider's position in the
-  declaration; 1 → the guest's object id. Request: wire list `[kind,
+  declaration; 1 → the guest's object id; 2 → the guest's instance id. Request: wire list `[kind,
   method, arg...]`. Arguments: scalars, text, bytes, trees as themselves;
   a buffer (`bytes_mut`) as bytes of its length (write it back); an object
   as a handle, a number: taken (the guest's: `drop` it) or lent (valid
@@ -83,7 +86,25 @@ value its wire encoding (`guatiao::value::wire`) in the module's memory.
   answer; or a status and its words. A status guatiao does not define is
   `GUATIAO_ERR_INTERNAL`, naming it.
 - **Declaration**: `{"providers": [{"id", "name", "serves": {kind: [slot,
-  ..]}}]}`, at most `abi::MOST_PROVIDERS`.
+  ..]}, "config"?, "instances_only"?, "may_be_unavailable"?}]}`, at most
+  `abi::MOST_PROVIDERS`.
+- **Instances** (`config`, a JSON Schema as a map): the provider is offered
+  with that schema, and a host's `instantiate` checks a configuration
+  against it before the guest runs. The configuration's wire bytes go where
+  `guatiao_guest_alloc` answered, then `guatiao_guest_create(position, at,
+  len)`: status 0 and `answer(id)` (a number, the guest's own) builds one,
+  whose slots' calls name it with `object` 2; another status refuses, in its
+  words. Dropping the instance's last owner reaches `guatiao_guest_destroy(id)`
+  once. The provider stays callable as itself unless `instances_only` is
+  `true` (refused without `config`).
+- **Availability** (`may_be_unavailable: true`): each time a host asks,
+  `guatiao_guest_available(position)`: status 0 and nothing (or null)
+  answered is available, a text answered the reason it is not; another
+  status, or a stop, is unavailable in its words. Without the key a
+  provider is available and never asked.
+- A provider declaring `config` without the module exporting
+  `guatiao_guest_create`, or `may_be_unavailable` without
+  `guatiao_guest_available`, refuses the library, naming both.
 - **A host object** a guest calls: its slot's arguments as scalars, text,
   bytes, borrowed or taken trees, or a taken object (a handle the guest
   owns); a lent tree, a buffer or a lent object is `GUATIAO_ERR_UNSUPPORTED`.
@@ -128,11 +149,15 @@ guatiao::source!(serves = "wasm", make = start);
 - **A trap or a limit discards the instance**: the call answers the error,
   and the next call makes the library afresh from its compiled module.
   What the instance held goes with it: its state, the objects it answered
-  (`GUATIAO_ERR_GONE`) and the host objects it was handed (destroyed).
+  and the instances it built (`GUATIAO_ERR_GONE`; their drop reaches no
+  guest), and the host objects it was handed (destroyed). An instance or
+  object dropped while the library is busy on that thread is let go of at
+  its next entry.
 
 ## Limits
 
-From the configuration's `limits`, per call, opening a library included
+From the configuration's `limits`, per entry into the guest: each call,
+create, destroy, release and availability question, and opening a library
 (instantiation, `_initialize`, the ABI check and the declaration each get
 the whole budget):
 

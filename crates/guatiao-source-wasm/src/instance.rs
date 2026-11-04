@@ -658,6 +658,9 @@ pub(crate) struct Live {
     declare: TypedFunc<(), i32>,
     call: TypedFunc<(i32, i64, i32, i32), i32>,
     release: Option<TypedFunc<i64, ()>>,
+    create: Option<TypedFunc<(i64, i32, i32), i32>>,
+    destroy: Option<TypedFunc<i64, ()>>,
+    available: Option<TypedFunc<i64, i32>>,
 }
 
 /// A guest's exports, found once.
@@ -667,6 +670,9 @@ struct Funcs {
     declare: TypedFunc<(), i32>,
     call: TypedFunc<(i32, i64, i32, i32), i32>,
     release: Option<TypedFunc<i64, ()>>,
+    create: Option<TypedFunc<(i64, i32, i32), i32>>,
+    destroy: Option<TypedFunc<i64, ()>>,
+    available: Option<TypedFunc<i64, i32>>,
 }
 
 impl Funcs {
@@ -681,6 +687,9 @@ impl Funcs {
             declare: instance.get_typed_func(&mut *store, export::DECLARE)?,
             call: instance.get_typed_func(&mut *store, export::CALL)?,
             release: instance.get_typed_func(&mut *store, export::RELEASE).ok(),
+            create: instance.get_typed_func(&mut *store, export::CREATE).ok(),
+            destroy: instance.get_typed_func(&mut *store, export::DESTROY).ok(),
+            available: instance.get_typed_func(&mut *store, export::AVAILABLE).ok(),
         })
     }
 }
@@ -748,6 +757,9 @@ impl Live {
                 declare: funcs.declare,
                 call: funcs.call,
                 release: funcs.release,
+                create: funcs.create,
+                destroy: funcs.destroy,
+                available: funcs.available,
             }),
             Err(e) => Err((Stopped(e), store)),
         }
@@ -791,26 +803,77 @@ impl Live {
         ))
     }
 
-    /// Runs one call: `request` copied into the guest's memory, then
-    /// `guatiao_guest_call`. Answers its status and answer bytes.
-    pub(crate) fn call(
-        &mut self,
-        limits: &Limits,
-        object: bool,
-        target: i64,
-        request: &[u8],
-    ) -> Result<(i32, Option<Vec<u8>>), Stopped> {
-        let len = i32::try_from(request.len())
+    /// `bytes` copied into memory the guest's `guatiao_guest_alloc`
+    /// answered, armed for one entry: where they are and their length.
+    fn hand_in(&mut self, limits: &Limits, bytes: &[u8]) -> Result<(i32, i32), Stopped> {
+        let len = i32::try_from(bytes.len())
             .map_err(|_| wasmtime::Error::msg("the request is larger than a guest can hold"))?;
         self.store.data_mut().answer = None;
         arm(&mut self.store, limits)?;
         let at = self.alloc.call(&mut self.store, len)?;
         self.memory
-            .write(&mut self.store, at as u32 as usize, request)
+            .write(&mut self.store, at as u32 as usize, bytes)
             .map_err(|_| wasmtime::Error::msg("the guest answered memory it does not have"))?;
-        let status = self
-            .call
-            .call(&mut self.store, (i32::from(object), target, at, len))?;
+        Ok((at, len))
+    }
+
+    /// Runs one call: `request` copied into the guest's memory, then
+    /// `guatiao_guest_call` on `target` of the sort `object` names (0 a
+    /// provider, 1 an object, 2 an instance). Answers its status and
+    /// answer bytes.
+    pub(crate) fn call(
+        &mut self,
+        limits: &Limits,
+        object: i32,
+        target: i64,
+        request: &[u8],
+    ) -> Result<(i32, Option<Vec<u8>>), Stopped> {
+        let (at, len) = self.hand_in(limits, request)?;
+        let status = self.call.call(&mut self.store, (object, target, at, len))?;
+        Ok((status, self.store.data_mut().answer.take()))
+    }
+
+    /// Builds an instance of the provider at `provider` from the
+    /// configuration's wire bytes: `guatiao_guest_create`'s status and
+    /// answer bytes.
+    pub(crate) fn create(
+        &mut self,
+        limits: &Limits,
+        provider: i64,
+        config: &[u8],
+    ) -> Result<(i32, Option<Vec<u8>>), Stopped> {
+        let create = self
+            .create
+            .clone()
+            .ok_or_else(|| wasmtime::Error::msg("it exports no guatiao_guest_create"))?;
+        let (at, len) = self.hand_in(limits, config)?;
+        let status = create.call(&mut self.store, (provider, at, len))?;
+        Ok((status, self.store.data_mut().answer.take()))
+    }
+
+    /// Tells the guest an instance it built was dropped.
+    pub(crate) fn destroy(&mut self, limits: &Limits, instance: i64) -> Result<(), Stopped> {
+        if let Some(destroy) = &self.destroy {
+            arm(&mut self.store, limits)?;
+            destroy.call(&mut self.store, instance)?;
+        }
+        Ok(())
+    }
+
+    /// Asks whether the provider at `provider` can run:
+    /// `guatiao_guest_available`'s status and answer bytes.
+    pub(crate) fn available(
+        &mut self,
+        limits: &Limits,
+        provider: i64,
+    ) -> Result<(i32, Option<Vec<u8>>), Stopped> {
+        let available = self
+            .available
+            .clone()
+            .ok_or_else(|| wasmtime::Error::msg("it exports no guatiao_guest_available"))?;
+        self.store.data_mut().answer = None;
+        arm(&mut self.store, limits)?;
+        let status = available.call(&mut self.store, provider)?;
         Ok((status, self.store.data_mut().answer.take()))
     }
 

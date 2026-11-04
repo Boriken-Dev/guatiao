@@ -19,6 +19,9 @@
 //! | `guatiao_guest_declare` | `() -> i32` | answers its declaration (below) through `answer`; a status |
 //! | `guatiao_guest_call` | `(object: i32, target: i64, request: i32, len: i32) -> i32` | runs a call; a status |
 //! | `guatiao_guest_release` | `(object: i64)` | optional: an object it answered was destroyed |
+//! | `guatiao_guest_create` | `(provider: i64, config: i32, len: i32) -> i32` | for a provider declaring `config`: builds an instance; a status |
+//! | `guatiao_guest_destroy` | `(instance: i64)` | optional: an instance it built was dropped |
+//! | `guatiao_guest_available` | `(provider: i64) -> i32` | for a provider declaring `may_be_unavailable`: whether it can run; a status |
 //! | `_initialize` | `()` | optional: called once, first (a WASI reactor's) |
 //!
 //! It may **import**, from module `guatiao`:
@@ -45,7 +48,8 @@
 //! limit when one is set, and decodes to no more than that.
 //!
 //! **A call.** `object` is 0 for a provider, `target` its position in the
-//! declaration; 1 for an object the guest answered, `target` its id. The
+//! declaration; 1 for an object the guest answered, `target` its id; 2
+//! for an instance it built, `target` its id. The
 //! request is a wire list `[kind, method, arg...]`, one argument per slot
 //! argument, in order: a number, bool, text, bytes or tree as itself; a
 //! buffer (`bytes_mut`) as bytes of its length; an object as a handle
@@ -65,13 +69,29 @@
 //!
 //! A provider's id on the host is `<module>_<id>`; a slot it does not
 //! name is null in the table, so a caller runs the kind's default. At
-//! most [`MOST_PROVIDERS`] providers.
+//! most [`MOST_PROVIDERS`] providers. Each may also declare:
+//!
+//! - `config`, a JSON Schema (a map): it builds instances from a
+//!   configuration fitting it, which the host checks first. The
+//!   configuration's wire bytes are written where `guatiao_guest_alloc`
+//!   answered and handed to `guatiao_guest_create` with the provider's
+//!   position; status 0 answers the instance's id (a number) through
+//!   `answer`, and its slots' calls name it with `object` 2. It stays
+//!   callable as itself unless `instances_only` is `true`.
+//!   `guatiao_guest_destroy` hears when an instance is dropped, once.
+//! - `may_be_unavailable`: `true` has a host's every question reach
+//!   `guatiao_guest_available`: status 0 with nothing (or null) answered
+//!   is available, with text it is unavailable for that reason; any other
+//!   status is unavailable, its words the reason.
+//!
+//! Every entry into a guest (a call, a create, a destroy, an availability
+//! question) runs under the whole of each limit.
 //!
 //! **The version** may be stated in a custom section named
 //! [`VERSION_SECTION`] (its UTF-8 text), read without compiling the
 //! module; a manifest without `version` needs it.
 
-use guatiao::value::convert::TryAsRef;
+use guatiao::value::convert::{FromValue, TryAsRef};
 use guatiao::value::wire;
 use guatiao::{List, Map, Status, Value};
 
@@ -96,6 +116,14 @@ pub mod export {
     pub const CALL: &str = "guatiao_guest_call";
     /// `(object: i64)`, optional.
     pub const RELEASE: &str = "guatiao_guest_release";
+    /// `(provider: i64, config: i32, len: i32) -> i32`, for a provider
+    /// declaring `config`.
+    pub const CREATE: &str = "guatiao_guest_create";
+    /// `(instance: i64)`, optional.
+    pub const DESTROY: &str = "guatiao_guest_destroy";
+    /// `(provider: i64) -> i32`, for a provider declaring
+    /// `may_be_unavailable`.
+    pub const AVAILABLE: &str = "guatiao_guest_available";
     /// `()`, optional, called first.
     pub const INITIALIZE: &str = "_initialize";
     /// The linear memory.
@@ -168,6 +196,10 @@ pub(crate) struct Declared {
     pub id: String,
     pub name: String,
     pub serves: Vec<(String, Vec<String>)>,
+    /// The schema of the configuration it builds instances from.
+    pub config: Option<Value>,
+    pub instances_only: bool,
+    pub may_be_unavailable: bool,
 }
 
 fn texts(value: &Value, what: &str) -> Result<Vec<String>, String> {
@@ -231,10 +263,36 @@ pub(crate) fn read_declaration(bytes: &[u8], budget: u64) -> Result<Vec<Declared
             let what = format!("`{id}`'s slots of `{}`", entry.key());
             kinds.push((entry.key().to_string(), texts(entry.value(), &what)?));
         }
+        let flag = |key: &str| -> Result<bool, String> {
+            match provider.get(key) {
+                None => Ok(false),
+                Some(v) => bool::from_value(v)
+                    .map_err(|_| format!("the provider `{id}`'s `{key}` is not true or false")),
+            }
+        };
+        let config = match provider.get("config") {
+            None => None,
+            Some(schema) if TryAsRef::<Map>::try_as_ref(schema).is_some() => Some(schema.clone()),
+            Some(_) => {
+                return Err(format!(
+                    "the provider `{id}`'s `config` is not a schema (a map)"
+                ));
+            }
+        };
+        let instances_only = flag("instances_only")?;
+        let may_be_unavailable = flag("may_be_unavailable")?;
+        if instances_only && config.is_none() {
+            return Err(format!(
+                "the provider `{id}` is `instances_only` and declares no `config` to build them from"
+            ));
+        }
         out.push(Declared {
             id,
             name,
             serves: kinds,
+            config,
+            instances_only,
+            may_be_unavailable,
         });
     }
     Ok(out)
@@ -300,6 +358,9 @@ mod tests {
                 id: "hello".into(),
                 name: "hello".into(),
                 serves: vec![("greeter".into(), vec!["greet".into()])],
+                config: None,
+                instances_only: false,
+                may_be_unavailable: false,
             }]
         );
 
@@ -322,6 +383,51 @@ mod tests {
             read_declaration(&empty, 1 << 20)
                 .unwrap_err()
                 .contains("`providers`")
+        );
+    }
+
+    #[test]
+    fn a_configuration_and_availability_are_declared_and_their_faults_named() {
+        let read = |extra: &[(&str, Value)]| {
+            let mut serves = Map::new();
+            serves.set("greeter", List::new());
+            let mut provider = Map::new();
+            provider.set("id", "tuned");
+            provider.set("serves", serves);
+            for (k, v) in extra {
+                provider.set(k, v.clone());
+            }
+            let mut providers = List::new();
+            providers.push(provider);
+            let mut declaration = Map::new();
+            declaration.set("providers", providers);
+            let bytes = wire::to_bytes(&Value::from(declaration)).expect("encoded");
+            read_declaration(&bytes, 1 << 20)
+        };
+        let schema = Value::from(Map::new());
+        let declared = read(&[
+            ("config", schema.clone()),
+            ("instances_only", Value::from(true)),
+            ("may_be_unavailable", Value::from(true)),
+        ])
+        .expect("read");
+        assert_eq!(declared[0].config.as_ref(), Some(&schema));
+        assert!(declared[0].instances_only && declared[0].may_be_unavailable);
+        let plain = read(&[]).expect("read");
+        assert!(plain[0].config.is_none() && !plain[0].instances_only);
+        assert!(!plain[0].may_be_unavailable);
+
+        assert_eq!(
+            read(&[("instances_only", Value::from(true))]).unwrap_err(),
+            "the provider `tuned` is `instances_only` and declares no `config` to build them from"
+        );
+        assert_eq!(
+            read(&[("config", Value::from("{}"))]).unwrap_err(),
+            "the provider `tuned`'s `config` is not a schema (a map)"
+        );
+        assert_eq!(
+            read(&[("may_be_unavailable", Value::from(1i64))]).unwrap_err(),
+            "the provider `tuned`'s `may_be_unavailable` is not true or false"
         );
     }
 
