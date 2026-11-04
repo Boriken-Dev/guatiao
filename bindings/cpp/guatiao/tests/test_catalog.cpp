@@ -95,6 +95,16 @@ fs::path fresh_copy() {
   return to;
 }
 
+/// Removes its directory when the test ends, after everything declared later
+/// is gone; a file still mapped (Windows) stays, and is not an error.
+struct remove_on_exit {
+  fs::path dir;
+  ~remove_on_exit() {
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+  }
+};
+
 /// How many times any `create` of the library at `path` was called.
 int built_count(const fs::path& path) {
 #ifdef _WIN32
@@ -116,6 +126,7 @@ std::vector<std::uint8_t> bytes_of(const fs::path& path) {
 
 void lists_every_provider_and_builds_none() {
   fs::path file = fresh_copy();
+  remove_on_exit cleanup{file.parent_path()};
   {
     guatiao::registry reg = MUST(guatiao::registry::try_open("catalog-host", "1.0"));
     guatiao::value report = MUST(reg.try_scan_dir(file.parent_path().string()));
@@ -168,6 +179,7 @@ void lists_every_provider_and_builds_none() {
 
 void names_why_a_library_has_no_digest() {
   fs::path file = fresh_copy();
+  remove_on_exit cleanup{file.parent_path()};
   guatiao::registry reg = MUST(guatiao::registry::try_open("catalog-host", "1.0"));
   MUST(reg.try_load_file(file.string()));
   // Another file at the path, before anything asked: renaming a mapped file
