@@ -537,6 +537,12 @@ fn run() -> Result<(), String> {
     for r in &refreshed.refused {
         eprintln!("guatiao-remote-server: {}: {}", r.source, r.reason);
     }
+    for (source, note) in &refreshed.notes {
+        match note.subject() {
+            "" => eprintln!("guatiao-remote-server: {source}: {}", note.text()),
+            about => eprintln!("guatiao-remote-server: {source}: {about}: {}", note.text()),
+        }
+    }
     if let Some(every) = a.refresh {
         let s = server.clone();
         std::thread::spawn(move || {

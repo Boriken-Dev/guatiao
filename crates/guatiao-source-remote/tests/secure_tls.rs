@@ -899,6 +899,54 @@ fn kinds_json() -> PathBuf {
         .join("../../examples/greeter_kind/include/greeter_kind.kinds.json")
 }
 
+/// The server is a host too: what a source it adds says, it prints, as it
+/// prints what a refresh refused. Here the remote source file itself, its
+/// policy keeping resumption.
+#[test]
+fn the_server_prints_what_a_source_it_adds_says() {
+    let Some(remote) = procs::library("guatiao_source_remote") else {
+        panic!("guatiao_source_remote is not built beside the server");
+    };
+    let dir = scratch("server_notes");
+    std::fs::write(dir.join("link.key"), "a key").unwrap();
+    let config = format!(
+        "{}={{\"connect\": \"tls://127.0.0.1:9\", \"security\": \"server-tls\", \
+         \"pins\": [\"sha256:{}\"], \"policy\": {{\"allow_resumption\": true}}}}",
+        remote.display(),
+        "0".repeat(64)
+    );
+    let (mut child, lines) = procs::start(
+        Command::new(server_program())
+            .args(["--listen", "tcp://127.0.0.1:0", "--security", "none"])
+            .args(["--range", "127.0.0.1", "--key-file"])
+            .arg(dir.join("link.key"))
+            .arg("--source")
+            .arg(config),
+    );
+    let mut said = String::new();
+    let until = Instant::now() + procs::DEADLINE;
+    while !said.contains("serving tcp://") && Instant::now() < until {
+        match lines.recv_timeout(Duration::from_millis(200)) {
+            Ok(line) => {
+                said.push_str(&line);
+                said.push('\n');
+            }
+            Err(_) if child.try_wait().unwrap().is_some() => break,
+            Err(_) => {}
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(
+        said.contains(&format!(
+            "{}: weaker than modern: allow_resumption = true (modern: false)",
+            remote.display()
+        )),
+        "{said}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Mutual TLS between this process and a `guatiao-remote-server` child:
 /// the first link waits, the operator accepts the client with the
 /// server's own command, the next link calls the greeter it loaded.
@@ -1126,6 +1174,44 @@ fn a_policy_naming_no_profile_is_tls_1_3_only_and_tls_1_2_is_a_weakening() {
         named.set("profile", old);
         assert!(policy_of(&guatiao::Value::from(named)).is_err(), "{old}");
     }
+}
+
+/// What the policy weakens reaches the host as the refresh's notes, which
+/// is how a host in any language sees it: once, about the peer, in words
+/// and as a detail, even when the peer cannot be reached.
+#[test]
+fn a_host_is_told_what_its_policy_weakens_by_the_refresh() {
+    let mut config = guatiao::Map::new();
+    config.set("connect", "tls://127.0.0.1:9");
+    config.set("security", "server-tls");
+    let mut pins = guatiao::List::new();
+    pins.push(format!("sha256:{}", "0".repeat(64)).as_str());
+    config.set("pins", pins);
+    let mut policy = guatiao::Map::new();
+    policy.set("allow_resumption", true);
+    config.set("policy", policy);
+    let source = RemoteSource::from_config(&config).unwrap();
+    let mut registry = Registry::new("host", "1.0");
+    registry.add_source("remote", source.clone()).unwrap();
+
+    let first = registry.refresh();
+    assert_eq!(first.refused.len(), 1, "nobody listens: {first:?}");
+    assert_eq!(first.notes.len(), 1, "{first:?}");
+    let (from, note) = &first.notes[0];
+    assert_eq!(from, "remote");
+    assert_eq!(note.subject(), "");
+    assert_eq!(
+        note.text(),
+        "weaker than modern: allow_resumption = true (modern: false)"
+    );
+    let mut detail = guatiao::Map::new();
+    detail.set("setting", "allow_resumption");
+    detail.set("value", "true");
+    detail.set("modern", "false");
+    assert_eq!(note.detail(), &detail);
+
+    let second = registry.refresh();
+    assert!(second.notes.is_empty(), "told once: {second:?}");
 }
 
 /// A manifest's identity file made by the first refresh leaves the peer
