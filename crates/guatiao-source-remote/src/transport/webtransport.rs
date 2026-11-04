@@ -325,9 +325,10 @@ fn trusted(acl: Acl) -> io::Result<TlsConfig> {
 }
 
 /// The bounds of a link's channel: coqui-web's, with the largest message
-/// a link allows set by the link as it reads.
+/// the handshake's until the link raises it, so the first message a peer
+/// sends is judged small, as the HELLO is.
 fn limits() -> Limits {
-    Limits::default()
+    Limits::default().with_max_message(crate::protocol::HANDSHAKE_MAX_FRAME)
 }
 
 /// A bad `https://` URL: `host:port` of the URL, or why it is not one.
@@ -447,7 +448,10 @@ impl WtConnect {
             Failure::Permission => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "the WebTransport server at {addr} refused the connection (by its access control list, which does not admit this client's address, or the server refused the connection): this client is {}",
+                    "the WebTransport server at {addr} refused the connection (by its access control list, which does not admit this client's address, or the server refused the connection{}): this client is {}",
+                    self.local.map_or_else(String::new, |a| format!(
+                        ", or this machine refused the local address {a} the connection binds first"
+                    )),
                     self.me
                 ),
             ),
