@@ -758,6 +758,42 @@ replaces the source's `key` or `token`. Its stamp is its content and the
 path and content of the key file, the token file, the identity file and
 the CA bundle the peer uses: a change to any is a new peer.
 
+## A source's note
+
+What a source wants its host to see that is neither a refusal nor a skip
+(a setting it runs looser than its default, say) is a map:
+
+```json
+{"subject": "lab", "text": "weaker than modern: allow_resumption = true (modern: false)",
+ "detail": {"setting": "allow_resumption", "value": "true", "modern": "false"}}
+```
+
+| key | holds |
+| --- | --- |
+| `text` | required, non-empty text: the words for a person |
+| `subject` | optional text: the part of the source it concerns (a peer, a setting); absent or empty for the source as a whole |
+| `detail` | optional map: what a program reads instead of the words, keys of the source's choosing, as its page documents them |
+
+A source answers every note it has after each listing, a failed one
+too, as a list of these maps (in C, `guatiao_source_info`'s `notes`
+slot; in Rust, `Source::notes`). An entry that is not one, or a failed
+answer, is reported as a refusal; the other entries still count. A
+refresh reports each note once, the first time its source answers it,
+in its answer's `notes` with the source's name beside it
+(`{"source", "subject", "text", "detail"}`, `subject` empty and `detail`
+an empty map when the source gave none), and not again while the source
+keeps answering it: one that goes and comes back is told again. Two
+notes are the same note when their subject, text and detail are equal.
+The answer has no `notes` when there is none to tell. Every binding's
+`refresh` hands this list over as data in its own idiom. Showing or
+logging a note is the host's.
+
+guatiao-source-remote tells a note per setting its TLS policy runs looser
+than modern (detail `setting`, `value`, `modern`), guatiao-source-py one
+while the environment reaches its interpreter (subject `isolation`) and
+one when `home` was not applied (subject `home`); each source's page
+documents its notes.
+
 ## In C, C++, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
 Each text form above has C functions that read it into a plain struct,
