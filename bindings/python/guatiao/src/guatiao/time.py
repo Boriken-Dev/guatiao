@@ -28,7 +28,7 @@ from typing import Any, Union
 
 from . import _abi, _lib
 from .errors import Unparsed, check, raise_for_status
-from .value import Ref, Value, _make_str, _string_view
+from .value import Ref, Value, _make_str, _reading, _string_view
 
 __all__ = [
     "Span",
@@ -240,7 +240,8 @@ def to_timedelta(value: Any) -> _dt.timedelta:
     secs = ctypes.c_uint64()
     nanos = ctypes.c_uint32()
     if isinstance(value, Ref):
-        status = lib.guatiao_duration_read(value._ptr(), ctypes.byref(secs), ctypes.byref(nanos))
+        with _reading(value) as node:
+            status = lib.guatiao_duration_read(node, ctypes.byref(secs), ctypes.byref(nanos))
     else:
         with Value(value) as built:
             status = lib.guatiao_duration_read(

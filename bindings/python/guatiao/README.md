@@ -271,8 +271,11 @@ provider's own words when it gave any.
   32-bit ARM: every pointer and `size_t` in the ABI is a word wide. It
   does not run in a browser (Pyodide has no way to load the library) or
   on 32-bit x86, where the library does not build.
-- A `Registry` is used from one thread at a time, and a `Value` is not
-  shared between threads without a lock of your own. A library may call a
+- A `Registry` is used from one thread at a time. A `Value` is read by
+  any number of threads at once, and a change, close, lend or hand-over
+  while another thread reads it raises `BufferError` (as a read does
+  while one of those runs) rather than reading freed memory: where both
+  must succeed, share it under a lock of your own. A library may call a
   Python object it was handed from any thread; each call takes the GIL.
 - A `Remote` cannot run a kind's default body for a slot a provider leaves
   out, as a Rust caller does: it raises `guatiao.Unsupported`.

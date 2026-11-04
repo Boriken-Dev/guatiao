@@ -6,12 +6,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 from typing import Any
 
 from . import _abi, _lib
 from .errors import check
-from .value import Ref, Value, _make_str
+from .value import Ref, Value, _make_str, _reading
 
 __all__ = ["redact"]
 
@@ -37,11 +38,12 @@ def redact(
     lib = _lib.core()
     alloc_struct = alloc if alloc is not None else lib.alloc
     owned = []
+    reads = contextlib.ExitStack()
     try:
         pointers = []
         for item in (schema, value):
             if isinstance(item, Ref):
-                pointers.append(item._ptr())
+                pointers.append(reads.enter_context(_reading(item)))
             else:
                 built = Value(item)
                 owned.append(built)
@@ -55,5 +57,6 @@ def redact(
         )
         return Value(_raw=out, alloc=alloc_struct)
     finally:
+        reads.close()
         for built in owned:
             built.close()

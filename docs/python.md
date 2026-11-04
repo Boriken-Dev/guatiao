@@ -264,9 +264,24 @@ token.close()                                 # overwritten, then freed
   slot, lending it and every change to it raise `BufferError`, so none
   reads memory that was freed or moved. Each of those holds the value
   while it runs (a lend for the whole call), and meanwhile a `reveal()`,
-  a close, a wipe or a change from any thread raises `BufferError`: a
-  provider holding a value its caller lent can neither reveal nor change
-  it, and two threads closing one value free it once.
+  a read, a close, a wipe or a change from any thread raises
+  `BufferError`: a provider holding a value its caller lent can neither
+  reveal, read nor change it. Of two threads closing one value, one frees
+  it and the other's `close()` raises `BufferError`; a closed value's
+  `close()` does nothing.
+- A read (`to_python()`, `clone()`, `len()`, `m[key]`, `key in m`,
+  `to_wire()`, `tag`, ...) shares the value with every other read while
+  it runs, and a call borrowing the value reads it for the whole call;
+  meanwhile a close, a wipe, a change, lending it and handing it over
+  raise `BufferError`, from any thread. So one call never has a value
+  lent and borrowed, or lent twice: for a slot
+  `f(&self, a: &mut Map, b: &Map)`, `remote.f(v, v)` raises before the
+  call, in either order, as it does for a node of `v` and `v` itself. A
+  call's views are held the same way, so a provider cannot pass what it
+  was lent on as both. Nothing waits for a claim, so nothing deadlocks.
+  A package reading a value through `guatiao.ffi.node_of`
+  (`guatiao-serde`, `guatiao-intake`) takes no claim: close or change a
+  value only once no other thread is passing it to one of them.
 - Of an argument a call lends or borrows to a provider, which the caller
   frees once the call returns, `reveal()` reads a copy in the wiping
   allocator, wiped when its last view and slice go: a slice the provider

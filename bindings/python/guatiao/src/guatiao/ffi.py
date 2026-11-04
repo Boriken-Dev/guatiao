@@ -87,7 +87,8 @@ def adopt(node: Node, alloc: Alloc) -> Value:
 
 def node_of(ref: Ref) -> Node:
     """The node `ref` names now, to pass to a call by address
-    (`ctypes.byref`) for as long as nothing changes its tree.
+    (`ctypes.byref`) for as long as nothing changes its tree. It takes no
+    claim, so a close or change on another thread is not refused meanwhile.
     `ValueError` once its value is closed, `LookupError` when its path
     names nothing."""
     return ref._require_node()

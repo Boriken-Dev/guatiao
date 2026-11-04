@@ -23,7 +23,7 @@ from typing import Any, Callable, NamedTuple, Optional
 
 from . import _abi, _lib
 from .errors import BadValue, GuatiaoError, NotFound, WrongKind, raise_for_status
-from .value import Ref, Value, _buffer_view, _free, _make_bytes, _node_to_python
+from .value import Ref, Value, _buffer_view, _free, _make_bytes, _node_to_python, _reading
 
 __all__ = [
     "Frame",
@@ -135,7 +135,8 @@ def _with_node(value: Any, call: Callable[[Any], bytes]) -> bytes:
     """Calls `call` with a pointer to `value`'s node, converting a plain
     Python object into a temporary `Value` first."""
     if isinstance(value, Ref):
-        return call(value._ptr())
+        with _reading(value) as node:
+            return call(node)
     with Value(value) as temporary:
         return call(temporary._ptr())
 
