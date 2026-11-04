@@ -31,13 +31,58 @@ use crate::values;
 /// which is `this` in each of them.
 type State = Rc<RefCell<Dynamic>>;
 
+/// An instance a provider's `create` built: its state, which is `this` in
+/// its slots, and the provider's functions as they were when it was built,
+/// which are its slots.
+struct Instance {
+    state: State,
+    slots: RhaiMap,
+}
+
 /// One library opened: its script, its providers by id, and the objects its
-/// slots answered, by the id each was given. Every provider shares the one
-/// compiled script.
+/// slots answered and the instances its providers built, by the id each was
+/// given. Every provider shares the one compiled script.
 struct Library {
     ast: AST,
     providers: BTreeMap<String, State>,
     objects: RefCell<BTreeMap<u64, State>>,
+    instances: RefCell<BTreeMap<u64, Rc<Instance>>>,
+}
+
+/// The provider-map keys that say how it is built and asked, not slots.
+const CREATE: &str = "create";
+const AVAILABLE: &str = "available";
+
+/// What a script value is, in the words a refusal uses.
+fn what(d: &Dynamic) -> String {
+    if d.is_unit() {
+        "()".into()
+    } else if d.is_bool() {
+        "boolean".into()
+    } else if d.is_int() || d.is_float() {
+        "number".into()
+    } else if d.is_string() || d.is_char() {
+        "string".into()
+    } else if d.is_map() {
+        "map".into()
+    } else if d.is_array() {
+        "array".into()
+    } else if d.is::<FnPtr>() {
+        "function".into()
+    } else {
+        values::type_name(d)
+    }
+}
+
+/// A provider's or an instance's state, borrowed for one call: refused
+/// `BUSY` while a call into it is running.
+fn running(state: &State) -> Result<core::cell::RefMut<'_, Dynamic>, ProviderError> {
+    state.try_borrow_mut().map_err(|_| {
+        ProviderError::new(
+            Status::GUATIAO_ERR_BUSY,
+            "the provider is already running: a call re-entered it",
+        )
+    })
 }
 
 /// The engine: one Rhai engine, on the bridge's thread for the life of the
@@ -128,13 +173,30 @@ impl RhaiEngine {
     fn method(state: &Dynamic, slot: &str) -> Result<FnPtr, ProviderError> {
         state
             .read_lock::<RhaiMap>()
-            .and_then(|m| m.get(slot).and_then(|f| f.clone().try_cast::<FnPtr>()))
+            .and_then(|m| Self::member(&m, slot))
             .ok_or_else(|| {
                 ProviderError::new(
                     Status::GUATIAO_ERR_UNSUPPORTED,
                     &format!("no method `{slot}`"),
                 )
             })
+    }
+
+    /// The function `name` holds in `map`, if it is one.
+    fn member(map: &RhaiMap, name: &str) -> Option<FnPtr> {
+        map.get(name).and_then(|f| f.clone().try_cast::<FnPtr>())
+    }
+
+    /// Checks a value the host passes against the size limits.
+    fn within_size(&self, v: &Dynamic) -> Result<(), ProviderError> {
+        if self.engine.ensure_data_size_within_limits(v).is_err() {
+            return Err(BridgeError::Limit {
+                limit: guatiao_bridge::Limit::Memory,
+                at: self.meter.limits.memory.unwrap_or(0),
+            }
+            .into());
+        }
+        Ok(())
     }
 
     /// A call's arguments as the script takes them, and what each lent one
@@ -184,13 +246,7 @@ impl RhaiEngine {
                     ));
                 }
             };
-            if self.engine.ensure_data_size_within_limits(&v).is_err() {
-                return Err(BridgeError::Limit {
-                    limit: guatiao_bridge::Limit::Memory,
-                    at: self.meter.limits.memory.unwrap_or(0),
-                }
-                .into());
-            }
+            self.within_size(&v)?;
             values.push(v);
             back.push(b);
         }
@@ -247,26 +303,31 @@ impl RhaiEngine {
     }
 
     /// Converts a call's arguments for the slot, runs it, writes the lent
-    /// ones back and answers the reply.
+    /// ones back and answers the reply. The slot is `slots`' function when
+    /// given (an instance's), else `state`'s own member.
     fn answer(
         &self,
         lib: &Library,
         state: &State,
+        slots: Option<&RhaiMap>,
         call: &mut Call,
     ) -> Result<Reply, ProviderError> {
         let slot = call.slot_description().clone();
         let (values, back) = self.arguments(call, &slot)?;
-        let mut this = state.try_borrow_mut().map_err(|_| {
-            ProviderError::new(
-                Status::GUATIAO_ERR_BUSY,
-                "the provider is already running: a call re-entered it",
-            )
-        })?;
+        let mut this = running(state)?;
         // Everything the script made is read and dropped within the call,
         // the method's curried values included: Rhai copies and drops nested
         // values by recursion, in the stack the call keeps free for them.
         let outcome = self.meter.run(|| {
-            let method = Self::method(&this, slot.name())?;
+            let method = match slots {
+                Some(slots) => Self::member(slots, slot.name()).ok_or_else(|| {
+                    ProviderError::new(
+                        Status::GUATIAO_ERR_UNSUPPORTED,
+                        &format!("no method `{}`", slot.name()),
+                    )
+                })?,
+                None => Self::method(&this, slot.name())?,
+            };
             let result = method
                 .call_as_method::<Dynamic>(&self.engine, &lib.ast, &mut this, values)
                 .map_err(|e| provider_error(&e, &self.meter.limits))?;
@@ -298,6 +359,57 @@ impl RhaiEngine {
                 Reply::Object { kind, id }
             }
         })
+    }
+
+    /// What a provider's map says about building it and asking it:
+    /// `config` (a JSON Schema as a map), `create` (a function of the
+    /// configuration), `instances_only` (a boolean), `available` (a
+    /// function). Each is optional; one of another type refuses the library.
+    fn built_and_asked(
+        id: &str,
+        key: &str,
+        members: &RhaiMap,
+        mut declared: Provided,
+    ) -> Result<Provided, BridgeError> {
+        let wrong = |member: &str, value: &Dynamic, wanted: &str| {
+            BridgeError::engine(format!(
+                "{id}: the provider `{key}` has `{member}` a {}, not {wanted}",
+                what(value)
+            ))
+        };
+        let config = members.get("config");
+        if let Some(schema) = config {
+            if !schema.is_map() {
+                return Err(wrong("config", schema, "a map (a JSON Schema)"));
+            }
+            let schema = values::to_value(schema)
+                .map_err(|why| BridgeError::engine(format!("{id}: `{key}`'s `config`: {why}")))?;
+            declared = declared.config(schema);
+        }
+        if let Some(create) = members.get(CREATE) {
+            if !create.is::<FnPtr>() {
+                return Err(wrong(CREATE, create, "a function"));
+            }
+            if config.is_none() {
+                return Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}` has `create` and no `config` to build from"
+                )));
+            }
+        }
+        if let Some(only) = members.get("instances_only") {
+            match only.as_bool() {
+                Ok(true) => declared = declared.instances_only(),
+                Ok(false) => {}
+                Err(_) => return Err(wrong("instances_only", only, "a boolean")),
+            }
+        }
+        if let Some(available) = members.get(AVAILABLE) {
+            if !available.is::<FnPtr>() {
+                return Err(wrong(AVAILABLE, available, "a function"));
+            }
+            declared = declared.may_be_unavailable();
+        }
+        Ok(declared)
     }
 
     /// The providers a script's result names, each serving the kinds it
@@ -371,6 +483,7 @@ impl RhaiEngine {
                     .collect();
                 declared = declared.serves(kind, implements);
             }
+            declared = Self::built_and_asked(id, &key, &members, declared)?;
             offered.push(declared);
             providers.insert(pid, Rc::new(RefCell::new(provider)));
         }
@@ -470,6 +583,7 @@ impl Engine for RhaiEngine {
                 ast,
                 providers,
                 objects: RefCell::new(BTreeMap::new()),
+                instances: RefCell::new(BTreeMap::new()),
             }),
         );
         Ok(Opened::Described {
@@ -480,13 +594,100 @@ impl Engine for RhaiEngine {
 
     fn call(&self, handle: &u64, call: &mut Call) -> Result<Reply, ProviderError> {
         let lib = self.library(*handle)?;
+        let nothing = |call: &Call| refused(format!("nothing answers `{}`", call.method()));
+        if let Target::Instance(id) = call.target() {
+            let instance = lib.instances.borrow().get(id).cloned();
+            let instance = instance.ok_or_else(|| nothing(call))?;
+            return self.answer(&lib, &instance.state, Some(&instance.slots), call);
+        }
         let state = match call.target() {
             Target::Provider(id) => lib.providers.get(id).cloned(),
             Target::Object(id) => lib.objects.borrow().get(id).cloned(),
             _ => None,
         }
-        .ok_or_else(|| refused(format!("nothing answers `{}`", call.method())))?;
-        self.answer(&lib, &state, call)
+        .ok_or_else(|| nothing(call))?;
+        self.answer(&lib, &state, None, call)
+    }
+
+    /// Runs the provider's `create` with the configuration, under the
+    /// limits, its map as `this`; without one, the configuration is the
+    /// state. The provider's functions are its instance's slots, as they
+    /// are now.
+    fn create(&self, handle: &u64, provider: &str, config: &Value) -> Result<u64, ProviderError> {
+        let lib = self.library(*handle)?;
+        let state = lib
+            .providers
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| refused(format!("no provider `{provider}`")))?;
+        let config = values::to_dynamic(config).map_err(refused)?;
+        self.within_size(&config)?;
+        let mut this = running(&state)?;
+        let built = self.meter.run(|| {
+            let made = match Self::method(&this, CREATE) {
+                Ok(create) => create
+                    .call_as_method::<Dynamic>(&self.engine, &lib.ast, &mut this, (config,))
+                    .map_err(|e| provider_error(&e, &self.meter.limits))?,
+                Err(_) => config,
+            };
+            let slots: RhaiMap = this
+                .read_lock::<RhaiMap>()
+                .map(|m| {
+                    m.iter()
+                        .filter(|(_, f)| f.is::<FnPtr>())
+                        .map(|(k, f)| (k.clone(), f.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok::<_, ProviderError>(Instance {
+                state: Rc::new(RefCell::new(made)),
+                slots,
+            })
+        });
+        drop(this);
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        lib.instances.borrow_mut().insert(id, Rc::new(built?));
+        Ok(id)
+    }
+
+    /// The instance's state goes, as an object's does.
+    fn destroy(&self, handle: &u64, instance: u64) {
+        if let Ok(lib) = self.library(*handle) {
+            let gone = lib.instances.borrow_mut().remove(&instance);
+            drop(gone);
+        }
+    }
+
+    /// The provider's `available`, under the limits, its map as `this`:
+    /// `()` is available, text the reason it is not; an error it raises is
+    /// unavailable in the error's words.
+    fn available(&self, handle: &u64, provider: &str) -> Result<(), String> {
+        let lib = self.library(*handle).map_err(|e| e.message().to_string())?;
+        let state = lib
+            .providers
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| format!("no provider `{provider}`"))?;
+        let mut this = running(&state).map_err(|e| e.message().to_string())?;
+        let answer = self.meter.run(|| {
+            let ask = Self::method(&this, AVAILABLE)?;
+            let answer = ask
+                .call_as_method::<Dynamic>(&self.engine, &lib.ast, &mut this, ())
+                .map_err(|e| provider_error(&e, &self.meter.limits))?;
+            Ok::<_, ProviderError>(if answer.is_unit() {
+                Ok(())
+            } else if answer.is_string() {
+                Err(answer.into_string().unwrap_or_default())
+            } else {
+                Err(format!(
+                    "`available` answers () or a reason, not a {}",
+                    what(&answer)
+                ))
+            })
+        });
+        drop(this);
+        answer.map_err(|e| e.message().to_string())?
     }
 
     /// The object's map goes; what it held goes with it now. Rhai drops a
@@ -523,6 +724,75 @@ mod tests {
         );
         assert_eq!(version("const VERSION = compute();"), None);
         assert_eq!(version("const MY_VERSION = \"2\";"), None);
+    }
+
+    /// On a thread with the stack the source gives its engine, which the
+    /// engine checks before each operation.
+    #[test]
+    fn an_instance_is_kept_until_destroyed_once() {
+        let config = Config::from_map(&guatiao::Map::new()).expect("a config");
+        let stack = RhaiEngine::stack_size(&config).expect("a stack size");
+        std::thread::Builder::new()
+            .stack_size(stack)
+            .spawn(move || instances_kept_until_destroyed_once(&config))
+            .expect("spawned")
+            .join()
+            .expect("passed");
+    }
+
+    fn instances_kept_until_destroyed_once(config: &Config) {
+        let dir = std::env::temp_dir().join(format!("guatiao-rhai-inst-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("made");
+        std::fs::write(
+            dir.join("inst.guatiao"),
+            "type = \"rhai\"\nmodule = \"inst\"\nkinds = []\nversion = \"1.0.0\"\n",
+        )
+        .expect("written");
+        std::fs::write(
+            dir.join("inst.rhai"),
+            "#{ providers: #{ p: #{ kinds: [], config: #{}, create: |c| #{ n: c.n } } } }",
+        )
+        .expect("written");
+        let engine = RhaiEngine::start(config).expect("starts");
+        let Some(guatiao_bridge::Found::Library(manifest)) =
+            guatiao_bridge::manifest::read(&RhaiEngine::MANIFESTS, &dir.join("inst.guatiao"))
+        else {
+            panic!("a manifest")
+        };
+        let Opened::Described { library, .. } = engine.open(&manifest, "1.0.0").expect("opens")
+        else {
+            panic!("described")
+        };
+        let config = |n: i64| {
+            let mut m = guatiao::Map::new();
+            m.set("n", n);
+            Value::from(m)
+        };
+        let first = engine
+            .create(&library, "inst_p", &config(1))
+            .expect("built");
+        let second = engine
+            .create(&library, "inst_p", &config(2))
+            .expect("built");
+        assert_ne!(first, second);
+        let live = || {
+            engine
+                .library(library)
+                .expect("open")
+                .instances
+                .borrow()
+                .len()
+        };
+        assert_eq!(live(), 2);
+        engine.destroy(&library, first);
+        assert_eq!(live(), 1);
+        engine.destroy(&library, first);
+        assert_eq!(live(), 1, "a second destroy of one id is nothing");
+        engine.destroy(&library, second);
+        assert_eq!(live(), 0);
+        engine.close(library);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

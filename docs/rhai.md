@@ -71,6 +71,38 @@ number whose exact text no float holds), `ABSENT`, and `STATUS`. A
 failure that is not a `throw` is a bug in the library and crosses as
 `GUATIAO_ERR_INTERNAL`.
 
+### Built from a configuration, asked whether it runs
+
+A provider with settings declares their JSON Schema as `config`, and a
+host builds instances of it, each from a configuration it checked against
+the schema first. `create` runs once per instance, with the provider's map
+as `this`, and answers the instance's state, which is `this` in that
+instance's slots; the slots are the provider's functions. Without
+`create`, the state is the configuration itself. `instances_only: true`
+offers no provider-as-itself. `available` is asked each time a host asks
+whether the provider can run: `()` when it can, a reason when it cannot.
+
+```js
+const DEVICES = ["/dev/ttyUSB0"];
+
+let sensor = #{
+    kinds: ["greeter"],
+    config: #{ type: "object", properties: #{ device: #{ type: "string" } },
+               required: ["device"] },
+    instances_only: true,
+    create: |config| {
+        if config.device == "" { throw "no device named"; }   // refused, in these words
+        #{ device: config.device, read: 0 }
+    },
+    available: || if DEVICES.is_empty() { "no device is plugged in" },
+    greet: |name| { this.read += 1; #{ greeting: `${this.device} greets ${name}` } },
+};
+```
+
+`create` and `available` run under the source's limits, as a slot does.
+An error `available` raises is the reason it gives. Dropping an instance
+drops its state.
+
 ## Add it from a host
 
 The host adds the file with where the manifests and the kinds are, and

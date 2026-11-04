@@ -18,9 +18,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
+use guatiao::library::kind::InstantiateError;
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
-use guatiao::{List, Map, Status, Tag};
+use guatiao::{List, Map, Status, Tag, Value};
 use guatiao_bridge::BridgeSource;
 use guatiao_libffi::Libffi;
 use guatiao_source_rhai::RhaiEngine;
@@ -835,5 +836,229 @@ let sizes = #{ kinds: ["greeter"], greet: |name| {
         ),
         "map"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Providers built from a configuration: `tuned` callable as itself and
+/// through instances, `only` through instances alone, its state the
+/// configuration itself.
+const TUNED: &str = r#"
+const VERSION = "1.0.0";
+let tuned = #{
+    kinds: ["greeter", "counter"],
+    config: #{
+        type: "object",
+        properties: #{ word: #{ type: "string" }, spin: #{ type: "boolean" } },
+        required: ["word"],
+        additionalProperties: false,
+    },
+    word: "hi",
+    built: 0,
+    create: |config| {
+        if config.word == "nobody" { throw "`nobody` greets nobody"; }
+        if config.spin == true { loop {} }
+        this.built += 1;
+        #{ word: config.word, built: this.built }
+    },
+    greet: |name| #{ greeting: `${this.word}, ${name}` },
+    count: || this.built,
+};
+let only = #{
+    kinds: ["greeter"],
+    config: #{ type: "object" },
+    instances_only: true,
+    greet: |name| #{ greeting: `${this.word}, ${name}` },
+};
+#{ providers: #{ tuned: tuned, only: only } }
+"#;
+
+fn word(w: &str) -> Value {
+    let mut config = Map::new();
+    config.set("word", w);
+    Value::from(config)
+}
+
+#[test]
+fn a_provider_builds_instances_from_a_configuration() {
+    let dir = scratch("instances");
+    put(&dir, "rhai_tuned", "", TUNED);
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 100_000)]))));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+
+    let offer = registry
+        .offer::<dyn Greeter>("rhai_tuned_tuned")
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.builds_instances());
+    assert!(offer.config_schema().is_some());
+    let howdy = offer.instantiate(&word("howdy")).expect("built");
+    let hey = offer.instantiate(&word("hey")).expect("built");
+    assert_eq!(
+        greeting(&howdy.greet("ana").expect("greeted")),
+        "howdy, ana"
+    );
+    assert_eq!(greeting(&hey.greet("bo").expect("greeted")), "hey, bo");
+    let itself = offer.default_instance().expect("callable as itself");
+    assert_eq!(greeting(&itself.greet("cy").expect("greeted")), "hi, cy");
+
+    // Each instance's state is its own; `create` ran with the provider's
+    // map as `this`.
+    let counters = registry
+        .offer::<dyn Counter>("rhai_tuned_tuned")
+        .expect("served")
+        .expect("as the trait");
+    let third = counters.instantiate(&word("yo")).expect("built");
+    assert_eq!(third.count(), 3);
+    let provider = counters.default_instance().expect("callable as itself");
+    assert_eq!(provider.count(), 3);
+
+    // A configuration the schema refuses never reaches the script.
+    let mut misspelled = Map::new();
+    misspelled.set("wrod", "x");
+    assert!(matches!(
+        offer.instantiate(&Value::from(misspelled)),
+        Err(InstantiateError::Invalid(_))
+    ));
+    // The script's refusal crosses in its words.
+    match offer.instantiate(&word("nobody")) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "`nobody` greets nobody");
+        }
+        Err(other) => panic!("{other:?}"),
+        Ok(_) => panic!("built for nobody"),
+    }
+    // `create` runs under the limits, and the source carries on.
+    let mut spin = Map::new();
+    spin.set("word", "x");
+    spin.set("spin", true);
+    match offer.instantiate(&Value::from(spin)) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_INTERNAL);
+            assert_eq!(e.message(), "stopped at its operations limit (100000)");
+        }
+        Err(other) => panic!("{other:?}"),
+        Ok(_) => panic!("a loop built an instance"),
+    }
+    assert_eq!(provider.count(), 3, "nothing else was built");
+
+    // Dropping one leaves the others served.
+    drop(howdy);
+    assert_eq!(greeting(&hey.greet("di").expect("greeted")), "hey, di");
+
+    // An instances-only provider is built, never offered as itself; with
+    // no `create`, its state is the configuration.
+    let only = registry
+        .offer::<dyn Greeter>("rhai_tuned_only")
+        .expect("served")
+        .expect("as the trait");
+    assert!(only.default_instance().is_none(), "instances only");
+    let plain = only.instantiate(&word("plain")).expect("built");
+    assert_eq!(greeting(&plain.greet("ed").expect("greeted")), "plain, ed");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+const ASKED: &str = r#"
+const VERSION = "1.0.0";
+let greet = |name| #{ greeting: name };
+#{ providers: #{
+    up: #{ kinds: ["greeter"], available: || (), greet: greet },
+    down: #{ kinds: ["greeter"], available: || "the device is unplugged", greet: greet },
+    thrown: #{ kinds: ["greeter"], available: || { throw "no power"; }, greet: greet },
+    odd: #{ kinds: ["greeter"], available: || 42, greet: greet },
+    plain: #{ kinds: ["greeter"], greet: greet },
+} }
+"#;
+
+#[test]
+fn a_provider_is_asked_whether_it_can_run() {
+    let dir = scratch("available");
+    put(&dir, "rhai_asked", "", ASKED);
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let asked = |key: &str| {
+        registry
+            .provider(key)
+            .unwrap_or_else(|| panic!("{key} registered"))
+            .available()
+            .map_err(str::to_string)
+    };
+    assert_eq!(asked("rhai_asked_up"), Ok(()));
+    assert_eq!(
+        asked("rhai_asked_down"),
+        Err("the device is unplugged".to_string())
+    );
+    assert_eq!(asked("rhai_asked_thrown"), Err("no power".to_string()));
+    let odd = asked("rhai_asked_odd").expect_err("unavailable");
+    assert!(odd.contains("`available` answers"), "{odd}");
+    assert_eq!(asked("rhai_asked_plain"), Ok(()));
+    let available: Vec<&str> = registry.available("greeter").map(|p| p.id()).collect();
+    assert!(available.contains(&"rhai_asked_up"));
+    assert!(!available.contains(&"rhai_asked_down"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_key_of_the_wrong_type_refuses_the_library() {
+    let dir = scratch("wrong-keys");
+    let library = |provider: &str| {
+        format!(
+            "const VERSION = \"1.0.0\";\n#{{ providers: #{{ p: #{{ kinds: [\"greeter\"], greet: |n| #{{}}, {provider} }} }} }}"
+        )
+    };
+    put(
+        &dir,
+        "rhai_wrongonly",
+        "",
+        &library("instances_only: \"yes\", config: #{}"),
+    );
+    put(&dir, "rhai_noconfig", "", &library("instances_only: true"));
+    put(
+        &dir,
+        "rhai_badcreate",
+        "",
+        &library("config: #{}, create: 1"),
+    );
+    put(&dir, "rhai_badconfig", "", &library("config: 7"));
+    put(&dir, "rhai_badavailable", "", &library("available: \"no\""));
+    put(&dir, "rhai_createonly", "", &library("create: |c| c"));
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    assert!(changed.loaded.is_empty(), "{changed:?}");
+    let reason = |id: &str| -> String {
+        changed
+            .refused
+            .iter()
+            .find(|r| r.id.as_deref() == Some(id))
+            .map(|r| r.reason.clone())
+            .unwrap_or_else(|| panic!("{id} refused: {changed:?}"))
+    };
+    for (id, words) in [
+        (
+            "rhai_wrongonly",
+            "the provider `p` has `instances_only` a string, not a boolean",
+        ),
+        ("rhai_noconfig", "instances only, with no configuration"),
+        (
+            "rhai_badcreate",
+            "the provider `p` has `create` a number, not a function",
+        ),
+        (
+            "rhai_badconfig",
+            "the provider `p` has `config` a number, not a map (a JSON Schema)",
+        ),
+        (
+            "rhai_badavailable",
+            "the provider `p` has `available` a string, not a function",
+        ),
+        (
+            "rhai_createonly",
+            "the provider `p` has `create` and no `config` to build from",
+        ),
+    ] {
+        assert!(reason(id).contains(words), "{id}: {}", reason(id));
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
