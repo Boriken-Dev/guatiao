@@ -262,9 +262,11 @@ token.close()                                 # overwritten, then freed
 - The view `reveal()` answers, and every slice of it, holds the value
   alive: while any lives, `close()`, `wipe()`, handing the value to a
   slot, lending it and every change to it raise `BufferError`, so none
-  reads memory that was freed or moved. A `reveal()` on another thread
-  while the value is being closed, wiped or handed over raises
-  `BufferError` too.
+  reads memory that was freed or moved. Each of those holds the value
+  while it runs (a lend for the whole call), and meanwhile a `reveal()`,
+  a close, a wipe or a change from any thread raises `BufferError`: a
+  provider holding a value its caller lent can neither reveal nor change
+  it, and two threads closing one value free it once.
 - Of an argument a call lends or borrows to a provider, which the caller
   frees once the call returns, `reveal()` reads a copy in the wiping
   allocator, wiped when its last view and slice go: a slice the provider

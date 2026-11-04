@@ -2553,7 +2553,9 @@ library three ways:
   method answers a `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a
   number, a `bool` or nothing, or a `Result` of one; any other type
   (`String`, `Option<String>`, `Vec<u8>`, a struct of yours) is refused at
-  compile time, a copy nobody wipes. Tables built at
+  compile time, a copy nobody wipes: by its spelling, and by a bound the
+  expansion asserts (`__private::SensitiveAnswer`, sealed), which a type
+  of yours spelled `Secret` or `Text`, or an alias, does not meet. Tables built at
   run time honour the mark too, their caller keeping a sensitive text
   answer as `Answer::Value` in the wiping allocator. Not hashed: `FLOOR_HASH` is the same with or
   without it. A provider building through `<method>_in`, or one whose
@@ -2896,7 +2898,10 @@ allocators overwrites the block it leaves**, whatever the target
 `guatiao_value_make_local`, a kind's answer into its carrier). **A node
 that lives there stays there**: those moves and the settle after a lent
 `&mut` call count this build's wiping allocator as home, so a second
-`into_local()` changes nothing. **A copy
+`into_local()` changes nothing. Home is `Alloc::wiping()`'s own address:
+a container recording a copy of its vtable (what `guatiao_alloc_wiping`
+fills) is pointed at it by `make_local_in`, and copied there by
+`into_local` and `into_alloc`. **A copy
 of a node that lives there is made there** (`clone`, `clone_in`,
 `guatiao_value_clone`), whatever allocator was asked for, a map whose
 array or any key lives there whole. **A kind's answer alone moves into
