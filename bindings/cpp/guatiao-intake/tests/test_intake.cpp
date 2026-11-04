@@ -188,9 +188,41 @@ void provider_forms() {
   CHECK_NONE_LEFT("a provider's form");
 }
 
+/// Each entry the registry's catalog lists is given the form it is shown with.
+void catalog_entries_have_their_forms() {
+  guatiao::registry reg = MUST(guatiao::registry::try_open("intake-catalog", "1.0"));
+  guatiao::value report = MUST(reg.try_scan_dir(GUATIAO_CATALOG_DIR));
+  CHECK(report["loaded"].size() == 1 && report["failed"].size() == 0);
+  guatiao::value catalog = MUST(reg.try_catalog());
+  CHECK(catalog.size() == 4);
+  int seen = 0;
+  for (guatiao::view entry : catalog.as_list()) {
+    std::string_view id = entry["id"].string_or("");
+    guatiao::value form = MUST(intake::try_provider_form(entry["config"], entry["meta"]));
+    if (id == "catalog_configured") {
+      // Its own form, under meta.
+      CHECK(form["sections"][0]["title"].string_or("") == "Network");
+      CHECK(form == entry["meta"][intake::provider_form_key]);
+      CHECK(intake::try_check(entry["config"], form).ok());
+      ++seen;
+    } else if (id == "catalog_implied") {
+      // None declared: the one its schema implies.
+      CHECK(form["sections"][0]["id"].string_or("") == "account");
+      CHECK(form["fields"]["token"]["widget"].string_or("") == "password");
+      ++seen;
+    } else {
+      // Nothing to configure: nothing to show.
+      CHECK(form.is_absent());
+      ++seen;
+    }
+  }
+  CHECK(seen == 4);
+}
+
 }  // namespace
 
 int main() {
+  catalog_entries_have_their_forms();
   provider_forms();
   forms();
   paths();
