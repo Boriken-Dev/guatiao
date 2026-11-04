@@ -559,3 +559,227 @@ fn a_limit_wasm_cannot_keep_is_refused_at_start() {
     };
     assert!(refused.to_string().contains("`depth`"), "{refused}");
 }
+
+/// The schema the configured guest's providers declare: `{"word": text}`.
+fn word_schema() -> Map {
+    let mut word = Map::new();
+    word.set("type", "string");
+    let mut properties = Map::new();
+    properties.set("word", word);
+    let mut schema = Map::new();
+    schema.set("type", "object");
+    schema.set("properties", properties);
+    schema.set("required", texts(&["word"]));
+    schema.set("additionalProperties", false);
+    schema
+}
+
+/// A guest whose providers are built from a configuration: `tuned` (also
+/// callable as itself, answering how many instances were destroyed),
+/// `only` (instances only) and `down` (never available; its own `greet`
+/// traps). An instance's `greet` answers the configuration it was built
+/// from; a configuration over 1000 bytes is refused. Without `create`,
+/// the module exports no `guatiao_guest_create`.
+fn configured_guest(create: bool) -> String {
+    let mut providers = List::new();
+    for (id, config, only, asks) in [
+        ("tuned", true, false, true),
+        ("only", true, true, false),
+        ("down", false, false, true),
+    ] {
+        let mut slots = List::new();
+        slots.push("greet");
+        let mut serves = Map::new();
+        serves.set("greeter", slots);
+        let mut p = Map::new();
+        p.set("id", id);
+        p.set("serves", serves);
+        if config {
+            p.set("config", word_schema());
+        }
+        if only {
+            p.set("instances_only", true);
+        }
+        if asks {
+            p.set("may_be_unavailable", true);
+        }
+        providers.push(p);
+    }
+    let mut d = Map::new();
+    d.set("providers", providers);
+    let declared = wire::to_bytes(&Value::from(d)).expect("encoded");
+    let mut answer = Map::new();
+    answer.set("greeting", "0");
+    let answer = wire::to_bytes(&Value::from(answer)).expect("encoded");
+    let digit = 4096 + answer.len() - 1;
+    let unplugged = wire::to_bytes(&Value::from("unplugged")).expect("encoded");
+    let ids: Vec<Vec<u8>> = (1..=9i64)
+        .map(|i| wire::to_bytes(&Value::from(i)).expect("encoded"))
+        .collect();
+    let id_len = ids[0].len();
+    assert!(ids.iter().all(|i| i.len() == id_len));
+    let create = if create {
+        format!(
+            r#"(func (export "guatiao_guest_create") (param $p i64) (param $cfg i32) (param $len i32) (result i32)
+    (if (i32.gt_u (local.get $len) (i32.const 1000))
+      (then (call $answer (i32.const 4300) (i32.const 8)) (return (i32.const 7))))
+    (global.set $made (i32.add (global.get $made) (i32.const 1)))
+    (memory.copy (i32.add (i32.const 16384) (i32.mul (global.get $made) (i32.const 1024)))
+                 (local.get $cfg) (local.get $len))
+    (i32.store (i32.add (i32.const 12288) (i32.mul (global.get $made) (i32.const 4))) (local.get $len))
+    (call $answer (i32.add (i32.const 5000) (i32.mul (i32.sub (global.get $made) (i32.const 1)) (i32.const {id_len})))
+                  (i32.const {id_len}))
+    (i32.const 0))"#
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"(module
+  (import "guatiao" "answer" (func $answer (param i32 i32)))
+  (memory (export "memory") 1)
+  (global $made (mut i32) (i32.const 0))
+  (global $destroyed (mut i32) (i32.const 0))
+  (data (i32.const 1024) "{decl}")
+  (data (i32.const 4096) "{answer}")
+  (data (i32.const 4200) "{unplugged}")
+  (data (i32.const 4300) "too long")
+  (data (i32.const 5000) "{ids}")
+  (func (export "guatiao_guest_abi") (result i32) (i32.const 1))
+  (func (export "guatiao_guest_alloc") (param i32) (result i32) (i32.const 8192))
+  (func (export "guatiao_guest_declare") (result i32)
+    (call $answer (i32.const 1024) (i32.const {decl_len}))
+    (i32.const 0))
+  {create}
+  (func (export "guatiao_guest_destroy") (param $i i64)
+    (global.set $destroyed (i32.add (global.get $destroyed) (i32.const 1))))
+  (func (export "guatiao_guest_available") (param $p i64) (result i32)
+    (if (i64.eq (local.get $p) (i64.const 2))
+      (then (call $answer (i32.const 4200) (i32.const {unplugged_len}))))
+    (i32.const 0))
+  (func (export "guatiao_guest_call") (param $object i32) (param $target i64) (param $req i32) (param $len i32) (result i32)
+    (local $k i32)
+    (if (i32.eq (local.get $object) (i32.const 2))
+      (then
+        (local.set $k (i32.wrap_i64 (local.get $target)))
+        (call $answer (i32.add (i32.const 16384) (i32.mul (local.get $k) (i32.const 1024)))
+                      (i32.load (i32.add (i32.const 12288) (i32.mul (local.get $k) (i32.const 4)))))
+        (return (i32.const 0))))
+    (if (i64.eq (local.get $target) (i64.const 2)) (then unreachable))
+    (i32.store8 (i32.const {digit}) (i32.add (i32.const 48) (global.get $destroyed)))
+    (call $answer (i32.const 4096) (i32.const {answer_len}))
+    (i32.const 0))
+)"#,
+        decl = escaped(&declared),
+        decl_len = declared.len(),
+        answer = escaped(&answer),
+        answer_len = answer.len(),
+        unplugged = escaped(&unplugged),
+        unplugged_len = unplugged.len(),
+        ids = ids.iter().map(|i| escaped(i)).collect::<String>(),
+    )
+}
+
+fn word(answer: &Map) -> &str {
+    answer
+        .get("word")
+        .and_then(guatiao::value::convert::TryAsRef::<str>::try_as_ref)
+        .unwrap_or("")
+}
+
+fn configuration(word: &str) -> Value {
+    let mut config = Map::new();
+    config.set("word", word);
+    Value::from(config)
+}
+
+#[test]
+fn a_guest_builds_instances_from_a_configuration_and_says_whether_it_runs() {
+    use greeter_kind::Greeter;
+    use guatiao::library::kind::InstantiateError;
+
+    let dir = scratch("configured");
+    put_wat(&dir, "configured", &configured_guest(true), VERSION);
+    let mut registry = serving(&config(&[&dir], None));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+
+    let offer = registry
+        .offer::<dyn Greeter>("configured_tuned")
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.builds_instances());
+    assert!(offer.config_schema().is_some(), "the schema is offered");
+    let itself = offer.default_instance().expect("callable as itself");
+    assert_eq!(greeting(&itself.greet("ana").expect("greeted")), "0");
+
+    let howdy = offer.instantiate(&configuration("howdy")).expect("built");
+    let hey = offer.instantiate(&configuration("hey")).expect("built");
+    assert_eq!(word(&howdy.greet("ana").expect("greeted")), "howdy");
+    assert_eq!(word(&hey.greet("bo").expect("greeted")), "hey");
+
+    // Checked against the schema before the guest is asked.
+    let mut misspelled = Map::new();
+    misspelled.set("wrod", "x");
+    assert!(matches!(
+        offer.instantiate(&Value::from(misspelled)),
+        Err(InstantiateError::Invalid(_))
+    ));
+    // The guest's refusal crosses in its words.
+    match offer.instantiate(&configuration(&"x".repeat(2000))) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "too long");
+        }
+        Ok(_) => panic!("built from a configuration the guest refuses"),
+        Err(other) => panic!("{other:?}"),
+    }
+
+    drop(howdy);
+    assert_eq!(
+        greeting(&itself.greet("ana").expect("greeted")),
+        "1",
+        "dropping the instance reached the guest once"
+    );
+    assert_eq!(word(&hey.greet("cy").expect("greeted")), "hey");
+
+    let only = registry
+        .offer::<dyn Greeter>("configured_only")
+        .expect("served")
+        .expect("as the trait");
+    assert!(only.default_instance().is_none(), "instances only");
+    let built = only.instantiate(&configuration("yo")).expect("built");
+    assert_eq!(word(&built.greet("di").expect("greeted")), "yo");
+
+    let provider = |key: &str| registry.provider(key).expect("registered");
+    assert_eq!(provider("configured_tuned").available(), Ok(()));
+    assert_eq!(provider("configured_down").available(), Err("unplugged"));
+    assert_eq!(
+        provider("configured_only").available(),
+        Ok(()),
+        "never asked"
+    );
+
+    // A trap discards the guest's store, and the instances with it.
+    let down = greeter(&registry, "configured_down");
+    let stopped = down.greet("ana").unwrap_err();
+    assert_eq!(stopped.status, Status::GUATIAO_ERR_INTERNAL);
+    let gone = hey.greet("ed").unwrap_err();
+    assert_eq!(gone.status, Status::GUATIAO_ERR_GONE, "{}", gone.message());
+    drop((hey, built, itself, down));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_configuration_declared_without_create_refuses_the_library() {
+    let dir = scratch("uncreated");
+    put_wat(&dir, "uncreated", &configured_guest(false), VERSION);
+    let mut registry = serving(&config(&[&dir], None));
+    let changed = registry.refresh();
+    let words = format!("{:?}", changed.refused);
+    assert!(
+        words.contains("`tuned` declares `config`") && words.contains("guatiao_guest_create"),
+        "{words}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
