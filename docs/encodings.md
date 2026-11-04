@@ -782,8 +782,11 @@ refresh reports each note once, the first time its source answers it,
 in its answer's `notes` with the source's name beside it
 (`{"source", "subject", "text", "detail"}`, `subject` empty and `detail`
 an empty map when the source gave none), and not again while the source
-keeps answering it: one that goes and comes back is told again. Two
-notes are the same note when their subject, text and detail are equal.
+keeps answering it: one that goes and comes back is told again, and one
+an answer repeats is told once. Two notes are the same note when their
+subject, text and detail are equal, so a source keeps them stable (no
+counters or times in either). A failed answer leaves the notes told
+standing.
 The answer has no `notes` when there is none to tell. Every binding's
 `refresh` hands this list over as data in its own idiom. Showing or
 logging a note is the host's.

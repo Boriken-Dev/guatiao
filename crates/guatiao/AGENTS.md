@@ -2317,8 +2317,11 @@ a program reads instead, keys of the source's choosing); `subject()`,
 `text()`, `detail()`. `notes()` is asked after every `list`, a failed one
 too, and answers the whole set each time: `Refreshed::notes` carries a
 note the first refresh its source answers it and not again while it
-stays (one that goes and comes back is told again). An error or a panic in `notes()`
-is a refusal. A library never prints; showing or logging a note is the
+stays (one that goes and comes back is told again), and once when an
+answer repeats it. A note is known by its subject, text and detail: keep
+them stable (no counters or times), since one that changes is told again.
+An error or a panic in `notes()` is a refusal and leaves the notes told
+standing. A library never prints; showing or logging a note is the
 host's.
 
 **The C table**, `guatiao_source_info` (`SourceInfo`): `struct_size`,

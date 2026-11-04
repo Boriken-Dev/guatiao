@@ -130,7 +130,10 @@ pub trait Source: Send + Sync {
     /// What the source wants its host to see now, asked after every
     /// `list`, a failed one too. Answer the whole set each time: the
     /// registry reports a note the first time it appears, not again while
-    /// it stays. An error is reported as a refusal. None by default.
+    /// it stays. A note is known by its subject, text and detail, so keep
+    /// them stable (no counters or times): one that changes is told again.
+    /// An error is reported as a refusal and leaves the notes told standing.
+    /// None by default.
     fn notes(&self) -> Result<Vec<Note>, ProviderError> {
         Ok(Vec::new())
     }

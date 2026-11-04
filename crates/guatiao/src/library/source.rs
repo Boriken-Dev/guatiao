@@ -463,15 +463,27 @@ impl Registry {
         let listed = cell.list(host);
         // Asked after every listing, a failed one too: what a source has to
         // say often matters most when it cannot serve.
-        let (notes, wrong_notes) = cell.notes();
-        let noted = &mut self.sources[at].noted;
-        report.notes.extend(
-            notes
-                .iter()
-                .filter(|note| !noted.contains(note))
-                .map(|note| (name.clone(), note.clone())),
-        );
-        *noted = notes;
+        let wrong_notes = match cell.notes() {
+            Ok((notes, wrong)) => {
+                let mut answered: Vec<Note> = Vec::with_capacity(notes.len());
+                for note in notes {
+                    if !answered.contains(&note) {
+                        answered.push(note);
+                    }
+                }
+                let noted = &mut self.sources[at].noted;
+                report.notes.extend(
+                    answered
+                        .iter()
+                        .filter(|note| !noted.contains(note))
+                        .map(|note| (name.clone(), note.clone())),
+                );
+                *noted = answered;
+                wrong
+            }
+            // A failed answer says nothing of the notes told: they stand.
+            Err(why) => vec![why],
+        };
         let (candidates, wrong) = match listed {
             Ok(listed) => listed,
             Err(reason) => {
