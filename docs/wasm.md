@@ -196,9 +196,10 @@ instances, and `.available(f)`; in Go, a `Provider`'s `Config`, `Build`,
 greeter built from `{"word": "howdy"}`.
 
 **Any other language** that emits a core WebAssembly module speaks
-**guatiao ABI 1**: five exports (`guatiao_guest_abi`, `_alloc`, `_declare`,
-`_call`, and optionally `_release`; `_create`, `_destroy` and `_available`
-for instances and availability) and five imports from `guatiao`
+**guatiao ABI 1**: its memory and four functions it must export
+(`guatiao_guest_abi`, `_alloc`, `_declare`, `_call`), four it may
+(`_release`, and `_create`, `_destroy` and `_available` for instances and
+availability), and five imports from `guatiao`
 (`answer`, `write_back`, `object_call`, `result`, `drop`), every value as
 its [wire encoding](encodings.md#values-on-the-wire) in the module's
 memory. A call is the wire list `[kind, method, arg...]`; its answer a

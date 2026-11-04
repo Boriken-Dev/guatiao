@@ -20,7 +20,8 @@ host needs nothing else.
 - **Limits.** Operations (fuel), time and memory, from the source's
   configuration: runaway code is stopped and the host carries on.
 - **Any language that emits a module.** A library speaks guatiao ABI 1:
-  five exports, five imports, every value as its wire encoding. Rust has
+  four exports it needs and four it may, five imports, every value as
+  its wire encoding. Rust has
   a guest crate (`guest/`), Go a guest package (`guest-go/`).
 - **One file on every platform**, reloadable: a refresh serves a rebuilt
   module while the old build answers the instances taken from it.
