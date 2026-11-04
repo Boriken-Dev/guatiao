@@ -154,12 +154,31 @@ func TestWritesTheDocumentAndTheGlueOfKindsBornInGo(t *testing.T) {
 	}
 }
 
+// A list view or a slice not marked taken is a list borrowed, as a map
+// view or a struct is a map borrowed.
+func TestDescribesAListBorrowed(t *testing.T) {
+	for name, c := range map[string]struct{ from, to string }{
+		"a view": {"//guatiao:lent config ear", "//guatiao:lent ear"},
+		"data":   {"\t//guatiao:taken items\n", ""},
+	} {
+		dir := pkg(t, strings.Replace(bornKinds, c.from, c.to, 1), "")
+		if err := runBorn(dir, "probe.kinds.json", "guatiao_kinds", false); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		text, err := os.ReadFile(filepath.Join(dir, "probe.kinds.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(text), "\"type\": \"list\",\n              \"pass\": \"borrowed\"") {
+			t.Errorf("%s: no list borrowed in\n%s", name, text)
+		}
+	}
+}
+
 func TestRefusesAKindBornInGoItCannotDescribe(t *testing.T) {
 	cases := map[string]struct{ from, to, says string }{
 		"an unknown directive":       {"//guatiao:infallible", "//guatiao:infalible", "is not one of"},
 		"a mark on no argument":      {"//guatiao:lent config ear", "//guatiao:lent config ear cup", "//guatiao:lent cup: no argument has that name"},
-		"a borrowed list view":       {"//guatiao:lent config ear", "//guatiao:lent ear", "a list is not borrowed"},
-		"a borrowed list":            {"\t//guatiao:taken items\n", "", "args[1].pass` is borrowed: a list is not borrowed"},
 		"capitals in a row":          {"Fill(config", "FillIO(config", "capitals in a row"},
 		"an optional non-interface":  {"//guatiao:optional Filler", "//guatiao:optional Filer", "Filer, which is no interface"},
 		"an optional kind":           {"//guatiao:optional Filler", "//guatiao:optional Ear", "a kind of its own"},
@@ -320,7 +339,6 @@ func TestAHeaderTableNoTraitDeclaresIsRefused(t *testing.T) {
 	}
 	for slot, says := range map[string]string{
 		"  guatiao_status (*header)(void *ctx);":                                          "the table's first field",
-		"  guatiao_status (*sum)(void *ctx, const guatiao_list *items, int64_t *out);":    "a list is not borrowed",
 		"  guatiao_status (*read)(void *ctx, const guatiao_object *memo, uint64_t *out);": "on a fallible slot only",
 		"  guatiao_status (*give)(void *ctx, guatiao_object memo);":                       "on a fallible slot only",
 		"  guatiao_status (*open)(void *ctx, guatiao_object *out);":                       "on a fallible slot only",
@@ -329,9 +347,13 @@ func TestAHeaderTableNoTraitDeclaresIsRefused(t *testing.T) {
 			t.Errorf("%s: %v", slot, err)
 		}
 	}
-	fine := "  guatiao_status (*open)(void *ctx, const guatiao_object *memo, guatiao_object *out, guatiao_provider_error *err);"
-	if _, err := readTable(table(fine), "w_vtable"); err != nil {
-		t.Fatal(err)
+	for _, fine := range []string{
+		"  guatiao_status (*open)(void *ctx, const guatiao_object *memo, guatiao_object *out, guatiao_provider_error *err);",
+		"  guatiao_status (*sum)(void *ctx, const guatiao_list *items, int64_t *out);",
+	} {
+		if _, err := readTable(table(fine), "w_vtable"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
