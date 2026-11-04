@@ -66,7 +66,7 @@ use crate::protocol::{
 use crate::transport::{Connection, Datagrams, FrameRead, FrameWrite};
 use gate::{Gate, Unsent};
 use handshake::Offer;
-use pool::{Permits, Pool};
+use pool::{Permits, Place, Pool};
 use waiting::Waiting;
 
 fn gone(why: &str) -> ProviderError {
@@ -1405,7 +1405,7 @@ impl Inner {
                 Ok(Inbound::Reply(frame)) => break Ok(frame),
                 Ok(Inbound::Call(frame)) => {
                     queued.fetch_sub(1, Ordering::AcqRel);
-                    self.run_inbound(frame);
+                    self.run_inbound(frame, None);
                 }
                 Ok(Inbound::Gone(why)) => break Err(gone(&why)),
                 Err(RecvTimeoutError::Disconnected) => break Err(gone(&self.why())),
@@ -1546,14 +1546,16 @@ impl Inner {
                     link: Arc::clone(self),
                     frame: Some(frame),
                 };
-                if let Err(busy) = self.pool.run(Box::new(move || job.run())) {
+                if let Err(busy) = self.pool.run(Box::new(move |place| job.run(place))) {
                     let why = busy.words("the peer is running as many calls as it allows");
                     self.refuse(call, Status::GUATIAO_ERR_BUSY, &why);
                 }
             }
             Frame::List { call } => {
                 let inner = Arc::clone(self);
-                let job = Box::new(move || inner.answering(call, || inner.answer_list(call)));
+                let job = Box::new(move |place| {
+                    inner.answering(call, || inner.answer_list(call, place));
+                });
                 if let Err(busy) = self.pool.run(job) {
                     self.refuse(
                         call,
@@ -1564,8 +1566,9 @@ impl Inner {
             }
             Frame::Open { call, .. } => {
                 let inner = Arc::clone(self);
-                let job =
-                    Box::new(move || inner.answering(call, || inner.answer_open(call, &frame)));
+                let job = Box::new(move |place| {
+                    inner.answering(call, || inner.answer_open(call, &frame, place));
+                });
                 if let Err(busy) = self.pool.run(job) {
                     self.refuse(
                         call,
@@ -1633,7 +1636,8 @@ impl Inner {
         self.post(out);
     }
 
-    fn answer_list(self: &Arc<Self>, call: u64) {
+    /// Answers the peer's LIST, giving `place` back before the answer goes.
+    fn answer_list(self: &Arc<Self>, call: u64, place: Place) {
         let mut out = Vec::new();
         match self.handler.list(self) {
             Ok(catalog) => {
@@ -1652,10 +1656,12 @@ impl Inner {
             }
             Err(e) => protocol::refusal(&mut out, call, e.status.into(), e.message()),
         }
+        drop(place);
         let _ = self.write(out);
     }
 
-    fn answer_open(self: &Arc<Self>, call: u64, frame: &[u8]) {
+    /// Answers the peer's OPEN, giving `place` back before the answer goes.
+    fn answer_open(self: &Arc<Self>, call: u64, frame: &[u8], place: Place) {
         let Ok(Frame::Open { library, stamp, .. }) = Frame::decode(frame, Alloc::rust()) else {
             return;
         };
@@ -1664,11 +1670,14 @@ impl Inner {
             Ok(()) => protocol::refusal(&mut out, call, 0, ""),
             Err(e) => protocol::refusal(&mut out, call, e.status.into(), e.message()),
         }
+        drop(place);
         let _ = self.write(out);
     }
 
-    /// Runs one of the peer's calls on this thread and answers it.
-    fn run_inbound(self: &Arc<Self>, frame: Vec<u8>) {
+    /// Runs one of the peer's calls on this thread and answers it. `place`,
+    /// the pool's for a call made during none, is given back before the
+    /// answer goes.
+    fn run_inbound(self: &Arc<Self>, frame: Vec<u8>, place: Option<Place>) {
         let Ok(Frame::Call {
             call,
             target,
@@ -1681,6 +1690,7 @@ impl Inner {
         };
         if RUNNING.with(|r| r.borrow().len()) >= MAX_DEPTH {
             self.let_go_handed(target, slot, args);
+            drop(place);
             self.refuse(
                 call,
                 Status::GUATIAO_ERR_BUSY,
@@ -1701,6 +1711,7 @@ impl Inner {
                 self.serve(call, target, slot, args, &cancelled, &mut out, &mut tail)
             };
             lock(&self.state).running.remove(&call);
+            drop(place);
             match served {
                 Ok(true) => {
                     let _ = match tail {
@@ -2138,9 +2149,9 @@ struct Unrun {
 }
 
 impl Unrun {
-    fn run(mut self) {
+    fn run(mut self, place: Place) {
         if let Some(frame) = self.frame.take() {
-            self.link.run_inbound(frame);
+            self.link.run_inbound(frame, Some(place));
         }
     }
 }
