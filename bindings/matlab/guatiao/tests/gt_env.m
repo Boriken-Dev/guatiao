@@ -16,6 +16,8 @@ function out = gt_env(op, varargin)
 %   gt_env('c_greeter')               the folder holding the C greeter, or ''
 %   gt_env('c_greeter_own', define)   a fresh build of the C greeter in a folder of its own, with
 %                                     -D<define> when given (not kept: a test unloads it), or ''
+%   gt_env('c_catalog')               a fresh build of the catalog library in a folder of its
+%                                     own (not kept: a test renames it), its file, or ''
 %   gt_env('c_source', name)          the C shelf source built as `name`, or ''
 %   gt_env('fixture')                 whether the gtfixture MEX file is built
 %   gt_env('bridge')                  GUATIAO_PY_BRIDGE when it names a file, or ''
@@ -64,6 +66,14 @@ function out = gt_env(op, varargin)
       dir = scratch('c-greeter-own');
       if build_c(src, fullfile(dir, lib_file('c_greeter')), false, varargin{:})
         out = dir;
+      else
+        out = '';
+      end
+    case 'c_catalog'
+      src = fullfile(repo_root(), 'crates', 'guatiao', 'tests', 'c_consumer', 'catalog_library.c');
+      path = fullfile(scratch('c-catalog'), lib_file('m_catalog_library'));
+      if build_c(src, path, false)
+        out = path;
       else
         out = '';
       end

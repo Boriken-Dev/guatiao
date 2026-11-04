@@ -98,6 +98,13 @@ methods call the table; it checks its registry or instance on every call,
 and a refusal raises an error whose identifier is
 `guatiao:<Status>:provider`, with the provider's words.
 
+A settings screen lists every provider of every loaded library at once, none
+of them built, with `reg.catalog()` (a cell of structs, best first: what
+`providers()` holds plus availability, `config`, `meta`, the library's
+`digest` or a `digest_error`), and takes the form to show one with
+`guatiao.intake.provider_form(entry.config, entry.meta)` (`[]` for a field an
+entry lacks).
+
 ## As a provider
 
 ```matlab

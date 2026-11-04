@@ -94,6 +94,19 @@ classdef Registry < handle
       r = guatiao_mex('registry_query', self.id(), 0, '');
     end
 
+    function r = catalog(self)
+    % Every provider of every loaded library, best first, with what a settings
+    % screen shows about each and none of them built: a cell of structs holding
+    % what providers() does, plus `available` (asked now) and `reason` when it
+    % cannot run, `config` (its schema) and `meta` when it declares them,
+    % `library_key`, `library_version`, and `digest` ('sha256:' and the hex of the
+    % file its library was mapped from, while it is still that file) or
+    % `digest_error` saying why not. The first call reads each library file in
+    % full. guatiao.intake.provider_form(entry.config, entry.meta) answers the
+    % form to show it with ([] for a field the entry lacks).
+      r = guatiao_mex('registry_query', self.id(), 6, '');
+    end
+
     function r = providers(self, kind)
     % Every provider serving `kind` (every one when omitted), best first.
       if nargin < 2, kind = ''; end

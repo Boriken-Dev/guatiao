@@ -295,6 +295,7 @@ guatiao.intake.is_visible(schema, form, 'key', values)
 guatiao.intake.provider_form_key()   % 'form': a provider's form in reg.provider_meta(key)
 guatiao.intake.at(value, 'agent[1].name')       % a view, a copy, or []
 guatiao.intake.for_schema(schema)               % a guatiao.Value
+guatiao.intake.provider_form(schema, meta)      % a guatiao.Value, or []: a provider's own form, else the one its schema implies; either argument may be []
 guatiao.intake.form_for(form, schema, 'path')   % a guatiao.Value, or []
 guatiao.intake.resolve(schema, 'auth.password') % a view, a copy, or []
 guatiao.intake.flat_keys(schema, 'auth')        % a cell of text
@@ -339,7 +340,15 @@ the file, beside the host's executable and in the system directory,
 Python bridge needs; unix ignores it), `provider_table(key,
 kind)` (struct(table, size, ctx), addresses as `uint64`, `table` `[]` for
 none; no `kind` for a single table), `provider_config(key)` (a copy of the
-schema, a `guatiao.Value`, or `[]`), `provider_meta(key)` (what the
+schema, a `guatiao.Value`, or `[]`), `catalog()` (every provider of every loaded library, best first, for a
+settings screen, with none built: a cell of structs holding what
+`providers()` does plus `available` (asked now) and `reason`, `config`
+and `meta` when it declares them, `library_key`, `library_version`,
+and `digest` (`'sha256:'` and the hex of the file its library was
+mapped from, while it is still that file) or `digest_error` saying why
+not; the first call reads each library file in full;
+`guatiao.intake.provider_form(entry.config, entry.meta)` answers the
+form to show an entry with), `provider_meta(key)` (what the
 provider declared beyond its schema, its notices or its form under
 `guatiao.intake.provider_form_key()`: a copy outliving the library, or
 `[]`; `guatiao:NotFound` for an unknown key), `host()` (the

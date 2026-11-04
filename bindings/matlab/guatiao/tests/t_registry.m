@@ -13,6 +13,9 @@ function cases = t_registry()
     'builds an instance, and gives a copy of its configuration schema', @instances
     'a provider''s meta is a copy carrying its form', @meta
     'a provider''s form, read from its meta, fits its schema', @form_fits
+    'the catalog lists every provider of a folder and builds none', @catalog_lists
+    'a catalog entry gives each provider its form', @catalog_forms
+    'a catalog names why a library has no digest', @catalog_digest_error
     'keys, ranks and re-keys', @keys
     'the import search is the library''s until the host names path', @import_searches
     'retires a library and frees its key', @retires
@@ -304,4 +307,118 @@ function copy_bytes(from, to)
   out = fopen(to, 'w');
   fwrite(out, bytes, 'uint8');
   fclose(out);
+end
+
+function out = by_id(catalog)
+  out = struct();
+  for i = 1:numel(catalog)
+    out.(catalog{i}.id) = catalog{i};
+  end
+end
+
+function out = opt(entry, name)
+% A field an entry may lack, as [] for guatiao.intake.provider_form.
+  if isfield(entry, name)
+    out = entry.(name);
+  else
+    out = [];
+  end
+end
+
+function hex = sha256_hex(file)
+  fid = fopen(file, 'r');
+  bytes = fread(fid, Inf, 'uint8=>uint8');
+  fclose(fid);
+  if exist('OCTAVE_VERSION', 'builtin')
+    hex = hash('sha256', char(bytes'));
+  else
+    md = java.security.MessageDigest.getInstance('SHA-256');
+    md.update(bytes);
+    hex = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'), 2)', 1, []));
+  end
+end
+
+function catalog_lists()
+  file = gt_env('c_catalog');
+  if isempty(file) || ~gt_env('fixture')
+    skip_case('the C catalog library: no C compiler built it (set GUATIAO_CC)');
+  end
+  reg = guatiao.Registry('catalog-host', '1.0');
+  report = reg.scan_dir(fileparts(file));
+  expect_true(isempty(report.failed) && numel(report.loaded) == 1, 'loaded');
+  catalog = by_id(reg.catalog());
+  expect_equal(sort(fieldnames(catalog))', {'catalog_configured', 'catalog_implied', 'catalog_plain', 'catalog_unavailable'});
+  digest = ['sha256:' sha256_hex(file)];
+
+  configured = catalog.catalog_configured;
+  expect_equal(configured.kinds, {'counter'});
+  expect_equal(configured.display_name, 'Configured, with a form');
+  expect_equal(configured.version, '2.0');
+  expect_equal(configured.library, 'catalog_library');
+  expect_equal(configured.library_version, '1.0');
+  expect_equal(configured.digest, digest);
+  expect_true(configured.available && ~isfield(configured, 'reason'), 'runs here');
+  expect_equal(configured.config.required, {'host', 'port'});
+  expect_equal(configured.meta.form.sections{1}.title, 'Network');
+
+  implied = catalog.catalog_implied;
+  expect_equal(implied.version, '1.0');
+  expect_true(~isfield(implied, 'meta'), 'no meta');
+  token = implied.config.properties.token;
+  expect_true(token('x-sensitive'), 'sensitive');
+
+  unavailable = catalog.catalog_unavailable;
+  expect_true(~unavailable.available, 'cannot run');
+  expect_equal(unavailable.reason, 'no device here');
+  expect_true(~isfield(unavailable, 'config') && ~unavailable.has_config, 'takes none');
+  expect_true(catalog.catalog_plain.available, 'plain runs');
+
+  % Listing asked the library for nothing: its count says so, and so does
+  % its refusal of the first instance asked for afterwards.
+  expect_equal(gtfixture('catalog_built', file), 0);
+  try
+    reg.create('catalog_configured', struct('host', 'localhost', 'port', 8080));
+    message = 'no refusal';
+  catch err
+    message = err.message;
+  end
+  expect_true(~isempty(strfind(message, 'built nothing: the first create this library was asked')), message);
+  expect_equal(gtfixture('catalog_built', file), 1);
+  reg.close();
+end
+
+function catalog_forms()
+  reg = scanned();
+  catalog = by_id(reg.catalog());
+  shouter = catalog.derived_greeter_shouter;
+  form = guatiao.intake.provider_form(opt(shouter, 'config'), opt(shouter, 'meta'));
+  sections = form.at('sections').data();
+  expect_equal(cellfun(@(s) s.id, sections, 'UniformOutput', false), {'words', 'volume'});
+  expect_equal(guatiao.intake.check(shouter.config, form), []);
+  form.close();
+  hello = catalog.derived_greeter_hello;
+  expect_equal(guatiao.intake.provider_form(opt(hello, 'config'), opt(hello, 'meta')), []);
+  reg.close();
+end
+
+function catalog_digest_error()
+  file = gt_env('c_catalog');
+  if isempty(file)
+    skip_case('the C catalog library: no C compiler built it (set GUATIAO_CC)');
+  end
+  reg = guatiao.Registry('catalog-host', '1.0');
+  reg.load_file(file);
+  % Another file at the path, before anything asked: renaming a mapped file
+  % works on every platform, where overwriting one does not.
+  movefile(file, fullfile(fileparts(file), 'moved_away.bin'));
+  fid = fopen(file, 'w');
+  fwrite(fid, 'not the library');
+  fclose(fid);
+  catalog = reg.catalog();
+  expect_equal(numel(catalog), 4);
+  for i = 1:numel(catalog)
+    expect_true(~isfield(catalog{i}, 'digest'), 'no digest');
+    expect_equal(catalog{i}.digest_error, 'the file changed since it was loaded');
+  end
+  reg.close();
 end

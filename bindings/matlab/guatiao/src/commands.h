@@ -49,6 +49,7 @@
   X(intake_is_visible)                                                         \
   X(intake_for_schema)                                                         \
   X(intake_form_for)                                                           \
+  X(intake_provider_form)                                                      \
   X(intake_at)                                                                 \
   X(intake_resolve)                                                            \
   X(intake_flat_keys)                                                          \

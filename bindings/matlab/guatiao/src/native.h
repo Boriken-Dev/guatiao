@@ -136,6 +136,8 @@
   X(guatiao_status, guatiao_registry_providers,                                                \
     (const guatiao_registry *reg, guatiao_str kind, const guatiao_alloc *alloc, guatiao_value *out), \
     (reg, kind, alloc, out), "load")                                                            \
+  X(guatiao_status, guatiao_registry_catalog,                                                  \
+    (const guatiao_registry *reg, const guatiao_alloc *alloc, guatiao_value *out), (reg, alloc, out), "load") \
   X(guatiao_status, guatiao_registry_provider,                                                 \
     (const guatiao_registry *reg, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
     (reg, key, alloc, out), "load")                                                             \
@@ -238,6 +240,10 @@
     (schema, form, alloc, out), "")                                                             \
   X(guatiao_status, guatiao_intake_for_schema,                                                 \
     (const guatiao_value *schema, const guatiao_alloc *alloc, guatiao_value *out), (schema, alloc, out), "") \
+  X(guatiao_status, guatiao_intake_provider_form,                                              \
+    (const guatiao_value *schema, const guatiao_value *meta, const guatiao_alloc *alloc,        \
+     guatiao_value *out),                                                                       \
+    (schema, meta, alloc, out), "")                                                             \
   X(guatiao_status, guatiao_intake_form_for,                                                   \
     (const guatiao_value *form, const guatiao_value *schema, guatiao_str path,                  \
      const guatiao_alloc *alloc, guatiao_value *out),                                           \

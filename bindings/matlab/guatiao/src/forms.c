@@ -619,6 +619,32 @@ int cmd_intake_for_schema(gt_call *c) {
   return answer_owner(c, &out, &gt_binding_alloc);
 }
 
+/* intake_provider_form(schema, meta) -> id or []. Either argument may be
+ * [], which reaches the library as no value. */
+int cmd_intake_provider_form(gt_call *c) {
+  if (!GT_NEED_INTAKE(c, guatiao_intake_provider_form)) return 0;
+  guatiao_value t[2], out;
+  const guatiao_value *p[2] = {NULL, NULL}, *q[2];
+  int at[2], slot[2], n = 0;
+  set_absent(&out);
+  for (int i = 0; i < 2; i++) {
+    const mxArray *x = gt_arg(c, i);
+    if (!x) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "a value is missing");
+    if (mxIsDouble(x) && mxIsEmpty(x)) continue;
+    slot[n] = i;
+    at[n++] = i;
+  }
+  if (n && !gt_tree_args(c, n, at, t, q)) return 0;
+  for (int i = 0; i < n; i++) p[slot[i]] = q[i];
+  guatiao_status st = gt_intake.guatiao_intake_provider_form(p[0], p[1], &gt_binding_alloc, &out);
+  free_all(t, n);
+  if (st) {
+    gt_free(&out);
+    return gt_fail(c, st, "no form for that provider");
+  }
+  return answer_owner(c, &out, &gt_binding_alloc);
+}
+
 /* intake_form_for(form, schema, path) -> id or [] */
 int cmd_intake_form_for(gt_call *c) {
   guatiao_str path;
