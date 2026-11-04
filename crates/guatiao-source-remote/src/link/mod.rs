@@ -765,7 +765,12 @@ impl Link {
         // The client may send a call as soon as it has this reply, and a
         // message channel judges a message as it arrives: the bound is
         // raised before the reply goes, not when the first call is read.
-        reader.set_max_frame(options.max_frame);
+        // Where a key PROOF is still to be read, it stays the handshake's
+        // until the proof checks, so a stranger cannot send a large message
+        // in its place.
+        if !proves_key(options) {
+            reader.set_max_frame(options.max_frame);
+        }
         let nonce = handshake::nonce();
         let proof = if proves_key(options) {
             #[cfg(feature = "tcp")]
@@ -813,6 +818,7 @@ impl Link {
             }
         }
         let _ = client_nonce;
+        reader.set_max_frame(options.max_frame);
         reader.set_timeout(None)?;
         writer.set_timeout(options.timeout)?;
         Ok(Link::start(
