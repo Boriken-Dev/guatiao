@@ -314,27 +314,25 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   per session carries the frames as over QUIC (coqui-web's own `u32` length
   framing, the same bytes), and `datagrams()` are HTTP/3 datagrams. At no
   security the client presents no certificate and a native one checks
-  none. The listener decides the policy's list in two parts, because the
-  handshake runs on coqui-web's threads, where coqui-peer-tls has no
-  connection addresses: its address rules before the handshake, in
-  coqui-web's admission (after a Retry proved the address), and its
-  fingerprint rules once the certificate is known and before any frame is
-  read (`web::list_permits`; a client it denies is sent the link's
-  refusal, `BAD_VALUE` naming the rule, and closed). The list is checked
-  once, as the listener is made: a rule naming something that is not a
-  SHA-256 fingerprint is refused there. A mutual listener backed by a
-  trust store (no fixed pins) is refused when it binds, with a list or
-  without: its handshake has no connection address, so the store would
-  record every stranger waiting without its source, in one bucket where
-  strangers evict each other; the clients are pinned. A client the
-  TLS handshake itself refuses (an unpinned certificate) is reported by
-  coqui-web as a lost path and told `GONE`, "the handshake did not
-  finish" (the ignored test `a_client_the_tls_refuses_is_told_so` waits
-  for a failure of its own). A source the list
-  denies, or any connection the server declines, is QUIC's
-  CONNECTION_REFUSED, which coqui-web reports as `Failure::Permission`; a
-  client cannot tell which, and says "refused the connection (by its access
-  control list, ... or the server refused the connection)" (`BAD_VALUE`).
+  none. Each connection's TLS configuration is built from its source
+  and local address (coqui-web's `with_tls_per_connection`, through
+  coqui-peer-tls's `ServerConfigs::for_connection`, built once at bind so
+  a policy or a rule it refuses, a fingerprint that is not SHA-256 among
+  them, fails the bind): the policy's list decides in the TLS, its
+  fingerprint rules at the client's certificate, and a trust store records
+  a stranger waiting under its source, as on `tls://` and `quic://`. A
+  resolver over the configuration's own keeps its address gate and
+  presents the certificate the listener holds now (rotation); the
+  listener's base configuration is the fail-closed fallback. The list's
+  address rules are also decided in coqui-web's admission, which reports the
+  sources turned away as `Accepted::Refused`. A client the server's TLS
+  refuses (not pinned, not accepted, denied by the list) fails its dial
+  with `Failure::Certificate` and is told `BAD_VALUE`, "the server does not
+  trust this client". A source the list denies by address, or any
+  connection the server declines, is QUIC's CONNECTION_REFUSED, which
+  coqui-web reports as `Failure::Permission`; a client cannot tell which,
+  and says "refused the connection (by its access control list, ... or the
+  server refused the connection)" (`BAD_VALUE`).
   A browser takes a certificate pinned by hash only when it is valid for
   at most 14 days: `rotating(every)` presents certificates it makes (each
   valid two periods and two hours, the next made a period ahead, a fresh
@@ -348,7 +346,8 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   key identifier and basicConstraints, and one given to `presenting` needs
   at least one extension. A client's own failure is a failure of the dial:
   a refused certificate reads as the verifier's words, a server that did
-  not answer as `TimedOut`, a QUIC handshake that did not finish as
+  not answer as `TimedOut` (on Windows an unreachable server is too: quinn
+  surfaces no ICMP error), a QUIC handshake that did not finish as
   `ConnectionRefused` (so `GONE`).
 - **QUIC's datagrams, runtime and ends.** Datagrams (`FrameRead::datagrams`,
   `Link::datagrams`, over QUIC and WebTransport) are
@@ -416,7 +415,15 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   the gate); a text message or a message over `max` ends the channel
   (`InvalidData`); a close or a dropped connection ends the reads as a
   stream's end of file does. The channel is told apart what it reads
-  (`set_max_receive`, the link's `max_frame`) and what it sends
+  (`set_max_receive`, the link's `max_frame`, raised by
+  `FrameRead::set_max_frame`: a channel judges a message by the bound in
+  force when it reads it off the socket, ahead of the reader, so a link
+  raises it before it can be sent a large frame, on a server before its
+  reply to the HELLO goes and on either side before the link is returned,
+  not when the reader first asks. From a valid HELLO on, a peer can make
+  this side buffer one message up to `max_frame` before the link refuses
+  it; a stream never holds more than the handshake's bound before the
+  proof) and what it sends
   (`set_max_send`, `FrameWrite::set_max_frame`, the peer's, known once the
   handshake agreed it); a frame past the peer's is refused by the writer
   (`InvalidInput`) and the reader keeps its own size check. A write waits

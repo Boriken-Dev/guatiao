@@ -200,6 +200,10 @@ struct Reader {
     timeout: Option<Duration>,
     /// The largest message the channel was last told to take.
     max: usize,
+    /// Whether the link told the reader its bound (`set_max_frame`): the
+    /// channel then reads under it, and each read's `max` only bounds the
+    /// frame it returns.
+    fixed: bool,
 }
 
 impl Reader {
@@ -234,7 +238,7 @@ impl FrameRead for Reader {
         let Some(channel) = self.channel()? else {
             return Ok(false);
         };
-        if self.max != max {
+        if !self.fixed && self.max != max {
             self.shared.bound(Some(max), None);
             self.max = max;
         }
@@ -264,6 +268,12 @@ impl FrameRead for Reader {
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
         self.timeout = timeout;
         Ok(())
+    }
+
+    fn set_max_frame(&mut self, bytes: usize) {
+        self.shared.bound(Some(bytes), None);
+        self.max = bytes;
+        self.fixed = true;
     }
 
     fn peer_id(&self) -> Option<String> {
@@ -408,25 +418,6 @@ impl Datagrams for ChannelDatagrams {
     }
 }
 
-/// Refuses a client the listener has decided against after the
-/// handshake: the link's own refusal frame (`BAD_VALUE`, `why` in it), as
-/// the link would send it, then the channel closed with it flushed. The
-/// client reads it as the reply it waits for.
-#[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
-pub(super) fn refuse(channel: &dyn Channel, why: &str) {
-    let frame = crate::protocol::Frame::Goodbye {
-        status: guatiao::Status::GUATIAO_ERR_BAD_VALUE.into(),
-        message: why,
-    };
-    let mut out = Vec::new();
-    if frame.encode(&mut out, usize::MAX).is_ok()
-        && let Some(body) = out.get(4..)
-    {
-        let _ = channel.send(body);
-    }
-    channel.close();
-}
-
 /// The two halves of a link over `shared`'s channel: open already
 /// (`open` none), or made by `open` on the first read, which the closer
 /// can cancel by `cancel`.
@@ -446,6 +437,7 @@ pub(super) fn connection(
             open,
             timeout: None,
             max: 0,
+            fixed: false,
         }),
         writer: Box::new(Writer {
             shared,
@@ -480,17 +472,15 @@ impl Refused {
 
 #[cfg(feature = "tls")]
 #[cfg_attr(not(feature = "webtransport"), allow(unused_imports))]
-pub(super) use verified::{Watching, canonical_list, list_permits, server_config};
+pub(super) use verified::{Watching, server_config};
 
 #[cfg(feature = "tls")]
 mod verified {
     use alloc::sync::Arc;
-    use core::net::SocketAddr;
     use std::io;
     use std::sync::Mutex;
 
-    use coqui_net_acl::{Acl, Outcome};
-    use coqui_peer_tls::{Digest, PeerId, Refusal};
+    use coqui_peer_tls::Refusal;
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::server::ResolvesServerCert;
@@ -607,15 +597,12 @@ mod verified {
     ///
     /// `scoped` says the handshake runs on a thread the caller gives the
     /// connection's addresses (`coqui_peer_tls::with_addresses`), so the
-    /// policy's access control list can stay in the TLS: a WebSocket
-    /// listener. Otherwise the list is left out of it, because
-    /// coqui-peer-tls would find no addresses and refuse every client: the
-    /// listener decides the list's address rules before the handshake and
-    /// its fingerprint rules after it ([`list_permits`]). A trust store
-    /// would record every stranger without its source, in one bucket
-    /// where strangers evict each other (and a stranger the list forbids
-    /// as waiting), so a store-backed mutual listener is refused here:
-    /// its clients are pinned.
+    /// policy's access control list can stay in the TLS at mutual TLS: a
+    /// WebSocket listener. Otherwise the list is left out of it, because
+    /// coqui-peer-tls would find no addresses and refuse every client, and
+    /// the listener decides its address rules in coqui-web's admission. A
+    /// WebTransport listener takes a configuration per connection instead
+    /// (`ServerConfigs`), and this one only as the fail-closed fallback.
     pub(crate) fn server_config(
         config: &TlsConfig,
         alpn: &[u8],
@@ -625,11 +612,6 @@ mod verified {
         let mut policy = config.tls_policy().clone();
         let mutual = config.is_mutual() && config.proves_peers();
         if !(scoped && mutual) {
-            if mutual && config.records_waiting() {
-                return Err(crate::transport::tls::invalid(
-                    "a mutual-TLS WebTransport listener cannot be backed by a trust store: its handshake runs where coqui-peer-tls has no connection address, so the store would record every stranger waiting without its source, in one bucket where strangers evict each other; pin the clients (`pins`) instead",
-                ));
-            }
             policy.acl = None;
         }
         let built = config.clone().policy(policy).server_naming(alpn)?;
@@ -640,57 +622,6 @@ mod verified {
                 tls.cert_resolver = resolver;
                 Ok(Arc::new(tls))
             }
-        }
-    }
-
-    /// The policy's list with its fingerprints in canonical form, checked
-    /// once: a rule naming something that is not a SHA-256 fingerprint is
-    /// refused here, as a listener is made. `None` where there is no list.
-    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
-    pub(crate) fn canonical_list(config: &TlsConfig) -> io::Result<Option<Arc<Acl>>> {
-        let Some(acl) = &config.tls_policy().acl else {
-            return Ok(None);
-        };
-        let mut acl = acl.clone();
-        acl.canonicalize_fingerprints(|index, text| {
-            text.parse::<PeerId>()
-                .ok()
-                .filter(|id| id.digest() == Digest::Sha256)
-                .map(|id| id.canonical())
-                .ok_or_else(|| {
-                    format!("acl rule {index}: the fingerprint is not a SHA-256 peer id")
-                })
-        })
-        .map_err(crate::transport::tls::invalid)?;
-        Ok(Some(Arc::new(acl)))
-    }
-
-    /// Whether the list permits the client that presented `chain` (its own
-    /// certificate first), from `source` to `local`: the fingerprint rules
-    /// of the list, decided after a handshake that had no addresses to
-    /// decide them by.
-    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
-    pub(crate) fn list_permits(
-        acl: &Acl,
-        source: SocketAddr,
-        local: SocketAddr,
-        chain: Option<&[Vec<u8>]>,
-    ) -> io::Result<()> {
-        let denied = |why: String| io::Error::new(io::ErrorKind::PermissionDenied, why);
-        let Some(certificate) = chain.and_then(<[Vec<u8>]>::first) else {
-            return Err(denied(
-                "the client presented no certificate to decide the list by".to_string(),
-            ));
-        };
-        let decision = acl.decide_peer(source, local, &PeerId::of(certificate).canonical());
-        match decision.outcome {
-            Outcome::Permit => Ok(()),
-            _ => Err(denied(format!(
-                "the server's access control list refuses this client's certificate (rule {})",
-                decision
-                    .rule_index
-                    .map_or_else(|| "its default".to_string(), |i| i.to_string())
-            ))),
         }
     }
 }

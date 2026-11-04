@@ -1571,13 +1571,14 @@ write now.
     certificate each side presented (`Channel::peer_certificates`, a
     resumed TLS 1.3 session's included), and `Link::peer_id()` names the
     peer by it. A WebTransport server's link is named `https <address>`.
-    The list's fingerprint rules for a WebTransport client are decided once
-    its certificate is known and before any frame is read, and a client it
-    denies is told so (`BAD_VALUE`). A mutual WebTransport listener backed
-    by a trust store is refused when it binds, since its handshake has no
-    connection address to record a waiting client under (pin the clients
-    instead), and a client TLS itself refuses is reported by coqui-web as a
-    lost path and told `GONE`. A wildcard plain `ws://` listener refuses a
+    A WebTransport listener builds each connection's TLS from its source
+    and local address, so the list's fingerprint rules decide in the
+    handshake and a trust store records a waiting client under its source,
+    as on `tls://`; a client the server's TLS refuses is told so
+    (`BAD_VALUE`, "the server does not trust this client"). A link raises
+    its reader's bound (`FrameRead::set_max_frame`) before the peer can
+    send a frame past the handshake's, on a server before its reply goes,
+    since a message channel judges a message as it arrives. A wildcard plain `ws://` listener refuses a
     client on a list rule naming the address or port it came to, as the TLS
     listeners do.
   - A source an access control list denies, or any connection a

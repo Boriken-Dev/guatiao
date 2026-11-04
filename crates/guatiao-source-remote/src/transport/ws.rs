@@ -73,6 +73,8 @@ struct Wss {
     verifier: Arc<dyn rustls::client::danger::ServerCertVerifier>,
     /// Whether the server's certificate is checked.
     proves: bool,
+    /// This side in a refusal's words.
+    me: String,
 }
 
 impl core::fmt::Debug for WsConnect {
@@ -121,6 +123,7 @@ impl WsConnect {
             config: config.client_naming(super::tls::WEBSOCKET_ALPN)?,
             verifier,
             proves: config.proves_peers(),
+            me: config.me(),
         });
         let url = self.parsed()?;
         if let Some(host) = url.host_str() {
@@ -193,6 +196,11 @@ impl WsConnect {
                 format!(
                     "`ws://` reaches only this machine (loopback) unless the connection allows a plain WebSocket beyond it (`plain_beyond_loopback`), and {addr} is not loopback: connect to wss://"
                 ),
+            ),
+            // The server's TLS refused this client's certificate.
+            #[cfg(feature = "tls")]
+            Failure::Certificate if self.tls.is_some() => super::tls::untrusted_client(
+                &self.tls.as_ref().map_or_else(String::new, |t| t.me.clone()),
             ),
             Failure::Timeout => io::Error::new(
                 io::ErrorKind::TimedOut,
