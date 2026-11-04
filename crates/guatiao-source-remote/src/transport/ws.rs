@@ -576,6 +576,8 @@ mod tests {
         let mut server = accepted(&l);
         let (tx, rx) = std::sync::mpsc::channel();
         let reading = std::thread::spawn(move || {
+            // As a link does once it has agreed the bound.
+            server.reader.set_max_frame(2 << 20);
             let mut frame = Vec::new();
             let mut got = Vec::new();
             for _ in 0..3 {
@@ -589,6 +591,7 @@ mod tests {
         });
         let mut client = client.join().unwrap();
         assert!(client.peer.starts_with("ws 127.0.0.1:"), "{}", client.peer);
+        client.writer.set_max_frame(2 << 20);
         client
             .writer
             .write_frames(&[&[1, 0, 0, 0, 1], &[2, 0, 0, 0, 2, 3]])
