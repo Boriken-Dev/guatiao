@@ -2069,6 +2069,15 @@ write now.
   places until it went. A pipe's reads during the handshake are now
   watched and cancelled at their bound; `local` on Windows adds
   `windows-sys` (`CancelIoEx`).
+- **guatiao-source-remote: a peer calling again the moment it has an
+  answer is not refused `GUATIAO_ERR_BUSY`.** A call held its place among
+  the receiver's `max_calls` until the pool thread that ran it was free
+  again, a little after its answer went, so a caller keeping to
+  `max_calls` (a host listing a peer's libraries and then opening one,
+  each call made when the last was answered) was refused now and then
+  under load. A call's place is now free before its answer is sent, and a
+  call arriving while every thread is still finishing waits for the first
+  that is.
 - **guatiao-source-remote: a call that panics on the side serving it
   answers `GUATIAO_ERR_INTERNAL` and gives its place back.** A panic
   while serving a call, a listing or an open left the call unanswered (its
