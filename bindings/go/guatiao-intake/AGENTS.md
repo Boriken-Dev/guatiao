@@ -74,6 +74,12 @@ value, err := intake.Unflatten(schema, "auth", store) // a Value to close, or ni
 - `At(value any, path string) (guatiao.Ref, bool, error)` and
   `Resolve(schema any, key string) (guatiao.Ref, bool, error)`: false when
   nothing is there.
+- `ProviderForm(schema, meta any) (*guatiao.Value, error)`: the form a
+  provider's settings are shown with, the one it declares in `meta`
+  under `ProviderFormKey`, else the one `schema` implies; each
+  argument a `*guatiao.Value`, a view, plain data or nil (the `config`
+  and `meta` of an entry `Registry.Catalog` lists). What is not a map
+  is skipped; the Value is nil when nothing is left to show.
 - `ForSchema(schema any) (*guatiao.Value, error)`,
   `FormFor(form, schema any, path string) (*guatiao.Value, error)` (nil
   for none).

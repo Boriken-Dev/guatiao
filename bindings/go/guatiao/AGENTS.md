@@ -185,7 +185,16 @@ in the current directory and on `PATH`, as a Go host adding a Python
 bridge needs; unix ignores it), `ProviderTable(key, kind)
 (Table, error)` (`ErrNotFound` for none; `kind` "" for a single table),
 `ProviderConfig(key) (Ref, bool, error)` (a borrowed, read-only view of the
-schema), `ProviderMeta(key) (*Value, bool, error)` (what the provider
+schema), `Catalog() ([]map[string]any, error)` (every provider of
+every loaded library, best first, for a settings screen, with none
+built: what `Providers` holds plus `available` (asked now) and
+`reason`, `config` and `meta` when it declares them, `library_key`,
+`library_version`, and `digest` (`sha256:` and the hex of the file its
+library was mapped from, while it is still that file) or
+`digest_error` saying why not; the first call reads each library file
+in full; `intake.ProviderForm(entry["config"], entry["meta"])`
+answers the form to show an entry with),
+`ProviderMeta(key) (*Value, bool, error)` (what the provider
 declared beyond its schema, its notices or its form under
 `intake.ProviderFormKey`: a copy the caller closes, outliving the library;
 false when it declares nothing, `ErrNotFound` for an unknown key),

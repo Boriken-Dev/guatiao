@@ -20,6 +20,7 @@ static void *te_sym(void *h, const char *name) { return dlsym(h, name); }
 static void te_void_int(void *fn, int i) { ((void (*)(int))fn)(i); }
 static void te_void_bool(void *fn, bool b) { ((void (*)(bool))fn)(b); }
 static int te_int_int(void *fn, int i) { return ((int (*)(int))fn)(i); }
+static int te_int_void(void *fn) { return ((int (*)(void))fn)(); }
 */
 import "C"
 
@@ -121,3 +122,6 @@ func (l *CLib) VoidBool(name string, b bool) { C.te_void_bool(l.sym(name), C.boo
 
 // IntInt calls an `int name(int)`.
 func (l *CLib) IntInt(name string, i int) int { return int(C.te_int_int(l.sym(name), C.int(i))) }
+
+// IntVoid calls an `int name(void)`.
+func (l *CLib) IntVoid(name string) int { return int(C.te_int_void(l.sym(name))) }

@@ -16,7 +16,7 @@ package intake
 
 #define gv const guatiao_value
 
-// (schema, form, alloc, out): check, layout.
+// (schema, form, alloc, out): check, layout, provider_form (schema, meta).
 static guatiao_status gi_two(void *fn, gv *a, gv *b, const guatiao_alloc *alloc, guatiao_value *out) {
   return ((guatiao_status(*)(gv *, gv *, const guatiao_alloc *, guatiao_value *))fn)(a, b, alloc, out);
 }
@@ -68,7 +68,7 @@ const (
 var exportNames = []string{
 	"guatiao_intake_check", "guatiao_intake_layout", "guatiao_intake_for_schema", "guatiao_intake_form_for",
 	"guatiao_intake_is_visible", "guatiao_intake_path_get", "guatiao_intake_resolve", "guatiao_intake_flat_keys",
-	"guatiao_intake_flatten", "guatiao_intake_unflatten",
+	"guatiao_intake_flatten", "guatiao_intake_unflatten", "guatiao_intake_provider_form",
 }
 
 // str is s as a guatiao_str for one call: the bytes are the Go string's.

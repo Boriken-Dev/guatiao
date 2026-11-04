@@ -87,6 +87,7 @@ back, err := intake.Unflatten(schema, "auth", store)      // a Value to close, o
 | Name | Purpose |
 | --- | --- |
 | `Check`, `Layout`, `IsVisible`, `ForSchema`, `FormFor` | a form over a schema |
+| `ProviderForm` | the form a provider's settings are shown with |
 | `At` | a path's place in a value |
 | `Resolve`, `FlatKeys`, `Flatten`, `Unflatten` | the flat `key -> text` store |
 | `Section` | one group of `Layout` |

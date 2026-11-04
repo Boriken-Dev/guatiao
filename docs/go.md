@@ -208,6 +208,12 @@ before anything in it runs. A slot the provider leaves out answers
 is decoded into the method's Go type, or kept as a `*guatiao.Value` the
 caller closes; an object answered is a remote whose `Close` destroys it.
 
+A settings screen lists every provider of every loaded library at once,
+none of them built, with `reg.Catalog()` (a `[]map[string]any`, best first:
+what `Providers` holds plus availability, `config`, `meta`, the library's
+`digest` or a `digest_error`), and takes the form to show one with
+`intake.ProviderForm(entry["config"], entry["meta"])`.
+
 Sources work as in every binding: `reg.AddSourceFile(path, config)` adds a
 source such as the guatiao-source-py bridge, and `reg.Refresh()` loads what it
 serves. A Go host calls greeters written in Python that way.

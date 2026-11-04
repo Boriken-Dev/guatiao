@@ -207,6 +207,21 @@ func (r *Registry) Providers(kind string) ([]map[string]any, error) {
 	return mapsOf(list), err
 }
 
+// Catalog is every provider of every loaded library, best first, with what a
+// settings screen shows about each and none of them built: what Providers
+// holds, plus "available" (asked now) and "reason" when it cannot run,
+// "config" (its schema) and "meta" when it declares them, "library_key",
+// "library_version", and "digest" ("sha256:" and the hex of the file its
+// library was mapped from, while it is still that file) or "digest_error"
+// saying why not. The first call reads each library file in full.
+// intake.ProviderForm(entry["config"], entry["meta"]) answers the form to show
+// it with.
+func (r *Registry) Catalog() ([]map[string]any, error) {
+	var list []any
+	err := r.answer("catalog", "", &list)
+	return mapsOf(list), err
+}
+
 // Available are the providers of kind that can run here, best first.
 func (r *Registry) Available(kind string) ([]map[string]any, error) {
 	var list []any

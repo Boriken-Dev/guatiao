@@ -8,7 +8,9 @@ package guatiao_test
 // instances, retire, collect and unload, and sources.
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -315,6 +317,134 @@ func TestCollectsARetiredLibraryOnceNothingOfItIsAlive(t *testing.T) {
 	if got, _ := reg.Collect(); !reflect.DeepEqual(got, []string{"derived_greeter"}) {
 		t.Fatalf("%v", got)
 	}
+}
+
+// catalogLibrary is the C library of four providers a settings screen
+// lists, built into a directory of its own.
+func catalogLibrary(t *testing.T) (dir, file string) {
+	t.Helper()
+	dir = mappedDir(t)
+	file, err := testenv.BuildC("catalog_library.c", dir, "go_catalog_library")
+	if err != nil {
+		t.Skip("the catalog library written in C is not built: " + err.Error())
+	}
+	return dir, file
+}
+
+func TestTheCatalogListsEveryProviderOfADirectoryAndBuildsNone(t *testing.T) {
+	dir, file := catalogLibrary(t)
+	reg := registry(t)
+	report, err := reg.ScanDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _ := report["loaded"].([]any); len(loaded) != 1 {
+		t.Fatalf("%v", report)
+	}
+	list, err := reg.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := map[string]map[string]any{}
+	for _, entry := range list {
+		catalog[entry["id"].(string)] = entry
+	}
+	want := []string{"catalog_configured", "catalog_implied", "catalog_plain", "catalog_unavailable"}
+	if got := ids(list); !reflect.DeepEqual(sorted(got), want) {
+		t.Fatalf("%v", got)
+	}
+	bytes, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := fmt.Sprintf("sha256:%x", sha256.Sum256(bytes))
+
+	configured := catalog["catalog_configured"]
+	if !reflect.DeepEqual(configured["kinds"], []any{"counter"}) ||
+		configured["display_name"] != "Configured, with a form" ||
+		configured["version"] != "2.0" ||
+		configured["library"] != "catalog_library" ||
+		configured["library_version"] != "1.0" ||
+		configured["digest"] != digest ||
+		configured["available"] != true {
+		t.Fatalf("%v", configured)
+	}
+	if _, has := configured["reason"]; has {
+		t.Fatalf("%v", configured)
+	}
+	if !reflect.DeepEqual(configured["config"].(map[string]any)["required"], []any{"host", "port"}) {
+		t.Fatalf("%v", configured["config"])
+	}
+	form := configured["meta"].(map[string]any)["form"].(map[string]any)
+	if !reflect.DeepEqual(form["sections"], []any{map[string]any{"id": "net", "title": "Network"}}) {
+		t.Fatalf("%v", form)
+	}
+
+	implied := catalog["catalog_implied"]
+	if _, has := implied["meta"]; has || implied["version"] != "1.0" {
+		t.Fatalf("%v", implied)
+	}
+	token := implied["config"].(map[string]any)["properties"].(map[string]any)["token"].(map[string]any)
+	if token["x-sensitive"] != true {
+		t.Fatalf("%v", token)
+	}
+
+	unavailable := catalog["catalog_unavailable"]
+	if _, has := unavailable["config"]; has || unavailable["available"] != false ||
+		unavailable["reason"] != "no device here" || unavailable["has_config"] != false {
+		t.Fatalf("%v", unavailable)
+	}
+	if catalog["catalog_plain"]["available"] != true {
+		t.Fatalf("%v", catalog["catalog_plain"])
+	}
+
+	// Listing asked the library for nothing: its count says so, and so does
+	// its refusal of the first instance asked for afterwards.
+	counted, err := testenv.OpenC(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built := counted.IntVoid("catalog_built"); built != 0 {
+		t.Fatalf("listing built %d", built)
+	}
+	_, err = reg.Create("catalog_configured", map[string]any{"host": "localhost", "port": 8080})
+	if err == nil || !strings.Contains(err.Error(), "built nothing: the first create this library was asked") {
+		t.Fatalf("%v", err)
+	}
+	if built := counted.IntVoid("catalog_built"); built != 1 {
+		t.Fatalf("built %d", built)
+	}
+}
+
+func TestACatalogNamesWhyALibraryHasNoDigest(t *testing.T) {
+	dir, file := catalogLibrary(t)
+	reg := registry(t)
+	if _, err := reg.LoadFile(file); err != nil {
+		t.Fatal(err)
+	}
+	// Another file at the path, before anything asked: renaming a mapped
+	// file works on every platform, where overwriting one does not.
+	if err := os.Rename(file, filepath.Join(dir, "moved_away.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("not the library"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := reg.Catalog()
+	if err != nil || len(list) != 4 {
+		t.Fatalf("%v %v", list, err)
+	}
+	for _, entry := range list {
+		if _, has := entry["digest"]; has || entry["digest_error"] != "the file changed since it was loaded" {
+			t.Fatalf("%v", entry)
+		}
+	}
+}
+
+func sorted(in []string) []string {
+	out := slices.Clone(in)
+	slices.Sort(out)
+	return out
 }
 
 func TestAClosedRegistryRefusesUse(t *testing.T) {
