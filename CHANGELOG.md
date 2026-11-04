@@ -26,6 +26,13 @@ write now.
   `DescribedRemote::instantiate(view, caller, &config)` builds an
   instance of a provider for a kind bound at run time, released when the
   remote drops.
+- **A JavaScript provider is built from a configuration under
+  guatiao-source-js as under Node.** `static config` (an `s` schema, which
+  `guatiao/provide` now gives) or `static configSchema` offers the
+  provider with that schema; a host's instance is `new Class(config)`,
+  its slots called on it and its `[Symbol.dispose]()` run when the host
+  drops it, and the class is callable as itself only with `static
+  default = true`.
 - **A source tells its host what is worth showing.** A note is neither a
   refusal nor a skip: `{"subject", "text", "detail"}`, words for a person
   and a map a program reads ([the encoding](https://boriken-dev.github.io/guatiao/encodings/#a-sources-note)).
@@ -1530,6 +1537,11 @@ write now.
 
 ### Changed
 
+- **A JavaScript provider's `static available()` is asked each time a host
+  asks, under guatiao-source-js as under Node.** A provider unavailable
+  when its library opened was left out of the library; it is now listed,
+  and a host's `available()` reaches its `static available()` every time,
+  so a provider that becomes available is served without a refresh.
 - **`guatiao_source_info` ends with a `notes` slot**, so a source table
   built against the previous header is refused by its `struct_size`;
   `Refreshed` and `SourceInfo` gained a `notes` field.
