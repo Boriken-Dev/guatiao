@@ -34,6 +34,7 @@ GuatiaoIntake.layout(schema, form)                 # [Dict("section" => ..., "fi
 GuatiaoIntake.isvisible(schema, form, "key", values)
 GuatiaoIntake.at(value, "agent[1].name")           # a borrowed ValueRef, or nothing
 GuatiaoIntake.for_schema(schema)                   # a Value
+GuatiaoIntake.provider_form(schema, meta)          # a Value, or nothing: a provider's own form, else the one its schema implies
 GuatiaoIntake.form_for(form, schema, "path")       # a Value, or nothing
 GuatiaoIntake.resolve(schema, "auth.password")     # a borrowed ValueRef, or nothing
 GuatiaoIntake.flat_keys(schema, "auth")            # Vector{String}; WrongKind for an unknown key

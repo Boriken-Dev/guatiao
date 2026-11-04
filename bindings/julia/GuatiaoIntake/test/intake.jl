@@ -121,3 +121,52 @@ end
     @test_throws GuatiaoError redact([1], login)
     close(s)
 end
+
+@testset "a provider's form is its own, else the one its schema implies" begin
+    schema = Dict("type" => "object", "properties" => Dict(
+        "user" => Dict("type" => "string", "x-section" => "account"),
+        "token" => Dict("type" => "string", "x-sensitive" => true)))
+    declared = Dict("sections" => [Dict("id" => "account", "title" => "Account")])
+
+    form = Intake.provider_form(schema, Dict(Intake.PROVIDER_FORM_KEY => declared, "other" => 1))
+    @test form !== nothing
+    @test form[] == declared
+    close(form)
+
+    form = Intake.provider_form(schema, nothing)
+    made = form[]
+    @test made["sections"] == [Dict("id" => "account")]
+    @test made["fields"]["token"]["widget"] == "password"
+    close(form)
+
+    # Meta without a form is the same as none; Values work as plain data does.
+    held = Value(schema)
+    meta = Value(Dict("other" => 1))
+    form = Intake.provider_form(held, meta)
+    @test form[] == made
+    close(form); close(held); close(meta)
+
+    @test Intake.provider_form(nothing, nothing) === nothing
+    @test Intake.provider_form(nothing, Dict("other" => 1)) === nothing
+
+    # What is not a form is skipped, as reading the key by hand skips it.
+    form = Intake.provider_form(schema, Dict(Intake.PROVIDER_FORM_KEY => ["not", "a", "form"]))
+    @test form[] == made
+    close(form)
+    @test Intake.provider_form(nothing, Dict(Intake.PROVIDER_FORM_KEY => "a form")) === nothing
+end
+
+@testset "a catalog entry gives each provider its form" begin
+    named = ENV["GUATIAO_LIBRARY"]
+    reg = Registry("julia-intake-tests", "0.1")
+    Guatiao.scan_dir(reg, isdir(named) ? named : dirname(named); rules = "kind=greeter")
+    catalog = Dict(e["id"] => e for e in Guatiao.catalog(reg))
+    shouter = catalog["derived_greeter_shouter"]
+    form = Intake.provider_form(get(shouter, "config", nothing), get(shouter, "meta", nothing))
+    @test [s["id"] for s in form[]["sections"]] == ["words", "volume"]
+    @test Intake.check(shouter["config"], form) === nothing
+    close(form)
+    hello = catalog["derived_greeter_hello"]
+    @test Intake.provider_form(get(hello, "config", nothing), get(hello, "meta", nothing)) === nothing
+    close(reg)
+end

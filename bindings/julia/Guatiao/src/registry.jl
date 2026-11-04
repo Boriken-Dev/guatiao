@@ -100,6 +100,21 @@ scan_path(reg::Registry, spec::AbstractString; rules = "", descending::Bool = fa
 libraries(reg::Registry) = answer(guatiao_registry_libraries, reg)
 "`providers(reg, kind = \"\")`: every provider of `kind` (or of any), best first."
 providers(reg::Registry, kind::AbstractString = "") = with_text(k -> answer(guatiao_registry_providers, reg, k), kind)
+"""
+    catalog(reg) -> Vector{Dict}
+
+Every provider of every loaded library, best first, with what a settings
+screen shows about each, and **none of them built**: one `Dict` per
+provider holding what `providers` does, plus `available` (asked now) and
+`reason` when it cannot run, `config` (its schema) and `meta` when it
+declares them, `library_key`, `library_version`, and `digest` (`"sha256:"`
+and the hex of the file its library was mapped from, while it is still
+that file, unchanged; absent for a library from no file) or `digest_error`
+saying why not. The first call reads each library file in full.
+`GuatiaoIntake.provider_form(entry["config"], entry["meta"])` answers the
+form to show it with.
+"""
+catalog(reg::Registry) = answer(guatiao_registry_catalog, reg)
 "`available(reg, kind = \"\")`: the providers of `kind` that can run here."
 available(reg::Registry, kind::AbstractString = "") = with_text(k -> answer(guatiao_registry_available, reg, k), kind)
 "`why_not(reg, kind)`: why nothing of `kind` is available, or what is."

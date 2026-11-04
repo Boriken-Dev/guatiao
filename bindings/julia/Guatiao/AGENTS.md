@@ -285,6 +285,15 @@ Julia host adding a Python bridge needs; unix ignores it),
 `provider_table(reg, key; kind) -> (table, size, ctx)` (`C_NULL` for
 none; no `kind` for a single table), `provider_config(reg, key)` (a
 borrowed, read-only view of the schema, or `nothing`),
+`catalog(reg)` (every provider of every loaded library, best first, for
+a settings screen, with none built: what `providers` holds plus
+`available` (asked now) and `reason`, `config` and `meta` when it
+declares them, `library_key`, `library_version`, and `digest`
+(`"sha256:"` and the hex of the file its library was mapped from,
+while it is still that file) or `digest_error` saying why not; the
+first call reads each library file in full;
+`GuatiaoIntake.provider_form(get(entry, "config", nothing),
+get(entry, "meta", nothing))` answers the form to show an entry with),
 `provider_meta(reg, key)` (what the provider declared beyond its schema,
 its notices or its form under `GuatiaoIntake.PROVIDER_FORM_KEY`: a `Value`
 the caller owns, outliving the library, or `nothing`; `NotFound` for an

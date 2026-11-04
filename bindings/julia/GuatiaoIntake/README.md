@@ -72,6 +72,7 @@ GuatiaoIntake.flatten(schema, "auth", value)       # Dict{String,String}
 | Name | Purpose |
 | --- | --- |
 | `check`, `layout`, `isvisible`, `for_schema`, `form_for` | a form over a schema |
+| `provider_form` | the form a provider's settings are shown with |
 | `at` | a path's place in a value |
 | `resolve`, `flat_keys`, `flatten`, `unflatten` | the flat `key => text` store |
 | `GuatiaoIntake.use_library(path)` | naming `guatiao_intake` |
