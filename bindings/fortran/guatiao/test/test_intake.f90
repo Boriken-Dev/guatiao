@@ -247,6 +247,15 @@ contains
     meta = json('{"form": "a form"}')
     call guatiao_intake_provider_form(none, meta, form, st)
     call check(form%is_absent(), 'and so is a string')
+
+    ! A value that was closed is an error, whichever argument it is; one
+    ! never assigned is no value.
+    call other%close()
+    call guatiao_intake_provider_form(schema, other, form, st)
+    call check_status(st, GUATIAO_STAT_CLOSED, 'a closed meta is refused')
+    call schema%close()
+    call guatiao_intake_provider_form(schema, none, form, st)
+    call check_status(st, GUATIAO_STAT_CLOSED, 'and so is a closed schema')
   end subroutine
 
   subroutine a_catalog_entry_gives_each_provider_its_form()

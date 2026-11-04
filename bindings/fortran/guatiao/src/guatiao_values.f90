@@ -26,7 +26,8 @@ module guatiao_values
   public :: guatiao_value_from_raw
   public :: GT_VIA_PATH, GT_VIA_RESOLVE, gt_via
   public :: gt_wrap, gt_same_tree, gt_set_frees, gt_new_owned, gt_borrowed, gt_end_borrow, gt_node, gt_root, &
-            gt_box_alloc, gt_writable_node, gt_take_tree, gt_is_closed, gt_read_only, gt_real_text, gt_parse_int64
+            gt_box_alloc, gt_writable_node, gt_take_tree, gt_is_closed, gt_was_closed, gt_read_only, &
+            gt_real_text, gt_parse_int64
 
   !> A piece of text, for a list of keys.
   type :: guatiao_text
@@ -182,6 +183,14 @@ contains
   recursive logical function gt_is_closed(v)
     type(guatiao_value), intent(in) :: v
     gt_is_closed = v%is_closed()
+  end function
+
+  !> Whether `v` held a tree that was closed since: a value never assigned
+  !> is not, though is_closed() answers true for it as well.
+  recursive logical function gt_was_closed(v)
+    type(guatiao_value), intent(in) :: v
+    gt_was_closed = .false.
+    if (associated(v%box)) gt_was_closed = v%box%closed
   end function
 
   recursive logical function gt_read_only(v)

@@ -244,10 +244,19 @@ contains
     type(guatiao_value) :: answer
     call intake_need(st, msg)
     if (st == GUATIAO_OK) then
+      ! A value that names nothing (never assigned, or a key the entry lacks)
+      ! is no value; one that was closed is an error, as in every other call.
       ps = c_null_ptr
       pm = c_null_ptr
-      if (.not. schema%is_closed()) ps = gt_node(schema)
-      if (.not. meta%is_closed()) pm = gt_node(meta)
+      if (gt_was_closed(schema) .or. gt_was_closed(meta)) then
+        st = GUATIAO_STAT_CLOSED
+        msg = 'guatiao: an argument''s tree is closed'
+      else
+        ps = gt_node(schema)
+        pm = gt_node(meta)
+      end if
+    end if
+    if (st == GUATIAO_OK) then
       call gt_new_owned(answer, gt_default_alloc(), out)
       st = gt_intake_provider_form(ps, pm, gt_default_alloc(), out)
       if (st == GUATIAO_OK) then
