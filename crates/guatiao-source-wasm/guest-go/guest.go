@@ -77,11 +77,23 @@ type Releaser interface {
 // it as `<module>_<id>`), a name for a person, the kinds it serves with
 // the slots it answers, and its handler. A slot left out runs the kind's
 // default at the caller; a required one left out refuses the library.
+//
+// With Config and Build it builds instances: Config is the JSON Schema
+// (a *Map or a map[string]any) the host checks a configuration against
+// first, and Build makes each instance's handler from it; the instance's
+// calls reach that handler until the host drops it (a Releaser hears
+// that). InstancesOnly serves it only through instances (Handler may then
+// be nil). With Available, a host asks it whether it can run each time:
+// nil is available, an error's text the reason it is not.
 type Provider struct {
-	ID      string
-	Name    string
-	Serves  []Serves
-	Handler Handler
+	ID            string
+	Name          string
+	Serves        []Serves
+	Handler       Handler
+	Config        any
+	Build         func(config any) (Handler, error)
+	InstancesOnly bool
+	Available     func() error
 }
 
 // Serves names a kind and the slots a provider answers of it.
@@ -111,7 +123,17 @@ func (l *Library) declaration() *Map {
 		if name == "" {
 			name = p.ID
 		}
-		providers = append(providers, NewMap().Set("id", p.ID).Set("name", name).Set("serves", serves))
+		entry := NewMap().Set("id", p.ID).Set("name", name).Set("serves", serves)
+		if p.Config != nil {
+			entry.Set("config", p.Config)
+		}
+		if p.InstancesOnly {
+			entry.Set("instances_only", true)
+		}
+		if p.Available != nil {
+			entry.Set("may_be_unavailable", true)
+		}
+		providers = append(providers, entry)
 	}
 	return NewMap().Set("providers", providers)
 }
@@ -334,11 +356,20 @@ var (
 	hostDrop       func(handle int64)
 )
 
-// The library registered, and the objects its providers answered.
+// The library registered, and the objects its providers answered and the
+// instances they built.
 var (
-	served  *Library
-	objects = map[int64]Handler{}
-	nextID  int64
+	served    *Library
+	objects   = map[int64]Handler{}
+	instances = map[int64]Handler{}
+	nextID    int64
+)
+
+// What a call's object argument names.
+const (
+	targetProvider int32 = 0
+	targetObject   int32 = 1
+	targetInstance int32 = 2
 )
 
 // Serve registers the library this module offers. Call it from an init
@@ -386,23 +417,42 @@ func read(request []byte) (*Call, error) {
 	return &Call{kind: kind, method: method, args: args, changed: make([]bool, len(args))}, nil
 }
 
-func dispatch(object bool, target int64, c *Call) (answer any, err error) {
+func provider(target int64) (*Provider, error) {
+	if served == nil || target < 0 || target >= int64(len(served.Providers)) {
+		return nil, Refuse(StatusNotFound, "no provider %d", target)
+	}
+	return &served.Providers[target], nil
+}
+
+func dispatch(object int32, target int64, c *Call) (answer any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = Refuse(StatusInternal, "panic: %v", p)
 		}
 	}()
 	var h Handler
-	switch {
-	case object:
+	switch object {
+	case targetObject:
 		h = objects[target]
 		if h == nil {
 			return nil, Refuse(StatusGone, "no object %d", target)
 		}
-	case served != nil && target >= 0 && target < int64(len(served.Providers)):
-		h = served.Providers[target].Handler
+	case targetInstance:
+		h = instances[target]
+		if h == nil {
+			return nil, Refuse(StatusGone, "no instance %d", target)
+		}
+	case targetProvider:
+		p, err := provider(target)
+		if err != nil {
+			return nil, err
+		}
+		if p.Handler == nil {
+			return nil, Refuse(StatusUnsupported, "`%s` is called on an instance, not on the provider", c.method)
+		}
+		h = p.Handler
 	default:
-		return nil, Refuse(StatusNotFound, "no provider %d", target)
+		return nil, Refuse(StatusUnsupported, "a call on a target of sort %d", object)
 	}
 	answer, err = h.Call(c)
 	if err != nil {
@@ -423,7 +473,7 @@ func dispatch(object bool, target int64, c *Call) (answer any, err error) {
 	return answer, nil
 }
 
-func call(object bool, target int64, request []byte) uint32 {
+func call(object int32, target int64, request []byte) uint32 {
 	c, err := read(request)
 	if err != nil {
 		return refuse(err)
@@ -454,4 +504,74 @@ func release(object int64) {
 	if r, ok := h.(Releaser); ok {
 		r.Release()
 	}
+}
+
+func answer(value any) uint32 {
+	out, err := Encode(value)
+	if err != nil {
+		return refuse(err)
+	}
+	hostAnswer(out)
+	return 0
+}
+
+func build(target int64, config []byte) (h Handler, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = Refuse(StatusInternal, "panic: %v", p)
+		}
+	}()
+	value, err := Decode(config)
+	if err != nil {
+		return nil, Refuse(StatusBadValue, "the configuration: %v", err)
+	}
+	p, err := provider(target)
+	if err != nil {
+		return nil, err
+	}
+	if p.Build == nil {
+		return nil, Refuse(StatusUnsupported, "provider %d builds no instances", target)
+	}
+	h, err = p.Build(value)
+	if err == nil && h == nil {
+		err = Refuse(StatusInternal, "provider %d built no handler", target)
+	}
+	return h, err
+}
+
+func create(target int64, config []byte) uint32 {
+	h, err := build(target, config)
+	if err != nil {
+		return refuse(err)
+	}
+	nextID++
+	instances[nextID] = h
+	return answer(nextID)
+}
+
+func destroy(instance int64) {
+	h := instances[instance]
+	delete(instances, instance)
+	if r, ok := h.(Releaser); ok {
+		r.Release()
+	}
+}
+
+func available(target int64) (status uint32) {
+	defer func() {
+		if p := recover(); p != nil {
+			status = refuse(Refuse(StatusInternal, "panic: %v", p))
+		}
+	}()
+	p, err := provider(target)
+	if err != nil {
+		return refuse(err)
+	}
+	if p.Available == nil {
+		return 0
+	}
+	if why := p.Available(); why != nil {
+		return answer(why.Error())
+	}
+	return 0
 }

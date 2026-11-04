@@ -26,17 +26,32 @@ fn library() -> Library {
             .name("Hello, in Rust")                           // default: the id
             .serves("greeter", ["greet", "check", "start"])   // the slots it answers
             .serves("counter", ["count"]))
+        .provider(Provider::instances("tuned", schema, tuned)  // only instances, built by `tuned`
+            .serves("greeter", ["greet"])
+            .available(|| Ok(())))                            // Err(words): the reason it cannot run
 }
+fn tuned(config: Value) -> Result<Tuned, Refusal> { .. }      // Tuned: Handler, one per instance
 guatiao_wasm_guest::export!(library, version = env!("CARGO_PKG_VERSION"));
 // or export!(library): the manifest then states `version`
 ```
 
-`export!` writes `guatiao_guest_abi`, `_alloc`, `_declare`, `_call` and
-`_release` (`#[unsafe(no_mangle)]`, so the crate cannot
+`export!` writes `guatiao_guest_abi`, `_alloc`, `_declare`, `_call`,
+`_release`, `_create`, `_destroy` and `_available` (`#[unsafe(no_mangle)]`, so the crate cannot
 `forbid(unsafe_code)`) and, with `version`, a `guatiao.version` custom
 section. `_call` takes back only what `_alloc` handed out, for the length
 asked, once; any other address is refused (`bad_value`). The library is made on the first call, once per instance: a
 trapped module is made afresh, its state with it.
+
+## Instances and availability (`Provider`)
+
+| | |
+| --- | --- |
+| `.config(schema, build)` | built from a configuration fitting `schema` (a JSON Schema, `impl Into<Value>`), checked by the host first: `build: FnMut(Value) -> Result<H: Handler, Refusal>` makes each instance's handler, which its calls reach until the host drops it (then it is dropped); the provider stays callable as itself |
+| `Provider::instances(id, schema, build)` | the same, served only through instances: no provider to call as itself |
+| `.available(f)` | `f: FnMut() -> Result<(), String>` asked each time a host asks; `Err(words)` is the reason it cannot run. Without it, always available |
+
+A refusal from `build` crosses to the host's `instantiate` with its status
+and words.
 
 ## A provider (`Handler`)
 
