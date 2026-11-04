@@ -19,16 +19,31 @@ use guatiao::{List, Status, Value};
 
 use crate::call::{Answer, Call, Handler, Refusal};
 use crate::host;
-use crate::library::Library;
+use crate::library::{Available, Build, Library};
 
 /// The ABI this crate speaks.
 pub const ABI: i32 = 1;
 
-/// The library's providers and the objects they answered, by id.
+/// What a call's `object` names: a provider, an object one answered, or
+/// an instance one built.
+const PROVIDER: i32 = 0;
+const OBJECT: i32 = 1;
+const INSTANCE: i32 = 2;
+
+/// One provider as the exports reach it.
+struct Served {
+    handler: Box<dyn Handler>,
+    build: Option<Build>,
+    available: Option<Available>,
+}
+
+/// The library's providers, the objects they answered and the instances
+/// they built, by id.
 struct Registry {
-    providers: Vec<Box<dyn Handler>>,
+    providers: Vec<Served>,
     declaration: Value,
     objects: BTreeMap<i64, Box<dyn Handler>>,
+    instances: BTreeMap<i64, Box<dyn Handler>>,
     next: i64,
 }
 
@@ -47,9 +62,18 @@ fn with<R>(make: fn() -> Library, f: impl FnOnce(&mut Registry) -> R) -> R {
             let library = make();
             let declaration = library.declaration();
             Registry {
-                providers: library.providers.into_iter().map(|p| p.handler).collect(),
+                providers: library
+                    .providers
+                    .into_iter()
+                    .map(|p| Served {
+                        handler: p.handler,
+                        build: p.build,
+                        available: p.available,
+                    })
+                    .collect(),
                 declaration,
                 objects: BTreeMap::new(),
+                instances: BTreeMap::new(),
                 next: 0,
             }
         });
@@ -145,24 +169,40 @@ fn read(request: &[u8]) -> Result<Call, Refusal> {
     Ok(Call::new(kind, method, items.collect()))
 }
 
+fn provider(registry: &mut Registry, target: i64) -> Result<&mut Served, Refusal> {
+    usize::try_from(target)
+        .ok()
+        .and_then(|i| registry.providers.get_mut(i))
+        .ok_or_else(|| Refusal::not_found(alloc::format!("no provider {target}")))
+}
+
 fn dispatch(
     registry: &mut Registry,
-    object: bool,
+    object: i32,
     target: i64,
     mut call: Call,
 ) -> Result<Answer, Refusal> {
-    let handler = if object {
-        registry.objects.get_mut(&target).ok_or_else(|| {
-            Refusal::new(
-                Status::GUATIAO_ERR_GONE,
-                alloc::format!("no object {target}"),
-            )
-        })?
-    } else {
-        usize::try_from(target)
-            .ok()
-            .and_then(|i| registry.providers.get_mut(i))
-            .ok_or_else(|| Refusal::not_found(alloc::format!("no provider {target}")))?
+    let gone = |what: &str| {
+        Refusal::new(
+            Status::GUATIAO_ERR_GONE,
+            alloc::format!("no {what} {target}"),
+        )
+    };
+    let handler = match object {
+        PROVIDER => &mut provider(registry, target)?.handler,
+        OBJECT => registry
+            .objects
+            .get_mut(&target)
+            .ok_or_else(|| gone("object"))?,
+        INSTANCE => registry
+            .instances
+            .get_mut(&target)
+            .ok_or_else(|| gone("instance"))?,
+        other => {
+            return Err(Refusal::unsupported(alloc::format!(
+                "a call on a target of sort {other}"
+            )));
+        }
     };
     let answer = handler.call(&mut call)?;
     call.settle()?;
@@ -179,7 +219,7 @@ pub fn call(make: fn() -> Library, object: i32, target: i64, request: usize, len
         )));
     };
     with(make, |registry| {
-        let outcome = read(&request).and_then(|call| dispatch(registry, object != 0, target, call));
+        let outcome = read(&request).and_then(|call| dispatch(registry, object, target, call));
         match outcome {
             Ok(Answer::Nothing) => 0,
             Ok(Answer::Value(value)) => match wire::to_bytes(&value) {
@@ -210,6 +250,69 @@ pub fn release(make: fn() -> Library, object: i64) {
     let gone = with(make, |registry| registry.objects.remove(&object));
     // Dropped outside the registry: a handler may drop host objects.
     drop(gone);
+}
+
+/// Answers `value` through the host: status 0, or a refusal when it does
+/// not encode.
+fn answer(value: &Value) -> u32 {
+    match wire::to_bytes(value) {
+        Ok(bytes) => {
+            host::answer(&bytes);
+            0
+        }
+        Err(e) => refuse(&Refusal::bad_value(e.to_string())),
+    }
+}
+
+/// `guatiao_guest_create`: `config` and `len` as [`call`] takes a
+/// request; answers the instance's id.
+pub fn create(make: fn() -> Library, target: i64, config: usize, len: usize) -> u32 {
+    let Some(config) = reclaim(config, len) else {
+        return refuse(&Refusal::bad_value(alloc::format!(
+            "the configuration at {config} ({len} bytes) is not one guatiao_guest_alloc handed out"
+        )));
+    };
+    with(make, |registry| {
+        let built = wire::decode(&config)
+            .map_err(|e| Refusal::bad_value(alloc::format!("the configuration: {e}")))
+            .and_then(|config| {
+                let served = provider(registry, target)?;
+                let build = served.build.as_mut().ok_or_else(|| {
+                    Refusal::unsupported(alloc::format!("provider {target} builds no instances"))
+                })?;
+                build(config)
+            });
+        match built {
+            Ok(handler) => {
+                registry.next += 1;
+                registry.instances.insert(registry.next, handler);
+                answer(&Value::from(registry.next))
+            }
+            Err(refusal) => refuse(&refusal),
+        }
+    })
+}
+
+/// `guatiao_guest_destroy`.
+pub fn destroy(make: fn() -> Library, instance: i64) {
+    let gone = with(make, |registry| registry.instances.remove(&instance));
+    // Dropped outside the registry: a handler may drop host objects.
+    drop(gone);
+}
+
+/// `guatiao_guest_available`: nothing answered is available, text the
+/// reason it is not.
+pub fn available(make: fn() -> Library, target: i64) -> u32 {
+    with(make, |registry| {
+        let served = match provider(registry, target) {
+            Ok(served) => served,
+            Err(refusal) => return refuse(&refusal),
+        };
+        match served.available.as_mut().map_or(Ok(()), |f| f()) {
+            Ok(()) => 0,
+            Err(why) => answer(&Value::from(why.as_str())),
+        }
+    })
 }
 
 /// Reads a number the host answered, for the native tests.
