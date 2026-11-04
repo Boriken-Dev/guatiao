@@ -100,8 +100,11 @@ fn notes(settings: &Settings, got: Got) -> Vec<Note> {
         Got::Joined { environment } => environment,
     };
     if environment {
+        // In effect, beside what the configuration asked: a joined
+        // interpreter runs as it is, whatever that was.
         let mut detail = Map::new();
-        detail.set("isolation", "inherit");
+        detail.set("effective", "inherit");
+        detail.set("configured", settings.isolation.name());
         detail.set("joined", joined);
         let words = if joined {
             "the interpreter already running in this process is used as it is, and its \

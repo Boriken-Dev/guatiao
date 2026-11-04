@@ -134,7 +134,7 @@ fn main() {
         );
         // The host is told when the environment reaches the interpreter.
         let told = if runs {
-            "isolation inherit joined=false"
+            "isolation effective=inherit configured=inherit joined=false"
         } else {
             ""
         };
@@ -576,18 +576,24 @@ fn child(args: &[String]) {
         .notes
         .iter()
         .map(|(_, note)| {
-            let isolation = note.detail().get("isolation");
-            let joined = note.detail().get("joined");
-            format!(
-                "{} {} joined={}",
-                note.subject(),
-                isolation
+            let text = |key: &str| {
+                note.detail()
+                    .get(key)
                     .and_then(TryAsRef::<str>::try_as_ref)
-                    .unwrap_or(""),
-                joined
-                    .and_then(TryAsRef::<bool>::try_as_ref)
-                    .copied()
-                    .unwrap_or_default()
+                    .unwrap_or("")
+                    .to_string()
+            };
+            let joined = note
+                .detail()
+                .get("joined")
+                .and_then(TryAsRef::<bool>::try_as_ref)
+                .copied()
+                .unwrap_or_default();
+            format!(
+                "{} effective={} configured={} joined={joined}",
+                note.subject(),
+                text("effective"),
+                text("configured")
             )
         })
         .collect();

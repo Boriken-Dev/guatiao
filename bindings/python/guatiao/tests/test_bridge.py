@@ -93,7 +93,7 @@ def test_the_host_is_told_what_the_interpreter_it_joined_takes(reg, tmp_path):
     told = {n["subject"]: n["detail"] for n in notes}
     expected = {"home": {"home": sys.base_prefix}}
     if not sys.flags.ignore_environment:
-        expected["isolation"] = {"isolation": "inherit", "joined": True}
+        expected["isolation"] = {"effective": "inherit", "configured": "shipped", "joined": True}
     assert told == expected, notes
     assert "notes" not in reg.refresh()
 
