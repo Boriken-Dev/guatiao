@@ -348,31 +348,58 @@ fn list_home(list: &List, alloc: Home) -> bool {
 
 /// What a walk counts as a tree's home: the allocator named, and, unless
 /// exact, this build's wiping allocator, where a secret stays.
+///
+/// The wiping allocator counts as home by its address, [`Alloc::wiping`]'s
+/// static: a container recording another struct with its `ctx` (a copy
+/// `guatiao_alloc_wiping` filled in a caller's memory, which may go away)
+/// is not home, and the settle points it at the static instead.
 #[derive(Clone, Copy)]
 struct Home {
     alloc: *const crate::value::alloc::Allocator,
-    keeps_secrets: bool,
+    /// [`Alloc::wiping`]'s address, or null when exact.
+    wiping: *const crate::value::alloc::Allocator,
+}
+
+/// What the settle does with a block, by the allocator it recorded.
+enum Settle {
+    /// Home: left as it is.
+    Keep,
+    /// In this build's wiping allocator through a struct other than its
+    /// static: left where it is, the container pointed at the static.
+    Repoint,
+    /// Moved into the allocator named.
+    Move,
 }
 
 impl Home {
     fn keeping(alloc: *const crate::value::alloc::Allocator) -> Home {
         Home {
             alloc,
-            keeps_secrets: true,
+            wiping: Alloc::wiping().as_raw(),
         }
     }
 
     fn exactly(alloc: *const crate::value::alloc::Allocator) -> Home {
         Home {
             alloc,
-            keeps_secrets: false,
+            wiping: core::ptr::null(),
         }
     }
 
     /// Whether a container that recorded `recorded` is home.
     fn holds(self, recorded: *const crate::value::alloc::Allocator) -> bool {
-        is_recorded(recorded, self.alloc)
-            || (self.keeps_secrets && super::types::lives_in_wiping(recorded))
+        is_recorded(recorded, self.alloc) || is_recorded(recorded, self.wiping)
+    }
+
+    /// What the settle does with a block that recorded `recorded`.
+    fn settle(self, recorded: *const crate::value::alloc::Allocator) -> Settle {
+        if self.holds(recorded) {
+            Settle::Keep
+        } else if !self.wiping.is_null() && super::types::lives_in_wiping(recorded) {
+            Settle::Repoint
+        } else {
+            Settle::Move
+        }
     }
 }
 
@@ -505,7 +532,8 @@ fn drain(mut stack: Vec<&Value>, alloc: Home) -> bool {
 /// Moves every block of the tree that `alloc` did not make into one it
 /// did, overwriting the old block and freeing it through its own
 /// allocator; a block in this build's wiping allocator stays where it is,
-/// a secret kept a secret: a container's
+/// a secret kept a secret, its container pointed at [`Alloc::wiping`]'s
+/// static when it recorded another copy of that vtable: a container's
 /// array with its elements moved bitwise, a key's or a leaf's bytes. A
 /// node whose tag this build does not know owns nothing it can see and is
 /// left as it is. One loop over a heap stack, so any depth.
@@ -534,30 +562,41 @@ pub(crate) fn settle_list(list: &mut List, alloc: Alloc) -> Result<(), ValueErro
 
 /// [`settle_value`] for a text.
 pub(crate) fn settle_text(text: &mut Text, alloc: Alloc) -> Result<(), ValueError> {
-    if !Home::keeping(alloc.as_raw()).holds(text.alloc) {
-        text.rehome(alloc)?;
+    let home = Home::keeping(alloc.as_raw());
+    match home.settle(text.alloc) {
+        Settle::Keep => {}
+        Settle::Repoint => text.alloc = home.wiping,
+        Settle::Move => text.rehome(alloc)?,
     }
     Ok(())
 }
 
 /// [`settle_value`] for a buffer.
 pub(crate) fn settle_buffer(buffer: &mut Buffer, alloc: Alloc) -> Result<(), ValueError> {
-    if !Home::keeping(alloc.as_raw()).holds(buffer.alloc) {
-        buffer.rehome(alloc)?;
+    let home = Home::keeping(alloc.as_raw());
+    match home.settle(buffer.alloc) {
+        Settle::Keep => {}
+        Settle::Repoint => buffer.alloc = home.wiping,
+        Settle::Move => buffer.rehome(alloc)?,
     }
     Ok(())
 }
 
-/// A container's array is moved when another allocator made it, or when
-/// it is not owned at all (`cap == 0`): its elements are about to be
-/// written, and a literal's array may be read-only.
+/// What the settle does with a container's array: moved when another
+/// allocator made it, or when it is not owned at all (`cap == 0`), since
+/// its elements are about to be written and a literal's array may be
+/// read-only.
 fn settle_array(
     recorded: *const crate::value::alloc::Allocator,
     len: usize,
     cap: usize,
-    alloc: Alloc,
-) -> bool {
-    !Home::keeping(alloc.as_raw()).holds(recorded) || (cap == 0 && len > 0)
+    home: Home,
+) -> Settle {
+    if cap == 0 && len > 0 {
+        Settle::Move
+    } else {
+        home.settle(recorded)
+    }
 }
 
 fn settle_map_into<'a>(
@@ -565,8 +604,11 @@ fn settle_map_into<'a>(
     alloc: Alloc,
     stack: &mut Vec<&'a mut Value>,
 ) -> Result<(), ValueError> {
-    if settle_array(map.alloc, map.len, map.cap, alloc) {
-        map.rehome(alloc)?;
+    let home = Home::keeping(alloc.as_raw());
+    match settle_array(map.alloc, map.len, map.cap, home) {
+        Settle::Keep => {}
+        Settle::Repoint => map.alloc = home.wiping,
+        Settle::Move => map.rehome(alloc)?,
     }
     for entry in map.entries_mut() {
         settle_text(&mut entry.key, alloc)?;
@@ -580,8 +622,11 @@ fn settle_list_into<'a>(
     alloc: Alloc,
     stack: &mut Vec<&'a mut Value>,
 ) -> Result<(), ValueError> {
-    if settle_array(list.alloc, list.len, list.cap, alloc) {
-        list.rehome(alloc)?;
+    let home = Home::keeping(alloc.as_raw());
+    match settle_array(list.alloc, list.len, list.cap, home) {
+        Settle::Keep => {}
+        Settle::Repoint => list.alloc = home.wiping,
+        Settle::Move => list.rehome(alloc)?,
     }
     for item in list.iter_mut() {
         settle_child(item, alloc, stack)?;

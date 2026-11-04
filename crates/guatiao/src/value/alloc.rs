@@ -254,8 +254,15 @@ impl Alloc {
     /// byte. A node built elsewhere and stored into a tree that lives
     /// here keeps its own allocator, and a copy taken out of it (a
     /// `String`, a binding's string) is the copier's to wipe. `clone()`
-    /// of a tree that lives here copies into this allocator; `into_local`
-    /// moves it into [`Alloc::rust`], which does not wipe.
+    /// of a tree that lives here copies into this allocator, and
+    /// `into_local`, `into_alloc` and `make_local_in` leave it here; a
+    /// kind's answer alone moves into exactly the carrier named.
+    ///
+    /// **Its address is home.** A container recording another struct with
+    /// this allocator's `ctx` (one `guatiao_alloc_wiping` filled in a
+    /// caller's memory) is pointed at this one by `make_local_in`, and
+    /// copied here by `into_local` and `into_alloc`, so it outlives that
+    /// struct.
     pub fn wiping() -> Alloc {
         /// As in [`Alloc::rust`].
         struct Vtable(Allocator);

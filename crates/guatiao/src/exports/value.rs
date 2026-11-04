@@ -87,8 +87,10 @@ pub unsafe extern "C" fn guatiao_value_clone(
 /// another allocator made is moved into one from `alloc` and the old one
 /// overwritten with zeros and freed through the allocator that made it.
 /// A block in this library's wiping allocator stays where it is, a secret
-/// kept a secret. Allocates nothing when everything already records
-/// `alloc` or lives there.
+/// kept a secret, its container pointed at the library's own wiping
+/// allocator if it recorded a copy `guatiao_alloc_wiping` filled.
+/// Allocates nothing when everything already records `alloc` or the
+/// library's own wiping allocator.
 ///
 /// What a caller of a kind table calls on a tree answer, or a lent tree,
 /// a slot may have built in the library's own allocator: afterwards the
@@ -742,7 +744,11 @@ pub unsafe extern "C" fn guatiao_alloc_default(out: *mut Allocator) -> Status {
 /// this one is overwritten before it is released. A move between any two
 /// allocators (`guatiao_value_make_local`) overwrites the block it leaves
 /// as well, and a copy (`guatiao_value_clone`) of a node that lives here
-/// is made here, whatever allocator was asked for. Build a secret here
+/// is made here, whatever allocator was asked for. `out` is a copy of
+/// this library's own wiping allocator: a tree built through it records
+/// `out`, which must outlive it as any allocator must, and
+/// `guatiao_value_make_local` points what it keeps at the library's own,
+/// so the tree no longer needs `out`. Build a secret here
 /// from its first byte: a node built in another allocator keeps that
 /// allocator when it is stored into a tree that lives here. A slot whose
 /// kind marks it `sensitive` names this allocator in its carrier.

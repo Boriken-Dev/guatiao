@@ -19,7 +19,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
-use guatiao::value::{Allocator, Dump, rust_alloc};
+use guatiao::value::{Allocator, Dump, rust_alloc, wiping_alloc};
 use guatiao::{Alloc, Buffer, List, Map, Secret, Text, Value, Wipe};
 
 const SECRET: &[u8] = b"hunter2-SECRET";
@@ -668,4 +668,42 @@ fn a_tree_holding_a_secret_is_local_and_moves_no_more() {
     let mut v = v;
     v.make_local_in(Alloc::rust()).unwrap();
     assert_eq!(at(&v), before, "make_local_in moved a secret out");
+}
+
+/// A secret built through a copy of the wiping vtable that goes away (a C
+/// caller's `guatiao_alloc` on its stack, filled by `guatiao_alloc_wiping`)
+/// and then kept through a move: the container ends up recording this
+/// build's own wiping allocator, never the copy.
+#[test]
+fn a_secret_kept_through_a_move_records_this_builds_own_wiping_allocator() {
+    let wiping = Alloc::wiping().as_raw();
+    for how in ["make_local_in", "into_local", "into_alloc"] {
+        let copy = Box::new(wiping_alloc());
+        // SAFETY: a complete vtable, alive until the tree moves.
+        let through_copy = unsafe { Alloc::from_raw(&*copy) }.unwrap();
+        assert!(through_copy.is_wiping());
+        let mut map = Map::new();
+        map.set("user", Text::new("alice"));
+        map.set(
+            "token",
+            Value::from(Text::new_in(through_copy, secret()).unwrap()),
+        );
+        let map = match how {
+            "make_local_in" => {
+                let mut map = map;
+                map.make_local_in(Alloc::rust()).unwrap();
+                map
+            }
+            "into_local" => map.into_local(),
+            _ => map.into_alloc(Alloc::rust()).unwrap(),
+        };
+        let token = map.get("token").unwrap().alloc().unwrap();
+        assert!(
+            core::ptr::eq(token.as_raw(), wiping),
+            "{how} left the secret recording the copy"
+        );
+        drop(copy);
+        assert!(map.get("token").unwrap().is_sensitive());
+        drop(map);
+    }
 }
