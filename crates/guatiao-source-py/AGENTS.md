@@ -35,7 +35,7 @@ over the one interpreter.
 | `manifests` | manifest files, listed as well | none |
 | `paths` | put first on `sys.path` once, when the source is added: where `guatiao` and shared kind modules are | none |
 | `isolation` | how much the interpreter this file starts takes from outside the configuration: `shipped`, `inherit` or `isolated` (below) | `shipped` |
-| `home` | the Python installation that interpreter runs from (`sys.base_prefix`): an existing directory, relative to this file's; not taken under `inherit` | CPython's own answer; under `isolated`, libpython's directory (Windows) or the one above its `lib` |
+| `home` | the Python installation that interpreter runs from (`sys.base_prefix`): an existing directory, relative to this file's; not taken under `inherit`. It does not decide where `python3.dll` comes from: that is mapped before this file runs (`import_dirs`) | CPython's own answer; under `isolated`, libpython's directory (Windows) or the one above its `lib` |
 | `import_dirs` | the registry's, not this file's: on Windows, where `python3.dll` (and the `python3XX.dll` it forwards to) is found when it is not beside the file or the host, as `[sys.base_prefix]`; relative to this file's directory | none |
 
 A list key holding anything but a list of text, `isolation` naming no
@@ -148,7 +148,13 @@ pyo3's embedding links one `libpython` at build:
   configuration's `import_dirs` (the registry maps `python3.dll` and the
   `python3XX.dll` it forwards to from there, under its default import
   search), or puts it on `PATH` and sets the registry's import search to
-  `path`.
+  `path`. The file imports `python3.dll` by name, so the registry maps it
+  before any of this file's code runs: `home` cannot choose it, and a
+  configuration naming only `home` is refused under the default search.
+  The installation named in `import_dirs` is the interpreter's `home`
+  too when `home` is not given; name `home` as well only for a standard
+  library kept elsewhere, of the same version (another version's is
+  refused, in CPython's words).
 - **Linux**: the build has `NEEDED libpython3.X.so.1.0`, the minor of the
   Python it was built with (`PYO3_PYTHON`), abi3 or not; build one per
   minor, against the host's own when the host is Python.
