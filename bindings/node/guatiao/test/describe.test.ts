@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { describeInterfaces, floorHashOf } from '../src/describe.js';
+import { generate } from '../src/generate.js';
 import { type KindsDocument, kindsOf } from '../src/kinds.js';
 import { REPO, readText } from './helpers.js';
 
@@ -283,6 +284,20 @@ export interface Between {
     expect(document.kinds[0]?.slots).toEqual(between.slots);
     expect(document.kinds[0]?.floor_hash).toBe(between.floor_hash);
     expect(kindsOf(document).between).toBeDefined();
+  });
+
+  it('describes a list borrowed as the shared vector does, and writes its module', async () => {
+    const document = await describeText(`${HEAD}
+export interface Summer {
+  sum(items: ListRef): i64;
+}
+`);
+    const file = path.join(REPO, 'crates', 'guatiao-derive', 'tests', 'vectors', 'floor_hash.json');
+    const { vectors } = JSON.parse(readText(file)) as { vectors: { name: string; slots: unknown; floor_hash: number }[] };
+    const borrowed = vectors.find((v) => v.name === 'a_borrowed_list')!;
+    expect(document.kinds[0]?.slots).toEqual(borrowed.slots);
+    expect(document.kinds[0]?.floor_hash).toBe(borrowed.floor_hash);
+    expect(generate(document).dts).toContain('  sum(items: g.ListRef): number | bigint;');
   });
 
   it('reaches the object kinds its slots name, in another file too', async () => {
