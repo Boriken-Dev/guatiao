@@ -198,3 +198,39 @@ describe('intake', () => {
     expect(back.toJS()).toEqual({ PATH: '/bin' });
   });
 });
+
+describe('providerForm', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      user: { type: 'string', 'x-section': 'account' },
+      token: { type: 'string', 'x-sensitive': true },
+    },
+  };
+  const declared = { sections: [{ id: 'account', title: 'Account' }] };
+
+  it('is the form a provider declares, else the one its schema implies', () => {
+    using own = intake.providerForm(schema, { [intake.providerFormKey]: declared, other: 1 })!;
+    expect(own.toJS()).toEqual(declared);
+
+    using implied = intake.providerForm(schema, null)!;
+    const made = implied.toJS<{ sections: unknown[]; fields: { token: { widget: string } } }>();
+    expect(made.sections).toEqual([{ id: 'account' }]);
+    expect(made.fields.token.widget).toBe('password');
+
+    // Meta without a form is the same as none; refs work as plain data does.
+    using held = new Value(schema);
+    using meta = new Value({ other: 1 });
+    using again = intake.providerForm(held, meta)!;
+    expect(again.toJS()).toEqual(made);
+  });
+
+  it('skips what is malformed and answers null when nothing is left', () => {
+    expect(intake.providerForm(null, null)).toBe(null);
+    expect(intake.providerForm(undefined, { other: 1 })).toBe(null);
+    using implied = intake.providerForm(schema, null)!;
+    using fallback = intake.providerForm(schema, { [intake.providerFormKey]: ['not', 'a', 'form'] })!;
+    expect(fallback.toJS()).toEqual(implied.toJS());
+    expect(intake.providerForm(null, { [intake.providerFormKey]: 'a form' })).toBe(null);
+  });
+});

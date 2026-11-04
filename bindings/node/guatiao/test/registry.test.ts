@@ -5,7 +5,8 @@
 // Registry against a real --all-features build: scanning, answers,
 // instances, retire, collect and unload, and sources.
 
-import { copyFileSync, mkdirSync, renameSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -151,6 +152,83 @@ describe('Registry', () => {
     reg.close();
     expect(() => reg.libraries()).toThrow(TypeError);
     reg.close();
+  });
+});
+
+describe('catalog', () => {
+  /** The C catalog library copied into a directory of its own, so each test counts from zero. */
+  function catalogCopy(ctx: { skip: (note?: string) => never }, name: string): { dir: string; file: string } {
+    const built = cLibraries()?.catalog;
+    if (built === undefined) return ctx.skip('no C compiler: the catalog library is not built');
+    const dir = scratch(name);
+    const file = path.join(dir, path.basename(built));
+    copyFileSync(built, file);
+    return { dir, file };
+  }
+
+  it('lists every provider of a directory with all its fields and builds none', (ctx) => {
+    const { dir, file } = catalogCopy(ctx, 'catalog');
+    using reg = new Registry('catalog-host', '1.0');
+    const report = reg.scanDir(dir) as { loaded: string[]; failed: unknown[] };
+    expect(report.failed).toEqual([]);
+    expect(report.loaded).toHaveLength(1);
+    const catalog = Object.fromEntries(reg.catalog().map((entry) => [entry.id as string, entry]));
+    expect(Object.keys(catalog).sort()).toEqual([
+      'catalog_configured',
+      'catalog_implied',
+      'catalog_plain',
+      'catalog_unavailable',
+    ]);
+    const digest = `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}`;
+
+    const configured = catalog.catalog_configured!;
+    expect(configured.kinds).toEqual(['counter']);
+    expect(configured.display_name).toBe('Configured, with a form');
+    expect(configured.version).toBe('2.0');
+    expect(configured.library).toBe('catalog_library');
+    expect(configured.library_version).toBe('1.0');
+    expect(configured.digest).toBe(digest);
+    expect(configured.available).toBe(true);
+    expect(configured).not.toHaveProperty('reason');
+    expect((configured.config as { required: string[] }).required).toEqual(['host', 'port']);
+    expect((configured.meta as { form: { sections: unknown[] } }).form.sections).toEqual([{ id: 'net', title: 'Network' }]);
+
+    const implied = catalog.catalog_implied!;
+    expect(implied.version).toBe('1.0');
+    expect(implied).not.toHaveProperty('meta');
+    expect((implied.config as { properties: { token: Record<string, unknown> } }).properties.token['x-sensitive']).toBe(true);
+
+    const unavailable = catalog.catalog_unavailable!;
+    expect(unavailable.available).toBe(false);
+    expect(unavailable.reason).toBe('no device here');
+    expect(unavailable).not.toHaveProperty('config');
+    expect(unavailable.has_config).toBe(false);
+    expect(catalog.catalog_plain!.available).toBe(true);
+
+    // Listing asked the library for nothing: its count says so, and so does
+    // its refusal of the first instance asked for afterwards.
+    const built = n.koffi().load(file).func('int catalog_built()');
+    expect(built()).toBe(0);
+    expect(() => reg.create('catalog_configured', { host: 'localhost', port: 8080 })).toThrow(
+      'built nothing: the first create this library was asked',
+    );
+    expect(built()).toBe(1);
+  });
+
+  it('names why a library has no digest', (ctx) => {
+    const { dir, file } = catalogCopy(ctx, 'catalog-swapped');
+    using reg = new Registry('catalog-host', '1.0');
+    reg.loadFile(file);
+    // Another file at the path, before anything asked: renaming a mapped
+    // file works on every platform, where overwriting one does not.
+    renameSync(file, path.join(dir, 'moved_away.bin'));
+    writeFileSync(file, 'not the library');
+    const catalog = reg.catalog();
+    expect(catalog).toHaveLength(4);
+    for (const entry of catalog) {
+      expect(entry).not.toHaveProperty('digest');
+      expect(entry.digest_error).toBe('the file changed since it was loaded');
+    }
   });
 });
 

@@ -115,6 +115,7 @@ import { Registry } from 'guatiao';
 using reg = new Registry('my-host', '1.0');
 reg.scanDir('/path/to/plugins', { rules: 'kind=greeter' });   // rules: newline-separated
 reg.providers('greeter');        // plain objects, best first
+reg.catalog();                   // every provider, none built: providers() plus available/reason, config, meta, library_key, library_version, digest or digest_error
 reg.best('greeter');             // { key, id, version, library, display_name, from, kinds, has_config, vtable_size }
 reg.whyNot('codec');             // { available: false, why: 'nothing-claims-it', ... }
 const greeter = reg.bind('acme_hello', Greeter);                // a Remote (see Kinds)
@@ -125,6 +126,14 @@ instance.bind(Greeter).greet('ana');
 Also `loadFile(path)`, `scanPath(spec, { descending, rules })`,
 `registerEntry(name, entry)` (the address of a `guatiao_library_entry`),
 `registerLibrary(library)` (see Providers), `libraries()`,
+`catalog()` (every provider of every loaded library, best first, for a
+settings screen, with none built: what `providers()` holds plus
+`available` (asked now) and `reason`, `config` and `meta` when it
+declares them, `library_key`, `library_version`, and `digest`
+(`'sha256:'` and the hex of the file its library was mapped from,
+while it is still that file) or `digest_error` saying why not; the
+first call reads each library file in full; `providerForm` of
+`guatiao-intake` answers the form to show an entry with),
 `provider(key)`, `available(kind)`, `providerAvailable(key)` (`{
 available, reason? }`), `keyedBy(template)` / `librariesKeyedBy`,
 `setPriority` / `priority`, `importSearch` (get and set, `ImportSearch`:

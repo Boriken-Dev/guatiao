@@ -272,6 +272,12 @@ status names (`BadValue`, `NotFound`, ...) with the provider's own words.
 A tree answered is a `Value` the caller closes; an object answered is an
 `ObjectHandle` whose `close()` destroys it.
 
+A settings screen lists every provider of every loaded library at once,
+none of them built, with `reg.catalog()` (plain objects, best first: what
+`providers()` holds plus availability, `config`, `meta`, the library's
+`digest` or a `digest_error`), and takes the form to show one with from
+`intake.providerForm(entry.config, entry.meta)` of `guatiao-intake`.
+
 Sources work as in every binding: `reg.addSourceFile(path, config)` adds
 a source such as the guatiao-source-py bridge, and `reg.refresh()` loads what it
 serves. A Node host calls greeters written in Python that way.

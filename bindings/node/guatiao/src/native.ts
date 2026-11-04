@@ -351,6 +351,7 @@ const CORE: readonly Declared[] = [
   ],
   ['uint32_t guatiao_registry_libraries(void *reg, void *alloc, void *out)', 'load'],
   ['uint32_t guatiao_registry_providers(void *reg, guatiao_str kind, void *alloc, void *out)', 'load'],
+  ['uint32_t guatiao_registry_catalog(void *reg, void *alloc, void *out)', 'load'],
   ['uint32_t guatiao_registry_provider(void *reg, guatiao_str key, void *alloc, void *out)', 'load'],
   ['uint32_t guatiao_registry_available(void *reg, guatiao_str kind, void *alloc, void *out)', 'load'],
   ['uint32_t guatiao_registry_why_not(void *reg, guatiao_str kind, void *alloc, void *out)', 'load'],

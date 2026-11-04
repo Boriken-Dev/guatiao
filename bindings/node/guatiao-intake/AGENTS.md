@@ -74,6 +74,15 @@ status's `GuatiaoError`.
 
 ## A provider's form
 
+`providerForm(schema, meta)` answers the form a provider's settings
+are shown with: the one it declares in `meta` under `providerFormKey`,
+else the one `schema` implies (`forSchema`). Each argument is a `Ref`,
+plain data or `null`/`undefined` (what `Registry.catalog()` lists as
+`config` and `meta` fits); what is not a map is skipped, as reading the
+key by hand skips it. A `Value` the caller closes, or `null` when the
+provider declares no form and takes no configuration. A declared form
+is not checked here; `check` does that.
+
 A provider's form travels in its `meta`, under `providerFormKey`
 (`'form'`), beside the configuration schema it is shown with:
 

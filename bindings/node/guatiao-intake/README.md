@@ -85,6 +85,7 @@ intake.check(registry.providerConfig('acme_dialer')!, meta.asMap().get(intake.pr
 | Name | Purpose |
 | --- | --- |
 | `check`, `layout`, `isVisible`, `forSchema`, `formFor` | a form over a schema |
+| `providerForm` | the form a provider's settings are shown with |
 | `at` | a path's place in a value |
 | `resolve`, `flatKeys`, `flatten`, `unflatten` | the flat `key -> text` store |
 | `providerFormKey` | where a provider's `meta` carries its form |

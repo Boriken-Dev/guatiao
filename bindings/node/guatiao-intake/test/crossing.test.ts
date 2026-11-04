@@ -34,6 +34,19 @@ describe('a tree between intake and the core', () => {
     schema.close();
   });
 
+  it("gives each catalog entry its form, declared or implied", () => {
+    using reg = new Registry('node-tests', '0.1');
+    reg.scanDir(libraryDir(), { rules: 'kind=greeter' });
+    const catalog = Object.fromEntries(reg.catalog().map((entry) => [entry.id as string, entry]));
+    const shouter = catalog.derived_greeter_shouter!;
+    using form = intake.providerForm(shouter.config, shouter.meta)!;
+    using schema = new Value(shouter.config);
+    expect((form.toJS() as { sections: { id: string }[] }).sections.map((s) => s.id)).toEqual(['words', 'volume']);
+    expect(intake.check(schema, form)).toBe(null);
+    const hello = catalog.derived_greeter_hello!;
+    expect(intake.providerForm(hello.config, hello.meta)).toBe(null);
+  });
+
   it("reads a provider's form from its meta, and it fits the schema", () => {
     using reg = new Registry('node-tests', '0.1');
     reg.scanDir(libraryDir(), { rules: 'kind=greeter' });

@@ -211,6 +211,21 @@ export class Registry implements Disposable {
     return this.#answer('guatiao_registry_providers', n.str(kind)) as Record<string, unknown>[];
   }
 
+  /**
+   * Every provider of every loaded library, best first, with what a settings
+   * screen shows about each and none of them built: what `providers()` holds,
+   * plus `available` (asked now) and `reason` when it cannot run, `config` (its
+   * schema) and `meta` when it declares them, `library_key`, `library_version`,
+   * and `digest` (`"sha256:"` and the hex of the file its library was mapped
+   * from, while it is still that file) or `digest_error` saying why not. The
+   * first call reads each library file in full.
+   * `providerForm(entry.config, entry.meta)` of `guatiao-intake` answers the
+   * form to show it with.
+   */
+  catalog(): Record<string, unknown>[] {
+    return this.#answer('guatiao_registry_catalog') as Record<string, unknown>[];
+  }
+
   /** The providers of `kind` that can run here, best first. */
   available(kind = ''): Record<string, unknown>[] {
     return this.#answer('guatiao_registry_available', n.str(kind)) as Record<string, unknown>[];
