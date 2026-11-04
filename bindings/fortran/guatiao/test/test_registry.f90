@@ -400,9 +400,14 @@ contains
   subroutine a_catalog_names_why_a_library_has_no_digest()
     type(guatiao_registry) :: reg
     type(guatiao_value) :: catalog, e, f
-    character(:), allocatable :: file, first, second
-    integer :: i, u, code
-    file = catalog_library('build/catalog_b')
+    character(:), allocatable :: file, folder, aside, first, second
+    character(24) :: stamp
+    integer :: i, u, code, count
+    ! A folder of its own each run, so nothing a run left behind is in the way.
+    call system_clock(count)
+    write (stamp, '(i0)') count
+    folder = 'build/catalog_b_' // trim(stamp)
+    file = catalog_library(folder)
     if (len(file) == 0) then
       call skip('the C catalog library: no C compiler built it (set CC)')
       return
@@ -412,11 +417,18 @@ contains
     ! Another file at the path, before anything asked: renaming a mapped
     ! file works on every platform, where overwriting one does not.
     call gt_library_file_names('fortran_catalog_library', first, second)
+    aside = folder // '/moved_away.bin'
     if (gt_windows) then
-      call execute_command_line('move "build\catalog_b\' // first // '" "build\catalog_b\moved_away.bin" > NUL', exitstat=code)
+      call execute_command_line('if exist "' // folder // '/moved_away.bin" del /q "' // folder // '/moved_away.bin"', &
+                                exitstat=code)
+      call execute_command_line('move /y "' // folder // '\' // first // '" "' // folder // '\moved_away.bin" > NUL', &
+                                exitstat=code)
     else
-      call execute_command_line('mv build/catalog_b/' // first // ' build/catalog_b/moved_away.bin', exitstat=code)
+      call execute_command_line('rm -f ' // aside, exitstat=code)
+      call execute_command_line('mv ' // folder // '/' // first // ' ' // aside, exitstat=code)
     end if
+    call check(code == 0, 'the library file was moved aside')
+    if (code /= 0) return
     open (newunit=u, file=file, access='stream', form='unformatted', status='replace')
     write (u) 'not the library'
     close (u)
