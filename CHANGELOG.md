@@ -14,6 +14,16 @@ write now.
 
 ### Added
 
+- **A JavaScript provider is built from a configuration and asked whether
+  it runs under guatiao-source-js as under Node.** `static config` (an `s`
+  schema, which `guatiao/provide` now gives) or `static configSchema`
+  offers the provider with that schema; a host's instance is `new
+  Class(config)`, its slots called on it and its `[Symbol.dispose]()` run
+  when the host drops it, and the class is callable as itself only with
+  `static default = true`. `static available()` is asked each time a host
+  asks, where it was asked once when the library opened and an
+  unavailable provider left out.
+
 - **A source tells its host what is worth showing.** A note is neither a
   refusal nor a skip: `{"subject", "text", "detail"}`, words for a person
   and a map a program reads ([the encoding](https://boriken-dev.github.io/guatiao/encodings/#a-sources-note)).
