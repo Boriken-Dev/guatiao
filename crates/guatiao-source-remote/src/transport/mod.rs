@@ -74,6 +74,16 @@ pub trait FrameRead: Send {
         Ok(())
     }
 
+    /// Tells the reader the largest frame the link will read from now on
+    /// (its `max_frame`), before the peer can send one: a message transport
+    /// whose channel judges a message by the bound in force when it
+    /// arrives, ahead of the reader, needs it raised before that, not
+    /// as the reader asks for the frame. The `max` of each read still
+    /// bounds the frame it returns. A stream ignores it.
+    fn set_max_frame(&mut self, bytes: usize) {
+        let _ = bytes;
+    }
+
     /// The peer's identity as the transport proved it, `sha256:<hex>` (a
     /// TLS certificate's fingerprint), once the first read has run the
     /// transport's own handshake; `None` on a transport that proves none.

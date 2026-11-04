@@ -174,6 +174,8 @@ fn a_frame_past_what_the_peer_takes_is_refused_by_the_writer() {
 #[test]
 fn a_burst_of_large_frames_waits_for_a_slow_peer_to_take_them() {
     let (mut server, mut client) = pair("ws");
+    // Raised before the client sends: a channel judges a message as it arrives.
+    server.reader.set_max_frame(64 << 20);
     client.writer.set_max_frame(64 << 20);
     client
         .writer
@@ -213,6 +215,7 @@ fn a_burst_of_large_frames_waits_for_a_slow_peer_to_take_them() {
 #[test]
 fn a_write_the_peer_takes_nothing_of_ends_at_the_timeout() {
     let (mut server, mut client) = pair("ws");
+    server.reader.set_max_frame(64 << 20);
     client.writer.set_max_frame(64 << 20);
     client
         .writer
