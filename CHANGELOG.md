@@ -33,6 +33,13 @@ write now.
   its slots called on it and its `[Symbol.dispose]()` run when the host
   drops it, and the class is callable as itself only with `static
   default = true`.
+- **A Rhai provider is built from a configuration and asked whether it
+  runs.** A provider's map may declare `config` (a JSON Schema as a map),
+  `create` (a function of the configuration answering the instance's
+  state, `this` in its slots), `instances_only` and `available` (`()` or
+  a reason); guatiao-source-rhai serves them as the provider's `create`,
+  `destroy` and `available` slots, running `create` and `available` under
+  the source's limits.
 - **A source tells its host what is worth showing.** A note is neither a
   refusal nor a skip: `{"subject", "text", "detail"}`, words for a person
   and a map a program reads ([the encoding](https://boriken-dev.github.io/guatiao/encodings/#a-sources-note)).

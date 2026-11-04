@@ -124,3 +124,39 @@ let spin = #{ kinds: ["greeter"], greet: |name| {
     with pytest.raises(Exception, match=r"stopped at its operations limit \(100000\)"):
         spin.greet("loop")
     assert spin.greet("bo").to_python() == {"greeting": "calm, bo"}
+
+
+def test_a_provider_is_built_from_a_configuration_and_asked_whether_it_runs(reg, tmp_path):
+    (tmp_path / "rhai_tuned.rhai").write_text(
+        """
+const VERSION = "1.0.0";
+let tuned = #{
+  kinds: ["greeter"],
+  config: #{ type: "object", properties: #{ word: #{ type: "string" } }, required: ["word"] },
+  instances_only: true,
+  create: |config| {
+    if config.word == "nobody" { throw "`nobody` greets nobody"; }
+    #{ word: config.word }
+  },
+  greet: |name| #{ greeting: `${this.word}, ${name}` },
+};
+let down = #{ kinds: ["greeter"], available: || "the device is unplugged", greet: |n| #{} };
+#{ providers: #{ tuned: tuned, down: down } }
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "rhai_tuned.guatiao").write_text(
+        'type = "rhai"\nmodule = "rhai_tuned"\nkinds = ["greeter"]\n', encoding="utf-8"
+    )
+    reg.add_source_file(_SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS]})
+    assert reg.refresh()["refused"] == []
+    with reg.create("rhai_tuned_tuned", {"word": "howdy"}) as howdy:
+        with reg.create("rhai_tuned_tuned", {"word": "hey"}) as hey:
+            assert howdy.bind(Greeter).greet("ana").to_python() == {"greeting": "howdy, ana"}
+            assert hey.bind(Greeter).greet("bo").to_python() == {"greeting": "hey, bo"}
+    with pytest.raises(Exception, match="`nobody` greets nobody"):
+        reg.create("rhai_tuned_tuned", {"word": "nobody"})
+    with pytest.raises(Exception):
+        reg.create("rhai_tuned_tuned", {})
+    assert reg.provider_available("rhai_tuned_tuned") == (True, None)
+    assert reg.provider_available("rhai_tuned_down") == (False, "the device is unplugged")
