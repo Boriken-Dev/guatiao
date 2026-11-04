@@ -13,6 +13,7 @@ function cases = t_provide()
     'a provider is checked when its library is made', @provider_refusals
     'what a provider answers lands in the caller''s allocator', @answers_in_carrier
     'a lent map grows in the allocator it records', @lent_map
+    'a list borrowed is read, and stays the caller''s', @borrowed_list
     'a map handed over is freed, whatever the provider answers', @handed_over
     'a map handed over and kept is all the provider''s own', @kept_handed_over
     'nothing crosses when an argument is refused before the call', @refused_before
@@ -79,7 +80,6 @@ function kind_refusals()
   memo = 'greeterkind.Listener';
   refused = {
     {guatiao.slot('header', {})}, 'bad.header: the table''s first field'
-    {guatiao.slot('sum', {'items', 'list'}, 'Returns', 'int64')}, 'bad.sum(items): a list is not borrowed'
     {guatiao.slot('fill', {'dst', guatiao.lent('bytes')})}, 'bad.fill(dst): bytes written in place cross on an object kind only'
     {guatiao.slot('read', {'l', guatiao.lent(memo)})}, 'bad.read(l): an object crosses on a fallible slot only'
     {guatiao.slot('give', {'l', guatiao.taken(memo)})}, 'bad.give(l): an object crosses on a fallible slot only'
@@ -94,6 +94,8 @@ function kind_refusals()
   end
   d = guatiao.Kind.describe('fine', 1, guatiao.slot('fill', {'dst', guatiao.lent('bytes')}), 'Object', true);
   expect_equal(d.object, true);
+  d = guatiao.Kind.describe('fine', 1, guatiao.slot('sum', {'items', 'list'}, 'Returns', 'int64'));
+  expect_equal(numel(d.slots), 1);
   d = guatiao.Kind.describe('fine', 1, guatiao.slot('open', {'l', guatiao.lent(memo)}, 'Returns', memo, 'Fallible', true));
   expect_equal(d.slots{1}.fallible, true);
   expect_error(@() guatiao.slot('f', {'x'}), 'guatiao:BadValue');
@@ -151,6 +153,20 @@ function lent_map()
   expect_equal(config.data(), struct('name', 'bo', 'greeting', 'hello, bo'));
   config.close();
   expect_equal(c.live(), 0);
+end
+
+function borrowed_list()
+  reg = preg();
+  reg.register_library(guatiao.Library('m_adds', '0.1.0', {'gtt.Adds'}));
+  s = reg.bind('m_adds_adds', 'gtt.Summer');
+  expect_equal(s.total({40, 2}), 42);
+  held = guatiao.Value({1, 2, 3});
+  expect_equal(s.total(held), 6);
+  expect_equal(held.length(), 3, 'the caller''s list, as it was');
+  held.close();
+  refused = gtt.Adds.refused();
+  expect_equal(numel(refused), 2);
+  expect_true(all(~cellfun(@isempty, strfind(refused, 'read-only'))), strjoin(refused, '; '));
 end
 
 function handed_over()

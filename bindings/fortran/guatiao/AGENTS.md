@@ -525,7 +525,7 @@ and `guatiao_settle_value`, `guatiao_lent_map` and
 `guatiao_taken_map` and `guatiao_taken_list` (the tree moved into the
 binding's default allocator, so the method may keep it; pass `stat` and
 refuse the call on a non-zero one: without it a refused move answers an
-absent tree), `guatiao_borrowed_map`,
+absent tree), `guatiao_borrowed_map`, `guatiao_borrowed_list`,
 `guatiao_borrowed_value`, `guatiao_take_object`, `guatiao_lend_object`
 and `guatiao_end_lent_object`, `guatiao_serve_object`,
 `guatiao_lend_impl`, `guatiao_string_out`), calls the method in a

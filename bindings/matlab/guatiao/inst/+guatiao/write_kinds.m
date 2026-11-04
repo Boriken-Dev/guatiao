@@ -184,9 +184,6 @@ function shape = shape_of(t, classes, objects, pkg, where)
     case {'value', 'map', 'list'}
       switch pass
         case 'borrowed'
-          if strcmp(type, 'list')
-            error('guatiao:BadValue', '%s: a list is not borrowed', where);
-          end
           shape = quoted(type);
         case {'lent', 'taken'}
           shape = ['guatiao.' pass '(' quoted(type) ')'];

@@ -64,7 +64,6 @@ function refusals()
   memo = [']}, {"name": "memo", "floor_hash": 2, "object": true, "slots": [' ...
           '{"name": "count", "required": true, "fallible": false, "args": []}'];
   cases = {
-    sprintf(slot, '{"name": "l", "type": "list", "pass": "borrowed"}', ''), 'a list is not borrowed'
     sprintf(slot, '{"name": "o", "type": "object", "kind": "far", "pass": "lent"}', ''), 'not in this document'
     sprintf(slot, '', ', "answer": {"type": "bytes"}'), 'an answer cannot be bytes'
     strrep(sprintf(slot, '', ''), '"f"', '"close"'), 'names no method'

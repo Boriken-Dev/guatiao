@@ -88,9 +88,8 @@ refusal(e) = sprint(showerror, e isa LoadError ? e.error : e)
     bad = Dict("kinds" => [Dict("name" => "k", "floor_hash" => 1, "object" => false,
         "slots" => [Dict("name" => "x", "required" => true, "fallible" => false,
                          "args" => [Dict("name" => "a", "type" => "list", "pass" => "borrowed")])])])
-    # Plain data is declared as @kind declares it, and refused as @kind refuses it.
-    e = try Guatiao.kinds_of(bad) catch e; e end
-    @test occursin("K.x(a): a list is not borrowed", refusal(e))
+    # Plain data is declared as @kind declares it: a list may be borrowed.
+    @test haskey(Guatiao.kinds_of(bad), "k")
 end
 
 @testset "@kind refuses what no trait declares, with no description and no library" begin
@@ -101,7 +100,7 @@ end
         refusal(e)
     end
     @test occursin("K.header: the table's first field", declare(:(begin header()::Nothing end)))
-    @test occursin("K.sum(items): a list is not borrowed", declare(:(begin sum(items::ListRef)::Int64 end)))
+    @test declare(:(begin sum(items::ListRef)::Int64 end)) === nothing
     @test occursin("K.fill(dst): bytes written in place cross on an object kind only",
         declare(:(begin fill(dst::Lent{Vector{UInt8}})::UInt end)))
     @test declare(:(begin fill(dst::Lent{Vector{UInt8}})::UInt end); object = true) === nothing

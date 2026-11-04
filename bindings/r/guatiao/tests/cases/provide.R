@@ -50,6 +50,16 @@ case("kinds and providers declared in a script", with_examples({
     close(b)
     n
   }, where = globalenv())
+  Summer <- kind("summer", floor_hash = 10, total = method(items = "list", returns = "int64", required = TRUE),
+    where = globalenv())
+  methods::setClass("GtAdds", contains = "Summer", where = globalenv())
+  methods::setMethod("total", "GtAdds", function(self, items) {
+    KEPT$refused <- c(KEPT$refused, tryCatch({
+      push(items, 0L)
+      "changed"
+    }, error = function(e) conditionMessage(e)))
+    sum(unlist(value_data(items)))
+  }, where = globalenv())
   methods::setClass("GtBuilt", contains = "Mirror", where = globalenv())
   methods::setMethod("show_me", "GtBuilt", function(self) value(list(built = "here")), where = globalenv())
   methods::setClass("GtMissing", contains = "Pair", where = globalenv())
@@ -65,7 +75,6 @@ case("kinds and providers declared in a script", with_examples({
     expect_true(grepl(says, conditionMessage(e), fixed = TRUE))
   }
   refused("bad.header: the table's first field", header = method())
-  refused("bad.sum(items): a list is not borrowed", sum = method(items = "list", returns = "int64"))
   refused("bad.fill(dst): bytes written in place cross on an object kind only", fill = method(dst = lent("bytes")))
   refused("bad.read(l): an object crosses on a fallible slot only", read = method(l = lent(Listener)))
   refused("bad.give(l): an object crosses on a fallible slot only", give = method(l = taken(Listener)))
@@ -182,6 +191,18 @@ case("a call refused at one handed-over argument still takes the others", with_e
     invisible(gc())
     expect_equal(fx("fx_listeners_destroyed"), before + 1L)
   }
+}))
+
+case("a list borrowed is read, and stays the caller's", with_examples({
+  PREG$register_library(guatiao_library("r_adds", "0.1.0", providers = list("GtAdds")))
+  s <- PREG$bind("r_adds_gt_adds", Summer)
+  expect_equal(total(s, list(40L, 2L)), 42)
+  held <- value(list(1L, 2L, 3L))
+  expect_equal(total(s, held), 6)
+  expect_equal(value_data(held), list(1L, 2L, 3L))
+  close(held)
+  expect_equal(length(KEPT$refused), 2L)
+  expect_true(all(grepl("read-only", KEPT$refused, fixed = TRUE)))
 }))
 
 case("nothing crosses when an argument is refused before the call", with_examples({

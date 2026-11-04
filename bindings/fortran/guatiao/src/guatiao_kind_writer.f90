@@ -1557,8 +1557,8 @@ contains
           call put(o, '    ' // a // ' = ' // x // ' /= 0')
         case ('map', 'list', 'value')
           if (t%pass == 'borrowed') then
-            if (t%type == 'map') then
-              call put(o, '    ' // a // ' = guatiao_borrowed_map(' // x // ')')
+            if (t%type == 'map' .or. t%type == 'list') then
+              call put(o, '    ' // a // ' = guatiao_borrowed_' // t%type // '(' // x // ')')
             else
               call put(o, '    ' // a // ' = guatiao_borrowed_value(' // x // ')')
             end if

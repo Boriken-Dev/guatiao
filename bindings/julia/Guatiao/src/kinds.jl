@@ -860,7 +860,7 @@ function read_shape(ex, answer::Bool, where)
     haskey(SCALAR_NAMES, ex) && return (:scalar, :borrow, SCALAR_NAMES[ex])
     ex === :ValueRef && return (:value, :borrow, nothing)
     ex === :MapRef && return (:map, :borrow, nothing)
-    ex === :ListRef && error("$where: a list is not borrowed: Lent{ListRef} or Taken{ListRef}")
+    ex === :ListRef && return (:list, :borrow, nothing)
     error("$where: $(ex) is no shape a slot can carry; an object is Taken{K} or Lent{K}")
 end
 

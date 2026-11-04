@@ -27,7 +27,7 @@ module guatiao_kinds
             guatiao_take_object, guatiao_lend_object, guatiao_end_lent_object, guatiao_failed, guatiao_warn, &
             guatiao_text_in, guatiao_map_carrier, guatiao_value_carrier, guatiao_settle_map, &
             guatiao_settle_value, guatiao_lent_map, guatiao_end_lent_map, guatiao_taken_map, &
-            guatiao_borrowed_map, guatiao_borrowed_value, guatiao_string_out, guatiao_bytes_in, &
+            guatiao_borrowed_map, guatiao_borrowed_list, guatiao_borrowed_value, guatiao_string_out, guatiao_bytes_in, &
             guatiao_list_carrier, guatiao_settle_list, guatiao_lent_list, guatiao_end_lent_list, &
             guatiao_taken_list
   public :: guatiao_call_error, guatiao_map_out, guatiao_settle_home, guatiao_string_in, &
@@ -707,6 +707,23 @@ contains
     v = gt_wrap(node, .false., .true., gt_default_alloc())
   end function
 
+  !> A list borrowed for the call (`const guatiao_list *`): read-only;
+  !> end it with gt_end_borrow.
+  recursive function guatiao_borrowed_list(ptr) result(v)
+    type(c_ptr), intent(in) :: ptr
+    type(guatiao_value) :: v
+    type(gt_owned), pointer :: list
+    type(gt_value) :: node
+    if (.not. c_associated(ptr)) then
+      v = guatiao_absent()
+      return
+    end if
+    call c_f_pointer(ptr, list)
+    node%tag = GUATIAO_TAG_LIST
+    node%payload = list
+    v = gt_wrap(node, .false., .true., gt_default_alloc())
+  end function
+
   !> A value borrowed for the call (`const guatiao_value *`): read-only.
   recursive function guatiao_borrowed_value(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
@@ -823,9 +840,10 @@ contains
     root%payload%alloc = carrier_alloc(alloc)
   end subroutine
 
-  !> A tree a remote slot borrows (`const guatiao_value *` or `const
-  !> guatiao_map *`): for GUATIAO_TAG_MAP the map arm of the node `v`
-  !> names, for GUATIAO_TAG_ABSENT the node itself, whatever it holds.
+  !> A tree a remote slot borrows (`const guatiao_value *`, `const
+  !> guatiao_map *` or `const guatiao_list *`): for GUATIAO_TAG_MAP or
+  !> GUATIAO_TAG_LIST that arm of the node `v` names, for
+  !> GUATIAO_TAG_ABSENT the node itself, whatever it holds.
   !> GUATIAO_ERR_NULL for nothing there (a value that may be null passes
   !> a null `ptr` instead), GUATIAO_ERR_WRONG_KIND for another kind.
   recursive subroutine guatiao_borrow_tree(v, tag, ptr, stat)
