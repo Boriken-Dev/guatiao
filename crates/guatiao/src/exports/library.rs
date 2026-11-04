@@ -1116,7 +1116,15 @@ pub unsafe extern "C" fn guatiao_registry_watch_dir(
 ///
 /// `{"loaded": [{"source", "id", "stamp", "key"}…], "retired": [the
 /// same…], "skipped": [{"source", "id", "skipped", …}…], "refused":
-/// [{"source", "id"?, "why"}…]}`.
+/// [{"source", "id"?, "why"}…], "notes"?: [{"source", "subject", "text",
+/// "detail"}…]}`.
+///
+/// `notes` is there only when a source said something worth showing that
+/// is neither a refusal nor a skip (its table's `notes` slot): each note
+/// the first refresh its source answers it, not again while it stays.
+/// `subject` names the part of the source it concerns (empty: the whole),
+/// `text` is words for a person, `detail` a map a program reads instead,
+/// as the source documents it. Showing or logging them is the host's.
 ///
 /// A new candidate loads; a changed one loads and, once it has, its old
 /// build is retired; a vanished one is retired; a library the host retired
@@ -2249,6 +2257,22 @@ fn refreshed_value(alloc: Alloc, report: &Refreshed) -> Result<Value, ValueError
         refused.try_push(entry)?;
     }
     map.try_set("refused", refused)?;
+    // Only when a source said something, as a scan's `unreadable`.
+    if !report.notes.is_empty() {
+        let mut notes = List::new_in(alloc);
+        for (source, note) in &report.notes {
+            let mut entry = Map::new_in(alloc);
+            entry.try_set("source", Text::new_in(alloc, source).map(Value::from)?)?;
+            entry.try_set(
+                "subject",
+                Text::new_in(alloc, note.subject()).map(Value::from)?,
+            )?;
+            entry.try_set("text", Text::new_in(alloc, note.text()).map(Value::from)?)?;
+            entry.try_set("detail", note.detail().clone_in(alloc)?)?;
+            notes.try_push(entry)?;
+        }
+        map.try_set("notes", notes)?;
+    }
     Ok(map.into())
 }
 

@@ -90,6 +90,31 @@ fn a_rust_host_adds_a_source_written_in_rust() {
     );
 }
 
+/// Its notes cross the `source!` glue's table: told by the first refresh,
+/// with their detail, and not again while they stay.
+#[test]
+fn a_source_written_in_rust_tells_its_note_once() {
+    let (_, source) = beside("source_library").expect("built as a dev-dependency");
+    let mut registry = Registry::new("rust-host", "1.0");
+    let mut noting = config(&[("hi", "hello")]);
+    noting.set("note", "the shelf is dusty, says Rust");
+    let name = registry
+        .add_source_file(&source, &noting)
+        .expect("the source starts");
+    let first = registry.refresh();
+    assert_eq!(first.notes.len(), 1, "{first:?}");
+    let (from, note) = &first.notes[0];
+    assert_eq!(from, &name);
+    assert_eq!(
+        (note.subject(), note.text()),
+        ("", "the shelf is dusty, says Rust")
+    );
+    let mut detail = Map::new();
+    detail.set("said", "by Rust");
+    assert_eq!(note.detail(), &detail);
+    assert!(registry.refresh().notes.is_empty(), "told once");
+}
+
 #[test]
 fn a_source_refusing_its_configuration_is_a_refusal_in_its_words() {
     let (_, source) = beside("source_library").expect("built as a dev-dependency");

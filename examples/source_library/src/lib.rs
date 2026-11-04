@@ -4,7 +4,9 @@
 
 //! A source written in Rust: one greeter library per entry of its
 //! configuration's `greetings` map (`{"hi": "hello"}` serves a library
-//! `hi` whose provider `hi_greeter` greets with "hello"). The source is a
+//! `hi` whose provider `hi_greeter` greets with "hello"), and the words of
+//! its optional `note`, told as a note about the whole source with the
+//! detail `{"said": "by Rust"}`. The source is a
 //! [`Source`] like any a Rust host links; `guatiao::source!` makes this
 //! file one any host adds, in any language.
 
@@ -14,7 +16,7 @@ use alloc::sync::Arc;
 
 use greeter_kind::{Greeter, GreeterVtable};
 use guatiao::library::kind::{LibraryParts, ProviderParts};
-use guatiao::library::{Candidate, Host, KindTable, LocalLibrary, ProviderError, Source};
+use guatiao::library::{Candidate, Host, KindTable, LocalLibrary, Note, ProviderError, Source};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Map, Status};
 
@@ -42,6 +44,7 @@ static TABLE: GreeterVtable = GreeterVtable::of::<Hello>();
 /// The libraries the configuration names, and their words.
 struct Shelf {
     greetings: Vec<(String, String)>,
+    note: Option<String>,
 }
 
 impl Source for Shelf {
@@ -75,9 +78,19 @@ impl Source for Shelf {
             .build();
         Ok(LibraryParts::new(id, "1.0.0", vec![provider]).into())
     }
+
+    fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+        let mut detail = Map::new();
+        detail.set("said", "by Rust");
+        Ok(self
+            .note
+            .iter()
+            .map(|words| Note::new("", words.as_str()).with_detail(detail.clone()))
+            .collect())
+    }
 }
 
-/// Reads `{"greetings": {<id>: <word>, ..}}`.
+/// Reads `{"greetings": {<id>: <word>, ..}, "note"?: <words>}`.
 fn start(_host: Host, config: &Map) -> Result<Shelf, ProviderError> {
     let greetings = config
         .get("greetings")
@@ -97,7 +110,18 @@ fn start(_host: Host, config: &Map) -> Result<Shelf, ProviderError> {
             Ok((entry.key().to_string(), word.to_string()))
         })
         .collect::<Result<_, ProviderError>>()?;
-    Ok(Shelf { greetings })
+    let note = match config.get("note") {
+        None => None,
+        Some(words) => Some(
+            TryAsRef::<str>::try_as_ref(words)
+                .filter(|words| !words.is_empty())
+                .ok_or_else(|| {
+                    ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "`note` is not words")
+                })?
+                .to_string(),
+        ),
+    };
+    Ok(Shelf { greetings, note })
 }
 
 guatiao::source!(serves = "greeters", make = start);

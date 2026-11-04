@@ -208,7 +208,8 @@ fn a_source_written_in_c_serves_libraries_that_come_and_go() {
 }
 
 /// The same source, driven through the C surface a C or binding host
-/// calls: add it by file, refresh, read the answer as a value.
+/// calls: add it by file, refresh, read the answer as a value, its note
+/// the first time only.
 #[test]
 fn the_c_surface_adds_a_source_file_and_refreshes() {
     use guatiao::exports::library::{
@@ -230,7 +231,9 @@ fn the_c_surface_adds_a_source_file_and_refreshes() {
     let reg =
         unsafe { guatiao_registry_new(Str::new("c-surface"), Str::new("1.0"), core::ptr::null()) };
     assert!(!reg.is_null());
-    let config = Value::from(config(&["shelf_a"]));
+    let mut noting = config(&["shelf_a"]);
+    noting.set("note", "the shelf is dusty, says C");
+    let config = Value::from(noting);
     let mut err = ProviderError::none();
     // SAFETY: a live registry, readable text, a well-formed value, a
     // writable error.
@@ -258,6 +261,28 @@ fn the_c_surface_adds_a_source_file_and_refreshes() {
         first.get("key").and_then(TryAsRef::<str>::try_as_ref),
         Some("shelf_a")
     );
+    let notes: &guatiao::List = answer
+        .get("notes")
+        .and_then(TryAsRef::<guatiao::List>::try_as_ref)
+        .expect("the shelf's note");
+    assert_eq!(notes.len(), 1);
+    let mut detail = Map::new();
+    detail.set("said", "by C");
+    let mut expected = Map::new();
+    expected.set("source", path_text.as_str());
+    expected.set("subject", "shelf");
+    expected.set("text", "the shelf is dusty, says C");
+    expected.set("detail", detail);
+    assert_eq!(notes[0], Value::from(expected));
+    drop(out);
+
+    // The note stays and is not told again: no `notes` at all.
+    let mut out = Value::absent();
+    // SAFETY: as above.
+    let status = unsafe { guatiao_registry_refresh(reg, alloc.as_raw(), &mut out) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    let answer: &Map = TryAsRef::<Map>::try_as_ref(&out).expect("a map");
+    assert!(answer.get("notes").is_none(), "{answer:?}");
     drop(out);
 
     // A file that is no source is refused with words.

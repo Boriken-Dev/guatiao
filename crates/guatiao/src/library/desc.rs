@@ -710,6 +710,19 @@ pub struct SourceInfo {
     /// one `id` are open at once. Null for a source with nothing to let go.
     pub close:
         Option<unsafe extern "C" fn(ctx: *mut c_void, id: Str, info: *const LibraryInfo<'static>)>,
+    /// What the source wants its host to see now that is neither a refusal
+    /// nor a skip (a setting it runs looser than its default, say), asked
+    /// after every `list`: writes a list into `out`, one map per note,
+    /// `{"subject": text, "text": text, "detail": map}`. `text` is words for
+    /// a person and required; `subject` names the part of the source it
+    /// concerns (absent or empty: the whole); `detail` (optional) is what a
+    /// program reads instead, keys of the source's choosing.
+    ///
+    /// Answer the whole set each time: a refresh reports a note the first
+    /// time it appears and not again while it stays. `out` arrives holding
+    /// a carrier, as `list`'s does. A non-OK status is reported by the
+    /// refresh as a refusal. Null for a source with nothing to say.
+    pub notes: Option<unsafe extern "C" fn(ctx: *mut c_void, out: *mut List) -> Status>,
 }
 
 impl SourceInfo {

@@ -1264,6 +1264,21 @@ typedef struct guatiao_source_info {
    one `id` are open at once. Null for a source with nothing to let go.
    */
   void (*close)(void *ctx, struct guatiao_str id, const struct guatiao_library_info *info);
+  /*
+   What the source wants its host to see now that is neither a refusal
+   nor a skip (a setting it runs looser than its default, say), asked
+   after every `list`: writes a list into `out`, one map per note,
+   `{"subject": text, "text": text, "detail": map}`. `text` is words for
+   a person and required; `subject` names the part of the source it
+   concerns (absent or empty: the whole); `detail` (optional) is what a
+   program reads instead, keys of the source's choosing.
+
+   Answer the whole set each time: a refresh reports a note the first
+   time it appears and not again while it stays. `out` arrives holding
+   a carrier, as `list`'s does. A non-OK status is reported by the
+   refresh as a refusal. Null for a source with nothing to say.
+   */
+  guatiao_status (*notes)(void *ctx, struct guatiao_list *out);
 } guatiao_source_info;
 
 /*
@@ -2195,7 +2210,15 @@ guatiao_status guatiao_registry_watch_dir(struct guatiao_registry *reg,
 
  `{"loaded": [{"source", "id", "stamp", "key"}…], "retired": [the
  same…], "skipped": [{"source", "id", "skipped", …}…], "refused":
- [{"source", "id"?, "why"}…]}`.
+ [{"source", "id"?, "why"}…], "notes"?: [{"source", "subject", "text",
+ "detail"}…]}`.
+
+ `notes` is there only when a source said something worth showing that
+ is neither a refusal nor a skip (its table's `notes` slot): each note
+ the first refresh its source answers it, not again while it stays.
+ `subject` names the part of the source it concerns (empty: the whole),
+ `text` is words for a person, `detail` a map a program reads instead,
+ as the source documents it. Showing or logging them is the host's.
 
  A new candidate loads; a changed one loads and, once it has, its old
  build is retired; a vanished one is retired; a library the host retired

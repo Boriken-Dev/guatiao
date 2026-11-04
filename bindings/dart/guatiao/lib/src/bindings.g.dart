@@ -3323,6 +3323,16 @@ final class guatiao_source_info extends ffi.Struct {
   >
   close;
 
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_list> out,
+      )
+    >
+  >
+  notes;
+
   static ffi.Pointer<guatiao_source_info> $allocate(
     ffi.Allocator $allocator, {
     required int struct_size,
@@ -3360,13 +3370,23 @@ final class guatiao_source_info extends ffi.Struct {
       >
     >
     close,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_list> out,
+        )
+      >
+    >
+    notes,
   }) => $allocator<guatiao_source_info>()
     ..ref.struct_size = struct_size
     ..ref.abi_version = abi_version
     ..ref.ctx = ctx
     ..ref.list = list
     ..ref.open = open
-    ..ref.close = close;
+    ..ref.close = close
+    ..ref.notes = notes;
 }
 
 final class guatiao_span extends ffi.Struct {

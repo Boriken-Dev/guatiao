@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! A Rust [`Source`] exported as a source file: the `guatiao_source`
-//! entry [`source!`](crate::source) writes, and the table's three slots
-//! over the trait.
+//! entry [`source!`](crate::source) writes, and the table's slots over
+//! the trait.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -13,7 +13,7 @@ use std::sync::{Mutex, PoisonError};
 use super::*;
 use crate::library::desc::{ABI_VERSION, SourceInfo};
 use crate::library::kind::{LibraryParts, ProviderError, return_alloc, write_err};
-use crate::library::serving::{Candidate, Source};
+use crate::library::serving::{Candidate, Note, Source};
 use crate::value::convert::TryAsRef;
 use crate::value::error::ValueError;
 use crate::value::types::{List, Text};
@@ -104,6 +104,7 @@ pub unsafe fn source_entry<S: Source + 'static>(
                 list: Some(list::<S>),
                 open: Some(open::<S>),
                 close: Some(close::<S>),
+                notes: Some(notes::<S>),
             }));
             Ok(table.cast_const())
         },
@@ -180,6 +181,43 @@ unsafe extern "C" fn list<S: Source>(
             .iter()
             .map(|c| (c.id().to_string(), c.stamp().to_string()))
             .collect();
+        // SAFETY: non-null; the carrier owns nothing and is written over.
+        unsafe { out.write(list) };
+        Status::GUATIAO_OK
+    })
+}
+
+fn notes_list(said: &[Note], alloc: Alloc) -> Result<List, ValueError> {
+    let mut list = List::new_in(alloc);
+    for note in said {
+        let mut map = Map::new_in(alloc);
+        map.set_in("subject", Text::new_in(alloc, note.subject())?, alloc)?;
+        map.set_in("text", Text::new_in(alloc, note.text())?, alloc)?;
+        map.set_in("detail", note.detail().clone_in(alloc)?, alloc)?;
+        list.try_push(map)?;
+    }
+    Ok(list)
+}
+
+unsafe extern "C" fn notes<S: Source>(ctx: *mut c_void, out: *mut List) -> Status {
+    crate::exports::guard(|| {
+        // SAFETY: the `ctx` this source answered.
+        let Some(state) = (unsafe { state::<S>(ctx) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        if out.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
+        // SAFETY: the registry's out slot, holding a carrier.
+        let alloc = unsafe { return_alloc(out) };
+        let said = match state.source.notes() {
+            Ok(said) => said,
+            Err(e) => return e.status,
+        };
+        let list = match notes_list(&said, alloc) {
+            Ok(list) => list,
+            Err(e) => return e.into(),
+        };
         // SAFETY: non-null; the carrier owns nothing and is written over.
         unsafe { out.write(list) };
         Status::GUATIAO_OK
@@ -308,6 +346,7 @@ mod tests {
         refuse: Mutex<bool>,
         closed: Arc<Mutex<Vec<(String, String)>>>,
         dropped: Arc<Mutex<usize>>,
+        notes: Mutex<Vec<Note>>,
     }
 
     impl Source for Shelf {
@@ -342,6 +381,10 @@ mod tests {
         fn close(&self, id: &str, stamp: &str) {
             lock(&self.closed).push((id.to_string(), stamp.to_string()));
         }
+
+        fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+            Ok(lock(&self.notes).clone())
+        }
     }
 
     type Made = (Arc<Mutex<Vec<(String, String)>>>, Arc<Mutex<usize>>);
@@ -362,6 +405,7 @@ mod tests {
                 refuse: Mutex::new(false),
                 closed: made.0,
                 dropped: made.1,
+                notes: Mutex::new(Vec::new()),
             })
         }
     }
@@ -431,6 +475,30 @@ mod tests {
         *lock(&shelf.source.stamp) = "panic".to_string();
         let third = registry.refresh();
         assert_eq!(third.refused.len(), 1, "{third:?}");
+    }
+
+    #[test]
+    fn an_exported_sources_notes_reach_the_host_through_its_table() {
+        let made: Made = Default::default();
+        let mut registry = Registry::new("export-tests", "1.0");
+        let table = start(&mut registry, &config(&["a"]), &made).expect("a table");
+        // SAFETY: the table `source_entry` answered, kept for the process.
+        let table = unsafe { &*table };
+        // SAFETY: the state behind the table's `ctx`.
+        let shelf = unsafe { state::<Shelf>(table.ctx) }.expect("a state");
+        let mut detail = Map::new();
+        detail.set("setting", "dust");
+        let said = vec![
+            Note::new("", "dusty").with_detail(detail),
+            Note::new("a", "on loan"),
+        ];
+        *lock(&shelf.source.notes) = said.clone();
+        registry.add_source_table("shelf", table).expect("added");
+        let first = registry.refresh();
+        let heard: Vec<Note> = first.notes.iter().map(|(_, n)| n.clone()).collect();
+        assert_eq!(heard, said);
+        assert!(first.notes.iter().all(|(source, _)| source == "shelf"));
+        assert!(registry.refresh().is_empty(), "told once");
     }
 
     #[test]

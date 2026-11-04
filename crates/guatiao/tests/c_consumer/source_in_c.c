@@ -14,7 +14,10 @@
  *
  * The shelf holds up to three libraries, `shelf_a` to `shelf_c`, each
  * offering one counter (`<id>_counter`, kind `counter`). Its configuration
- * names which are on the shelf at the start (`{"ids": ["shelf_a", ..]}`).
+ * names which are on the shelf at the start (`{"ids": ["shelf_a", ..]}`)
+ * and, optionally, a note it tells its host on every refresh (`"note":
+ * "words"`, answered as `{"subject": "shelf", "text": "words", "detail":
+ * {"said": "by C"}}`).
  * The test changes the shelf through the `shelf_*` functions below -- puts
  * one on, takes one off, bumps one's stamp, makes `open` refuse -- and
  * reads back how often each was opened and closed.
@@ -157,6 +160,42 @@ static guatiao_status shelf_list(void *ctx, const guatiao_host_info *host, guati
   return GUATIAO_OK;
 }
 
+/* ---- the notes: one, when the configuration gave words ------------------- */
+
+static char NOTE_TEXT[128];
+static size_t NOTE_LEN = 0;
+static guatiao_entry SAID[1];
+static guatiao_entry NOTE_FIELDS[3];
+static guatiao_value NOTES[1];
+
+static guatiao_status shelf_notes(void *ctx, guatiao_list *out) {
+  (void)ctx;
+  size_t n = 0;
+  if (NOTE_LEN > 0) {
+    SAID[0].key = key("said");
+    SAID[0].value = text("by C", 4);
+    NOTE_FIELDS[0].key = key("subject");
+    NOTE_FIELDS[0].value = text("shelf", 5);
+    NOTE_FIELDS[1].key = key("text");
+    NOTE_FIELDS[1].value = text(NOTE_TEXT, NOTE_LEN);
+    NOTE_FIELDS[2].key = key("detail");
+    memset(&NOTE_FIELDS[2].value, 0, sizeof(guatiao_value));
+    NOTE_FIELDS[2].value.tag = (uint32_t)GUATIAO_MAP;
+    NOTE_FIELDS[2].value.payload.map.ptr = SAID;
+    NOTE_FIELDS[2].value.payload.map.len = 1;
+    memset(&NOTES[0], 0, sizeof(guatiao_value));
+    NOTES[0].tag = (uint32_t)GUATIAO_MAP;
+    NOTES[0].payload.map.ptr = NOTE_FIELDS;
+    NOTES[0].payload.map.len = 3;
+    n = 1;
+  }
+  out->ptr = NOTES;
+  out->len = n;
+  out->cap = 0;
+  out->alloc = NULL;
+  return GUATIAO_OK;
+}
+
 static guatiao_status refuse(guatiao_provider_error *err, const char *why) {
   err->status = GUATIAO_ERR_BAD_VALUE;
   err->message.ptr = (uint8_t *)why;
@@ -233,12 +272,24 @@ EXPORT guatiao_status guatiao_source(const guatiao_host_info *host, const guatia
     }
     LISTED[i] = true;
   }
+  const guatiao_value *note = guatiao_map_find(config, guatiao_cstr("note"));
+  NOTE_LEN = 0;
+  if (note) {
+    guatiao_str words = guatiao_string_text(note);
+    if (guatiao_tag_of(note) != (uint32_t)GUATIAO_STRING || words.len == 0 ||
+        words.len > sizeof(NOTE_TEXT)) {
+      return refuse(err, "the configuration's `note` is not short words");
+    }
+    memcpy(NOTE_TEXT, words.ptr, words.len);
+    NOTE_LEN = words.len;
+  }
   memset(&SOURCE, 0, sizeof(SOURCE));
   SOURCE.struct_size = (uint32_t)sizeof(guatiao_source_info);
   SOURCE.abi_version = GUATIAO_ABI_VERSION;
   SOURCE.list = shelf_list;
   SOURCE.open = shelf_open;
   SOURCE.close = shelf_close;
+  SOURCE.notes = shelf_notes;
   *out = &SOURCE;
   return GUATIAO_OK;
 }

@@ -11,6 +11,7 @@
 
 use super::kind::ProviderError;
 use super::raw::{Host, LocalLibrary};
+use crate::value::types::Map;
 
 /// One library a source can open, described without running it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +61,51 @@ impl Candidate {
     }
 }
 
-/// A source a Rust host links: the three calls a source file's
+/// Something a source wants its host to show that is neither a refusal
+/// nor a skip: a setting it runs looser than its default, say. A refresh
+/// reports a note once, the first time the source answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Note {
+    subject: String,
+    text: String,
+    detail: Map,
+}
+
+impl Note {
+    /// A note about `subject` (what part of the source it concerns; empty
+    /// for the source as a whole), in words for a person.
+    pub fn new(subject: impl Into<String>, text: impl Into<String>) -> Note {
+        Note {
+            subject: subject.into(),
+            text: text.into(),
+            detail: Map::new(),
+        }
+    }
+
+    /// The same note carrying `detail`: what a program reads instead of
+    /// the words, keys of the source's choosing.
+    pub fn with_detail(self, detail: Map) -> Note {
+        Note { detail, ..self }
+    }
+
+    /// What part of the source it concerns; empty for the whole.
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+
+    /// The words.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// What a program reads instead of the words; empty when the source
+    /// gives none.
+    pub fn detail(&self) -> &Map {
+        &self.detail
+    }
+}
+
+/// A source a Rust host links: the calls a source file's
 /// `guatiao_source_info` table makes, as a trait.
 ///
 /// The registry calls them one at a time, from whichever thread calls the
@@ -80,5 +125,13 @@ pub trait Source: Send + Sync {
     /// tells two builds of one id apart.
     fn close(&self, id: &str, stamp: &str) {
         let _ = (id, stamp);
+    }
+
+    /// What the source wants its host to see now, asked after every
+    /// `list`, a failed one too. Answer the whole set each time: the
+    /// registry reports a note the first time it appears, not again while
+    /// it stays. An error is reported as a refusal. None by default.
+    fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+        Ok(Vec::new())
     }
 }
