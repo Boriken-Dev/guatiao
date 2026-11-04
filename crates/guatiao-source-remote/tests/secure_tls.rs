@@ -947,6 +947,78 @@ fn the_server_prints_what_a_source_it_adds_says() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// What a source says first on a later refresh is printed too: a peer
+/// manifest with a weaker policy, written once the server runs, is read by
+/// its `--refresh-ms` loop, which tells it once.
+#[test]
+fn the_server_prints_what_a_source_says_on_a_later_refresh() {
+    let Some(remote) = procs::library("guatiao_source_remote") else {
+        panic!("guatiao_source_remote is not built beside the server");
+    };
+    let dir = scratch("server_later_notes");
+    let peers = dir.join("peers");
+    std::fs::create_dir_all(&peers).unwrap();
+    std::fs::write(dir.join("link.key"), "a key").unwrap();
+    // Forward slashes: the path sits in JSON text.
+    let config = format!(
+        "{}={{\"dirs\": [\"{}\"]}}",
+        remote.display(),
+        peers.display().to_string().replace('\\', "/")
+    );
+    let (mut child, lines) = procs::start(
+        Command::new(server_program())
+            .args(["--listen", "tcp://127.0.0.1:0", "--security", "none"])
+            .args(["--range", "127.0.0.1", "--key-file"])
+            .arg(dir.join("link.key"))
+            .args(["--refresh-ms", "100", "--source"])
+            .arg(config),
+    );
+    let told = format!(
+        "{}: lab: weaker than modern: allow_resumption = true (modern: false)",
+        remote.display()
+    );
+    let mut said = String::new();
+    let mut written = false;
+    let until = Instant::now() + procs::DEADLINE;
+    while !said.contains(&told) && Instant::now() < until {
+        if !written && said.contains("serving tcp://") {
+            std::fs::write(
+                peers.join("lab.guatiao"),
+                format!(
+                    "type = \"remote\"\nname = \"lab\"\nconnect = \"tls://127.0.0.1:9\"\n\
+                     security = \"mutual-tls\"\nidentity_file = \"lab.pem\"\n\
+                     pins = [\"sha256:{}\"]\n[policy]\nallow_resumption = true\n",
+                    "0".repeat(64)
+                ),
+            )
+            .unwrap();
+            written = true;
+        }
+        match lines.recv_timeout(Duration::from_millis(200)) {
+            Ok(line) => {
+                said.push_str(&line);
+                said.push('\n');
+            }
+            Err(_) if child.try_wait().unwrap().is_some() => break,
+            Err(_) => {}
+        }
+    }
+    // Several more refreshes, which tell nothing new.
+    let more = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < more {
+        if let Ok(line) = lines.recv_timeout(Duration::from_millis(100)) {
+            said.push_str(&line);
+            said.push('\n');
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(written, "the server never said it serves: {said}");
+    assert!(said.contains(&told), "{said}");
+    assert_eq!(said.matches(&told).count(), 1, "told once: {said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Mutual TLS between this process and a `guatiao-remote-server` child:
 /// the first link waits, the operator accepts the client with the
 /// server's own command, the next link calls the greeter it loaded.

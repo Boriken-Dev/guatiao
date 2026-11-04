@@ -48,7 +48,8 @@ source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured poli
   or `child` configuration), text `weaker than modern: S = V (modern: M)`,
   detail `{"setting", "value", "modern"}`, each told the first refresh
   that finds it. `guatiao-remote-server` prints its sources' notes as
-  `guatiao-remote-server: SOURCE: [SUBJECT: ]TEXT`.
+  `guatiao-remote-server: SOURCE: [SUBJECT: ]TEXT`, and what each refresh
+  refused, after the first refresh and after every `--refresh-ms` one.
 
 - **Peers described by manifests** (`dirs`, `manifests` in the
   configuration): every refresh reads the `type = "remote"` manifests
