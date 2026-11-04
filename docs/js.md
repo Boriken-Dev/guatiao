@@ -66,6 +66,28 @@ counts: a module that describes a kind differently is refused. A
 provider is every exported class extending `Provider`; its id is the
 library's followed by its name in snake case (`greeters_hello`).
 
+A provider with settings says so as it does for Node: `static config` (an
+`s` schema from `guatiao/provide`) or `static configSchema` (a raw JSON
+Schema). A host builds an instance from a configuration it checked
+against that schema, the constructor receiving it; the class is then not
+callable as itself unless `static default = true`. `static available()`
+answers why the provider cannot run, or nothing when it can, and is asked
+each time a host asks:
+
+```js
+import { Provider, s } from 'guatiao/provide';
+import { Greeter } from './greeter_kind.js';
+
+export class Shouter extends Provider {
+  static kinds = [Greeter];
+  static config = s.object({ word: s.string({ minLength: 1 }) });
+  static available() { return undefined; }
+  #word;
+  constructor(config) { super(); this.#word = config.word; }
+  greet(name) { return { greeting: `${this.#word}, ${name}` }; }
+}
+```
+
 What a library imports is `guatiao` (the errors, `ExactNumber`),
 `guatiao/kinds`, `guatiao/provide` and its own files by relative path. It
 has `console`, `TextEncoder` and `TextDecoder`, and no files, network or
@@ -122,9 +144,8 @@ The shapes are the Node binding's, with these exceptions:
   provider that takes trees is written for one engine.
 - **A decimal that a double would change** is an `ExactNumber`
   (`toString()` gives its text), where Node reads it as a `number`.
-- **A provider is one instance**: `static config` and `s` (providers built
-  from a configuration) are refused, and a kind cannot be defined in
-  JavaScript: the host's descriptions are the kinds.
+- **A kind cannot be defined in JavaScript**: the host's descriptions are
+  the kinds.
 - **A library's meta** (the package's `description`, licence and authors)
   is not carried.
 - **A script's own object is never passed to a host as an object**, only

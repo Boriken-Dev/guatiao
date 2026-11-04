@@ -44,17 +44,21 @@ paths = ["."]                     # where its files are, relative to this file
   the entry as an ES module (top-level `await` works for promises that
   settle without timers), and reads the exports: every class extending
   `Provider` is a provider, once, in the order a module namespace lists
-  them. Each is built with `new Class()` once, with the library; its
-  instance answers every call.
+  them. Each is built with `new Class()` once, with the library, and that
+  instance answers every call on the provider as itself; a class built
+  from a configuration (below) is built again for each instance a host
+  makes.
 - **Refused** (`GUATIAO_ERR_BAD_VALUE`, in words naming the library): an
   entry that is not a file under `paths`, a module that throws or never
   finishes loading, no exported `Provider`, a class with no `static kinds`
   or naming a kind the manifest does not list, a kind with no description
   from the host (`GUATIAO_ERR_NOT_FOUND`) or described with another floor
   hash, an object kind, a required slot with no method (`Hello does not
-  implement greet, which the greeter kind requires`), `static config` or
-  `static configSchema` (a provider built from a configuration is not
-  served), two providers with one id, an import outside `paths`.
+  implement greet, which the greeter kind requires`), a `static config`
+  that is not an `s` schema (`P.config is a schema made with s; say a raw
+  JSON Schema with configSchema`), a configuration's schema that is not
+  plain data, `static default = false` with no configuration, two
+  providers with one id, an import outside `paths`.
 
 ## A provider
 
@@ -86,7 +90,23 @@ are listed below. Statics, all optional but `kinds`:
 | `id` | the whole provider id (default `<library id>_<named>`) |
 | `displayName` | shown to a person |
 | `meta` | plain data, a map, the provider's `meta` |
-| `available()` | text when the provider cannot run here: it is then left out; asked when the library opens |
+| `config` | an `s` schema (`import { s } from 'guatiao/provide'`): the provider is built from a configuration; its constructor receives what the schema's `build` makes of the plain data |
+| `configSchema` | a raw JSON Schema, plain data: built from a configuration; its constructor receives the plain data. Wins over `config`'s schema when both are given |
+| `default` | with a configuration, `true` also offers `new Class()` as the provider itself (default: `false`, instances only); without one it must not be `false` |
+| `available()` | `undefined` or `null` when the provider can run here, else why not (as text); asked each time a host asks, never at open. A throw is unavailable, in its words |
+
+- **Built from a configuration**: a host's `instantiate` (Rust),
+  `guatiao_registry_provider_create` (C) or `Registry.create` (Python)
+  checks the configuration against the schema, then the configuration
+  crosses as plain data (the shapes of "Values" below), `config.build` runs
+  on it, and `new Class(built)` is the instance, under the same limits as a
+  call; a throw there refuses with its status. Its slots are called on
+  that object. When the host drops it, its `[Symbol.dispose]()` runs, once,
+  when no script is running. `s` is the Node binding's: `s.object`,
+  `string`, `integer`, `number`, `boolean`, `literal`, `any`, `array`,
+  `record`, `nullable`, `optional` (with `{ default }`), `isSchema`, each
+  taking JSON Schema keywords last; an object refuses keys it does not
+  declare.
 
 - **A slot** is the method named for it in camel case (`greet_into` is
   `greetInto`), found on the class's prototype. One it leaves out is null
@@ -124,7 +144,7 @@ are listed below. Statics, all optional but `kinds`:
 | --- | --- |
 | `guatiao` | `Status`, `GuatiaoError`, `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`, `errorFor(status, message)`, `ExactNumber` |
 | `guatiao/kinds` | `kindsOf(document)` (an object or its JSON text) → kinds by name; `kindOf(description)` |
-| `guatiao/provide` | `Provider` |
+| `guatiao/provide` | `Provider`, `s` (a configuration's schema) |
 | `./x.js`, `../y/z.js` | a file under the library's `paths`, by its exact name |
 
 Nothing else resolves (no bare package, no `node:`, no JSON modules, no
@@ -142,7 +162,6 @@ and what QuickJS-NG adds (`Array.fromAsync`, `Object.groupBy`, `WeakRef`),
 | --- | --- | --- |
 | a library's id, version | the package's `name`, `version` | the manifest's `name`; its `version`, else the package's |
 | a library's meta | `description`, `license`, `author`, licence files | not carried (a provider's `static meta` is) |
-| a provider built from a configuration (`static config`, `s`) | yes | refused |
 | a kind defined in JavaScript (`Kind`, `slot`, `t`, `kind()`) | yes | no: kinds come from the host's descriptions |
 | a tree argument | `Value`, `MapRef`, `ListRef` | plain data |
 | a number in a tree | `number`, or `bigint` beyond 2^53; a decimal as a `number` | the same, and an `ExactNumber` where a double would change the text (`1.10`) |
