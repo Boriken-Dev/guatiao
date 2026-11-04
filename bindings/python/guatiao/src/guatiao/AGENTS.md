@@ -162,7 +162,7 @@ unload or a collect that closed it.
 ```python
 reg.add_source_file("/opt/app/guatiao_source_py.so", {"dirs": ["/opt/app/py"]})  # answers its name, the path
 reg.watch_dir("/opt/app/plugins", rules="kind=greeter")
-changed = reg.refresh()   # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...]}
+changed = reg.refresh()   # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...], "notes"?: [...]}
 ```
 
 `add_source_file(path, config=None) -> str` maps a file exporting
@@ -174,7 +174,12 @@ own status. `watch_dir(directory, *, rules=None)`: each refresh loads a
 library file that appeared (by `rules`), retires one that vanished, and
 reloads one that changed. `refresh() -> dict`: `loaded` and `retired`
 (`{source, id, stamp, key}`), `skipped` (`{source, id, skipped, ...}`),
-`refused` (`{source, id?, why}`). A changed candidate loads before its
+`refused` (`{source, id?, why}`), and `notes` (`{source, subject, text,
+detail}`) only when a source said something worth showing that is
+neither: each note the first refresh its source answers it, not again
+while it stays (`changed.get("notes", [])`; the remote source names its
+TLS settings weaker than modern there, `detail` `{setting, value,
+modern}`). A changed candidate loads before its
 old build is retired, and an `Instance` of the old keeps working; a
 library retired by hand stays out until its stamp changes; refusals are
 part of the answer, never an exception. Nothing refreshes on its own.

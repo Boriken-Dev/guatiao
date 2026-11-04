@@ -187,7 +187,7 @@ a disagreement's detail is the map describing it.
 guatiao::registry reg("my-host", "1.0");                  // registry::try_open(...) without exceptions
 reg.watch_dir("/opt/plugins", guatiao::rules({"kind=greeter"}));
 reg.add_source_file("/opt/bridge/libguatiao_source_py.so", guatiao::make(guatiao::item::map({{"dirs", ...}})));
-guatiao::value changed = reg.refresh();                   // {"loaded", "retired", "skipped", "refused"}
+guatiao::value changed = reg.refresh();                   // {"loaded", "retired", "skipped", "refused", "notes"?}
 auto g = greeter_kind::greeter::bind(reg, "derived_greeter_hello");
 guatiao::instance inst = reg.create("acme_shouter", guatiao::make(guatiao::item::map({{"prefix", "hey"}})));
 auto shouter = greeter_kind::greeter::bind(inst);
@@ -207,7 +207,10 @@ nothing. Not safe to call from two threads at once. Each method has its
 - sources: `watch_dir(dir, rules)`, `add_source_file(path, config)` (a
   file exporting `guatiao_source`, kept for the registry's life; a
   refusal carries the source's words), `add_source(name, table)`,
-  `refresh()`. Nothing refreshes on its own.
+  `refresh()`: `notes` (`{source, subject, text, detail}` each) is there
+  only when a source said something worth showing that is neither a
+  refusal nor a skip, each note the first refresh its source answers it.
+  Nothing refreshes on its own.
 - asking: `libraries()`, `providers(kind)` (best first; every provider
   for an empty kind), `provider(key)`, `available(kind)`, `why_not(kind)`,
   `best(kind)`, `provider_unavailable(key)` (`std::optional<std::string>`,

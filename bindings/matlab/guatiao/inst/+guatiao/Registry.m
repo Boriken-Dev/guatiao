@@ -244,7 +244,10 @@ classdef Registry < handle
 
     function r = refresh(self)
     % Makes the registry agree with every source: struct(loaded, retired,
-    % skipped, refused). Nothing refreshes on its own.
+    % skipped, refused), and notes (each struct(source, subject, text,
+    % detail)) only when a source said something worth showing that is
+    % neither a refusal nor a skip: each note the first refresh its source
+    % answers it. Nothing refreshes on its own.
       r = guatiao_mex('registry_refresh', self.id());
     end
 

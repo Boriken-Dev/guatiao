@@ -166,8 +166,12 @@ table, `ctx` or borrowed schema taken from it is used again.
 `guatiao_source` (a bridge to another language) and adds the source it
 answers, refusing with its words; `watchDir(dir, { rules })` watches a
 directory; `refresh()` makes the registry agree with every source,
-answering `{ loaded, retired, skipped, refused }`. Nothing refreshes on
-its own.
+answering `{ loaded, retired, skipped, refused, notes? }`. `notes`
+(`{ source, subject, text, detail }[]`) is there only when a source said
+something worth showing that is neither a refusal nor a skip, each note
+the first refresh its source answers it (the remote source names its TLS
+settings weaker than modern there, `detail` `{ setting, value, modern }`).
+Nothing refreshes on its own.
 
 ## Kinds: calling a table, serving one
 

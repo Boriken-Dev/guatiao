@@ -168,3 +168,47 @@ fn a_lua_host_calls_greeters_written_in_rust_c_and_python() {
         assert!(printed.contains(line), "{line} missing:\n{printed}");
     }
 }
+
+/// A source's note reaches a Lua host's refresh once: the source written in
+/// Rust (`examples/source_library`, in `GUATIAO_LIBRARY`) tells its
+/// configuration's `note`.
+#[test]
+fn a_lua_host_is_told_a_sources_note_once() {
+    let source = std::env::var_os("GUATIAO_LIBRARY")
+        .map(|dir| PathBuf::from(dir).join(library_name("source_library")))
+        .filter(|file| file.is_file());
+    let Some(source) = source else {
+        println!(
+            "skipped: GUATIAO_LIBRARY names no directory holding source_library (build the workspace)"
+        );
+        return;
+    };
+    let lua = Lua::new();
+    let module = guatiao_source_lua::module(&lua).expect("the module");
+    lua.globals().set("guatiao", module).expect("set");
+    lua.globals()
+        .set("source", source.display().to_string())
+        .expect("set");
+    let said: String = lua
+        .load(
+            r#"
+            local reg = guatiao.registry("lua-notes", "0.1")
+            local name = reg:add_source_file(source, {
+                greetings = {hi = "hello"},
+                note = "the shelf is dusty, says Rust",
+            })
+            local first = reg:refresh()
+            assert(#first.notes == 1, "one note")
+            local note = first.notes[1]
+            assert(note.source == name, "by its source")
+            assert(note.subject == "", "about the whole source")
+            assert(note.detail.said == "by Rust", "with its detail")
+            assert(reg:refresh().notes == nil, "told once")
+            reg:close()
+            return note.text
+            "#,
+        )
+        .eval()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(said, "the shelf is dusty, says Rust");
+}

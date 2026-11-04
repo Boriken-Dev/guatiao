@@ -530,7 +530,15 @@ class Registry:
 
         `{"loaded": [{"source", "id", "stamp", "key"}...], "retired": [the
         same...], "skipped": [{"source", "id", "skipped", ...}...],
-        "refused": [{"source", "id"?, "why"}...]}`.
+        "refused": [{"source", "id"?, "why"}...], "notes"?: [{"source",
+        "subject", "text", "detail"}...]}`.
+
+        `notes` is there only when a source said something worth showing
+        that is neither a refusal nor a skip -- the remote source's TLS
+        settings weaker than modern, say: each note the first refresh its
+        source answers it, not again while it stays. `subject` names the
+        part of the source it concerns (empty: the whole), `text` is words
+        for a person, `detail` a dict a program reads instead.
 
         A new candidate loads; a changed one loads and, once it has, its old
         build is retired, while an `Instance` of the old keeps working; a

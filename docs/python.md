@@ -106,10 +106,15 @@ A **source** serves libraries that come and go while the host runs:
 reg.add_source_file("/opt/myapp/libguatiao_source_py.so", {"dirs": ["/opt/myapp/python"]})
 reg.watch_dir("/opt/myapp/plugins", rules="kind=greeter")
 changed = reg.refresh()     # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...]}
+for note in changed.get("notes", []):
+    print(f"{note['source']}: {note['text']}")
 ```
 
 Nothing runs on its own: call `refresh()` when you want the registry to
-agree with disk.
+agree with disk. `notes` is there only when a source has something worth
+showing that is neither a refusal nor a skip, such as the TLS settings a
+remote source's policy weakens; each is told once, by the first refresh
+that finds it.
 
 ## As a provider
 

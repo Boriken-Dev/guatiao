@@ -112,7 +112,10 @@ pub fn module(lua: &Lua) -> LuaResult<LuaTable>    // helpers + `registry`: what
 `reg:load_file(path)` → `{id, version, key, providers}` or `nil, why`;
 `reg:add_source_file(path [, config])` → the source's name;
 `reg:refresh()` → `{loaded, retired, skipped, refused}` (each a list of
-`{source, id, stamp, key}`, `{source, id, why}`, `{source, id, reason}`);
+`{source, id, stamp, key}`, `{source, id, why}`, `{source, id, reason}`),
+and `notes` (`{source, subject, text, detail}` each) only when a source
+said something worth showing that is neither a refusal nor a skip, each
+note the first refresh its source answers it;
 `reg:providers([kind])` → `{key, id, name, library, version, kinds,
 configured}`; `reg:bind(key, kind)` → a handle (`kind` a `guatiao.kind`
 or its name); `reg:retire(key)`; `reg:collect()` → the keys closed;

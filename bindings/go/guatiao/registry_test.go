@@ -373,6 +373,33 @@ func TestServesLibrariesThatComeAndGoFromASource(t *testing.T) {
 	}
 }
 
+func TestASourceNoteIsToldOnce(t *testing.T) {
+	// The shelf written in C answers its configuration's `note` from its
+	// table's `notes` slot.
+	shelf, err := testenv.BuildC("source_in_c.c", mappedDir(t), "go_shelf_note")
+	if err != nil {
+		t.Skip("the source written in C is not built: " + err.Error())
+	}
+	reg := registry(t)
+	if err := reg.AddSourceFile(shelf, map[string]any{"ids": []string{}, "note": "the shelf is dusty, says C"}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := reg.Refresh()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{map[string]any{
+		"source": shelf, "subject": "shelf", "text": "the shelf is dusty, says C",
+		"detail": map[string]any{"said": "by C"},
+	}}
+	if !reflect.DeepEqual(first["notes"], want) {
+		t.Fatalf("%#v", first["notes"])
+	}
+	if again, _ := reg.Refresh(); again["notes"] != nil {
+		t.Fatalf("told again: %v", again)
+	}
+}
+
 // mappedDir is a directory for a library this process maps, which stays
 // mapped, so on Windows it is not removed after the test: Windows refuses
 // to delete a mapped image.

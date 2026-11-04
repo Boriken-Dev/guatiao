@@ -102,6 +102,28 @@ void main() {
     );
   });
 
+  test("a source's note is told once", () {
+    // The source written in Rust tells its configuration's `note`.
+    final reg = Registry('dart-sources', '0.1');
+    addTearDown(reg.close);
+    final name = reg.addSourceFile(
+      join([libraryDir(), libraryName('source_library')]),
+      {
+        'greetings': {'hi': 'hello'},
+        'note': 'the shelf is dusty, says Rust',
+      },
+    );
+    expect(reg.refresh()['notes'], [
+      {
+        'source': name,
+        'subject': '',
+        'text': 'the shelf is dusty, says Rust',
+        'detail': {'said': 'by Rust'},
+      },
+    ]);
+    expect(reg.refresh().containsKey('notes'), isFalse);
+  });
+
   test('a file that is no source is refused with words', () {
     final reg = Registry('dart-sources', '0.1');
     addTearDown(reg.close);

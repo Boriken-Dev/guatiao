@@ -448,6 +448,30 @@ void a_key_a_slot_wrote_into_a_lent_map_that_is_not_utf8_is_removed() {
   check(alloc.live == 0, "every block of the allocator is back");
 }
 
+// The source written in Rust tells its configuration's `note`: the first
+// refresh hands it over, and not again while it stays.
+void a_sources_note_is_told_once() {
+  std::string rust = env("GUATIAO_RUST_GREETERS");
+  if (rust.empty()) rust = RUST_GREETERS_DIR;
+  std::string source = library_file(rust, "source_library");
+  if (!exists(source)) {
+    skip("no source_library in " + rust + ": set GUATIAO_RUST_GREETERS to the workspace's build");
+    return;
+  }
+  guatiao::registry reg("cpp-notes", "0.1");
+  reg.add_source_file(source, guatiao::make(item::map({{"greetings", item::map({{"hi", "hello"}})},
+                                                       {"note", "the shelf is dusty, says Rust"}})));
+  guatiao::value first = reg.refresh();
+  check(first["notes"].size() == 1, "the first refresh tells the note: " + json_of(first));
+  view note = first["notes"].at(0);
+  check(note["source"].string_or("") == source, "by its source");
+  check(json_of(note["subject"]) == "\"\"", "about the whole source");
+  check(note["text"].string_or("") == "the shelf is dusty, says Rust", "in its words");
+  check(json_of(note["detail"]) == "{\"said\":\"by Rust\"}", "with its detail");
+  guatiao::value again = reg.refresh();
+  check(json_of(again["notes"]) == "absent", "and not again while it stays");
+}
+
 }  // namespace
 
 int main() {
@@ -470,6 +494,7 @@ int main() {
     native_threads_call_the_cpp_greeter(reg);
     the_cpp_library_leaves_when_nothing_holds_it(reg);
   }
+  a_sources_note_is_told_once();
   an_answer_built_in_the_librarys_allocator_outlives_the_unload();
   what_a_slot_grew_a_lent_map_with_outlives_the_unload();
   a_refused_move_of_a_lent_tree_is_the_calls_error();

@@ -314,7 +314,12 @@ exporting `guatiao_source` (a bridge to another language) and adds the
 source it answers, refusing with its own words; `watch_dir!(reg, dir;
 rules)` watches a directory; `refresh!(reg)` makes the registry agree with
 every source, answering `Dict("loaded" => [...], "retired" => [...],
-"skipped" => [...], "refused" => [...])`. Nothing refreshes on its own.
+"skipped" => [...], "refused" => [...])`, and `"notes" => [Dict("source",
+"subject", "text", "detail")...]` only when a source said something worth
+showing that is neither, each note the first refresh its source answers it
+(`get(changed, "notes", [])`; the remote source names its TLS settings
+weaker than modern there, `detail` `{setting, value, modern}`). Nothing
+refreshes on its own.
 
 Every registry call that can reach a library is made in a GC-safe region,
 so a library calling back from a thread of its own never waits for this

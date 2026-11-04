@@ -56,7 +56,9 @@ uses them; \code{unload} answers \code{Busy}, \code{Unsupported}, \code{WrongKin
 \item{\code{add_source_file(path, config)}, \code{watch_dir(dir, rules = "")},
 \code{refresh()}}{Sources of libraries that come and go: \code{refresh()} makes the
 registry agree with every source, answering \code{list(loaded, retired, skipped,
-refused)}. Nothing refreshes on its own.}
+refused)}, and \code{notes} (each \code{list(source, subject, text, detail)}) only
+when a source said something worth showing that is neither a refusal nor a skip,
+each note the first refresh its source answers it. Nothing refreshes on its own.}
 }
 }
 \examples{
