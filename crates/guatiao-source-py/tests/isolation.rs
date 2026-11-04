@@ -307,6 +307,32 @@ fn main() {
         format!("sys.prefix is the home given: {facts:?}"),
     );
 
+    if cfg!(windows) {
+        // With no `home`, the installation `import_dirs` mapped
+        // `python3.dll` from is the interpreter's: `sys.prefix` is it.
+        for isolation in ["shipped", "isolated"] {
+            let case = Case::new(&root, &format!("import-dirs-home-{isolation}"));
+            let facts = case.run(&bridge, isolation, None, &[]);
+            check(
+                &case.name,
+                facts.prefix_is(&python.base),
+                format!("sys.prefix is the installation in import_dirs: {facts:?}"),
+            );
+        }
+
+        // `home` alone does not bring `python3.dll`: the registry maps the
+        // bridge, and what it imports, before the bridge reads its
+        // configuration. Under the default search the copy on `PATH` is
+        // not reached either, and the refusal names `import_dirs`.
+        let case = Case::new(&root, "home-without-import-dirs");
+        let said = case.run_raw(&bridge, "home-alone", Some(&python.base), &[]);
+        check(
+            &case.name,
+            said.contains("ok: home-alone"),
+            format!("home without import_dirs: {said}"),
+        );
+    }
+
     // Refusals, before anything starts.
     let case = Case::new(&root, "refusals");
     let said = case.run_raw(&bridge, "refusals", None, &[]);
@@ -550,6 +576,10 @@ fn child(args: &[String]) {
         failed_start(bridge, work);
         return;
     }
+    if isolation == "home-alone" {
+        home_alone(bridge, Path::new(home));
+        return;
+    }
     let mut registry = Registry::new("isolation", "1.0");
     let mut config = base_config();
     config.set("isolation", isolation);
@@ -644,6 +674,21 @@ fn failed_start(bridge: &Path, work: &Path) {
         other => panic!("expected the first failure again, got {other:?}"),
     }
     println!("ok: failed-start");
+}
+
+/// A configuration naming the installation as `home` and nothing in
+/// `import_dirs`, the import search left at its default: refused before the
+/// bridge runs, naming `python3.dll` and `import_dirs`.
+fn home_alone(bridge: &Path, home: &Path) {
+    let mut config = Map::new();
+    config.set("isolation", "isolated");
+    config.set("home", home.display().to_string().as_str());
+    match Registry::new("home-alone", "1.0").add_source_file(bridge, &config) {
+        Err(SourceError::Open { reason, .. })
+            if reason.contains("python3.dll") && reason.contains("import_dirs") => {}
+        other => panic!("expected the bridge's import to be missing, got {other:?}"),
+    }
+    println!("ok: home-alone");
 }
 
 /// Settings refused before any interpreter starts, and a second source
