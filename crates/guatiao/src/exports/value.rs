@@ -753,6 +753,12 @@ pub unsafe extern "C" fn guatiao_alloc_default(out: *mut Allocator) -> Status {
 /// allocator when it is stored into a tree that lives here. A slot whose
 /// kind marks it `sensitive` names this allocator in its carrier.
 ///
+/// **Not to be edited**: use `out` as it is filled, or copy it whole. A
+/// struct is taken for this allocator by its `ctx` alone, so one with
+/// this `ctx` and an `alloc` or `free` of the caller's would have the
+/// blocks it made freed through the library's own `free` once a settle
+/// points their container at the library's own wiping allocator.
+///
 /// **Recognised within one copy of the library**: another library
 /// linking its own copy has its own wiping allocator, which wipes just
 /// the same, but which this copy does not tell apart from any other, so
@@ -777,10 +783,11 @@ pub unsafe extern "C" fn guatiao_alloc_wiping(out: *mut Allocator) -> Status {
 }
 
 /// Whether `alloc` is the allocator `guatiao_alloc_wiping` writes,
-/// recognised by its `ctx`, the address of a static of this copy of the
-/// library. False for a null or unusable one, for an allocator of the
-/// caller's own, even one that wipes, and for the wiping allocator of
-/// another copy of the library linked into the same process.
+/// recognised by its `ctx` alone, the address of a static of this copy of
+/// the library: its other fields are not looked at, which is why that
+/// struct is not to be edited. False for a null or unusable one, for an
+/// allocator of the caller's own, even one that wipes, and for the wiping
+/// allocator of another copy of the library linked into the same process.
 ///
 /// # Safety
 ///

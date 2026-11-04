@@ -2901,7 +2901,9 @@ that lives there stays there**: those moves and the settle after a lent
 `into_local()` changes nothing. Home is `Alloc::wiping()`'s own address:
 a container recording a copy of its vtable (what `guatiao_alloc_wiping`
 fills) is pointed at it by `make_local_in`, and copied there by
-`into_local` and `into_alloc`. **A copy
+`into_local` and `into_alloc`; such a copy is recognised by `ctx` alone,
+so it is used as filled, never edited (an `alloc` or `free` of its own
+would see its blocks freed through the library's). **A copy
 of a node that lives there is made there** (`clone`, `clone_in`,
 `guatiao_value_clone`), whatever allocator was asked for, a map whose
 array or any key lives there whole. **A kind's answer alone moves into

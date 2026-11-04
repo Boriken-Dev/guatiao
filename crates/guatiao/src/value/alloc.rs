@@ -262,7 +262,9 @@ impl Alloc {
     /// this allocator's `ctx` (one `guatiao_alloc_wiping` filled in a
     /// caller's memory) is pointed at this one by `make_local_in`, and
     /// copied here by `into_local` and `into_alloc`, so it outlives that
-    /// struct.
+    /// struct. That struct is recognised by its `ctx` alone, so it is not
+    /// to be edited: one whose `alloc` or `free` was changed would have
+    /// what it made freed through this one's.
     pub fn wiping() -> Alloc {
         /// As in [`Alloc::rust`].
         struct Vtable(Allocator);
