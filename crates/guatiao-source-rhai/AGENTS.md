@@ -78,6 +78,21 @@ let hello = #{
   place and read back); `bytes_mut` as a blob the slot writes into
   (`dst.write_utf8(0, n, text)`, `dst[i] = b`); an object as a handle whose
   methods are its kind's slots (a lent one answers `gone` after the call).
+- **Built from a configuration and asked whether it runs**: optional
+  members of a provider's map, none of them a slot.
+
+  | member | is |
+  | --- | --- |
+  | `config` | the configuration's JSON Schema, a map: a host builds instances, checking each configuration against it first |
+  | `create` | `\|config\| state`, with the provider's map as `this`: the instance's state, `this` in its slots; without it the state is the configuration. Needs `config` |
+  | `instances_only` | `true`: no provider-as-itself is offered. Needs `config` |
+  | `available` | `\|\| ()` when it can run, `\|\| "why not"` when not; asked every time a host asks, with the provider's map as `this`. An error it raises is the reason; any other answer is unavailable, saying what it answered |
+
+  An instance's slots are the provider's functions as they were when it
+  was built; dropping it drops its state. `create` and `available` run
+  under the limits, as a call, and answer `GUATIAO_ERR_BUSY` while the
+  provider runs. A member of another type refuses the library
+  (`` the provider `p` has `create` a number, not a function ``).
 - **Its answer** is the value the function returns (a text slot's may be a
   string or a char); `()` for none. An
   object kind's answer is a map of that kind's slots, held until the caller

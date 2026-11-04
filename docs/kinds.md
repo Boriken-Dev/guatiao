@@ -41,3 +41,10 @@ version; C++'s `library(id, version)`; TypeScript's and JavaScript's nearest `pa
 identity`; Python's module and its `__version__`; Go's module path and
 build version; Julia's `Project.toml`; R's and MATLAB's `DESCRIPTION`;
 Fortran's literals, checked against `fpm.toml` by a test.
+
+**A Rhai provider is a map**, its function members the slots, served by
+guatiao-source-rhai from the kinds' descriptions. The same map declares
+how it is built and asked: `config` (the configuration's JSON Schema, as
+a map), `create` (a function of a configuration answering an instance's
+state, `this` in its slots), `instances_only` and `available` (a function
+answering `()` or a reason); see [Rhai](rhai.md#built-from-a-configuration-asked-whether-it-runs).
