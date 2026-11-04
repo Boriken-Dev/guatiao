@@ -30,7 +30,7 @@
 //!
 //! A method takes `&self` and the trait names `Send + Sync`. Arguments:
 //! integers, floats, `bool`, `&str`, `&[u8]`, `&Value`, `Option<&Value>`,
-//! `&Map`; `Value`, `Map` and `List` by value, which cross as a move (a
+//! `&Map`, `&List`; `Value`, `Map` and `List` by value, which cross as a move (a
 //! pointer to the caller's node, which the callee then owns); `&mut
 //! Value`, `&mut Map` and `&mut List`, lent for the call (a pointer to the
 //! caller's node, which the callee may change and grow; once it returns,
@@ -249,6 +249,8 @@ enum ArgKind {
     ValueOpt,
     /// `&Map`, as a pointer that must not be null.
     MapRef,
+    /// `&List`, as a pointer that must not be null.
+    ListRef,
     /// `Value` by value: a pointer to the caller's node, which the callee
     /// owns once called and the caller never frees.
     ValueOwned,
@@ -766,14 +768,11 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             Type::Slice(s) if last_ident(&s.elem).is_some_and(|i| i == "u8") => Ok(ArgKind::Bytes),
             Type::Path(_) if special(elem, roots)? == Some("Value") => Ok(ArgKind::ValueRef),
             Type::Path(_) if special(elem, roots)? == Some("Map") => Ok(ArgKind::MapRef),
-            Type::Path(_) if special(elem, roots)? == Some("List") => Err(syn::Error::new_spanned(
-                ty,
-                "a list is not borrowed: lend it (`&mut List`) or hand it over (`List`)",
-            )),
+            Type::Path(_) if special(elem, roots)? == Some("List") => Ok(ArgKind::ListRef),
             _ => Err(syn::Error::new_spanned(
                 ty,
-                "a borrowed argument of this type cannot cross; `&str`, `&[u8]`, `&Value` and \
-                 `&Map` can, or take it by value and it crosses through `ToValue`",
+                "a borrowed argument of this type cannot cross; `&str`, `&[u8]`, `&Value`, \
+                 `&Map` and `&List` can, or take it by value and it crosses through `ToValue`",
             )),
         },
         Type::ImplTrait(_) => Err(syn::Error::new_spanned(
@@ -1670,6 +1669,7 @@ fn describe_arg(json: &mut Json, arg: &ArgPlan) {
             json.text(",\"nullable\":true");
         }
         ArgKind::MapRef => tree(json, "map", "borrowed"),
+        ArgKind::ListRef => tree(json, "list", "borrowed"),
         ArgKind::ValueOwned => tree(json, "value", "taken"),
         ArgKind::MapOwned => tree(json, "map", "taken"),
         ArgKind::ListOwned => tree(json, "list", "taken"),
@@ -1821,6 +1821,7 @@ fn arg_c_type(kind: &ArgKind) -> TokenStream {
             quote!(*const ::guatiao::Value)
         }
         ArgKind::MapRef => quote!(*const ::guatiao::Map),
+        ArgKind::ListRef => quote!(*const ::guatiao::List),
         ArgKind::ValueOwned | ArgKind::ValueMut => quote!(*mut ::guatiao::Value),
         ArgKind::MapOwned | ArgKind::MapMut => quote!(*mut ::guatiao::Map),
         ArgKind::ListOwned | ArgKind::ListMut => quote!(*mut ::guatiao::List),
@@ -2025,6 +2026,16 @@ fn emit_shim(
                 quote! {
                     // SAFETY: the proxy passes a well-formed map.
                     let #ident = match unsafe { ::guatiao::library::kind::map_arg(#ident) } {
+                        ::core::result::Result::Ok(__v) => __v,
+                        ::core::result::Result::Err(__s) => { #f }
+                    };
+                }
+            }
+            ArgKind::ListRef => {
+                let f = fail(quote!(__s));
+                quote! {
+                    // SAFETY: the proxy passes a well-formed list.
+                    let #ident = match unsafe { ::guatiao::library::kind::list_arg(#ident) } {
                         ::core::result::Result::Ok(__v) => __v,
                         ::core::result::Result::Err(__s) => { #f }
                     };
@@ -2392,6 +2403,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             },
             ArgKind::ValueRef => quote! { let #name = #ident as *const ::guatiao::Value; },
             ArgKind::MapRef => quote! { let #name = #ident as *const ::guatiao::Map; },
+            ArgKind::ListRef => quote! { let #name = #ident as *const ::guatiao::List; },
             // Handed over with the call: the callee frees it, so this side
             // forgets it. Marshalled after every argument that can fail.
             ArgKind::ValueOwned | ArgKind::MapOwned | ArgKind::ListOwned => {
@@ -3212,7 +3224,7 @@ mod tests {
     fn a_crate_path_reroots_every_generated_path() {
         // Every way an argument and a return can cross.
         const EVERYTHING: &str = "pub trait Greeter: Send + Sync { \
-            fn a(&self, s: &str, b: &[u8], v: &Value, o: Option<&Value>, m: &Map, n: i64, \
+            fn a(&self, s: &str, b: &[u8], v: &Value, o: Option<&Value>, m: &Map, l: &List, n: i64, \
                 c: Config, t: Value, u: Map, w: List, x: &mut Map, y: &mut List, \
                 z: &mut Value) -> Result<Map, ProviderError>; \
             fn b(&self) -> Result<List, ProviderError>; \
@@ -3556,7 +3568,7 @@ mod tests {
             ///
             /// Second paragraph.
             pub trait Codec: Send + Sync {
-                fn open(&self, config: Option<&Value>, tags: List, into: &mut Value, cb: Object<dyn Sink>) -> Result<(), ProviderError>;
+                fn open(&self, config: Option<&Value>, tags: List, seen: &List, into: &mut Value, cb: Object<dyn Sink>) -> Result<(), ProviderError>;
                 /// Optional.
                 fn close(&self) -> u32 { 0 }
             }
@@ -3570,6 +3582,7 @@ mod tests {
             r#"\"doc\":\"Says \\\"hi\\\"\\t(tab).\\n\\nSecond paragraph.\""#,
             r#"{\"name\":\"config\",\"type\":\"value\",\"pass\":\"borrowed\",\"nullable\":true}"#,
             r#"{\"name\":\"tags\",\"type\":\"list\",\"pass\":\"taken\"}"#,
+            r#"{\"name\":\"seen\",\"type\":\"list\",\"pass\":\"borrowed\"}"#,
             r#"{\"name\":\"into\",\"type\":\"value\",\"pass\":\"lent\"}"#,
             r#"{\"name\":\"cb\",\"type\":\"object\",\"kind\":"#,
             "<dyn Sink as ::guatiao::library::Kind>::NAME",
@@ -3754,11 +3767,6 @@ mod tests {
                 "",
                 "pub trait G: Send + Sync { fn f(&self, l: Object<dyn Listener>) -> i64; }",
                 "on a fallible slot only",
-            ),
-            (
-                "",
-                "pub trait G: Send + Sync { fn f(&self, l: &List) -> i64; }",
-                "a list is not borrowed: lend it (`&mut List`) or hand it over (`List`)",
             ),
             (
                 "",

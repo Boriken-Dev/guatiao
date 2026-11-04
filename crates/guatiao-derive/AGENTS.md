@@ -233,7 +233,7 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | --- | --- |
 | integers, floats, `bool` | by value |
 | `&str` / `&[u8]` | `Str` / `Bytes` views |
-| `&Value`, `&Map` | non-null pointers |
+| `&Value`, `&Map`, `&List` | non-null `const` pointers, read for the call; a map's keys are checked as UTF-8 (`kind::{value,map,list}_arg`) |
 | `Option<&Value>` | a pointer that may be null |
 | `Value`, `Map`, `List` by value | **a move**: `*mut Value`/`*mut Map`/`*mut List` (no `const`) to the caller's node, which the proxy then forgets and the callee owns on every path, taken first in the shim; nothing is copied. The tree is in the caller's allocators; `into_local()` re-homes one a callee keeps past them. A map's keys are checked as for `&Map` |
 | `&mut Value`, `&mut Map`, `&mut List` | **lent for the call**: `*mut Value`/`*mut Map`/`*mut List` to the caller's node; the callee may change and grow it, never free it or keep it. The shim refuses null and a map's keys that are not UTF-8 (`kind::{value,map,list}_mut_arg`). The proxy reads the allocator the tree records before the call (`kind::lent_home`) and, after it, answered or refused, moves into it whatever the callee built elsewhere (`kind::lent_settle`, which is `make_local_in`, and removes a key a foreign slot wrote that is not UTF-8). The slot's field carries a doc line, "Lent for the call, not handed over", which a C header renders. Provider and object kinds alike; `Option<&mut T>` is refused |

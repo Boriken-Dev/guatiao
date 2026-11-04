@@ -195,6 +195,12 @@ impl Serve for Engine {
                 Some(Arg::Uint(x)) => Ok(Answer::Uint(x)),
                 other => panic!("{other:?}"),
             },
+            ("summer", "sum") => match args.as_slice() {
+                [Arg::List(items)] => Ok(Answer::Int(
+                    items.iter().filter_map(|v| i64::try_from(v).ok()).sum(),
+                )),
+                other => panic!("{other:?}"),
+            },
             (k, s) => panic!("{k}.{s}"),
         }
     }
@@ -494,6 +500,12 @@ type DriveCheck = unsafe extern "C" fn(
 ) -> Status;
 type DriveTable = unsafe extern "C" fn(*const core::ffi::c_void) -> i32;
 type DriveWide = unsafe extern "C" fn(*const core::ffi::c_void, *mut core::ffi::c_void) -> i32;
+type DriveSum = unsafe extern "C" fn(*const core::ffi::c_void, *mut core::ffi::c_void) -> i64;
+
+/// A kind taking a list borrowed, as a description says it.
+const SUMMER: &str = r#"{"name":"summer","floor_hash":2920396019,"object":false,"slots":[
+    {"name":"sum","required":true,"fallible":false,
+     "args":[{"name":"items","type":"list","pass":"borrowed"}],"answer":{"type":"i64"}}]}"#;
 
 #[test]
 fn a_c_host_calls_a_table_built_at_run_time() {
@@ -531,7 +543,7 @@ fn a_c_host_calls_a_table_built_at_run_time() {
     // SAFETY: the library the compiler just wrote, which runs nothing on load.
     let library = unsafe { libloading::Library::new(&out) }.expect("it loads");
     // SAFETY: the signatures `described_caller.c` defines.
-    let (greet, check, shout_is_null, drive_wide) = unsafe {
+    let (greet, check, shout_is_null, drive_wide, drive_sum) = unsafe {
         (
             *library
                 .get::<DriveGreet>(b"drive_greet\0")
@@ -543,6 +555,7 @@ fn a_c_host_calls_a_table_built_at_run_time() {
                 .get::<DriveTable>(b"drive_shout_is_null\0")
                 .expect("exported"),
             *library.get::<DriveWide>(b"drive_wide\0").expect("exported"),
+            *library.get::<DriveSum>(b"drive_sum\0").expect("exported"),
         )
     };
 
@@ -556,8 +569,11 @@ fn a_c_host_calls_a_table_built_at_run_time() {
     });
     let greeter = ServedTable::new(k.greeter, |s| s.name() != "shout", engine.clone(), &Libffi)
         .expect("built");
-    let wide = ServedTable::new(k.wide, |_| true, engine, &Libffi).expect("built");
+    let wide = ServedTable::new(k.wide, |_| true, engine.clone(), &Libffi).expect("built");
+    let summer = ServedTable::new(described(SUMMER), |_| true, engine, &Libffi).expect("built");
     let ctx = core::ptr::without_provenance_mut(1);
+    // SAFETY: a summer table and its `ctx`; the C side lends its own list.
+    assert_eq!(unsafe { drive_sum(summer.as_ptr(), ctx) }, 42);
 
     let mut answer = Map::new();
     let mut err = ProviderError::none();

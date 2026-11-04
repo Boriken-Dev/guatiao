@@ -15,7 +15,7 @@ use core::ffi::c_void;
 use guatiao::value::convert::TryAsRef;
 
 use guatiao::library::{Kind, KindMismatch, ProviderError, Remote};
-use guatiao::{FromValue, Map, Schema, Status, ToValue, Value};
+use guatiao::{FromValue, List, Map, Schema, Status, ToValue, Value};
 
 /// Something that crosses by value, through the derives.
 #[derive(Debug, PartialEq, ToValue, FromValue, Schema)]
@@ -481,4 +481,64 @@ fn an_object_crosses_as_raw_parts_and_a_mismatch_destroys_it() {
     let why =
         unsafe { Object::<dyn Tally>::from_raw(guatiao::library::ObjectRaw::null()) }.unwrap_err();
     assert_eq!(why, KindMismatch::NoTable);
+}
+
+/// A list lent shared for the call: the callee reads it through `&List`,
+/// the caller keeps it as it was.
+#[guatiao::kind]
+pub trait Summer: Send + Sync {
+    fn sum(&self, items: &List) -> i64;
+    fn first(&self, items: &List) -> Result<String, ProviderError>;
+}
+
+struct Adds;
+
+impl Summer for Adds {
+    fn sum(&self, items: &List) -> i64 {
+        items.iter().filter_map(|v| i64::try_from(v).ok()).sum()
+    }
+    fn first(&self, items: &List) -> Result<String, ProviderError> {
+        items
+            .get(0)
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .map(str::to_string)
+            .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_NOT_FOUND, "an empty list"))
+    }
+}
+
+static ADDS_TABLE: SummerVtable = SummerVtable::of::<Adds>();
+static ADDS: Adds = Adds;
+
+#[test]
+fn a_borrowed_list_crosses_and_stays_the_callers() {
+    assert_eq!(
+        <dyn Summer as Kind>::FLOOR_HASH,
+        guatiao::library::kind::fnv1a(
+            "provider;sum(&List)->i64;first(&List)->Result<String,ProviderError>"
+        )
+    );
+    assert!(
+        SummerVtable::description().contains(r#"{"name":"items","type":"list","pass":"borrowed"}"#)
+    );
+    // SAFETY: a table `of::<Adds>()` with the `&Adds` it was built for.
+    let r = unsafe {
+        Remote::<dyn Summer>::from_raw(
+            &ADDS_TABLE as *const SummerVtable as *const c_void,
+            size_of::<SummerVtable>(),
+            (&ADDS as *const Adds).cast::<c_void>().cast_mut(),
+        )
+    }
+    .expect("a full table validates");
+    let mut items = List::new();
+    items.push(Value::from(40));
+    items.push(Value::from(2));
+    assert_eq!(r.sum(&items), 42);
+    assert_eq!(items.len(), 2, "the caller's list, as it was");
+    assert_eq!(
+        r.first(&List::new()).unwrap_err().status,
+        Status::GUATIAO_ERR_NOT_FOUND
+    );
+    let mut words = List::new();
+    words.push(Value::from("ana"));
+    assert_eq!(r.first(&words).unwrap(), "ana");
 }

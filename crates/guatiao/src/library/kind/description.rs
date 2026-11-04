@@ -469,10 +469,9 @@ fn slot(value: &Value, at: &str) -> Result<SlotDescription, DescriptionError> {
 
 /// A kind's `slots`: at least one, each name once and none `header`, an
 /// object kind's never `destroy`, each argument named once, `bytes_mut` on
-/// an object kind only, an object only on a fallible slot and a list never
-/// borrowed: what `#[guatiao::kind]` refuses to declare, checked here for a
-/// kind declared anywhere else. Required and optional slots come in any
-/// order.
+/// an object kind only and an object only on a fallible slot: what
+/// `#[guatiao::kind]` refuses to declare, checked here for a kind declared
+/// anywhere else. Required and optional slots come in any order.
 fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, DescriptionError> {
     let listed = list_at(map, at, "slots")?;
     if listed.is_empty() {
@@ -500,21 +499,6 @@ fn slots_of(map: &Map, at: &str, object: bool) -> Result<Vec<SlotDescription>, D
                 format!("{here}.args[{j}].type"),
                 "is `bytes_mut`, the caller's bytes written in place, which cross on an object \
                  kind only",
-            ));
-        }
-        if let Some(j) = slot.args.iter().position(|a| {
-            matches!(
-                a.ty,
-                ArgType::Tree {
-                    tree: Tree::List,
-                    pass: Pass::Borrowed,
-                    ..
-                }
-            )
-        }) {
-            return Err(DescriptionError::new(
-                format!("{here}.args[{j}].pass"),
-                "is borrowed: a list is not borrowed, but taken or lent",
             ));
         }
         // The object's table is checked where it arrives, and only a
@@ -968,8 +952,8 @@ mod tests {
     }
 
     /// What `#[guatiao::kind]` cannot declare: an object on a slot that
-    /// cannot fail, a borrowed list, a slot named `header`; each refused
-    /// where it is said.
+    /// cannot fail, a slot named `header`; each refused where it is said.
+    /// A list crosses borrowed, lent or taken, as a map does.
     #[test]
     fn what_no_trait_declares_is_refused_where_it_is_said() {
         let kind = |slot: Value| {
@@ -1030,11 +1014,6 @@ mod tests {
                 "on a fallible slot only",
             ),
             (
-                slot("f", true, vec![list("borrowed")], None),
-                "slots[0].args[0].pass",
-                "a list is not borrowed",
-            ),
-            (
                 slot("header", true, vec![], None),
                 "slots[0]",
                 "the table's first field",
@@ -1054,7 +1033,11 @@ mod tests {
             slot(
                 "f",
                 false,
-                vec![list("lent"), named(list("taken"), "kept")],
+                vec![
+                    list("lent"),
+                    named(list("taken"), "kept"),
+                    named(list("borrowed"), "read"),
+                ],
                 None,
             ),
         ] {

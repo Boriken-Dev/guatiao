@@ -477,6 +477,16 @@ mod tests {
             Ok(PreparedArg::Map(_))
         ));
         assert!(matches!(
+            PreparedArg::<(), (), ()>::tree(
+                Value::from(List::new()),
+                Tree::List,
+                Pass::Borrowed,
+                None,
+                at
+            ),
+            Ok(PreparedArg::List(_))
+        ));
+        assert!(matches!(
             PreparedArg::<(), (), ()>::tree(map(), Tree::Map, Pass::Taken, None, at),
             Ok(PreparedArg::TakenMap(Some(_)))
         ));
