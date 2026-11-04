@@ -116,6 +116,24 @@ macro_rules! export {
         pub extern "C" fn guatiao_guest_release(object: i64) {
             $crate::glue::release($make, object)
         }
+
+        /// guatiao ABI 1: an instance of a provider, from a configuration.
+        #[unsafe(no_mangle)]
+        pub extern "C" fn guatiao_guest_create(provider: i64, config: usize, len: usize) -> u32 {
+            $crate::glue::create($make, provider, config, len)
+        }
+
+        /// guatiao ABI 1: an instance this module built was dropped.
+        #[unsafe(no_mangle)]
+        pub extern "C" fn guatiao_guest_destroy(instance: i64) {
+            $crate::glue::destroy($make, instance)
+        }
+
+        /// guatiao ABI 1: whether a provider can run now.
+        #[unsafe(no_mangle)]
+        pub extern "C" fn guatiao_guest_available(provider: i64) -> u32 {
+            $crate::glue::available($make, provider)
+        }
     };
 }
 
@@ -163,12 +181,47 @@ mod tests {
         }
     }
 
+    /// An instance: greets with the word it was configured with.
+    struct Word(alloc::string::String);
+
+    impl Handler for Word {
+        fn call(&mut self, call: &mut Call) -> Result<Answer, Refusal> {
+            let name = call.text(0)?;
+            Ok(alloc::format!("{}, {name}", self.0).as_str().into())
+        }
+    }
+
+    fn word(config: Value) -> Result<Word, Refusal> {
+        let word = TryAsRef::<Map>::try_as_ref(&config)
+            .and_then(|m| m.get("word"))
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .unwrap_or("");
+        if word.is_empty() {
+            return Err("no word".into());
+        }
+        Ok(Word(word.to_string()))
+    }
+
     fn library() -> Library {
-        Library::new().provider(
-            Provider::new("counter", Counter { count: 0 })
-                .name("A counter")
-                .serves("counter", ["count"]),
-        )
+        let mut schema = Map::new();
+        schema.set("type", "object");
+        Library::new()
+            .provider(
+                Provider::new("counter", Counter { count: 0 })
+                    .name("A counter")
+                    .serves("counter", ["count"]),
+            )
+            .provider(
+                Provider::new("tuned", Counter { count: 0 })
+                    .serves("greeter", ["greet"])
+                    .config(schema.clone(), word)
+                    .available(|| Ok(())),
+            )
+            .provider(
+                Provider::instances("only", schema, word)
+                    .serves("greeter", ["greet"])
+                    .available(|| Err("asleep".to_string())),
+            )
     }
 
     export!(library, version = "1.2.3");
@@ -201,7 +254,28 @@ mod tests {
             .and_then(|m| m.get("providers"))
             .and_then(TryAsRef::try_as_ref)
             .expect("providers");
-        assert_eq!(providers.len(), 1);
+        assert_eq!(providers.len(), 3);
+        let keys = |i: usize| -> Vec<alloc::string::String> {
+            let entry: &Map =
+                TryAsRef::try_as_ref(providers.get(i).expect("declared")).expect("a map");
+            entry.iter().map(|e| e.key().to_string()).collect()
+        };
+        assert_eq!(keys(0), ["id", "name", "serves"]);
+        assert_eq!(
+            keys(1),
+            ["id", "name", "serves", "config", "may_be_unavailable"]
+        );
+        assert_eq!(
+            keys(2),
+            [
+                "id",
+                "name",
+                "serves",
+                "config",
+                "instances_only",
+                "may_be_unavailable"
+            ]
+        );
 
         let (at, len) = request("counter", "count", Vec::new());
         assert_eq!(guatiao_guest_call(0, 0, at, len), 0);
@@ -217,6 +291,73 @@ mod tests {
         assert_eq!(guatiao_guest_call(0, 7, at, len), 10, "no provider 7");
         let garbage = guatiao_guest_alloc(3);
         assert_eq!(guatiao_guest_call(0, 0, garbage, 3), 7, "not a request");
+        answers();
+    }
+
+    fn configuration(word: &str) -> (usize, usize) {
+        let mut config = Map::new();
+        config.set("word", word);
+        let bytes = wire::to_bytes(&Value::from(config)).expect("encoded");
+        let at = guatiao_guest_alloc(bytes.len());
+        // SAFETY: `at` is `bytes.len()` writable bytes, just allocated.
+        unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), at as *mut u8, bytes.len()) };
+        (at, bytes.len())
+    }
+
+    fn text(bytes: &[u8]) -> alloc::string::String {
+        let value = wire::decode(bytes).expect("a value");
+        TryAsRef::<str>::try_as_ref(&value)
+            .expect("text")
+            .to_string()
+    }
+
+    #[test]
+    fn instances_are_built_called_and_destroyed_and_availability_is_answered() {
+        let (at, len) = configuration("howdy");
+        assert_eq!(guatiao_guest_create(1, at, len), 0);
+        let howdy = glue::number(&answers()[0]).expect("an instance id");
+        let (at, len) = configuration("hey");
+        assert_eq!(guatiao_guest_create(2, at, len), 0);
+        let hey = glue::number(&answers()[0]).expect("an instance id");
+        assert_ne!(howdy, hey);
+
+        let (at, len) = request("greeter", "greet", alloc::vec![Value::from("ana")]);
+        assert_eq!(guatiao_guest_call(2, howdy, at, len), 0);
+        let (at, len) = request("greeter", "greet", alloc::vec![Value::from("bo")]);
+        assert_eq!(guatiao_guest_call(2, hey, at, len), 0);
+        let greeted: Vec<_> = answers().iter().map(|b| text(b)).collect();
+        assert_eq!(greeted, ["howdy, ana", "hey, bo"]);
+
+        guatiao_guest_destroy(howdy);
+        let (at, len) = request("greeter", "greet", alloc::vec![Value::from("cy")]);
+        assert_eq!(guatiao_guest_call(2, howdy, at, len), 12, "destroyed");
+        let (at, len) = request("greeter", "greet", alloc::vec![Value::from("cy")]);
+        assert_eq!(guatiao_guest_call(2, hey, at, len), 0);
+        assert_eq!(text(&answers()[1]), "hey, cy");
+        let (at, len) = request("greeter", "greet", alloc::vec![Value::from("di")]);
+        assert_eq!(
+            guatiao_guest_call(0, 2, at, len),
+            13,
+            "only through instances"
+        );
+        answers();
+
+        let (at, len) = configuration("");
+        assert_eq!(guatiao_guest_create(1, at, len), 7, "refused");
+        assert_eq!(answers(), [b"no word".to_vec()]);
+        let (at, len) = configuration("x");
+        assert_eq!(guatiao_guest_create(0, at, len), 13, "builds no instances");
+        let (at, len) = configuration("x");
+        assert_eq!(guatiao_guest_create(9, at, len), 10, "no provider 9");
+        assert_eq!(guatiao_guest_create(1, at, len), 7, "taken back already");
+        answers();
+
+        assert_eq!(guatiao_guest_available(0), 0);
+        assert_eq!(guatiao_guest_available(1), 0);
+        assert!(answers().is_empty(), "available: nothing answered");
+        assert_eq!(guatiao_guest_available(2), 0);
+        assert_eq!(text(&answers()[0]), "asleep");
+        assert_eq!(guatiao_guest_available(9), 10);
         answers();
     }
 

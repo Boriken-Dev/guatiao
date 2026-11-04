@@ -27,6 +27,7 @@ func standIn(t *testing.T) *told {
 	}
 	hostDrop = func(h int64) { got.dropped = append(got.dropped, h) }
 	objects = map[int64]Handler{}
+	instances = map[int64]Handler{}
 	return got
 }
 
@@ -97,7 +98,7 @@ func TestTheGlueDeclaresDispatchesAndRefuses(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 	for want := int64(1); want <= 2; want++ {
-		if s := call(false, 0, request(t, "counter", "count")); s != 0 {
+		if s := call(targetProvider, 0, request(t, "counter", "count")); s != 0 {
 			t.Fatalf("status %d", s)
 		}
 		v, _ := Decode(got.answers[len(got.answers)-1])
@@ -105,16 +106,16 @@ func TestTheGlueDeclaresDispatchesAndRefuses(t *testing.T) {
 			t.Errorf("counted %v", v)
 		}
 	}
-	if s := call(false, 0, request(t, "counter", "nope")); s != uint32(StatusUnsupported) {
+	if s := call(targetProvider, 0, request(t, "counter", "nope")); s != uint32(StatusUnsupported) {
 		t.Errorf("status %d", s)
 	}
-	if s := call(false, 0, request(t, "counter", "panic")); s != uint32(StatusInternal) {
+	if s := call(targetProvider, 0, request(t, "counter", "panic")); s != uint32(StatusInternal) {
 		t.Errorf("a panic is %d", s)
 	}
-	if s := call(false, 9, request(t, "counter", "count")); s != uint32(StatusNotFound) {
+	if s := call(targetProvider, 9, request(t, "counter", "count")); s != uint32(StatusNotFound) {
 		t.Errorf("no provider 9: %d", s)
 	}
-	if s := call(false, 0, []byte{0xff}); s != uint32(StatusBadValue) {
+	if s := call(targetProvider, 0, []byte{0xff}); s != uint32(StatusBadValue) {
 		t.Errorf("garbage: %d", s)
 	}
 }
@@ -122,26 +123,26 @@ func TestTheGlueDeclaresDispatchesAndRefuses(t *testing.T) {
 func TestLentArgumentsAreWrittenBackAndObjectsKeptUntilReleased(t *testing.T) {
 	got := standIn(t)
 	Serve(&Library{Providers: []Provider{{ID: "c", Handler: &counter{}}}})
-	if s := call(false, 0, request(t, "counter", "fill", NewMap(), make([]byte, 4))); s != 0 {
+	if s := call(targetProvider, 0, request(t, "counter", "fill", NewMap(), make([]byte, 4))); s != 0 {
 		t.Fatalf("status %d", s)
 	}
 	buffer, _ := Decode(got.written[1])
 	if string(buffer.([]byte)) != "ok\x00\x00" {
 		t.Errorf("%q", buffer)
 	}
-	if s := call(false, 0, request(t, "counter", "start", Number("42"))); s != 0 {
+	if s := call(targetProvider, 0, request(t, "counter", "start", Number("42"))); s != 0 {
 		t.Fatalf("status %d", s)
 	}
 	id, _ := Decode(got.answers[len(got.answers)-1])
 	n, _ := id.(Number).Int()
-	if s := call(true, n, request(t, "conversation", "say", "hi")); s != 0 || len(got.calls) != 1 || got.calls[0] != 42 {
+	if s := call(targetObject, n, request(t, "conversation", "say", "hi")); s != 0 || len(got.calls) != 1 || got.calls[0] != 42 {
 		t.Errorf("status %d, calls %v", s, got.calls)
 	}
 	release(n)
 	if len(got.dropped) != 1 || got.dropped[0] != 42 {
 		t.Errorf("dropped %v", got.dropped)
 	}
-	if s := call(true, n, request(t, "conversation", "say", "hi")); s != uint32(StatusGone) {
+	if s := call(targetObject, n, request(t, "conversation", "say", "hi")); s != uint32(StatusGone) {
 		t.Errorf("released, then %d", s)
 	}
 }

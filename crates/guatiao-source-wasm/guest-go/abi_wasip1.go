@@ -65,16 +65,37 @@ func exportAlloc(n int32) int32 {
 //go:wasmexport guatiao_guest_declare
 func exportDeclare() int32 { return int32(declare()) }
 
+// taken is the request written at address, n bytes, which no export has
+// taken yet.
+func taken(address int32, n int32) ([]byte, bool) {
+	b, ok := requests[uint32(address)]
+	delete(requests, uint32(address))
+	return b, ok && int32(len(b)) == n
+}
+
 //go:wasmexport guatiao_guest_call
 func exportCall(object int32, target int64, request int32, n int32) int32 {
-	address := uint32(request)
-	b, ok := requests[address]
-	delete(requests, address)
-	if !ok || int32(len(b)) != n {
-		return int32(refuse(Refuse(StatusBadValue, "no request at %d", address)))
+	b, ok := taken(request, n)
+	if !ok {
+		return int32(refuse(Refuse(StatusBadValue, "no request at %d", uint32(request))))
 	}
-	return int32(call(object != 0, target, b))
+	return int32(call(object, target, b))
 }
 
 //go:wasmexport guatiao_guest_release
 func exportRelease(object int64) { release(object) }
+
+//go:wasmexport guatiao_guest_create
+func exportCreate(provider int64, config int32, n int32) int32 {
+	b, ok := taken(config, n)
+	if !ok {
+		return int32(refuse(Refuse(StatusBadValue, "no configuration at %d", uint32(config))))
+	}
+	return int32(create(provider, b))
+}
+
+//go:wasmexport guatiao_guest_destroy
+func exportDestroy(instance int64) { destroy(instance) }
+
+//go:wasmexport guatiao_guest_available
+func exportAvailable(provider int64) int32 { return int32(available(provider)) }

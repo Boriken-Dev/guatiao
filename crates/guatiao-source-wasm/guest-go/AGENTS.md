@@ -26,10 +26,27 @@ func init() {                        // a reactor's main never runs
 func main() {}
 ```
 
+A provider built from a configuration, and asked whether it runs:
+
+```go
+guest.Provider{
+	ID: "tuned", Serves: []guest.Serves{{Kind: "greeter", Slots: []string{"greet"}}},
+	Config: schema,                                   // a JSON Schema: *guest.Map or map[string]any
+	Build: func(config any) (guest.Handler, error) { ... },   // each instance's handler
+	InstancesOnly: true,                              // no provider to call as itself (Handler may be nil)
+	Available: func() error { return nil },           // an error's text: the reason it cannot run
+}
+```
+
+The host checks a configuration against `Config` before `Build` runs; an
+error from `Build` crosses to the host's `instantiate` as a refusal does.
+An instance's calls reach its handler until the host drops it, which a
+`Releaser` hears. Without `Available` a provider is always available.
+
 ```go
 type Handler interface{ Call(c *Call) (any, error) }
 type HandlerFunc func(c *Call) (any, error)
-type Releaser interface{ Release() }       // an object's handler: told when the caller destroyed it
+type Releaser interface{ Release() }       // an object's or instance's handler: told when the caller destroyed it
 ```
 
 **Answer**: `nil` for nothing; `&guest.Object{Handler: h}` for an object
