@@ -373,8 +373,7 @@ wherever it is declared, `@fallible` a slot ending in
 its remote. Object kinds a slot names are declared before it. `@kind`
 refuses, as `#[guatiao::kind]` and the library's reader do, a kind with
 no slot, two arguments of one slot with one name, a slot named
-`header`, a bare `ListRef` argument (a list is lent or taken),
-`Lent{Vector{UInt8}}` on a kind that is not an object kind, and an object
+`header`, `Lent{Vector{UInt8}}` on a kind that is not an object kind, and an object
 passed or answered on a slot that is not `@fallible`.
 
 **From a description**: `Guatiao.kinds_of(document; into = Module(:Kinds),
@@ -398,7 +397,7 @@ refuses it.
 | `Vector{UInt8}` | `guatiao_bytes` | bytes | a copy |
 | `Lent{Vector{UInt8}}` | `guatiao_bytes_mut` | a `Vector{UInt8}`, written in place | a copy, written back when the method returns |
 | `Bool`, `Int8`..`UInt64`, `Int`, `UInt`, `Float32`, `Float64` | the C scalar (`UInt` is `size_t`, `Int` `intptr_t`) | a number that converts | the scalar |
-| `ValueRef`, `MapRef` | `const guatiao_value *`, `const guatiao_map *` | a Value, a view or plain data (`nothing` is a null value pointer) | a read-only view, valid for the call |
+| `ValueRef`, `MapRef`, `ListRef` | `const guatiao_value *`, `const guatiao_map *`, `const guatiao_list *` | a Value, a view or plain data (`nothing` is a null value pointer) | a read-only view, valid for the call |
 | `Lent{ValueRef}`, `Lent{MapRef}`, `Lent{ListRef}` | the same without `const`, "Lent for the call" | a Value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent; a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value), what it answered freed |
 | `Taken{ValueRef}`, `Taken{MapRef}`, `Taken{ListRef}` | the same, handed over | a Value (moved: it holds absent afterwards), a view (copied) or plain data | a `Value` the method owns (and closes, or its finalizer frees it), moved into this binding's allocator on arrival (copied only where the caller built it elsewhere), so it may be kept past the caller's library; taken, and freed, even when another argument refuses the call |
 | answer `ValueRef`, `MapRef`, `ListRef` | `guatiao_value/map/list *out` | a `Value`, moved into this binding's allocator on arrival when the slot built it in its own | any Julia data or a `Value`, built in the allocator the carrier names (a Value elsewhere is copied there and closed) |

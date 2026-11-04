@@ -29,6 +29,22 @@ function both(::Sizes, a::Value, b::Value)
     return n
 end
 
+@kind Summer floor_hash = 9 begin
+    @required total(items::ListRef)::Int64
+end
+
+"Adds a list it borrows, and notes each attempt to change it."
+struct Adds <: Summer end
+const ADDS_REFUSED = String[]
+function total(::Adds, items)
+    try
+        push!(items, 0)
+    catch e
+        push!(ADDS_REFUSED, sprint(showerror, e))
+    end
+    return sum(Int64(x[]) for x in items)
+end
+
 struct Built <: Mirror end
 show_me(::Built) = Value(Dict("built" => "here"))
 
@@ -172,6 +188,17 @@ end
     @test KEEPER.kept[1][] == Dict("name" => "ivy")
     foreach(close, KEEPER.kept)
     empty!(KEEPER.kept)
+end
+
+@testset "a list borrowed is read, and stays the caller's" begin
+    Guatiao.register_library(REG, Guatiao.Library("julia_adds", "0.1.0"; providers = [Adds]))
+    s = Guatiao.bind(REG, "julia_adds_adds", Summer)
+    @test total(s, [40, 2]) == 42
+    held = Value([1, 2, 3])
+    @test total(s, held) == 6
+    @test held[] == [1, 2, 3]
+    close(held)
+    @test length(ADDS_REFUSED) == 2
 end
 
 @testset "a caller frees what it handed over when a later argument fails" begin

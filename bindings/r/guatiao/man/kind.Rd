@@ -95,9 +95,9 @@ object passed or answered on a slot that is not fallible.
 \code{kinds_of(document)} declares, as \code{kind()} would, every kind of a
 description document (each object kind before the kinds naming it), in
 \code{where}: what a host binds a kind from when it has no declaration of
-it, such as the document a library carries. A type it does not know, a
-borrowed list or kinds referring to each other in a cycle is an error naming
-the kind and the slot.
+it, such as the document a library carries. A type it does not know or
+kinds referring to each other in a cycle is an error naming the kind and
+the slot.
 
 Shapes: \code{"string"} (\code{guatiao_str}: a string), \code{"bytes"} (a raw
 vector), \code{"bool"}, \code{"int8"} to \code{"uint64"}, \code{"float"},

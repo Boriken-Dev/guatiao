@@ -167,7 +167,7 @@ the `Value` `kind_descriptions` answers, or plain data. JSON text is read
 by the library, so no JSON package is needed. A slot's function is
 `getfield(into, :greet)`; code compiled before the call reaches it
 through `Base.invokelatest`. `ArgumentError` names the kind and the slot
-for a type it does not know, a borrowed list, or a cycle.
+for a type it does not know, or a cycle.
 """
 function kinds_of(document; into::Module = Module(:Kinds), known = ())
     doc = document_data(document)

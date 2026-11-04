@@ -124,14 +124,17 @@ contains
     end do
   end subroutine
 
-  recursive subroutine shape_borrow(self, m, v, n, answer, error)
+  recursive subroutine shape_borrow(self, m, v, n, l, answer, error)
     class(every_shape), intent(inout) :: self
-    type(guatiao_value), intent(in) :: m, v, n
+    type(guatiao_value), intent(in) :: m, v, n, l
     type(guatiao_value), intent(inout) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
+    type(guatiao_value) :: first
     call answer%set('m', int(m%length(), int64))
     call answer%set('v', int(v%tag(), int64))
     call answer%set('n', n%is_absent())
+    first = l%item(1)
+    call answer%set('l', int(l%length(), int64) * 100 + first%int_or(-1_int64))
   end subroutine
 
   recursive subroutine shape_lend(self, m, l, answer, error)
@@ -267,8 +270,14 @@ contains
     call m%set('a', 1_int64)
     call m%set('b', 2_int64)
     v = guatiao_of('text')
-    call g%borrow(m, v, guatiao_absent(), answer, error)
-    call check(.not. allocated(error), 'borrow: a map, a value and a null value are borrowed')
+    l = guatiao_list()
+    call l%push(4_int64)
+    call l%push(5_int64)
+    call g%borrow(m, v, guatiao_absent(), l, answer, error)
+    call check(.not. allocated(error), 'borrow: a map, a value, a null value and a list are borrowed')
+    item = answer%key('l')
+    call check(item%int_or(-1_int64) == 204, 'borrow: the list is read')
+    call check(l%length() == 2, 'borrow: the list borrowed is left as it was')
     item = answer%key('m')
     call check(item%int_or(-1_int64) == 2, 'borrow: the map is read')
     item = answer%key('v')

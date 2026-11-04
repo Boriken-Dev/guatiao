@@ -26,7 +26,7 @@ module shape_kinds
 
   ! The kinds' floor hashes, as the uint32 bits an int32 holds.
   integer(c_int32_t), parameter :: NOTE_FLOOR_HASH = -1451907028_c_int32_t  ! 2843060268
-  integer(c_int32_t), parameter :: SHAPES_FLOOR_HASH = 1249696788_c_int32_t
+  integer(c_int32_t), parameter :: SHAPES_FLOOR_HASH = -825009650_c_int32_t  ! 3469957646
 
   ! ---- the tables ------------------------------------------------------
 
@@ -147,12 +147,13 @@ module shape_kinds
       type(guatiao_error), allocatable, intent(out) :: error
     end subroutine
     !> What it was lent to read, described.
-    subroutine shapes_borrow(self, m, v, n, answer, error)
+    subroutine shapes_borrow(self, m, v, n, l, answer, error)
       import
       class(shapes), intent(inout) :: self
       type(guatiao_value), intent(in) :: m
       type(guatiao_value), intent(in) :: v
       type(guatiao_value), intent(in) :: n
+      type(guatiao_value), intent(in) :: l
       type(guatiao_value), intent(inout) :: answer
       type(guatiao_error), allocatable, intent(out) :: error
     end subroutine
@@ -330,12 +331,13 @@ module shape_kinds
       type(c_ptr), value :: out
       integer(c_int32_t) :: status
     end function
-    function shapes_borrow_c(ctx, x1, x2, x3, out, err) bind(c) result(status)
+    function shapes_borrow_c(ctx, x1, x2, x3, x4, out, err) bind(c) result(status)
       import
       type(c_ptr), value :: ctx
       type(c_ptr), value :: x1
       type(c_ptr), value :: x2
       type(c_ptr), value :: x3
+      type(c_ptr), value :: x4
       type(c_ptr), value :: out
       type(c_ptr), value :: err
       integer(c_int32_t) :: status
@@ -773,11 +775,12 @@ contains
     end if
   end function
 
-  recursive function shapes_borrow_slot(ctx, x1, x2, x3, out, err) bind(c) result(status)
+  recursive function shapes_borrow_slot(ctx, x1, x2, x3, x4, out, err) bind(c) result(status)
     type(c_ptr), value :: ctx
     type(c_ptr), value :: x1
     type(c_ptr), value :: x2
     type(c_ptr), value :: x3
+    type(c_ptr), value :: x4
     type(c_ptr), value :: out
     type(c_ptr), value :: err
     integer(c_int32_t) :: status
@@ -785,6 +788,7 @@ contains
     type(guatiao_value) :: a1
     type(guatiao_value) :: a2
     type(guatiao_value) :: a3
+    type(guatiao_value) :: a4
     type(guatiao_value) :: carrier, ans
     type(guatiao_error), allocatable :: error
     integer :: st
@@ -794,15 +798,17 @@ contains
     a1 = guatiao_borrowed_map(x1)
     a2 = guatiao_borrowed_value(x2)
     a3 = guatiao_borrowed_value(x3)
+    a4 = guatiao_borrowed_list(x4)
     carrier = guatiao_map_carrier(out)
     ans = carrier
     select type (impl)
     class is (shapes)
-      call impl%borrow(a1, a2, a3, ans, error)
+      call impl%borrow(a1, a2, a3, a4, ans, error)
     end select
     call gt_end_borrow(a1)
     call gt_end_borrow(a2)
     call gt_end_borrow(a3)
+    call gt_end_borrow(a4)
     status = guatiao_failed(error, err)
     call guatiao_settle_map(carrier, ans, out, st, failed=allocated(error))
     if (status == GUATIAO_OK) status = int(st, c_int32_t)
@@ -1280,11 +1286,12 @@ contains
     answer = gk_out
   end subroutine
 
-  recursive subroutine shapes_remote_borrow(self, m, v, n, answer, error)
+  recursive subroutine shapes_remote_borrow(self, m, v, n, l, answer, error)
     class(shapes_remote), intent(inout) :: self
     type(guatiao_value), intent(in) :: m
     type(guatiao_value), intent(in) :: v
     type(guatiao_value), intent(in) :: n
+    type(guatiao_value), intent(in) :: l
     type(guatiao_value), intent(inout) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
     procedure(shapes_borrow_c), pointer :: gk_f
@@ -1294,6 +1301,7 @@ contains
     type(c_ptr) :: gk_p1
     type(c_ptr) :: gk_p2
     type(c_ptr) :: gk_p3
+    type(c_ptr) :: gk_p4
     type(guatiao_value) :: gk_got
     type(c_ptr) :: gk_out
     if (gk_lacks(self%r, 6, error)) return
@@ -1314,8 +1322,13 @@ contains
       call guatiao_fail(error, gk_ist, 'borrow borrows a value as n')
       return
     end if
+    call guatiao_borrow_tree(l, GUATIAO_TAG_LIST, gk_p4, gk_ist)
+    if (gk_ist /= GUATIAO_OK) then
+      call guatiao_fail(error, gk_ist, 'borrow borrows a list as l')
+      return
+    end if
     call guatiao_map_out(gk_got, gk_out, self%r%alloc)
-    gk_st = gk_f(self%r%ctx, gk_p1, gk_p2, gk_p3, gk_out, c_loc(gk_err))
+    gk_st = gk_f(self%r%ctx, gk_p1, gk_p2, gk_p3, gk_p4, gk_out, c_loc(gk_err))
     call guatiao_call_error(gk_st, gk_err, error)
     if (gk_st /= GUATIAO_OK) return
     call guatiao_settle_home(gk_got, gk_ist)

@@ -5,7 +5,7 @@
 function check_slot(kind, s, object)
 % What #[guatiao::kind] and the library's description reader refuse to
 % declare, for a slot guatiao.Kind.describe is given: a slot named header,
-% an argument named twice, a borrowed list, bytes written in place on a kind that is not an object
+% an argument named twice, bytes written in place on a kind that is not an object
 % kind, and an object passed or answered on a slot that cannot fail (its
 % table is checked where it arrives).
   at = sprintf('%s.%s', kind, s.name);
@@ -22,9 +22,6 @@ function check_slot(kind, s, object)
   for j = 2:2:numel(s.args)
     shape = s.args{j};
     where = sprintf('%s(%s)', at, s.args{j - 1});
-    if ischar(shape) && strcmp(shape, 'list')
-      error('guatiao:BadValue', '%s: a list is not borrowed: guatiao.lent(''list'') or guatiao.taken(''list'')', where);
-    end
     if ~isstruct(shape) || ~isfield(shape, 'wrap')
       continue
     end

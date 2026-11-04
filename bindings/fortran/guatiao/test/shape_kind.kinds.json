@@ -47,7 +47,7 @@
     },
     {
       "name": "shapes",
-      "floor_hash": 1249696788,
+      "floor_hash": 3469957646,
       "object": false,
       "doc": "Every shape a slot can take or answer.",
       "slots": [
@@ -206,6 +206,11 @@
               "type": "value",
               "pass": "borrowed",
               "nullable": true
+            },
+            {
+              "name": "l",
+              "type": "list",
+              "pass": "borrowed"
             }
           ],
           "answer": {

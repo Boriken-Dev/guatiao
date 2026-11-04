@@ -48,7 +48,6 @@ contains
                                       '"slots": [{"name": "f", "required": true, "fallible": false, "args": ['
     character(*), parameter :: FALLIBLE = '{"kinds": [{"name": "k", "floor_hash": 1, "object": false, ' // &
                                           '"slots": [{"name": "f", "required": true, "fallible": true, "args": ['
-    call refused(HEAD // '{"name": "l", "type": "list", "pass": "borrowed"}]}]}]}', 'a list is not borrowed')
     call refused(HEAD // '{"name": "o", "type": "object", "kind": "k", "pass": "lent"}]}]}]}', 'on a fallible slot only')
     call refused(HEAD // '{"name": "b", "type": "bytes_mut"}]}]}]}', 'on an object kind only')
     call refused(HEAD // '{"name": "v", "type": "value", "pass": "lent"}]}]}]}', 'has no Fortran form yet')

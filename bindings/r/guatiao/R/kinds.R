@@ -68,10 +68,10 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
 }
 
 # What #[guatiao::kind] and the library's description reader refuse to
-# declare: a slot named header, two arguments of one slot with one name, a
-# borrowed list, bytes written in place on a kind that is not an object
-# kind, and an object passed or answered on a slot that cannot fail (its
-# table is checked where it arrives).
+# declare: a slot named header, two arguments of one slot with one name,
+# bytes written in place on a kind that is not an object kind, and an
+# object passed or answered on a slot that cannot fail (its table is
+# checked where it arrives).
 .gt_check_slot <- function(kind, n, s, object) {
   at <- sprintf("%s.%s", kind, n)
   if (n == "header") stop(sprintf("%s: the table's first field is its header; name the slot otherwise", at), call. = FALSE)
@@ -81,9 +81,6 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
     shape <- s$args[[a]]
     where <- sprintf("%s(%s)", at, a)
     wrapped <- inherits(shape, c("guatiao_lent", "guatiao_taken"))
-    if (identical(shape, "list")) {
-      stop(sprintf("%s: a list is not borrowed: lent(\"list\") or taken(\"list\")", where), call. = FALSE)
-    }
     if (wrapped && identical(shape$shape, "bytes") && !object) {
       stop(sprintf("%s: bytes written in place cross on an object kind only", where), call. = FALSE)
     }

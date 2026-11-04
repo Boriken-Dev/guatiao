@@ -7,6 +7,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/GuatiaoTests.cmake")
 guatiao_cpp_test(cpp_values SOURCES test_values.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
 guatiao_cpp_test(cpp_vectors SOURCES test_vectors.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
 guatiao_cpp_test(cpp_frees SOURCES test_frees.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
+guatiao_cpp_test(cpp_borrowed_list SOURCES test_borrowed_list.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
 # The library of four providers a settings screen lists, written in C: the
 # catalog test copies this file to a directory of its own and scans it.
 enable_language(C)
