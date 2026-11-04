@@ -280,7 +280,14 @@ beside the host's executable and in the system directory,
 as a host adding a Python bridge needs; unix ignores it),
 `provider_table(key, kind, table, size)` (`kind` `''` for a single
 table), `provider_ctx(key)`, `provider_config(key)` (a read-only handle on
-the schema, absent for none), `provider_meta(key, answer [, stat, errmsg])`
+the schema, absent for none), `catalog(answer [, stat, errmsg])` (every provider of every loaded
+library, best first, for a settings screen, with none built: a list
+of maps holding what `providers` does plus `available` (asked now) and
+`reason`, `config` and `meta` when it declares them, `library_key`,
+`library_version`, and `digest` (`'sha256:'` and the hex of the file
+its library was mapped from, while it is still that file) or
+`digest_error` saying why not; the first call reads each library file
+in full), `provider_meta(key, answer [, stat, errmsg])`
 (what the provider declared beyond its schema, its notices or its form
 under `GUATIAO_INTAKE_PROVIDER_FORM_KEY`: a copy outliving the library,
 absent when it declares nothing, `GUATIAO_ERR_NOT_FOUND` for an unknown
@@ -661,6 +668,7 @@ call guatiao_intake_layout(schema, form, sections)          ! [{"section": ..., 
 call guatiao_intake_is_visible(schema, form, 'key', values, shown)
 at = guatiao_intake_at(value, 'agent[1].name')               ! read-only handle
 call guatiao_intake_for_schema(schema, form)
+call guatiao_intake_provider_form(config, meta, form)         ! a provider's own form, else the one its schema implies; absent for none
 call guatiao_intake_form_for(form, schema, 'path', sub)      ! absent when there is none
 field = guatiao_intake_resolve(schema, 'auth.password')       ! read-only handle
 call guatiao_intake_flat_keys(schema, 'auth', keys)          ! guatiao_text array

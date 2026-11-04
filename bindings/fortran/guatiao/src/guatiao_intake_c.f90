@@ -11,11 +11,12 @@ module guatiao_intake_c
   implicit none
   public
 
-  type(gt_export), parameter :: gt_intake_exports(10) = [ &
+  type(gt_export), parameter :: gt_intake_exports(11) = [ &
     gt_export('guatiao_intake_check     ', 4, ''), &
     gt_export('guatiao_intake_layout    ', 4, ''), &
     gt_export('guatiao_intake_for_schema', 3, ''), &
     gt_export('guatiao_intake_form_for  ', 5, ''), &
+    gt_export('guatiao_intake_provider_form', 4, ''), &
     gt_export('guatiao_intake_is_visible', 5, ''), &
     gt_export('guatiao_intake_path_get  ', 2, ''), &
     gt_export('guatiao_intake_resolve   ', 2, ''), &
@@ -43,6 +44,14 @@ module guatiao_intake_c
     function guatiao_intake_for_schema_i(schema, alloc, out) bind(c) result(r)
       import :: c_int32_t, c_ptr
       type(c_ptr), value :: schema
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_intake_provider_form_i(schema, meta, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: schema
+      type(c_ptr), value :: meta
       type(c_ptr), value :: alloc
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
@@ -109,6 +118,7 @@ module guatiao_intake_c
   procedure(guatiao_intake_layout_i), pointer :: gt_intake_layout => null()
   procedure(guatiao_intake_for_schema_i), pointer :: gt_intake_for_schema => null()
   procedure(guatiao_intake_form_for_i), pointer :: gt_intake_form_for => null()
+  procedure(guatiao_intake_provider_form_i), pointer :: gt_intake_provider_form => null()
   procedure(guatiao_intake_is_visible_i), pointer :: gt_intake_is_visible => null()
   procedure(guatiao_intake_path_get_i), pointer :: gt_intake_path_get => null()
   procedure(guatiao_intake_resolve_i), pointer :: gt_intake_resolve => null()
@@ -125,6 +135,7 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_layout'), gt_intake_layout)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_for_schema'), gt_intake_for_schema)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_form_for'), gt_intake_form_for)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_provider_form'), gt_intake_provider_form)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_is_visible'), gt_intake_is_visible)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_path_get'), gt_intake_path_get)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_resolve'), gt_intake_resolve)

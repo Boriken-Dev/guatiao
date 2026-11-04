@@ -17,7 +17,8 @@ module guatiao_intake
   private
 
   public :: guatiao_intake_check, guatiao_intake_layout, guatiao_intake_is_visible, guatiao_intake_at, &
-            guatiao_intake_for_schema, guatiao_intake_form_for, guatiao_intake_resolve, &
+            guatiao_intake_for_schema, guatiao_intake_provider_form, guatiao_intake_form_for, &
+            guatiao_intake_resolve, &
             guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_unflatten, &
             guatiao_intake_use_library, GUATIAO_INTAKE_PROVIDER_FORM_KEY
 
@@ -216,6 +217,43 @@ contains
         form = answer
       else
         msg = 'guatiao: no form for that schema'
+      end if
+    end if
+    call gt_report(st, msg, stat, errmsg)
+  end subroutine
+
+  !> The form a provider's settings are shown with: the one it declares in
+  !> its `meta` under GUATIAO_INTAKE_PROVIDER_FORM_KEY, or else the one its
+  !> configuration `schema` implies, as guatiao_intake_for_schema makes it.
+  !>
+  !> `schema` and `meta` are what the registry answers for the provider
+  !> (provider_config and provider_meta, or `key('config')` and `key('meta')`
+  !> of an entry the registry's `catalog` lists); a value that names nothing
+  !> (an absent one) reaches the library as no value. What is not a map is
+  !> skipped, as reading the key by hand skips it. `form` is absent when that
+  !> leaves nothing to show. A declared form is not checked against the
+  !> schema here; guatiao_intake_check does that.
+  recursive subroutine guatiao_intake_provider_form(schema, meta, form, stat, errmsg)
+    type(guatiao_value), intent(in) :: schema, meta
+    type(guatiao_value), intent(inout) :: form
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    type(c_ptr) :: ps, pm, out
+    integer :: st
+    character(:), allocatable :: msg
+    type(guatiao_value) :: answer
+    call intake_need(st, msg)
+    if (st == GUATIAO_OK) then
+      ps = c_null_ptr
+      pm = c_null_ptr
+      if (.not. schema%is_closed()) ps = gt_node(schema)
+      if (.not. meta%is_closed()) pm = gt_node(meta)
+      call gt_new_owned(answer, gt_default_alloc(), out)
+      st = gt_intake_provider_form(ps, pm, gt_default_alloc(), out)
+      if (st == GUATIAO_OK) then
+        form = answer
+      else
+        msg = 'guatiao: no form for that provider'
       end if
     end if
     call gt_report(st, msg, stat, errmsg)

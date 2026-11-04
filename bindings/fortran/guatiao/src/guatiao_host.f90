@@ -38,6 +38,7 @@ module guatiao_host
     procedure :: refresh => reg_refresh
     procedure :: libraries => reg_libraries
     procedure :: providers => reg_providers
+    procedure :: catalog => reg_catalog
     procedure :: provider => reg_provider
     procedure :: available => reg_available
     procedure :: why_not => reg_why_not
@@ -374,6 +375,31 @@ contains
     if (st == GUATIAO_OK) then
       call fresh(self, answer, out)
       st = gt_registry_libraries(p, self%alloc, out)
+    end if
+    call gt_report(st, msg, stat, errmsg)
+  end subroutine
+
+  !> Every provider of every loaded library, best first, with what a
+  !> settings screen shows about each and none of them built: a list of
+  !> maps holding what `providers` does, plus `available` (asked now) and
+  !> `reason` when it cannot run, `config` (its schema) and `meta` when it
+  !> declares them, `library_key`, `library_version`, and `digest`
+  !> ('sha256:' and the hex of the file its library was mapped from, while
+  !> it is still that file) or `digest_error` saying why not. The first call
+  !> reads each library file in full. `guatiao_intake_provider_form` of
+  !> `guatiao_intake` answers the form to show an entry with.
+  recursive subroutine reg_catalog(self, answer, stat, errmsg)
+    class(guatiao_registry), intent(in) :: self
+    type(guatiao_value), intent(inout) :: answer
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    type(c_ptr) :: p, out
+    integer :: st
+    character(:), allocatable :: msg
+    call open_reg(self, p, st, msg)
+    if (st == GUATIAO_OK) then
+      call fresh(self, answer, out)
+      st = gt_registry_catalog(p, self%alloc, out)
     end if
     call gt_report(st, msg, stat, errmsg)
   end subroutine

@@ -32,6 +32,8 @@ program test_intake
   call flat_keys_flatten_and_unflatten()
   call a_view_is_gone_once_its_source_is_closed()
   call a_providers_form_from_its_meta_fits_its_schema()
+  call a_providers_form_is_its_own_else_the_one_its_schema_implies()
+  call a_catalog_entry_gives_each_provider_its_form()
   call finish('intake')
 
 contains
@@ -203,6 +205,74 @@ contains
     call check(at%is_absent(), 'found again: the source changed')
     call v%close()
     call check(at%is_closed(), 'gone with its source')
+  end subroutine
+
+
+  subroutine a_providers_form_is_its_own_else_the_one_its_schema_implies()
+    type(guatiao_value) :: schema, meta, other, form, section, field, none
+    integer :: st
+    schema = json('{"type": "object", "properties": {"user": {"type": "string", "x-section": "account"}, ' // &
+      '"token": {"type": "string", "x-sensitive": true}}}')
+    meta = json('{"form": {"sections": [{"id": "account", "title": "Account"}]}, "other": 1}')
+    call guatiao_intake_provider_form(schema, meta, form, st)
+    call check_status(st, GUATIAO_OK, 'a declared form')
+    section = form%at('sections', 1, 'title')
+    call check_text(section%string_or(''), 'Account', 'is the provider''s own')
+
+    ! No meta at all: the value names nothing, and the schema's form is made.
+    call guatiao_intake_provider_form(schema, none, form, st)
+    call check_status(st, GUATIAO_OK, 'a provider with no meta')
+    section = form%at('sections', 1, 'id')
+    call check_text(section%string_or(''), 'account', 'gets the one its schema implies')
+    field = form%at('fields', 'token', 'widget')
+    call check_text(field%string_or(''), 'password', 'masking its sensitive field')
+
+    ! Meta without a form is the same as none.
+    other = json('{"other": 1}')
+    call guatiao_intake_provider_form(schema, other, form, st)
+    section = form%at('sections', 1, 'id')
+    call check_text(section%string_or(''), 'account', 'meta without a form')
+
+    call guatiao_intake_provider_form(none, none, form, st)
+    call check_status(st, GUATIAO_OK, 'nothing to show is no error')
+    call check(form%is_absent(), 'and the form is absent')
+    call guatiao_intake_provider_form(none, other, form, st)
+    call check(form%is_absent(), 'meta alone gives none')
+
+    ! What is not a form is skipped, as reading the key by hand skips it.
+    meta = json('{"form": ["not", "a", "form"]}')
+    call guatiao_intake_provider_form(schema, meta, form, st)
+    section = form%at('sections', 1, 'id')
+    call check_text(section%string_or(''), 'account', 'a list under the key is skipped')
+    meta = json('{"form": "a form"}')
+    call guatiao_intake_provider_form(none, meta, form, st)
+    call check(form%is_absent(), 'and so is a string')
+  end subroutine
+
+  subroutine a_catalog_entry_gives_each_provider_its_form()
+    type(guatiao_registry) :: reg
+    type(guatiao_value) :: catalog, entry, id, config, meta, form, section, why
+    integer :: i, st
+    reg = guatiao_open_registry('fortran-intake', '0.1')
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'])
+    call reg%catalog(catalog)
+    do i = 1, catalog%length()
+      entry = catalog%item(i)
+      id = entry%key('id')
+      config = entry%key('config')
+      meta = entry%key('meta')
+      if (id%string_or('') == 'derived_greeter_shouter') then
+        call guatiao_intake_provider_form(config, meta, form, st)
+        call check_status(st, GUATIAO_OK, 'the shouter''s form')
+        section = form%at('sections', 1, 'id')
+        call check_text(section%string_or(''), 'words', 'is its declared one')
+        call guatiao_intake_check(config, form, why, st)
+        call check_status(st, GUATIAO_OK, 'and fits its schema')
+      else if (id%string_or('') == 'derived_greeter_hello') then
+        call guatiao_intake_provider_form(config, meta, form, st)
+        call check(form%is_absent(), 'a provider taking nothing has none')
+      end if
+    end do
   end subroutine
 
 end program test_intake
