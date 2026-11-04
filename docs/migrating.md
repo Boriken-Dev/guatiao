@@ -1289,6 +1289,17 @@ user site-packages. Put what a library needs on the configuration's
 `pyvenv.cfg` beside the host's executable; `"isolation": "inherit"` in
 the configuration starts it as before. A Python host is unchanged.
 
+### A source table ends with `notes`
+
+`guatiao_source_info` gained a last slot, `notes`, so a source written
+against an older header is refused by its `struct_size`: rebuild it, and
+leave `notes` null (`memset` the table, as the examples do) unless it
+has something to tell. A Rust source is unchanged (`Source::notes` has a
+default), as is one exported with `guatiao::source!`. A Rust host
+building a `Refreshed` or a `SourceInfo` by hand adds `notes: Vec::new()` or
+`notes: None`
+([what a note is](encodings.md#a-sources-note)).
+
 ### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao`
 
 No release carried the source crates or their manifests: this is for a

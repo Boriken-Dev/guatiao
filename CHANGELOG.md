@@ -14,6 +14,20 @@ write now.
 
 ### Added
 
+- **A source tells its host what is worth showing.** A note is neither a
+  refusal nor a skip: `{"subject", "text", "detail"}`, words for a person
+  and a map a program reads ([the encoding](https://boriken-dev.github.io/guatiao/encodings/#a-sources-note)).
+  A source answers its notes after every listing (`Source::notes` in
+  Rust, the `notes` slot of `guatiao_source_info` in C), and a refresh
+  reports each the first time it appears: `Refreshed::notes` and `notes`
+  in `guatiao_registry_refresh`'s answer, which every binding's
+  `refresh` hands over as data. guatiao-bridge's `Engine::notes` is what a
+  language bridge tells. guatiao-source-remote tells each TLS setting its
+  policy runs looser than modern (what `RemoteSource::weakened()` lists),
+  and `guatiao-remote-server` prints its sources' notes;
+  guatiao-source-py tells when the environment reaches its interpreter
+  (`isolation = "inherit"`, or a running interpreter it joined) and when
+  `home` was not applied.
 - **Every provider a host loaded, listed for a settings screen with none
   built.** `guatiao_registry_catalog(reg, alloc, &out)` lists each
   provider of every loaded library, best first, with what
@@ -1498,6 +1512,9 @@ write now.
 
 ### Changed
 
+- **`guatiao_source_info` ends with a `notes` slot**, so a source table
+  built against the previous header is refused by its `struct_size`;
+  `Refreshed` and `SourceInfo` gained a `notes` field.
 - **A library file is mapped by its absolute path on every platform.**
   `Registry::load_file` with a bare file name loads the file of that name
   in the current directory on Linux, macOS and FreeBSD too, as it already
