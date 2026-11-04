@@ -20,7 +20,7 @@ use std::thread::{self, ThreadId};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
 use guatiao::library::kind::{Arg, Caller, InstantiateError, KindDescription, RawObject};
-use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, Source};
+use guatiao::library::{Candidate, Host, LocalLibrary, Note, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Status, Value};
 use guatiao_bridge::{
@@ -52,6 +52,8 @@ struct Toy {
     closed: Cell<usize>,
     created: Cell<usize>,
     destroyed: RefCell<Vec<u64>>,
+    /// What the configuration's `note` asks it to tell its host.
+    note: Option<String>,
 }
 
 /// Reads `key = value` lines.
@@ -120,6 +122,11 @@ impl Engine for Toy {
             closed: Cell::new(0),
             created: Cell::new(0),
             destroyed: RefCell::new(Vec::new()),
+            note: config
+                .map()
+                .get("note")
+                .and_then(TryAsRef::<str>::try_as_ref)
+                .map(str::to_string),
         })
     }
 
@@ -321,6 +328,17 @@ impl Engine for Toy {
         }
     }
 
+    /// The configuration's `note`, saying whether it was asked on the
+    /// engine's own thread.
+    fn notes(&self) -> Vec<Note> {
+        let mut detail = Map::new();
+        detail.set("on_its_thread", thread::current().id() == self.thread);
+        self.note
+            .iter()
+            .map(|words| Note::new("", words.as_str()).with_detail(detail.clone()))
+            .collect()
+    }
+
     fn close(&self, handle: u64) {
         self.libraries.borrow_mut().remove(&handle);
         self.closed.set(self.closed.get() + 1);
@@ -357,6 +375,9 @@ impl Source for Held {
     }
     fn close(&self, id: &str, stamp: &str) {
         self.0.close(id, stamp);
+    }
+    fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+        self.0.notes()
     }
 }
 
@@ -427,6 +448,29 @@ fn greeting(answer: &Map) -> &str {
         .get("greeting")
         .and_then(TryAsRef::<str>::try_as_ref)
         .unwrap_or("")
+}
+
+#[test]
+fn what_the_engine_tells_reaches_the_host_once() {
+    let dir = scratch("notes");
+    put(&dir, "toy_hello", "version = \"1.0.0\"\n", "word = hello\n");
+    let mut said = config(&dir, None);
+    said.set("note", "the toy is loud");
+    let source = BridgeSource::<Toy>::pinned(&said, "toy-engine")
+        .expect("the engine starts")
+        .with_mechanism(Arc::new(Libffi));
+    let mut registry = Registry::new("toy-host", "1.0");
+    registry.add_source("toy", source).expect("added");
+    let first = registry.refresh();
+    assert_eq!(first.notes.len(), 1, "{first:?}");
+    let (from, note) = &first.notes[0];
+    assert_eq!(
+        (from.as_str(), note.subject(), note.text()),
+        ("toy", "", "the toy is loud")
+    );
+    assert_eq!(note.detail().get("on_its_thread"), Some(&Value::from(true)));
+    assert!(registry.refresh().notes.is_empty(), "told once");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

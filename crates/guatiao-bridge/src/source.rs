@@ -10,7 +10,7 @@ use alloc::sync::Arc;
 use std::sync::{Mutex, PoisonError};
 
 use guatiao::library::kind::Mechanism;
-use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Source};
+use guatiao::library::{Candidate, Host, LocalLibrary, Note, ProviderError, Source};
 
 use crate::config::Config;
 use crate::engine::{Engine, Opened, ThreadModel};
@@ -275,5 +275,11 @@ impl<E: Engine> Source for BridgeSource<E> {
         if let Some(library) = library {
             let _ = self.runner.run(move |e| e.close(library));
         }
+    }
+
+    /// The engine's [`Engine::notes`], asked where its calls run; an engine
+    /// that cannot be reached is a refusal.
+    fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+        Ok(self.runner.run(|e| e.notes())?)
     }
 }
