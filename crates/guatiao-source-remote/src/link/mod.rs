@@ -762,6 +762,10 @@ impl Link {
                 "the client's token is not this server's",
             ));
         }
+        // The client may send a call as soon as it has this reply, and a
+        // message channel judges a message as it arrives: the bound is
+        // raised before the reply goes, not when the first call is read.
+        reader.set_max_frame(options.max_frame);
         let nonce = handshake::nonce();
         let proof = if proves_key(options) {
             #[cfg(feature = "tcp")]
@@ -817,7 +821,7 @@ impl Link {
     }
 
     fn start(
-        reader: Box<dyn FrameRead>,
+        mut reader: Box<dyn FrameRead>,
         mut writer: Box<dyn FrameWrite>,
         closer: Option<Box<dyn Fn() + Send + Sync>>,
         peer: String,
@@ -828,6 +832,8 @@ impl Link {
         let peer_id = reader.peer_id();
         let datagrams = reader.datagrams();
         writer.set_max_frame(theirs.max_frame);
+        // Before a call can be sent, not when the reader thread first reads.
+        reader.set_max_frame(options.max_frame);
         let gate = Gate::new(writer);
         let buffers = Arc::clone(gate.buffers());
         // The peer's calls, and the large buffers they leave, are this
