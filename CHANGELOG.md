@@ -1580,7 +1580,13 @@ write now.
     send a frame past the handshake's, on a server before its reply goes
     (where a PROOF is read, staged so the PROOF is judged at the
     handshake's bound and what follows at the full one), since a message
-    channel judges a message as it arrives. `WsConnect::local_addr` and
+    channel judges a message as it arrives. Until the link admits its peer
+    (the PROOF holds, or the HELLO where none is read; on a client, the
+    WELCOME and its proof), the channel reads one message ahead of the
+    link, then 64 (`FrameRead::set_read_ahead`, new, its default answering
+    `Unsupported`), so a stranger past the address rules sending a junk
+    PROOF and then large messages has one of them held, not 64 of
+    `max_frame`. `WsConnect::local_addr` and
     `WtConnect::local_addr` bind a connection's socket first. With `allow_resumption` a WebTransport listener
     asks the list's fingerprint rules after the handshake, as a resumed
     session skips the client verifier. A wildcard plain `ws://` listener refuses a

@@ -972,15 +972,19 @@ place. On a message transport (WebSocket, WebTransport) the server
 stages its bound before the WELCOME: the PROOF is judged small and every
 message behind it at `max_frame`, so a call a client sends right behind
 its PROOF is read; a transport that cannot stage keeps the handshake's
-bound until the PROOF is through. The cost: the channel reads ahead of
-the link (coqui-web's `pending`, 64 messages), so a client past the
+bound until the PROOF is through. Such a channel reads one message ahead
+of the link until the peer is admitted, and 64 after that: the server's
+once the PROOF holds (once the HELLO does where there is no PROOF), the
+client's once the WELCOME and its proof hold. So a client past the
 address rules that sends a junk PROOF and then large messages makes the
-server hold what it transmits before the server reads the PROOF, checks
-it and closes the channel: up to `pending` messages of `max_frame` each
-(4 GiB at the defaults), for the few milliseconds that takes, or at most
-the handshake timeout if the thread serving the link stalls. A smaller
-`LinkOptions::max_frame` shrinks it; the read-ahead cannot be lowered for
-a channel's first messages only.
+server hold at most one message of `max_frame` behind the PROOF, plus
+what lies below whole messages: under 128 KiB the WebSocket has read past
+it (under 16 KiB on WebTransport), what TLS has decrypted, and the
+system's TCP receive buffer or QUIC's stream window. It holds that until
+it has checked the PROOF and closed the channel, in milliseconds, or at
+most the handshake timeout if the thread serving the link stalls; a
+smaller `LinkOptions::max_frame` shrinks the one message. The client's
+sends behind it wait, as they do for any reader that has stopped.
 
 At the trusted level the WELCOME's proof is HMAC-SHA256 over the key, of
 `"guatiao-remote server"`, the client's nonce and the server's; the
