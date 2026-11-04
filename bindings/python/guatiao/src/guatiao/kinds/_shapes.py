@@ -21,7 +21,18 @@ from typing import Any, Callable
 
 from .. import _abi, _lib
 from ..errors import BadValue, NullArgument, raise_for_status
-from ..value import _HANDING, _LENT, List, Map, Ref, Value, _make_bytes, _make_str, wiping_alloc
+from ..value import (
+    _HANDING,
+    _LENT,
+    List,
+    Map,
+    Ref,
+    Value,
+    _Claims,
+    _make_bytes,
+    _make_str,
+    wiping_alloc,
+)
 
 _P = ctypes.POINTER
 
@@ -103,14 +114,17 @@ class Scope:
             raise failure
 
 
-class _View:
+class _View(_Claims):
     """The owner of a `Ref` onto memory a call lends: valid while the
-    scope is open, writable only when lent, never freed here."""
+    scope is open, writable only when lent, never freed here. Claimed and
+    read as a `Value` is, so a provider cannot lend it to one call twice,
+    or lend it and borrow it at once."""
 
     def __init__(self, node: Any, scope: Scope, *, alloc: Any = None) -> None:
         self._raw = node
         self._scope = scope
         self._alloc = alloc
+        self._init_claims()
 
     def _check_open(self) -> None:
         self._scope._check_open()
@@ -444,6 +458,14 @@ class _Tree(Shape):
             if not isinstance(value, Ref):
                 value = scope.keep(Value(value))
                 scope.after(value.close)
+            else:
+                # Read for the call: a tree this call also lends, or one being
+                # changed or closed on another thread, is refused, as is
+                # lending or changing it until the call returns.
+                owner = value.owner
+                if isinstance(owner, _Claims):
+                    owner._share()
+                    scope.after(owner._unshare)
             return ctypes.byref(self._arm(value._require_node()))
         if self.mode == "lend":
             if not isinstance(value, Ref):
@@ -452,10 +474,10 @@ class _Tree(Shape):
                 )
             value._writable()
             # Claimed for the call: a provider holding the value can neither
-            # reveal nor change it while the callee changes it, and the
-            # settle moves it.
+            # reveal, read nor change it while the callee changes it, and the
+            # settle moves it; nor can this call borrow it or lend it again.
             owner = value.owner
-            if isinstance(owner, Value):
+            if isinstance(owner, _Claims):
                 owner._claim(_LENT)
                 scope.after(owner._release)
             node = value._require_node()

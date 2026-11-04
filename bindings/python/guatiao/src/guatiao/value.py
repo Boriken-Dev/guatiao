@@ -332,20 +332,130 @@ _LENT = "lent to a call"
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 
+class _Claims:
+    """Who has a tree now: one claim (a change, a lend, a close, ...) or
+    any number of reads, never both. A claim or read that cannot have it
+    raises `BufferError` at once rather than waiting, so none can
+    deadlock; a change or read nested in a change on the same thread
+    joins it."""
+
+    _lock: threading.Lock
+    # What has the tree (`_CLOSING`, `_CHANGING`, ...), which thread, and
+    # how many changes that thread has nested; and how many reads run.
+    _busy: "str | None"
+    _busy_by: int
+    _depth: int
+    _readers: int
+
+    def _init_claims(self) -> None:
+        self._lock = threading.Lock()
+        self._busy = None
+        self._busy_by = 0
+        self._depth = 0
+        self._readers = 0
+
+    def _check_open(self) -> None:
+        raise NotImplementedError
+
+    def _check_unrevealed(self) -> None:
+        pass
+
+    def _claim(self, what: str) -> None:
+        """Claims the tree for `what` until `_release()`: `BufferError`
+        while a view `reveal()` answered lives, a read runs or another
+        claim holds it, except a change nested in a change on the same
+        thread."""
+        with self._lock:
+            self._check_open()
+            if self._busy is not None:
+                if what == _CHANGING == self._busy and self._busy_by == threading.get_ident():
+                    self._depth += 1
+                    return
+                raise BufferError(f"this value is {self._busy}: it cannot be {what} now")
+            if self._readers:
+                raise BufferError(f"this value is being read: it cannot be {what} now")
+            self._check_unrevealed()
+            self._busy, self._busy_by, self._depth = what, threading.get_ident(), 1
+
+    def _release(self) -> None:
+        with self._lock:
+            self._depth -= 1
+            if self._depth == 0:
+                self._busy = None
+
+    @contextlib.contextmanager
+    def _claimed(self, what: str) -> Iterator[None]:
+        self._claim(what)
+        try:
+            yield
+        finally:
+            self._release()
+
+    def _share(self) -> None:
+        """Reads the tree until `_unshare()`, beside any other read:
+        `BufferError` while a claim holds it, except a change on this
+        thread."""
+        with self._lock:
+            self._check_open()
+            busy = self._busy
+            if busy is not None and not (busy == _CHANGING and self._busy_by == threading.get_ident()):
+                raise BufferError(f"this value is {busy}: it cannot be read now")
+            self._readers += 1
+
+    def _unshare(self) -> None:
+        with self._lock:
+            self._readers -= 1
+
+
 def _changes(method: _F) -> _F:
     """A method changing its node's tree: the owning `Value` is claimed
-    for it, so a `reveal()`, a close or another change on another thread
-    waits for nothing and is refused instead of reading what it frees."""
+    for it, so a `reveal()`, a read, a close or another change on another
+    thread waits for nothing and is refused instead of reading what it
+    frees."""
 
     @functools.wraps(method)
     def changing(self: "Ref", *args: Any, **kwargs: Any) -> Any:
         owner = self.owner
-        if not isinstance(owner, Value):
+        if not isinstance(owner, _Claims):
             return method(self, *args, **kwargs)
         with owner._claimed(_CHANGING):
             return method(self, *args, **kwargs)
 
     return cast(_F, changing)
+
+
+def _reads(method: _F) -> _F:
+    """A method reading its node's tree: the owning `Value` is read for
+    it, beside other reads, so a close or a change on another thread is
+    refused until it returns, and it is refused while one runs."""
+
+    @functools.wraps(method)
+    def reading(self: "Ref", *args: Any, **kwargs: Any) -> Any:
+        owner = self.owner
+        if not isinstance(owner, _Claims):
+            return method(self, *args, **kwargs)
+        owner._share()
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            owner._unshare()
+
+    return cast(_F, reading)
+
+
+@contextlib.contextmanager
+def _reading(ref: "Ref") -> Iterator[Any]:
+    """A pointer to `ref`'s node, its owner read until the block ends: for
+    a call that reads the tree."""
+    owner = ref.owner
+    if not isinstance(owner, _Claims):
+        yield ref._ptr()
+        return
+    owner._share()
+    try:
+        yield ref._ptr()
+    finally:
+        owner._unshare()
 
 
 class _Owner(Protocol):
@@ -396,10 +506,12 @@ class Ref:
         self.owner._check_writable()
 
     @property
+    @_reads
     def tag(self) -> int:
         return _tag_of(self._node())
 
     @property
+    @_reads
     def is_sensitive(self) -> bool:
         """Whether any part of this node's tree lives in the wiping
         allocator: a secret, which `repr` does not show."""
@@ -482,18 +594,23 @@ class Ref:
     def is_null(self) -> bool:
         return self.tag == _abi.Tag.NULL
 
+    @_reads
     def bool_or(self, fallback: bool = False) -> bool:
         return _bool_or(self._node(), fallback)
 
+    @_reads
     def int_or(self, fallback: int = 0) -> int:
         return _int_or(self._node(), fallback)
 
+    @_reads
     def float_or(self, fallback: float = 0.0) -> float:
         return _float_or(self._node(), fallback)
 
+    @_reads
     def str_or(self, fallback: str = "") -> str:
         return _str_or(self._node(), fallback)
 
+    @_reads
     def to_python(self, numbers: str = "auto") -> Any:
         return _node_to_python(self._node(), numbers)
 
@@ -507,6 +624,7 @@ class Ref:
             raise TypeError("value is not a list")
         return List(self.owner, self.path)
 
+    @_reads
     def to_wire(self) -> bytes:
         """This node in the wire encoding: a tag byte per node, LEB128
         lengths, a number as its own text, a map in its order. The same
@@ -520,6 +638,7 @@ class Ref:
         finally:
             _free(out)
 
+    @_reads
     def clone(self) -> "Value":
         """A deep, independent copy of this node, as its own `Value`."""
         node = self._require_node()
@@ -544,13 +663,16 @@ class Ref:
 class Map(Ref):
     """A `Ref` whose node is a map: the mapping protocol over it."""
 
+    @_reads
     def __len__(self) -> int:
         node = self._node()
         return node.payload.map.len if node is not None and node.tag == _abi.Tag.MAP else 0
 
+    @_reads
     def __contains__(self, key: str) -> bool:
         return _map_find(self._node(), key.encode("utf-8")) is not None
 
+    @_reads
     def __getitem__(self, key: str) -> Ref:
         if _map_find(self._node(), key.encode("utf-8")) is None:
             raise KeyError(key)
@@ -581,12 +703,14 @@ class Map(Ref):
     def __iter__(self) -> Iterator[str]:
         return iter(self.keys())
 
+    @_reads
     def get(self, key: str, default: Any = None) -> Any:
         """The plain Python value at `key` (as `to_python()` reads it),
         or `default` when the map has no such key."""
         node = _map_find(self._node(), key.encode("utf-8"))
         return default if node is None else _node_to_python(node, "auto")
 
+    @_reads
     def keys(self) -> "list[str]":
         node = self._require_node()
         if node.tag != _abi.Tag.MAP:
@@ -626,6 +750,7 @@ class List(Ref):
     through their own direct export.
     """
 
+    @_reads
     def __len__(self) -> int:
         node = self._node()
         return node.payload.list.len if node is not None and node.tag == _abi.Tag.LIST else 0
@@ -641,6 +766,7 @@ class List(Ref):
             raise IndexError(index)
         return index
 
+    @_reads
     def __getitem__(self, index: int) -> Ref:
         index = self._checked_index(index)
         return Ref(self.owner, self.path + (index,))
@@ -736,7 +862,7 @@ class List(Ref):
 _UNSET: Any = object()
 
 
-class Value(Ref):
+class Value(Ref, _Claims):
     """Owns a root `guatiao_value`, freed on `close()`/`__del__`/`__exit__`."""
 
     def __init__(
@@ -755,14 +881,9 @@ class Value(Ref):
         self._alloc_override = alloc
         # The holders of views `reveal()` answered that are still alive.
         self._reveals: "weakref.WeakValueDictionary[int, Any]" = weakref.WeakValueDictionary()
-        # Held while a reveal is recorded or the tree is claimed, so the two
-        # never interleave across threads. `_busy` says what has the tree
-        # (`_CLOSING`, `_CHANGING`, ...), `_busy_by` which thread, and
-        # `_depth` how many changes that thread has nested.
-        self._lock = threading.Lock()
-        self._busy: "str | None" = None
-        self._busy_by = 0
-        self._depth = 0
+        # The lock is held while a reveal is recorded or the tree is claimed
+        # or read, so they never interleave across threads.
+        self._init_claims()
         self._closed = False
         Ref.__init__(self, self, ())
         if obj is _UNSET and not fields:
@@ -793,34 +914,6 @@ class Value(Ref):
         self._check_open()
         self._check_unrevealed()
 
-    def _claim(self, what: str) -> None:
-        """Claims the tree for `what` until `_release()`: `BufferError`
-        while a view `reveal()` answered lives or another claim holds it,
-        except a change nested in a change on the same thread."""
-        with self._lock:
-            self._check_open()
-            if self._busy is not None:
-                if what == _CHANGING == self._busy and self._busy_by == threading.get_ident():
-                    self._depth += 1
-                    return
-                raise BufferError(f"this value is {self._busy}: it cannot be {what} now")
-            self._check_unrevealed()
-            self._busy, self._busy_by, self._depth = what, threading.get_ident(), 1
-
-    def _release(self) -> None:
-        with self._lock:
-            self._depth -= 1
-            if self._depth == 0:
-                self._busy = None
-
-    @contextlib.contextmanager
-    def _claimed(self, what: str) -> Iterator[None]:
-        self._claim(what)
-        try:
-            yield
-        finally:
-            self._release()
-
     def _ensure_alloc(self) -> "_abi.Alloc":
         if self._alloc_override is not None:
             return self._alloc_override
@@ -838,10 +931,12 @@ class Value(Ref):
             check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
 
     def close(self) -> None:
-        """Frees the tree, wiping what lives in the wiping allocator.
-        `BufferError` while a view `reveal()` answered, or a slice of one,
-        lives, or while the value is lent to a call, changed, wiped, handed
-        over or closed on another thread."""
+        """Frees the tree, wiping what lives in the wiping allocator; a
+        closed value's `close()` does nothing. `BufferError` while a view
+        `reveal()` answered, or a slice of one, lives, or while the value
+        is lent to a call, borrowed by one, read, changed, wiped or handed
+        over, and while another thread is closing it: that close frees it,
+        once, and this one waits for nothing."""
         if getattr(self, "_closed", True):
             return
         with self._lock:
@@ -849,6 +944,8 @@ class Value(Ref):
                 return
             if self._busy is not None:
                 raise BufferError(f"this value is {self._busy}: it cannot be closed now")
+            if self._readers:
+                raise BufferError("this value is being read: it cannot be closed now")
             self._check_unrevealed()
             self._busy, self._busy_by, self._depth = _CLOSING, threading.get_ident(), 1
         try:

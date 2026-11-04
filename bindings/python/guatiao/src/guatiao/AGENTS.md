@@ -549,9 +549,11 @@ other.wipe()                             # any Value: overwritten, freed, left n
   the value to a slot, lending it and every change to it raise
   `BufferError`. Each of those claims the value under its lock for as long
   as it runs (a lend for the whole call), and while one holds it a
-  `reveal()`, a close, a wipe and any other claim raise `BufferError`,
-  from any thread: a provider holding a value its caller lent can neither
-  reveal nor change it, and two threads ending one value free it once. Of a node a call lends or
+  `reveal()`, a read, a close, a wipe and any other claim raise
+  `BufferError`, from any thread: a provider holding a value its caller
+  lent can neither reveal, read nor change it. Of two threads closing one
+  value, one frees it and the other's `close()` raises `BufferError`; a
+  closed value's `close()` does nothing. Of a node a call lends or
   borrows (a provider's argument), the view is over a copy in the wiping
   allocator, wiped when its last view and slice go. A slice in a
   reference cycle holds the value until the cycle is collected; one alive
@@ -612,7 +614,9 @@ value = ffi.adopt(out, lib.alloc)          # a guatiao.Value; it frees the tree
 - `adopt(node, alloc) -> Value`: a `Value` owning the root a call wrote in
   `alloc`. `free(node)`: frees a node no `Value` adopted (through the
   `guatiao` library). `node_of(ref) -> Node`: the node a `Value` or `Ref`
-  names now, to pass by `ctypes.byref` while nothing changes its tree.
+  names now, to pass by `ctypes.byref` while nothing changes its tree;
+  it takes no claim, so a close or change on another thread is not
+  refused meanwhile.
   `borrow(keep, find) -> Ref | None`: a read-only view of the node `find()`
   answers, asked again on every access, keeping `keep` alive.
 - `check(status, message="")`: raises the status's `GuatiaoError`.
@@ -645,5 +649,15 @@ They pickle, `Unparsed` included. A refusal the library words itself
 ## Threading
 
 A `Registry` is used from one thread at a time, like the C handle
-it wraps. A `Value` is not shared across threads without the
-caller's own lock.
+it wraps. A `Value` is read by any number of threads at once: every
+read of a `Value`, `Ref`, `Map` or `List` (`to_python`, `clone`, `len`,
+`[]`, `in`, `keys`, `get`, `to_wire`, `tag`, the `*_or` readers, and
+`wire`, `time` and `redact` given one) shares it while it runs, and a
+call borrowing it reads it for the whole call. A change, `close()`,
+`wipe()`, a lend or a hand-over then raises `BufferError`, and a read
+raises it while one of those runs; nothing waits, so nothing deadlocks.
+So one call never has a value lent and borrowed, or lent twice
+(`remote.f(v, v)` for a slot `f(&mut Map, &Map)` raises before the
+call), and a call's views are held the same way. `ffi.node_of` takes no
+claim: a package reading through it reads unclaimed. Where two threads
+must both succeed, share a value under a lock of your own.

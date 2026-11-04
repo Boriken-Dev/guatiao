@@ -1953,6 +1953,18 @@ write now.
 
 ### Fixed
 
+- **Python and Dart: one call never has a value lent and borrowed, or lent
+  twice.** A slot taking `&mut Map` and `&Map`, called as `f(v, v)` (in
+  either order, or with a node of `v` and `v`), handed Rust a `&mut` and
+  a `&` onto one tree. Python now reads a borrowed tree for the call and
+  claims a lent one, and Dart marks both, so the second is refused
+  (`BufferError`, `StateError`) before the call; a provider passing on
+  what it was lent is held the same way. Python's reads of a `Value`
+  (`to_python`, `clone`, `len`, `[]`, `to_wire`, ...) share it too, so a
+  close or a change on another thread is refused while one runs, and a
+  read while one of those runs, where before it read memory being freed
+  or moved. A Dart call that throws while it is being closed no longer
+  leaves its lent values marked lent.
 - **guatiao-source-remote: a certificate's chain and the policy's TLS
   versions reach every connection.** A QUIC or WebTransport listener at
   mutual TLS, and a TLS listener whose access control list deferred a
