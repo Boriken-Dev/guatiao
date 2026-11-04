@@ -258,8 +258,12 @@ def test_an_empty_kind_and_an_argument_named_twice_are_refused_with_no_library()
         Kind("k", floor_hash=1, is_object=True, methods=[])
     with pytest.raises(TypeError, match="`k.add`: an argument names `n` a second time"):
         Kind("k", floor_hash=1, methods=[Method("add", [USIZE, USIZE], USIZE, arg_names=["n", "n"])])
-    # A name given and one made up may meet.
-    with pytest.raises(TypeError, match="names `arg1` a second time"):
+    # A name given and one made up may meet: the made-up one is named.
+    with pytest.raises(
+        TypeError,
+        match="`add`: argument 1 is not named, and `arg1`, the name made up for it, is argument 0's: "
+        "name every argument",
+    ):
         Kind("k", floor_hash=1, methods=[Method("add", [USIZE, USIZE], USIZE, arg_names=["arg1"])])
     def adding(*names: str) -> "dict[str, object]":
         args = [{"name": n, "type": "u32"} for n in names]

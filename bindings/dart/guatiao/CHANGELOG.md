@@ -155,6 +155,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   call as a lend does, and the second throws `StateError` before the
   call; a change or free of a value a call borrows throws too. A call
   whose undo throws while it closes still lifts its marks.
+- **`dart run guatiao:kind` refuses two arguments one name in Dart**
+  (`foo_bar` and `fooBar`), rather than writing code that does not
+  compile.
 - **The remote client lets go of what a refused call handed over.** A
   call the page refused before running it (made during a call that had
   returned, past its `maxCalls`, on a slot its `Served` does not fill)

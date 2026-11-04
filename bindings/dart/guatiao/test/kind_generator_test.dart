@@ -152,6 +152,28 @@ void main() {
       ),
       refusal('k.aB: aB is taken'),
     );
+    for (final pair in [
+      ['foo_bar', 'fooBar'],
+      ['foo__bar', 'foo_bar'],
+      ['c', 'c_'],
+      ['arg1', '1st'],
+    ]) {
+      expect(
+        () => generateKinds(
+          _one([
+            {
+              'name': 'x',
+              'args': [
+                {'name': pair[0], 'type': 'u8'},
+                {'name': pair[1], 'type': 'u8'},
+              ],
+            },
+          ]),
+        ),
+        refusal('k.x: arguments 0 and 1 are both '),
+        reason: pair.join(' and '),
+      );
+    }
     expect(
       () => generateKinds({
         'kinds': [
