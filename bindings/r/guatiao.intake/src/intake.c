@@ -103,6 +103,20 @@ SEXP C_intake_for_schema(SEXP schema) {
   return api->value_new(&out, api->binding_alloc, R_NilValue);
 }
 
+/* Either argument may be R's NULL: it reaches the library as no value. */
+SEXP C_intake_provider_form(SEXP schema, SEXP meta) {
+  guatiao_value ts, tm, out;
+  set_absent(&out);
+  set_absent(&ts);
+  set_absent(&tm);
+  const guatiao_value *s = schema == R_NilValue ? NULL : api->tree_arg(schema, &ts);
+  const guatiao_value *m = meta == R_NilValue ? NULL : api->tree_arg(meta, &tm);
+  guatiao_status st = INTAKE(guatiao_intake_provider_form)(s, m, api->binding_alloc, &out);
+  api->free(&ts);
+  api->free(&tm);
+  return answer_value(st, &out, "no form for that provider");
+}
+
 SEXP C_intake_form_for(SEXP form, SEXP schema, SEXP path) {
   guatiao_value tf, ts, out;
   set_absent(&out);
@@ -177,6 +191,7 @@ static const R_CallMethodDef calls[] = {
     {"C_intake_for_schema", (DL_FUNC)(void (*)(void)) & C_intake_for_schema, 1},
     {"C_intake_form_for", (DL_FUNC)(void (*)(void)) & C_intake_form_for, 3},
     {"C_intake_is_visible", (DL_FUNC)(void (*)(void)) & C_intake_is_visible, 4},
+    {"C_intake_provider_form", (DL_FUNC)(void (*)(void)) & C_intake_provider_form, 2},
     {"C_intake_layout", (DL_FUNC)(void (*)(void)) & C_intake_layout, 2},
     {"C_intake_resolve", (DL_FUNC)(void (*)(void)) & C_intake_resolve, 2},
     {"C_intake_unflatten", (DL_FUNC)(void (*)(void)) & C_intake_unflatten, 3},

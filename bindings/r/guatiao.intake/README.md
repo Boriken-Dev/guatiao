@@ -72,6 +72,7 @@ intake_flatten(schema, "auth", value)            # named character vector
 | Name | Purpose |
 | --- | --- |
 | `intake_check`, `intake_layout`, `intake_is_visible`, `intake_for_schema`, `intake_form_for` | a form over a schema |
+| `intake_provider_form` | the form a provider's settings are shown with |
 | `intake_at` | a path's place in a value |
 | `intake_resolve`, `intake_flat_keys`, `intake_flatten`, `intake_unflatten` | the flat key-to-text store |
 

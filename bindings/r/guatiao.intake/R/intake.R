@@ -22,6 +22,8 @@ intake_for_schema <- function(schema) .Call(C_intake_for_schema, schema)
 
 intake_form_for <- function(form, schema, path) .Call(C_intake_form_for, form, schema, path)
 
+intake_provider_form <- function(schema, meta) .Call(C_intake_provider_form, schema, meta)
+
 intake_resolve <- function(schema, key) .Call(C_intake_resolve, schema, key)
 
 intake_flat_keys <- function(schema, key) unlist(.Call(C_intake_flat_keys, schema, key), use.names = FALSE)

@@ -136,6 +136,8 @@
   X(guatiao_status, guatiao_registry_providers,                                                \
     (const guatiao_registry *reg, guatiao_str kind, const guatiao_alloc *alloc, guatiao_value *out), \
     (reg, kind, alloc, out), "load")                                                            \
+  X(guatiao_status, guatiao_registry_catalog,                                                  \
+    (const guatiao_registry *reg, const guatiao_alloc *alloc, guatiao_value *out), (reg, alloc, out), "load") \
   X(guatiao_status, guatiao_registry_provider,                                                 \
     (const guatiao_registry *reg, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
     (reg, key, alloc, out), "load")                                                             \

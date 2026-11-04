@@ -332,6 +332,15 @@ as an R host adding a Python bridge needs; unix ignores it),
 `provider_table(key, kind = NULL)` (`list(table, size,
 ctx)`, `table` NULL for none; no `kind` for a single table),
 `provider_config(key)` (a copy of the schema, a value, or NULL),
+`catalog()` (every provider of every loaded library, best first, for a
+settings screen, with none built: what `providers()` holds plus
+`available` (asked now) and `reason`, `config` and `meta` when it
+declares them, `library_key`, `library_version`, and `digest`
+(`"sha256:"` and the hex of the file its library was mapped from,
+while it is still that file) or `digest_error` saying why not; the
+first call reads each library file in full;
+`intake_provider_form(entry[["config"]], entry[["meta"]])` of
+`guatiao.intake` answers the form to show an entry with),
 `provider_meta(key)` (what the provider declared beyond its schema, its
 notices or its form under `guatiao.intake`'s `intake_provider_form_key`: a
 copy, outliving the library, or NULL; `NotFound` for an unknown key),

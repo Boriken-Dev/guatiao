@@ -48,3 +48,18 @@ case("the header copies are the committed headers", with_repo({
     expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
   }
 }))
+
+case("a catalog entry gives each provider its form", with_library({
+  reg <- guatiao::registry("r-intake-tests", "0.1")
+  reg$scan_dir(LIBRARY_DIR, rules = "kind=greeter")
+  entries <- reg$catalog()
+  catalog <- setNames(entries, vapply(entries, function(e) e$id, ""))
+  shouter <- catalog[["derived_greeter_shouter"]]
+  form <- intake_provider_form(shouter[["config"]], shouter[["meta"]])
+  expect_equal(vapply(value_data(form)$sections, function(s) s$id, ""), c("words", "volume"))
+  expect_true(is.null(intake_check(shouter[["config"]], form)))
+  close(form)
+  hello <- catalog[["derived_greeter_hello"]]
+  expect_true(is.null(intake_provider_form(hello[["config"]], hello[["meta"]])))
+  reg$close()
+}))
