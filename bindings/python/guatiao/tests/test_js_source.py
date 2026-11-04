@@ -132,3 +132,46 @@ def test_a_runaway_call_is_stopped_and_the_host_carries_on(reg, tmp_path):
     with pytest.raises(Exception, match=r"stopped at its operations limit \(100000\)"):
         spin.greet("loop")
     assert spin.greet("bo").to_python() == {"greeting": "calm, bo"}
+
+
+def test_a_configured_provider_is_built_per_configuration_and_asked_whether_it_runs(reg, tmp_path):
+    _library(
+        tmp_path,
+        "js_conf",
+        '"greeter"',
+        "import { BadValue } from 'guatiao';\n"
+        "import { Provider, s } from 'guatiao/provide';\n"
+        "import { Greeter } from '__KINDS__';\n"
+        "let plugged = false;\n"
+        "export class Shouter extends Provider {\n"
+        "  static kinds = [Greeter];\n"
+        "  static config = s.object({ word: s.string({ minLength: 1 }) });\n"
+        "  static available() { return plugged ? undefined : 'unplugged'; }\n"
+        "  #word;\n"
+        "  constructor(config) {\n"
+        "    super();\n"
+        "    if (config.word === 'nobody') throw new BadValue('`nobody` greets nobody');\n"
+        "    this.#word = config.word;\n"
+        "  }\n"
+        "  greet(name) { return { greeting: `${this.#word}, ${name}` }; }\n"
+        "}\n"
+        "export class Plug extends Provider {\n"
+        "  static kinds = [Greeter];\n"
+        "  greet() { plugged = true; return { greeting: 'plugged' }; }\n"
+        "}\n",
+    )
+    reg.add_source_file(_SOURCE, {"dirs": [str(tmp_path)], "kinds": [_KINDS]})
+    assert reg.refresh()["refused"] == []
+
+    assert reg.provider_available("js_conf_shouter") == (False, "unplugged")
+    with reg.create("js_conf_shouter", {"word": "hey"}) as loud:
+        with reg.create("js_conf_shouter", {"word": "psst"}) as soft:
+            assert loud.bind(Greeter).greet("ana").to_python() == {"greeting": "hey, ana"}
+            assert soft.bind(Greeter).greet("bo").to_python() == {"greeting": "psst, bo"}
+    with pytest.raises(Exception, match="`nobody` greets nobody"):
+        reg.create("js_conf_shouter", {"word": "nobody"})
+    with pytest.raises(Exception):
+        reg.create("js_conf_shouter", {"wrod": "x"})
+
+    assert reg.bind("js_conf_plug", Greeter).greet("x").to_python() == {"greeting": "plugged"}
+    assert reg.provider_available("js_conf_shouter") == (True, None)
