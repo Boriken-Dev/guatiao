@@ -47,9 +47,10 @@ fn invalid(why: impl core::fmt::Display) -> io::Error {
 }
 
 /// The bounds of a link's channel: coqui-web's, with the largest message
-/// a link allows set by the link as it reads.
+/// the handshake's until the link raises it, so the first message a peer
+/// sends is judged small, as the HELLO is.
 fn limits() -> Limits {
-    Limits::default()
+    Limits::default().with_max_message(crate::protocol::HANDSHAKE_MAX_FRAME)
 }
 
 /// Connects to a WebSocket URL: `ws://host:port/path` (loopback unless
@@ -201,7 +202,25 @@ impl WsConnect {
             url.host_str().unwrap_or_default(),
             url.port_or_known_default().unwrap_or_default()
         );
+        // Permission is also a local address the system refuses (taken, or
+        // not permitted): known when the URL itself would not be refused.
+        let url_allowed = self.beyond_loopback
+            || url.host_str().is_some_and(|h| {
+                let h = h.trim_matches(['[', ']']);
+                h.eq_ignore_ascii_case("localhost")
+                    || h.parse::<core::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            });
         match failure {
+            Failure::Permission if self.local.is_some() && (self.encrypted() || url_allowed) => {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "this machine refused the local address {} the connection to {addr} binds first (taken, or not permitted)",
+                        self.local.map_or_else(String::new, |a| a.to_string())
+                    ),
+                )
+            }
             Failure::Permission if !self.encrypted() => io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
