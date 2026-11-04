@@ -148,6 +148,45 @@ func polite(c *guest.Call) (any, error) {
 	return guest.NewMap().Set("greeting", "good day, "+name), nil
 }
 
+// configured is a greeter built from a configuration, {"word": "howdy"}:
+// it greets with that word. Each instance a host builds is one of these.
+type configured struct{ word string }
+
+func (g *configured) Call(c *guest.Call) (any, error) {
+	if c.Method() != "greet" {
+		return nil, unknown(c)
+	}
+	name, err := c.Text(0)
+	if err != nil {
+		return nil, err
+	}
+	if name == "" {
+		return nil, guest.Refuse(guest.StatusBadValue, "nobody to greet")
+	}
+	return guest.NewMap().Set("greeting", g.word+", "+name), nil
+}
+
+// wordSchema is the configuration configured is built from, as a JSON
+// Schema the host checks before the module is asked.
+var wordSchema = guest.NewMap().
+	Set("type", "object").
+	Set("properties", guest.NewMap().Set("word", guest.NewMap().Set("type", "string"))).
+	Set("required", []any{"word"}).
+	Set("additionalProperties", false)
+
+func buildConfigured(config any) (guest.Handler, error) {
+	m, _ := config.(*guest.Map)
+	var w string
+	if m != nil {
+		v, _ := m.Get("word")
+		w, _ = v.(string)
+	}
+	if w == "" {
+		return nil, guest.Refuse(guest.StatusBadValue, "a greeting needs a word")
+	}
+	return &configured{word: w}, nil
+}
+
 // wide answers 64-bit integers, both ways, at their limits.
 func wide(c *guest.Call) (any, error) {
 	switch c.Method() {
@@ -175,6 +214,12 @@ func init() {
 		{
 			ID: "wide", Name: "Wide, in Go (wasm)", Handler: guest.HandlerFunc(wide),
 			Serves: []guest.Serves{{Kind: "wide", Slots: []string{"echo_i64", "echo_u64"}}},
+		},
+		{
+			ID: "configured", Name: "Configured, in Go (wasm)",
+			Serves: []guest.Serves{{Kind: "greeter", Slots: []string{"greet"}}},
+			Config: wordSchema, Build: buildConfigured, InstancesOnly: true,
+			Available: func() error { return nil },
 		},
 	}})
 }

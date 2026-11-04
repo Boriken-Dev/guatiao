@@ -29,6 +29,45 @@ use guatiao::{Map, Status};
 #[path = "../../guatiao/tests/support/c_compiler.rs"]
 mod c_compiler;
 
+/// The example's `configured` provider: only instances, each built from
+/// its own `{"word": ..}` and greeting with it, a configuration the guest
+/// refuses crossing in its words, and asked whether it runs.
+fn builds_instances(registry: &Registry, module: &str) {
+    use guatiao::library::kind::InstantiateError;
+    let key = format!("{module}_configured");
+    let offer = registry
+        .offer::<dyn Greeter>(&key)
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.default_instance().is_none(), "instances only");
+    let word = |w: &str| {
+        let mut config = Map::new();
+        config.set("word", w);
+        guatiao::Value::from(config)
+    };
+    let howdy = offer.instantiate(&word("howdy")).expect("built");
+    let hey = offer.instantiate(&word("hey")).expect("built");
+    assert_eq!(
+        greeting(&howdy.greet("ana").expect("greeted")),
+        "howdy, ana"
+    );
+    assert_eq!(greeting(&hey.greet("bo").expect("greeted")), "hey, bo");
+    drop(howdy);
+    assert_eq!(greeting(&hey.greet("cy").expect("greeted")), "hey, cy");
+    match offer.instantiate(&word("")) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "a greeting needs a word");
+        }
+        Ok(_) => panic!("{key} was built from an empty word"),
+        Err(other) => panic!("{other:?}"),
+    }
+    assert_eq!(
+        registry.provider(&key).expect("registered").available(),
+        Ok(())
+    );
+}
+
 /// Every slot of a example greeter's providers, through the kinds' traits.
 fn calls_every_slot(registry: &Registry, module: &str, checked_by: &str) {
     let hello = greeter(registry, &format!("{module}_hello"));
@@ -110,6 +149,8 @@ fn calls_every_slot(registry: &Registry, module: &str, checked_by: &str) {
         polite.greet("").unwrap_err().message(),
         "nobody to greet, politely"
     );
+
+    builds_instances(registry, module);
 
     let wide = registry
         .offer::<dyn Wide>(&format!("{module}_wide"))
