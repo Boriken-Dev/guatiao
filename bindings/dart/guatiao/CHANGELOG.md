@@ -148,6 +148,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **One call never has a value lent and borrowed, or lent twice.** A slot
+  taking a lent map and a borrowed one, called with one value for both
+  (in either order, or a node of it and the value), handed the callee a
+  `&mut` and a `&` onto one tree. A borrow now marks the value for the
+  call as a lend does, and the second throws `StateError` before the
+  call; a change or free of a value a call borrows throws too. A call
+  whose undo throws while it closes still lifts its marks.
 - **The remote client lets go of what a refused call handed over.** A
   call the page refused before running it (made during a call that had
   returned, past its `maxCalls`, on a slot its `Served` does not fill)
