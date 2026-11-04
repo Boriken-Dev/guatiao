@@ -358,8 +358,84 @@ for (final entry in reg.catalog()) {             // plain maps, best first
 `providerForm` reads the form; whatever is malformed is skipped as above,
 so a value under `"form"` that is not a map gives the schema's form.
 
-Node, Go, Julia, R, MATLAB and Octave, Fortran and C++ have no catalog
-yet: they read a provider's kinds, availability, configuration schema and
-`meta` one call at a time (`providers`, the per-key availability call,
-`provider_config`, `provider_meta`) and the implied form with their
-intake package's `for_schema`; no call there answers a library's digest.
+### Node.js
+
+```ts
+for (const entry of reg.catalog()) {             // plain objects, best first
+  using form = intake.providerForm(entry.config, entry.meta);   // null: nothing to configure
+  // entry.digest ?? entry.digest_error, entry.available, ...
+}
+```
+
+### Go
+
+```go
+catalog, _ := reg.Catalog()                      // []map[string]any, best first
+for _, entry := range catalog {
+	form, _ := intake.ProviderForm(entry["config"], entry["meta"]) // nil: nothing to configure
+	// entry["digest"] or entry["digest_error"], entry["available"], ...
+	form.Close()
+}
+```
+
+### Julia
+
+```julia
+for entry in Guatiao.catalog(reg)                # Dicts, best first
+    form = GuatiaoIntake.provider_form(get(entry, "config", nothing), get(entry, "meta", nothing))
+    # nothing: nothing to configure; else close(form)
+    # get(entry, "digest", nothing) or entry["digest_error"], entry["available"], ...
+end
+```
+
+### R
+
+```r
+for (entry in reg$catalog()) {                   # lists, best first
+  form <- intake_provider_form(entry[["config"]], entry[["meta"]])   # NULL: nothing to configure
+  # entry$digest or entry$digest_error, entry$available, ...
+  if (!is.null(form)) close(form)
+}
+```
+
+### MATLAB and Octave
+
+```matlab
+catalog = reg.catalog();                         % a cell of structs, best first
+for i = 1:numel(catalog)
+  entry = catalog{i};
+  config = []; meta = [];                        % a field the entry lacks is []
+  if isfield(entry, 'config'), config = entry.config; end
+  if isfield(entry, 'meta'), meta = entry.meta; end
+  form = guatiao.intake.provider_form(config, meta);   % []: nothing to configure
+  % entry.digest or entry.digest_error, entry.available, ...
+end
+```
+
+### Fortran
+
+```fortran
+call reg%catalog(catalog)                        ! a list of maps, best first
+do i = 1, catalog%length()
+  entry = catalog%item(i)
+  config = entry%key('config')                   ! absent when the entry has none
+  meta = entry%key('meta')
+  call guatiao_intake_provider_form(config, meta, form)   ! absent: nothing to configure
+  ! entry%key('digest') or entry%key('digest_error'), entry%key('available'), ...
+end do
+```
+
+### C++
+
+```cpp
+guatiao::value catalog = reg.catalog();          // a list of maps, best first
+for (guatiao::view entry : catalog.as_list()) {
+  guatiao::value form = guatiao::intake::provider_form(entry["config"], entry["meta"]);
+  // form.is_absent(): nothing to configure
+  // entry["digest"] or entry["digest_error"], entry["available"], ...
+}
+```
+
+Every `providerForm` reads the form the same way: whatever is malformed is
+skipped, and a provider with neither a form nor a configuration schema
+answers nothing, which is not an error.
