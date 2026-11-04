@@ -346,7 +346,11 @@ releasing it, and a secret built there leaves nothing readable behind.
   call that was lent a tree `&mut` count this copy's wiping allocator as
   home, so a node there stays there, is still wiped when freed, and a
   second `into_local()` changes nothing. A kind's answer is the
-  exception (below).
+  exception (below). Home is the library's own wiping allocator: a node
+  recording a copy of it (a `guatiao_alloc` that `guatiao_alloc_wiping`
+  filled in memory of yours) is pointed at the library's own by
+  `make_local_in` and `guatiao_value_make_local`, and copied there by
+  `into_local` and `into_alloc`, so the tree no longer needs your copy.
 - **A copy of a secret stays one**: `clone()`, `clone_in` and
   `guatiao_value_clone` make a copy of a node that lives in the wiping
   allocator there, whatever allocator was asked for. A kind's answer is

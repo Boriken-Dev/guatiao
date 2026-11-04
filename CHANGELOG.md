@@ -96,7 +96,9 @@ write now.
   settle after a lent call; a copy of a node that lives in
   the wiping allocator is made there; tables built at run time honour
   the mark; `#[sensitive]` refuses a method answering anything but a
-  `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a scalar or nothing.
+  `Secret<_>`, a `Value`, `Map`, `List` or `Text`, a scalar or nothing,
+  checked by type as well as by spelling. A value lent to a call is not
+  revealed or changed until the call returns, in Python and Dart.
 - **The library computes a kind's floor hash.**
   `guatiao_kind_floor_hash(kind, alloc, &hash, &why)` answers the floor
   hash of one kind's description, given as JSON text (its `object` and
