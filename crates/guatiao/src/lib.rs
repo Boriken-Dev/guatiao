@@ -223,6 +223,55 @@ pub mod __private {
         let kind = KindBuilder::string_in(alloc);
         if nullable { kind.nullable() } else { kind }
     }
+
+    mod sealed {
+        pub trait Sealed {}
+    }
+
+    /// What a `#[sensitive]` kind slot may answer: a type its caller can
+    /// wipe. The attribute reads the answer's spelling for its message, and
+    /// asserts this bound in what it generates, so a type of the caller's
+    /// spelled the same (`use mylib::Secret`, `type Text = String`) is
+    /// refused too. Sealed: implemented here for exactly these.
+    pub trait SensitiveAnswer: sealed::Sealed {}
+
+    /// Compiles only for a [`SensitiveAnswer`]: what the attribute calls.
+    pub const fn sensitive_answer<T: SensitiveAnswer + ?Sized>() {}
+
+    macro_rules! sensitive_answers {
+        ($($t:ty),* $(,)?) => {
+            $(
+                impl sealed::Sealed for $t {}
+                impl SensitiveAnswer for $t {}
+            )*
+        };
+    }
+
+    sensitive_answers!(
+        (),
+        bool,
+        i8,
+        i16,
+        i32,
+        i64,
+        i128,
+        isize,
+        u8,
+        u16,
+        u32,
+        u64,
+        u128,
+        usize,
+        f32,
+        f64,
+        crate::value::Value,
+        crate::value::Map,
+        crate::value::List,
+        crate::value::Text,
+    );
+
+    impl<T: crate::value::Wipe> sealed::Sealed for crate::value::Secret<T> {}
+    impl<T: crate::value::Wipe> SensitiveAnswer for crate::value::Secret<T> {}
 }
 
 pub use value::convert::{Bytes, FromValue, Kinds, MapError, ToValue, TryAsMut, TryAsRef};
@@ -361,6 +410,33 @@ pub use guatiao_derive::Provider;
 /// pub trait Leakier: Send + Sync {
 ///     #[sensitive]
 ///     fn pin(&self) -> Result<Option<String>, ProviderError>;
+/// }
+/// ```
+///
+/// The answer's type is checked as well as its spelling: a type of yours
+/// named `Secret` or `Text` is refused.
+///
+/// ```compile_fail,E0277
+/// use guatiao::library::ProviderError;
+///
+/// type Secret = String;
+///
+/// #[guatiao::kind]
+/// pub trait Aliased: Send + Sync {
+///     #[sensitive]
+///     fn pin(&self) -> Result<Secret, ProviderError>;
+/// }
+/// ```
+///
+/// ```compile_fail,E0277
+/// use guatiao::library::ProviderError;
+///
+/// type Text = String;
+///
+/// #[guatiao::kind]
+/// pub trait Renamed: Send + Sync {
+///     #[sensitive]
+///     fn pin(&self) -> Result<Text, ProviderError>;
 /// }
 /// ```
 ///
