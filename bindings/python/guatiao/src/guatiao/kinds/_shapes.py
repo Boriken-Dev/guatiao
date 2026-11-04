@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from .. import _abi, _lib
 from ..errors import BadValue, NullArgument, raise_for_status
-from ..value import List, Map, Ref, Value, _make_bytes, _make_str, wiping_alloc
+from ..value import _HANDING, _LENT, List, Map, Ref, Value, _make_bytes, _make_str, wiping_alloc
 
 _P = ctypes.POINTER
 
@@ -145,7 +145,7 @@ def _move_out(value: Value) -> "_abi.Value":
     """The root node of `value`, moved into a fresh struct: `value` holds
     ABSENT afterwards and frees nothing. `BufferError` while a view of it
     `reveal()` answered lives: the callee may free the tree."""
-    with value._ending_tree():
+    with value._claimed(_HANDING):
         moved = _abi.Value.from_buffer_copy(value._raw)
         ctypes.memset(ctypes.addressof(value._raw), 0, ctypes.sizeof(_abi.Value))
     return moved
@@ -451,6 +451,13 @@ class _Tree(Shape):
                     f"{self!r} takes a Value or a Ref, so what the callee changes has somewhere to go"
                 )
             value._writable()
+            # Claimed for the call: a provider holding the value can neither
+            # reveal nor change it while the callee changes it, and the
+            # settle moves it.
+            owner = value.owner
+            if isinstance(owner, Value):
+                owner._claim(_LENT)
+                scope.after(owner._release)
             node = value._require_node()
             # What the callee grew it with may be in its library's
             # allocator: moved into the one the tree records now, which a
