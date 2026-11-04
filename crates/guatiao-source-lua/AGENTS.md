@@ -73,6 +73,21 @@ return M
   `<module>_<key>` (dots made `_`); `name` is shown to a person (default
   the key). A slot it leaves out is null: a Rust caller runs the kind's
   default.
+- **Instances from a configuration**: optional keys `config` (a JSON
+  Schema as a table, converted as any value) and `new`, called
+  `provider:new(config)` (the configuration as a table) and answering the
+  instance, a table whose functions serve the slots, or `nil, why`; each
+  instance's slots are called with it as `self`, and it is dropped when
+  the host's last holder lets it go. A host checks the configuration
+  against `config` before `new` runs. `instances_only = true` offers no
+  default instance. `config` without `new`, `new` without `config`, or
+  `instances_only` without both, refuses the library.
+- **Availability**: an optional `available` function, called
+  `provider:available()` each time a host asks: `nil` is available, text
+  is the reason it is not, a raised error's message the reason too, and
+  any other answer (`true` included) is unavailable, saying what it
+  answered. Without one the provider is always available. `new` and
+  `available` run under the limits, as a slot does.
 - **A slot is called** as `provider:slot(args...)`. Arguments: numbers,
   booleans, text as Lua's; `bytes` as a string; a tree as a table (a lent
   one changed in place and read back); `bytes_mut` as a `guatiao.buffer`;
@@ -118,7 +133,12 @@ said something worth showing that is neither a refusal nor a skip, each
 note the first refresh its source answers it;
 `reg:providers([kind])` → `{key, id, name, library, version, kinds,
 configured}`; `reg:bind(key, kind)` → a handle (`kind` a `guatiao.kind`
-or its name); `reg:retire(key)`; `reg:collect()` → the keys closed;
+or its name); `reg:create(key, kind, config)` → a handle over a new
+instance built from `config` (released when the handle is collected), or
+`nil, guatiao.error` when the schema or the provider refuses it (an
+unknown key or a kind the provider does not serve raises, as for
+`bind`); `reg:available(key)` → `true`, or `false, reason`;
+`reg:retire(key)`; `reg:collect()` → the keys closed;
 `reg:close()`.
 
 ### A handle (`Handle`)

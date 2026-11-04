@@ -565,3 +565,255 @@ fn a_c_host_calls_the_lua_greeter() {
         "{stdout}"
     );
 }
+
+// --- instances from a configuration, and availability ------------------------
+
+const CONFIGURED: &str = r#"
+local Word = {
+  name = "Greets with a word",
+  kinds = { "greeter" },
+  word = "hello",
+  config = {
+    type = "object",
+    properties = { word = { type = "string" } },
+    required = { "word" },
+    additionalProperties = false,
+  },
+}
+Word.__index = Word
+-- Every instance built, weakly: one the engine let go is collected.
+local alive = setmetatable({}, { __mode = "k" })
+function Word:new(config)
+  if config.word == "nobody" then return nil, "`nobody` greets nobody" end
+  if config.word == "loop" then while true do end end
+  local instance = setmetatable({ word = config.word }, Word)
+  alive[instance] = true
+  return instance
+end
+function Word:greet(name)
+  if name == "alive" then
+    local n = 0
+    for _ in pairs(alive) do n = n + 1 end
+    return { greeting = tostring(n) }
+  end
+  return { greeting = self.word .. ", " .. name }
+end
+
+local Only = {
+  kinds = { "greeter" },
+  instances_only = true,
+  config = { type = "object", properties = { word = { type = "string" } } },
+}
+Only.__index = Only
+function Only:new(config) return setmetatable({ word = config.word or "only" }, Only) end
+function Only:greet(name) return { greeting = self.word .. ", " .. name } end
+
+local Down = { kinds = { "greeter" }, plugged = false }
+function Down:available()
+  if not self.plugged then return "the greeter is unplugged" end
+end
+function Down:greet(name) self.plugged = (name == "plug") return { greeting = "down, " .. name } end
+
+local Broken = { kinds = { "greeter" } }
+function Broken:available() error("the probe broke") end
+function Broken:greet(name) return { greeting = name } end
+
+local Yes = { kinds = { "greeter" } }
+function Yes:available() return true end
+function Yes:greet(name) return { greeting = name } end
+
+return {
+  _VERSION = "1.0.0",
+  providers = { word = Word, only = Only, down = Down, broken = Broken, yes = Yes },
+}
+"#;
+
+fn word(word: &str) -> guatiao::Value {
+    let mut config = Map::new();
+    config.set("word", word);
+    guatiao::Value::from(config)
+}
+
+#[test]
+fn a_configured_provider_builds_instances_each_with_its_own_settings() {
+    let dir = scratch("instances");
+    put(&dir, "lua_conf", "", CONFIGURED);
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 200_000)]))));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+
+    let offer = registry
+        .offer::<dyn Greeter>("lua_conf_word")
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.builds_instances());
+    assert!(offer.config_schema().is_some());
+    // Callable as itself too, with the table's own settings.
+    assert_eq!(
+        greeting(
+            &offer
+                .default_instance()
+                .expect("itself")
+                .greet("ana")
+                .expect("greeted")
+        ),
+        "hello, ana"
+    );
+
+    let howdy = offer.instantiate(&word("howdy")).expect("built");
+    let hey = offer.instantiate(&word("hey")).expect("built");
+    assert_eq!(greeting(&howdy.greet("bo").expect("greeted")), "howdy, bo");
+    assert_eq!(greeting(&hey.greet("cy").expect("greeted")), "hey, cy");
+
+    // The schema refuses before `new` runs; `new`'s refusal crosses in
+    // its words; a runaway `new` stops at its limit.
+    let mut misspelled = Map::new();
+    misspelled.set("wrod", "x");
+    assert!(matches!(
+        offer.instantiate(&guatiao::Value::from(misspelled)),
+        Err(guatiao::library::kind::InstantiateError::Invalid(_))
+    ));
+    match offer.instantiate(&word("nobody")) {
+        Err(guatiao::library::kind::InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "`nobody` greets nobody");
+        }
+        other => panic!("refused: {other:?}"),
+    }
+    match offer.instantiate(&word("loop")) {
+        Err(guatiao::library::kind::InstantiateError::Refused(e)) => {
+            assert_eq!(e.message(), "stopped at its operations limit (200000)");
+        }
+        other => panic!("stopped: {other:?}"),
+    }
+    let alive = |offer: &guatiao::library::kind::Offer<dyn Greeter>| -> String {
+        greeting(
+            &offer
+                .default_instance()
+                .expect("itself")
+                .greet("alive")
+                .expect("counted"),
+        )
+        .to_string()
+    };
+    assert_eq!(alive(&offer), "2");
+    drop(howdy);
+    assert_eq!(alive(&offer), "1", "the dropped instance was destroyed");
+    assert_eq!(greeting(&hey.greet("di").expect("greeted")), "hey, di");
+    drop(hey);
+    assert_eq!(alive(&offer), "0");
+
+    let only = registry
+        .offer::<dyn Greeter>("lua_conf_only")
+        .expect("served")
+        .expect("as the trait");
+    assert!(only.default_instance().is_none(), "instances only");
+    let built = only.instantiate(&word("solo")).expect("built");
+    assert_eq!(greeting(&built.greet("ed").expect("greeted")), "solo, ed");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_provider_says_whether_it_can_run_each_time_it_is_asked() {
+    let dir = scratch("available");
+    put(&dir, "lua_avail", "", CONFIGURED);
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+
+    let down = registry.provider("lua_avail_down").expect("registered");
+    assert_eq!(down.available(), Err("the greeter is unplugged"));
+    greeter(&registry, "lua_avail_down")
+        .greet("plug")
+        .expect("greeted");
+    let down = registry.provider("lua_avail_down").expect("registered");
+    assert_eq!(down.available(), Ok(()), "asked again, never cached");
+
+    let broken = registry.provider("lua_avail_broken").expect("registered");
+    let why = broken.available().unwrap_err();
+    assert!(why.contains("the probe broke"), "{why}");
+    // Only nil is available: any other answer is a reason saying so.
+    let yes = registry.provider("lua_avail_yes").expect("registered");
+    let why = yes.available().unwrap_err();
+    assert!(why.contains("answered a boolean"), "{why}");
+    // Without `available`, a provider is available.
+    let plain = registry.provider("lua_avail_word").expect("registered");
+    assert_eq!(plain.available(), Ok(()));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_malformed_configuration_declaration_is_refused_in_words() {
+    let dir = scratch("conf_refused");
+    let library = |providers: &str| {
+        format!(
+            "local P = {{ kinds = {{ 'greeter' }} }}\nfunction P:greet(n) return {{ greeting = n }} end\n{providers}\nreturn {{ providers = {{ p = P }} }}"
+        )
+    };
+    put(
+        &dir,
+        "lua_nonew",
+        "version = \"1.0.0\"\n",
+        &library("P.config = { type = 'object' }"),
+    );
+    put(
+        &dir,
+        "lua_noconf",
+        "version = \"1.0.0\"\n",
+        &library("function P:new(c) return {} end"),
+    );
+    put(
+        &dir,
+        "lua_onlyalone",
+        "version = \"1.0.0\"\n",
+        &library("P.instances_only = true"),
+    );
+    put(
+        &dir,
+        "lua_badconf",
+        "version = \"1.0.0\"\n",
+        &library("P.config = 'object'\nfunction P:new(c) return {} end"),
+    );
+    put(
+        &dir,
+        "lua_badavail",
+        "version = \"1.0.0\"\n",
+        &library("P.available = 'yes'"),
+    );
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    assert!(changed.loaded.is_empty(), "{changed:?}");
+    let reason = |id: &str| -> String {
+        changed
+            .refused
+            .iter()
+            .find(|r| r.id.as_deref() == Some(id))
+            .map(|r| r.reason.clone())
+            .unwrap_or_else(|| panic!("{id} refused: {changed:?}"))
+    };
+    assert!(
+        reason("lua_nonew").contains("no `new`"),
+        "{}",
+        reason("lua_nonew")
+    );
+    assert!(
+        reason("lua_noconf").contains("no `config`"),
+        "{}",
+        reason("lua_noconf")
+    );
+    assert!(
+        reason("lua_onlyalone").contains("`instances_only`"),
+        "{}",
+        reason("lua_onlyalone")
+    );
+    assert!(
+        reason("lua_badconf").contains("not a JSON Schema"),
+        "{}",
+        reason("lua_badconf")
+    );
+    assert!(
+        reason("lua_badavail").contains("not a function"),
+        "{}",
+        reason("lua_badavail")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
