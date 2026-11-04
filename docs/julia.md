@@ -110,6 +110,12 @@ refused before anything in it runs (`FloorMismatch`); a slot the provider
 leaves out answers `Unsupported`, which `Guatiao.has(g, :shout)` asks
 first. A refusal is a `GuatiaoError` with the provider's status and words.
 
+A settings screen lists every provider of every loaded library at once,
+none of them built, with `Guatiao.catalog(reg)` (a vector of `Dict`s, best
+first: what `providers` holds plus availability, `config`, `meta`, the
+library's `digest` or a `digest_error`), and takes the form to show one with
+`GuatiaoIntake.provider_form(get(entry, "config", nothing), get(entry, "meta", nothing))`.
+
 Libraries that come and go are a **source**: `watch_dir!` makes a
 directory one, `add_source_file!` adds a bridge to another language (the
 guatiao-source-py bridge serves Python modules), and `refresh!` makes the

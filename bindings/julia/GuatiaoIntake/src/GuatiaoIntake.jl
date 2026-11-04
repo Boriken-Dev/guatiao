@@ -29,6 +29,7 @@ const PROVIDER_FORM_KEY = "form"
 @cdef "guatiao_intake" "" :plain guatiao_intake_check(schema::PV, form::PV, a::PA, out::PV)::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_layout(schema::PV, form::PV, a::PA, out::PV)::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_for_schema(schema::PV, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_provider_form(schema::PV, meta::PV, a::PA, out::PV)::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_form_for(form::PV, schema::PV, path::GStr, a::PA, out::PV)::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_is_visible(schema::PV, form::PV, key::GStr, values::PV, out::Ptr{Bool})::UInt32
 @cdef "guatiao_intake" "" :plain guatiao_intake_path_get(v::PV, path::GStr)::PV
@@ -145,6 +146,35 @@ function for_schema(schema)
     with_nodes(schema) do s
         status, out = answer(o -> guatiao_intake_for_schema(s, binding_alloc(), o))
         status == 0 || (free_root(out); FFI.check(status))
+        return adopt(out)
+    end
+end
+
+"""
+    provider_form(schema, meta) -> Union{Value,Nothing}
+
+The form a provider's settings are shown with: the one it declares in its
+`meta` under `PROVIDER_FORM_KEY`, or else the one its configuration
+`schema` implies (`for_schema`).
+
+`schema` and `meta` are what the registry answers for the provider
+(`Guatiao.provider_config` and `Guatiao.provider_meta`, or the `"config"`
+and `"meta"` of an entry `Guatiao.catalog` lists): each a `Value`, a view,
+plain data or `nothing`. What is not a map is skipped, as reading the key
+by hand skips it. `nothing` when that leaves nothing to show. A declared
+form is not checked against the schema here; `check` does that.
+"""
+function provider_form(schema, meta)
+    given = Any[schema, meta]
+    present = filter(!isnothing, given)
+    with_nodes(present...) do nodes...
+        next = 0
+        s, m = map(given) do item
+            item === nothing ? PV(C_NULL) : nodes[next += 1]
+        end
+        status, out = answer(o -> guatiao_intake_provider_form(s, m, binding_alloc(), o))
+        status == 0 || (free_root(out); FFI.check(status))
+        load_tag(out) == TAG_ABSENT && (free_root(out); return nothing)
         return adopt(out)
     end
 end

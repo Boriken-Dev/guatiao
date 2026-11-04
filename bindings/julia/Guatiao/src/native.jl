@@ -290,6 +290,7 @@ end
 @cdef "guatiao" "load" :safe guatiao_registry_scan_path(reg::P, spec::GStr, descending::Bool, rules::GStr, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_libraries(reg::P, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_providers(reg::P, kind::GStr, a::PA, out::PV)::UInt32
+@cdef "guatiao" "load" :safe guatiao_registry_catalog(reg::P, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_provider(reg::P, key::GStr, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_available(reg::P, kind::GStr, a::PA, out::PV)::UInt32
 @cdef "guatiao" "load" :safe guatiao_registry_why_not(reg::P, kind::GStr, a::PA, out::PV)::UInt32

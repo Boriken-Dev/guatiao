@@ -6,6 +6,7 @@
 # collect and unload, and sources.
 
 using GreeterKind
+using SHA
 
 const TARGET = library_dir()
 
@@ -203,6 +204,74 @@ end
     @test Guatiao.collect!(reg) == ["derived_greeter"]
     @test Guatiao.collect!(reg) == []
     close(reg)
+end
+
+
+"The catalog library written in C copied into a directory of its own; `nothing` without a compiler."
+build_catalog_library() = (dir = scratch("catalog"); (dir, build_c(joinpath(C_CONSUMER, "catalog_library.c"), dir, "julia_catalog_library")))
+
+@testset "the catalog lists every provider of a directory and builds none" begin
+    dir, file = build_catalog_library()
+    if file === nothing
+        absent_greeter(:c_catalog, "no C compiler: the catalog library is not built")
+    else
+        Registry("julia-catalog", "1.0") do reg
+            report = Guatiao.scan_dir(reg, dir)
+            @test isempty(report["failed"]) && length(report["loaded"]) == 1
+            catalog = Dict(e["id"] => e for e in Guatiao.catalog(reg))
+            @test sort!(collect(keys(catalog))) == ["catalog_configured", "catalog_implied", "catalog_plain", "catalog_unavailable"]
+            digest = "sha256:" * bytes2hex(SHA.sha256(read(file)))
+
+            configured = catalog["catalog_configured"]
+            @test configured["kinds"] == ["counter"]
+            @test configured["display_name"] == "Configured, with a form"
+            @test configured["version"] == "2.0"
+            @test configured["library"] == "catalog_library"
+            @test configured["library_version"] == "1.0"
+            @test configured["digest"] == digest
+            @test configured["available"] === true && !haskey(configured, "reason")
+            @test configured["config"]["required"] == ["host", "port"]
+            @test configured["meta"]["form"]["sections"] == [Dict("id" => "net", "title" => "Network")]
+
+            implied = catalog["catalog_implied"]
+            @test implied["version"] == "1.0" && !haskey(implied, "meta")
+            @test implied["config"]["properties"]["token"]["x-sensitive"] === true
+
+            unavailable = catalog["catalog_unavailable"]
+            @test unavailable["available"] === false && unavailable["reason"] == "no device here"
+            @test !haskey(unavailable, "config") && unavailable["has_config"] === false
+            @test catalog["catalog_plain"]["available"] === true
+
+            # Listing asked the library for nothing: its count says so, and so
+            # does its refusal of the first instance asked for afterwards.
+            built = Libdl.dlsym(Libdl.dlopen(file), :catalog_built)
+            @test ccall(built, Cint, ()) == 0
+            e = try Guatiao.create(reg, "catalog_configured", Dict("host" => "localhost", "port" => 8080)) catch e; e end
+            @test e isa GuatiaoError && e.message == "built nothing: the first create this library was asked"
+            @test ccall(built, Cint, ()) == 1
+        end
+    end
+end
+
+@testset "a catalog names why a library has no digest" begin
+    dir, file = build_catalog_library()
+    if file === nothing
+        absent_greeter(:c_catalog, "no C compiler: the catalog library is not built")
+    else
+        Registry("julia-catalog", "1.0") do reg
+            Guatiao.load_file(reg, file)
+            # Another file at the path, before anything asked: renaming a
+            # mapped file works on every platform, where overwriting one does not.
+            mv(file, joinpath(dir, "moved_away.bin"))
+            write(file, "not the library")
+            catalog = Guatiao.catalog(reg)
+            @test length(catalog) == 4
+            for entry in catalog
+                @test !haskey(entry, "digest")
+                @test entry["digest_error"] == "the file changed since it was loaded"
+            end
+        end
+    end
 end
 
 @testset "refuses use once closed, and closes twice quietly" begin
