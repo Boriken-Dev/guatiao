@@ -499,7 +499,7 @@ impl Summer for Adds {
     }
     fn first(&self, items: &List) -> Result<String, ProviderError> {
         items
-            .get(0)
+            .first()
             .and_then(TryAsRef::<str>::try_as_ref)
             .map(str::to_string)
             .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_NOT_FOUND, "an empty list"))
