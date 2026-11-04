@@ -30,7 +30,12 @@ struct Reading {
 
 impl FrameRead for Reading {
     fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> io::Result<bool> {
-        self.inner.read_frame(buf, max)
+        let read = self.inner.read_frame(buf, max);
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{} reads", self.side));
+        read
     }
 
     fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
@@ -131,5 +136,47 @@ fn a_link_raises_its_readers_bound_before_the_peer_can_send_a_large_frame() {
     assert!(
         at("client raises to 67108864").is_some(),
         "the client raises its bound before its link is returned: {log:?}"
+    );
+}
+
+#[cfg(feature = "tcp")]
+/// Where a key PROOF is still to be read, the bound stays the handshake's
+/// until the proof is through: a stranger cannot send a large message in
+/// its place.
+#[test]
+fn a_server_that_reads_a_proof_raises_its_bound_only_after_it() {
+    let log: Log = Arc::default();
+    let (host_end, server_end) = memory::pair();
+    let key = b"a key both ends hold".as_slice();
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(key));
+    let served = {
+        let log = Arc::clone(&log);
+        let server = server.clone();
+        std::thread::spawn(move || server.serve(watched(server_end, &log, "server")))
+    };
+    let source = RemoteSource::new(
+        Box::new(Once(Mutex::new(Some(watched(host_end, &log, "client"))))),
+        LinkOptions::new(Trust::Trusted).key(key),
+    );
+    let _link = source.link().expect("the link is made");
+    let _served = served.join().unwrap().expect("the server's link is made");
+
+    let log = log.lock().unwrap().clone();
+    let server_events: Vec<&str> = log
+        .iter()
+        .map(String::as_str)
+        .filter(|e| e.starts_with("server"))
+        .collect();
+    let raised = server_events
+        .iter()
+        .position(|e| e.contains("raises"))
+        .unwrap_or_else(|| panic!("never raised: {log:?}"));
+    let reads_before = server_events[..raised]
+        .iter()
+        .filter(|e| **e == "server reads")
+        .count();
+    assert_eq!(
+        reads_before, 2,
+        "the HELLO and the PROOF are read before the bound is raised: {log:?}"
     );
 }
