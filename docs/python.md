@@ -277,8 +277,12 @@ token.close()                                 # overwritten, then freed
   lent and borrowed, or lent twice: for a slot
   `f(&self, a: &mut Map, b: &Map)`, `remote.f(v, v)` raises before the
   call, in either order, as it does for a node of `v` and `v` itself. A
-  call's views are held the same way, so a provider cannot pass what it
-  was lent on as both. Nothing waits for a claim, so nothing deadlocks.
+  claim holds the whole value, so lending `v["a"]` and borrowing `v["b"]`
+  in one call is refused too, though the two do not overlap: copy one
+  first (`clone()`). A view `guatiao_intake.at(v, ...)` answers counts as
+  `v`, for reads and for calls. A call's views are held the same way, so
+  a provider cannot pass what it was lent on as both. Nothing waits for a
+  claim, so nothing deadlocks.
   A package reading a value through `guatiao.ffi.node_of`
   (`guatiao-serde`, `guatiao-intake`) takes no claim: close or change a
   value only once no other thread is passing it to one of them.
