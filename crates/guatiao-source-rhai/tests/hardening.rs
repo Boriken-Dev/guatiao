@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What a script must not be able to do to its host or to the sandbox: reach
+//! What a script must not do to its host by accident: reach
 //! a file through `import`, write to the host's standard output, or call
 //! back into an object that is already running.
 

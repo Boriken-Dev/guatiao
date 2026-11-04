@@ -9,8 +9,8 @@ or any language with a binding, adds this one file and calls providers
 written in Rhai as it calls the ones written in Rust or C. Rhai is pure
 Rust and built into the file; the host needs nothing else. Rhai has no
 host of its own beyond Rust, so this is the way a script reaches the other
-languages, and a script runs under limits the host sets: it is meant for
-code the host did not write.
+languages, and a script runs under limits the host sets, which stop a
+mistake (a runaway loop) and are not a defence against a hostile author.
 
 > **Status: alpha, not published.** Built from this repository.
 
@@ -29,11 +29,11 @@ code the host did not write.
   and maps, from the source's configuration: runaway code is stopped and
   the host carries on, even code that wraps the stopped loop in
   `try`/`catch`.
-- **No way out of the sandbox.** A script reaches no file, no network and
-  no other module: `import` is refused, and `print` and `debug` do
-  nothing. It can still abort the host if it nests values more than a
-  hundred thousand levels deep with no `operations` limit set, or over
-  many calls (see below).
+- **Trusted, with no host access of its own.** A script is trusted like any
+  library a host loads. It has no file, network or module access: `import`
+  is refused, and `print` and `debug` do nothing. A mistake can still abort
+  the host if it nests values more than a hundred thousand levels deep with
+  no `operations` limit set, or over many calls (see below).
 - **One engine on a thread of its own**, which every call reaches.
 
 ## Building

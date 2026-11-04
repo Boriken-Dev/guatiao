@@ -140,9 +140,12 @@ new code while an instance taken from the old build still answers.
 
 ## Limits
 
-A script is untrusted by default. The configuration's `limits` apply to
-each call, opening a library included, and a runaway script is stopped
-with a status that names the limit while the host carries on:
+A script is trusted like any library the host chose to load. The
+configuration's `limits` guard against accidents (a runaway loop, deep
+recursion, a script that grows without end), not against an author who sets
+out to harm the host, and they apply to each call, opening a library
+included. A runaway script is stopped with a status that names the limit
+while the host carries on. Checking untrusted input is the provider's job:
 
 | limit | stops | status |
 | --- | --- | --- |
@@ -152,8 +155,8 @@ with a status that names the limit while the host carries on:
 | `memory` | a string, array or map larger than the limit allows | `GUATIAO_ERR_ALLOC` |
 
 A stop cannot be caught by the script: a `try`/`catch` around a loop does
-not keep it running. A script reaches no file and no network, cannot
-import another module, and its `print` and `debug` do nothing. A function
+not keep it running. A script has no file, network or module access of its
+own (Rhai's `import` is refused), and its `print` and `debug` do nothing. A function
 body or closure nests expressions at most 16 deep; a script with a deeper
 one does not open.
 
@@ -174,8 +177,8 @@ the stack): lower `operations`. Comparing or writing a nested value
 recurses through Rhai's own calls; when that nears the end of the stack
 the call stops at its depth limit. `to_json` refuses a map nested deeper
 than 512 levels or holding more than 1 000 000 values. Without
-`operations`, a script that nests values more than a hundred thousand
-levels deep can run past the stack and abort the host process. What a
+`operations`, a script that mistakenly nests values more than a hundred
+thousand levels deep can run past the stack and abort the host process. What a
 provider builds up in its own state over many calls is not covered
 either.
 
