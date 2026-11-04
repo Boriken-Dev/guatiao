@@ -766,7 +766,16 @@ fn a_guest_builds_instances_from_a_configuration_and_says_whether_it_runs() {
     assert_eq!(stopped.status, Status::GUATIAO_ERR_INTERNAL);
     let gone = hey.greet("ed").unwrap_err();
     assert_eq!(gone.status, Status::GUATIAO_ERR_GONE, "{}", gone.message());
-    drop((hey, built, itself, down));
+    // Their drop reaches no guest, not even the store made afresh, where
+    // their ids could name instances of its own.
+    assert_eq!(greeting(&itself.greet("ana").expect("greeted")), "0");
+    drop((hey, built));
+    assert_eq!(
+        greeting(&itself.greet("ana").expect("greeted")),
+        "0",
+        "an instance of a discarded store was destroyed in the new one"
+    );
+    drop((itself, down));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
