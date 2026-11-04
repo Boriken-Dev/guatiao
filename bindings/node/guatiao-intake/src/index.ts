@@ -49,6 +49,7 @@ const EXPORTS: readonly n.Declared[] = [
   ['uint32_t guatiao_intake_layout(void *schema, void *form, void *alloc, void *out)'],
   ['uint32_t guatiao_intake_is_visible(void *schema, void *form, guatiao_str key, void *values, void *out)'],
   ['uint32_t guatiao_intake_for_schema(void *schema, void *alloc, void *out)'],
+  ['uint32_t guatiao_intake_provider_form(void *schema, void *meta, void *alloc, void *out)'],
   ['uint32_t guatiao_intake_form_for(void *form, void *schema, guatiao_str path, void *alloc, void *out)'],
   ['void *guatiao_intake_path_get(void *value, guatiao_str path)'],
   ['void *guatiao_intake_resolve(void *schema, guatiao_str key)'],
@@ -206,6 +207,44 @@ export function forSchema(schema: unknown): Value {
       },
     ),
   ) as Value;
+}
+
+/**
+ * The form a provider's settings are shown with: the one it declares in its
+ * `meta` under `providerFormKey`, or else the one its configuration `schema`
+ * implies (`forSchema`).
+ *
+ * `schema` and `meta` are what the registry answers for the provider
+ * (`providerConfig` and `providerMeta`, or the `config` and `meta` of an
+ * entry `Registry.catalog()` lists): each a `Ref`, plain data (converted),
+ * or `null`. What is not a map is skipped, as reading the key by hand
+ * skips it. `null` when that leaves nothing to show. A declared form is
+ * not checked against the schema here; `check` does that. A `Value` the
+ * caller closes.
+ */
+export function providerForm(schema: unknown, meta: unknown): Value | null {
+  const given = [schema ?? null, meta ?? null];
+  const present = given.filter((item) => item !== null);
+  return withNodes(present, (nodes) => {
+    let next = 0;
+    const [s, m] = given.map((item) => (item === null ? null : nodes[next++]!));
+    return answer(
+      (alloc, out) => library().fn.guatiao_intake_provider_form!(s, m, alloc, out),
+      (status, out) => {
+        try {
+          raiseForStatus(status);
+        } catch (e) {
+          out.close();
+          throw e;
+        }
+        if (out.isAbsent()) {
+          out.close();
+          return null;
+        }
+        return out;
+      },
+    );
+  }) as Value | null;
 }
 
 /**

@@ -68,6 +68,8 @@ export interface CLibraries {
   foreignThread: string;
   /** `layout.c`: the header's structs as this platform's C compiler lays them out. */
   layout: string;
+  /** `catalog_library.c`: four providers a settings screen lists, each `create` refusing and counting. */
+  catalog: string;
 }
 
 /** Every C library the suite calls, or `null` without a C compiler. */
@@ -98,5 +100,6 @@ export function buildCLibraries(): CLibraries | null {
       'foreign_thread',
     ),
     layout: buildC(cc, path.join(C_CONSUMER, 'layout.c'), path.join(root, 'layout'), 'c_layout'),
+    catalog: buildC(cc, path.join(C_CONSUMER, 'catalog_library.c'), path.join(root, 'catalog'), 'catalog_library'),
   };
 }
