@@ -211,6 +211,62 @@ fn a_server_that_reads_a_proof_reads_ahead_only_after_it() {
     );
 }
 
+/// A PROOF that does not hold leaves the channel reading one message ahead:
+/// the server never raises it, after reading the PROOF or before refusing.
+#[cfg(feature = "tcp")]
+#[test]
+fn a_server_refusing_a_proof_never_reads_ahead() {
+    use guatiao_source_remote::protocol::Frame;
+    let log: Log = Arc::default();
+    let (mut host_end, server_end) = memory::pair();
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(b"a key both ends hold"));
+    let served = {
+        let log = Arc::clone(&log);
+        let server = server.clone();
+        std::thread::spawn(move || server.serve(watched(server_end, &log, "server")))
+    };
+    let send = |writer: &mut Box<dyn FrameWrite>, frame: &Frame<'_>| {
+        let mut out = Vec::new();
+        frame.encode(&mut out, usize::MAX).unwrap();
+        writer.write_frame(&out).unwrap();
+    };
+    send(
+        &mut host_end.writer,
+        &Frame::Hello {
+            trust: Trust::Trusted,
+            nonce: [7; 16],
+            options: guatiao::Value::from(guatiao::Map::new()),
+        },
+    );
+    let mut welcome = Vec::new();
+    assert!(host_end.reader.read_frame(&mut welcome, 1 << 20).unwrap());
+    assert!(
+        matches!(
+            Frame::decode(&welcome, guatiao::Alloc::rust()),
+            Ok(Frame::Welcome { .. })
+        ),
+        "the server answers with a WELCOME"
+    );
+    send(&mut host_end.writer, &Frame::Proof { proof: &[0; 32] });
+    let why = served
+        .join()
+        .unwrap()
+        .map(|_| ())
+        .expect_err("the server refuses the PROOF");
+    assert!(
+        format!("{why:?}").contains("does not hold this link's key"),
+        "{why:?}"
+    );
+
+    let log = log.lock().unwrap().clone();
+    let reads = log.iter().filter(|e| *e == "server reads").count();
+    assert_eq!(reads, 2, "the HELLO and the PROOF are read: {log:?}");
+    assert!(
+        !log.iter().any(|e| e.starts_with("server reads ahead")),
+        "the server read ahead for a client it refused: {log:?}"
+    );
+}
+
 #[cfg(feature = "tcp")]
 /// Where a key PROOF is still to be read, the bound stays the handshake's
 /// until the proof is through: a stranger cannot send a large message in
