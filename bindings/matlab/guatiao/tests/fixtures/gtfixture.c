@@ -439,6 +439,19 @@ static int dispatch(const char *cmd, int nlhs, mxArray *plhs[], int nrhs, const 
     }
     return 1;
   }
+  if (!strcmp(cmd, "catalog_built")) {
+    /* catalog_built(path) -> how many times any `create` of the catalog
+     * library at `path` was called */
+    void *p = nrhs > 1 ? open_symbol(prhs[1], "catalog_built") : NULL;
+    if (!p) {
+      snprintf(failure, sizeof failure, "no catalog_built");
+      return 0;
+    }
+    int (*f)(void);
+    memcpy(&f, &p, sizeof f);
+    plhs[0] = mxCreateDoubleScalar((double)f());
+    return 1;
+  }
   snprintf(failure, sizeof failure, "no command %s", cmd);
   return 0;
 }

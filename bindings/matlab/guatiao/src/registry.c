@@ -127,7 +127,7 @@ int cmd_registry_scan(gt_call *c) {
 }
 
 /* registry_query(reg, what, arg): 0 libraries, 1 providers, 2 available,
- * 3 why_not, 4 provider, 5 best */
+ * 3 why_not, 4 provider, 5 best, 6 catalog */
 int cmd_registry_query(gt_call *c) {
   guatiao_registry *reg = NULL;
   double what = 0;
@@ -138,6 +138,8 @@ int cmd_registry_query(gt_call *c) {
   guatiao_status st;
   if (w == 0) {
     st = gt_core.guatiao_registry_libraries(reg, &gt_binding_alloc, &out);
+  } else if (w == 6) {
+    st = gt_core.guatiao_registry_catalog(reg, &gt_binding_alloc, &out);
   } else {
     guatiao_str a;
     if (!gt_arg_text(c, 2, "the kind or key", &a)) return 0;

@@ -7,6 +7,7 @@ function cases = t_intake()
     'checking a form and laying it out', @check_layout
     'a path names one place inside a value', @paths
     'a form made out of a schema', @forms
+    'a provider''s form is its own, else the one its schema implies', @provider_forms
     'the flat projection', @flat
     'redaction', @redaction
     'validation against a schema', @validation
@@ -159,4 +160,42 @@ function validation()
   expect_true(isstruct(problem) || isa(problem, 'containers.Map'), 'a refusal');
   problem = guatiao.validate(schema, struct());
   expect_true(~isempty(problem), 'missing');
+end
+
+function provider_forms()
+  schema = guatiao.serde.parse(['{"type": "object", "properties": {' ...
+    '"user": {"type": "string", "x-section": "account"},' ...
+    '"token": {"type": "string", "x-sensitive": true}}}']);
+  meta = guatiao.serde.parse(['{"form": {"sections": [{"id": "account", "title": "Account"}]}, "other": 1}']);
+  form = guatiao.intake.provider_form(schema, meta);
+  expect_equal(form.data(), struct('sections', {{struct('id', 'account', 'title', 'Account')}}));
+  form.close();
+
+  implied = guatiao.intake.provider_form(schema, []);
+  made = implied.data();
+  expect_equal(made.sections, {struct('id', 'account')});
+  expect_equal(made.fields.token.widget, 'password');
+  implied.close();
+
+  % Meta without a form is the same as none; MATLAB data works as values do.
+  other = guatiao.serde.parse('{"other": 1}');
+  again = guatiao.intake.provider_form(schema, other);
+  expect_equal(again.data(), made);
+  again.close();
+
+  expect_equal(guatiao.intake.provider_form([], []), []);
+  expect_equal(guatiao.intake.provider_form([], other), []);
+
+  % What is not a form is skipped, as reading the key by hand skips it.
+  list = guatiao.serde.parse('{"form": ["not", "a", "form"]}');
+  skipped = guatiao.intake.provider_form(schema, list);
+  expect_equal(skipped.data(), made);
+  skipped.close();
+  text = guatiao.serde.parse('{"form": "a form"}');
+  expect_equal(guatiao.intake.provider_form([], text), []);
+  schema.close();
+  meta.close();
+  other.close();
+  list.close();
+  text.close();
 end
