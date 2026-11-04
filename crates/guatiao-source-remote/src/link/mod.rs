@@ -533,6 +533,10 @@ fn proves_key(options: &LinkOptions) -> bool {
     }
 }
 
+/// Frames a message transport may read ahead of the link's reader once the
+/// peer is admitted (coqui-web's default); until then its channel holds one.
+const READ_AHEAD: usize = 64;
+
 /// A token that proves nothing, refused at both ends.
 const BLANK_TOKEN: &str = "token is empty or only white space, and proves nothing";
 
@@ -663,6 +667,9 @@ impl Link {
             write_frame(&mut *writer, &Frame::Proof { proof: &mine })?;
         }
         let _ = (server_nonce, proof);
+        // The server is admitted: its WELCOME holds, and its proof where one
+        // was asked.
+        let _ = reader.set_read_ahead(READ_AHEAD);
         reader.set_timeout(None)?;
         writer.set_timeout(options.timeout)?;
         Ok(Link::start(
@@ -771,11 +778,14 @@ impl Link {
         // arrives: a stranger cannot send a large message in the PROOF's
         // place, and a client's call right behind it is read at once. A
         // transport that cannot stage keeps the handshake's bound until the
-        // proof checks.
+        // proof checks. The channel reads one frame ahead until the client is
+        // admitted, so a stranger sending large frames behind a junk PROOF
+        // has one of them held, not as many as the read-ahead allows.
         if proves_key(options) {
             let _ = reader.set_max_frame_after(1, options.max_frame);
         } else {
             reader.set_max_frame(options.max_frame);
+            let _ = reader.set_read_ahead(READ_AHEAD);
         }
         let nonce = handshake::nonce();
         let proof = if proves_key(options) {
@@ -822,6 +832,7 @@ impl Link {
                     "the client does not hold this link's key",
                 ));
             }
+            let _ = reader.set_read_ahead(READ_AHEAD);
         }
         let _ = client_nonce;
         reader.set_max_frame(options.max_frame);

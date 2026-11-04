@@ -220,6 +220,7 @@ ws::{WsConnect::beyond_loopback(self), WsListen::bind_beyond_loopback(addr, Acl)
 ws::WsConnect::local_addr(self, SocketAddr) -> WsConnect   // binds each connection's socket first (port 0: any); refused: PermissionDenied
 webtransport::WtConnect::local_addr(self, SocketAddr) -> WtConnect   // the same; WtConnect is Clone, a clone sharing the TLS session store (so it can resume a session)
 transport::FrameRead::set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool   // stage the read bound by position (default false: cannot); the link calls it with (1, max_frame) before the WELCOME where a PROOF follows
+transport::FrameRead::set_read_ahead(&mut self, frames: usize) -> io::Result<()>   // frames a message transport holds ahead of the reader (default Err(Unsupported): none to set); WebSocket and WebTransport channels start at 1, the link sets 64 once the peer is admitted
 ws::WsListen::accept() -> io::Result<tcp::Accepted>
 ws::{WsConnect::new("wss://host:port/path").tls(&TlsConfig)?, WsListen::bind_tls(addr, &TlsConfig)?}   // ws + tls
 rdma::{RdmaConnect::new("host:port").port(RdmaPort).timeout(d), RdmaListen::bind(addr, Acl)?.port(RdmaPort)}   // rdma
@@ -434,14 +435,20 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   checks) and on either side before the link is returned, not when the
   reader first asks. The first message is judged at the handshake's bound
   from the channel's start (`limits()` sets coqui-web's `max_message`).
-  The staged transports pay for it: coqui-web reads ahead up to `pending`
-  (64) messages and cannot lower that per channel, so a client past the
+  A channel also reads one message ahead of the link (`limits()` sets
+  coqui-web's `pending` to 1) until the link admits the peer and raises it
+  to 64 (`FrameRead::set_read_ahead`, through the channel's `set_pending`;
+  a transport without one answers `Unsupported` and changes nothing): a
+  server once the PROOF holds, or before its reply where no PROOF is read,
+  a client once the WELCOME and its proof hold. So a client past the
   address rules that sends a junk PROOF and then large messages makes this
-  side hold what it transmits, up to 64 messages of `max_frame` (4 GiB at
-  the defaults), until the link reads the PROOF, checks it and closes the
-  channel (milliseconds; at most the handshake timeout if the serving
-  thread stalls); a smaller `max_frame` shrinks it. A stream never holds
-  more than the handshake's bound before the proof) and what it sends
+  side hold one message of `max_frame` behind the PROOF, plus coqui-web's
+  buffers below whole messages (under 128 KiB on a WebSocket, under 16 KiB
+  on WebTransport, TLS's, and the TCP receive buffer or QUIC stream
+  window), until the link checks the PROOF and closes the channel
+  (milliseconds; at most the handshake timeout if the serving thread
+  stalls); its sends wait meanwhile. A stream never holds more than the
+  handshake's bound before the proof) and what it sends
   (`set_max_send`, `FrameWrite::set_max_frame`, the peer's, known once the
   handshake agreed it); a frame past the peer's is refused by the writer
   (`InvalidInput`) and the reader keeps its own size check. A write waits

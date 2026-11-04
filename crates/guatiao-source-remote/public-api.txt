@@ -513,6 +513,7 @@ pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mu
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame_in(&mut self, &mut alloc::vec::Vec<u8>, usize, &mut dyn core::ops::function::FnMut(usize) -> alloc::vec::Vec<u8>) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_max_frame(&mut self, usize)
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_max_frame_after(&mut self, usize, usize) -> bool
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_read_ahead(&mut self, usize) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub struct guatiao_source_remote::transport::stream::StreamWriter<W: core::io::write::Write>
 impl<W: core::io::write::Write + core::marker::Send> guatiao_source_remote::transport::stream::StreamWriter<W>
@@ -703,6 +704,7 @@ pub fn guatiao_source_remote::transport::FrameRead::read_frame(&mut self, &mut a
 pub fn guatiao_source_remote::transport::FrameRead::read_frame_in(&mut self, &mut alloc::vec::Vec<u8>, usize, &mut dyn core::ops::function::FnMut(usize) -> alloc::vec::Vec<u8>) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::FrameRead::set_max_frame(&mut self, usize)
 pub fn guatiao_source_remote::transport::FrameRead::set_max_frame_after(&mut self, usize, usize) -> bool
+pub fn guatiao_source_remote::transport::FrameRead::set_read_ahead(&mut self, usize) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::FrameRead::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 impl<R: alloc::io::read::Read + core::marker::Send> guatiao_source_remote::transport::FrameRead for guatiao_source_remote::transport::stream::StreamReader<R>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::datagrams(&self) -> core::option::Option<alloc::sync::Arc<dyn guatiao_source_remote::transport::Datagrams>>
@@ -712,6 +714,7 @@ pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame(&mu
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::read_frame_in(&mut self, &mut alloc::vec::Vec<u8>, usize, &mut dyn core::ops::function::FnMut(usize) -> alloc::vec::Vec<u8>) -> core::io::error::Result<bool>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_max_frame(&mut self, usize)
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_max_frame_after(&mut self, usize, usize) -> bool
+pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_read_ahead(&mut self, usize) -> core::io::error::Result<()>
 pub fn guatiao_source_remote::transport::stream::StreamReader<R>::set_timeout(&mut self, core::option::Option<core::time::Duration>) -> core::io::error::Result<()>
 pub trait guatiao_source_remote::transport::FrameWrite: core::marker::Send
 pub fn guatiao_source_remote::transport::FrameWrite::set_max_frame(&mut self, usize)

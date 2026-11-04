@@ -384,6 +384,8 @@ fn a_peer_outside_the_ranges_is_turned_away() {
 struct SlowAfterFirst {
     inner: Box<dyn guatiao_source_remote::transport::FrameRead>,
     reads: usize,
+    /// How long it holds the PROOF before handing it over.
+    pause: Duration,
 }
 
 impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
@@ -391,7 +393,7 @@ impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
         let read = self.inner.read_frame(buf, max);
         self.reads += 1;
         if self.reads == 2 {
-            std::thread::sleep(Duration::from_millis(400));
+            std::thread::sleep(self.pause);
         }
         read
     }
@@ -406,6 +408,10 @@ impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
 
     fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
         self.inner.set_max_frame_after(messages, bytes)
+    }
+
+    fn set_read_ahead(&mut self, frames: usize) -> std::io::Result<()> {
+        self.inner.set_read_ahead(frames)
     }
 
     fn peer_id(&self) -> Option<String> {
@@ -427,6 +433,7 @@ fn a_large_call_pipelined_right_behind_the_proof_is_served() {
                 conn.reader = Box::new(SlowAfterFirst {
                     inner: conn.reader,
                     reads: 0,
+                    pause: Duration::from_millis(400),
                 });
                 let server = server.clone();
                 std::thread::spawn(move || {
@@ -574,4 +581,157 @@ fn a_one_mib_first_message_sent_with_the_upgrade_is_refused() {
         "refused by the channel's bound: {e}"
     );
     sending.join().unwrap();
+}
+
+/// One WebSocket message as a client sends it: binary, masked with a key of
+/// zeros, which leaves the payload as it is.
+fn masked(payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x82];
+    match payload.len() {
+        n if n < 126 => out.push(0x80 | u8::try_from(n).unwrap()),
+        n if n <= 0xffff => {
+            out.push(0x80 | 126);
+            out.extend_from_slice(&u16::try_from(n).unwrap().to_be_bytes());
+        }
+        n => {
+            out.push(0x80 | 127);
+            out.extend_from_slice(&u64::try_from(n).unwrap().to_be_bytes());
+        }
+    }
+    out.extend_from_slice(&[0, 0, 0, 0]);
+    out.extend_from_slice(payload);
+    out
+}
+
+/// The payload of the next message a server sends.
+fn unmasked(stream: &mut std::net::TcpStream) -> Vec<u8> {
+    use std::io::Read;
+    let mut head = [0u8; 2];
+    stream.read_exact(&mut head).unwrap();
+    let len = match head[1] & 0x7f {
+        126 => {
+            let mut n = [0u8; 2];
+            stream.read_exact(&mut n).unwrap();
+            usize::from(u16::from_be_bytes(n))
+        }
+        127 => {
+            let mut n = [0u8; 8];
+            stream.read_exact(&mut n).unwrap();
+            usize::try_from(u64::from_be_bytes(n)).unwrap()
+        }
+        n => usize::from(n),
+    };
+    let mut payload = vec![0u8; len];
+    stream.read_exact(&mut payload).unwrap();
+    payload
+}
+
+/// A frame's body as the link encodes it, without its length.
+fn body(frame: &guatiao_source_remote::protocol::Frame<'_>) -> Vec<u8> {
+    let mut out = Vec::new();
+    frame.encode(&mut out, usize::MAX).unwrap();
+    out.split_off(4)
+}
+
+/// A stranger past the address rules answers the WELCOME with a junk PROOF
+/// and then 1 MiB messages while the server is slow to check the PROOF: the
+/// channel reads one of those messages ahead and no more, so the stranger's
+/// socket stops taking bytes once that one and the transport's own buffers
+/// are full, rather than the server reading up to 64 of them.
+#[test]
+fn a_stranger_behind_a_junk_proof_has_one_message_read_ahead() {
+    use guatiao_source_remote::protocol::Frame;
+    use std::io::{Read, Write};
+    const MESSAGE: usize = 1 << 20;
+    const SENT: usize = 48;
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let at = listener.local_addr().unwrap();
+    let (told, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        if let Ok(Accepted::Connection(mut conn)) = listener.accept() {
+            conn.reader = Box::new(SlowAfterFirst {
+                inner: conn.reader,
+                reads: 0,
+                pause: Duration::from_secs(4),
+            });
+            let _ = told.send(server.serve(conn).map(|_| ()).map_err(|e| format!("{e:?}")));
+        }
+    });
+
+    let mut stream = std::net::TcpStream::connect(at).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    stream
+        .write_all(
+            format!(
+                "GET /remote HTTP/1.1\r\nHost: {at}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    assert!(
+        head.starts_with(b"HTTP/1.1 101"),
+        "{}",
+        String::from_utf8_lossy(&head)
+    );
+    let hello = Frame::Hello {
+        trust: Trust::Trusted,
+        nonce: [7; 16],
+        options: guatiao::Value::from(Map::new()),
+    };
+    stream.write_all(&masked(&body(&hello))).unwrap();
+    let welcome = unmasked(&mut stream);
+    assert!(
+        matches!(
+            Frame::decode(&welcome, guatiao::Alloc::rust()),
+            Ok(Frame::Welcome { .. })
+        ),
+        "the server answers with a WELCOME"
+    );
+    stream
+        .write_all(&masked(&body(&Frame::Proof { proof: &[0; 32] })))
+        .unwrap();
+
+    // While the server holds the PROOF, how much of what follows the socket
+    // takes before it stops taking any.
+    stream
+        .set_write_timeout(Some(Duration::from_millis(1500)))
+        .unwrap();
+    let message = masked(&vec![0u8; MESSAGE]);
+    let mut taken = 0;
+    'sending: for _ in 0..SENT {
+        let mut at = 0;
+        while at < message.len() {
+            let end = message.len().min(at + (64 << 10));
+            match stream.write(&message[at..end]) {
+                Ok(0) | Err(_) => break 'sending,
+                Ok(n) => {
+                    at += n;
+                    taken += n;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "the socket took {taken} bytes of {} sent behind the PROOF",
+        SENT * message.len()
+    );
+    assert!(
+        taken < 16 * MESSAGE,
+        "the server read {taken} bytes of {SENT} messages of {MESSAGE} behind a PROOF it had not checked: \
+         more than one message ahead and the transport's buffers"
+    );
+    let why = heard
+        .recv_timeout(Duration::from_secs(20))
+        .unwrap()
+        .expect_err("the server refuses the junk PROOF");
+    assert!(why.contains("does not hold this link's key"), "{why}");
 }
