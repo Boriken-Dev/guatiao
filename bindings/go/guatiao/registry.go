@@ -497,7 +497,11 @@ func (r *Registry) WatchDir(dir string, rules ...string) error {
 }
 
 // Refresh asks every source and watched directory what it serves now and
-// makes this registry agree: {"loaded", "retired", "skipped", "refused"}.
+// makes this registry agree: {"loaded", "retired", "skipped", "refused"},
+// and "notes" ([{"source", "subject", "text", "detail"}]) only when a
+// source said something worth showing that is neither a refusal nor a
+// skip, such as the remote source's TLS settings weaker than modern: each
+// note the first refresh its source answers it, not again while it stays.
 func (r *Registry) Refresh() (map[string]any, error) {
 	var out map[string]any
 	return out, r.answer("refresh", "", &out)

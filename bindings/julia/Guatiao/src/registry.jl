@@ -341,7 +341,11 @@ watch_dir!(reg::Registry, dir::AbstractString; rules = nothing) =
 
 Asks every source and watched directory what it serves now and makes the
 registry agree: `Dict("loaded" => [...], "retired" => [...], "skipped" =>
-[...], "refused" => [...])`. Nothing refreshes on its own.
+[...], "refused" => [...])`, and `"notes" => [Dict("source", "subject",
+"text", "detail")...]` only when a source said something worth showing
+that is neither a refusal nor a skip (the remote source's TLS settings
+weaker than modern, say): each note the first refresh its source answers
+it, not again while it stays. Nothing refreshes on its own.
 """
 refresh!(reg::Registry) = answer(guatiao_registry_refresh, reg)
 

@@ -325,8 +325,11 @@ added), or the source's own status. `watchDir(directory, rules: ...)`:
 each refresh loads a library file that appeared, retires one that
 vanished, reloads one that changed. `refresh() -> Map`: `loaded` and
 `retired` (`{source, id, stamp, key}`), `skipped` (`{source, id,
-skipped, ...}`), `refused` (`{source, id?, why}`). A changed candidate
-loads before its old build is retired, and an `Instance` of the old keeps
+skipped, ...}`), `refused` (`{source, id?, why}`), and `notes` (`{source,
+subject, text, detail}`) only when a source said something worth showing
+that is neither, each note the first refresh its source answers it, not
+again while it stays. A changed candidate loads before its old build is
+retired, and an `Instance` of the old keeps
 working; refusals are part of the answer. Nothing refreshes on its own.
 
 `bind(key, Greeter.kind)` answers the provider's table for that kind as

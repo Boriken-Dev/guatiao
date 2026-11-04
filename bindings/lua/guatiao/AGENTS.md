@@ -33,7 +33,7 @@ rockspec `guatiao-dev-1.rockspec` builds it with `luarocks make`.
 ```lua
 reg:load_file(path)              --> {id, version, key, providers} | nil, why
 reg:add_source_file(path, config) --> the source's name; raises on refusal
-reg:refresh()                    --> {loaded = {...}, retired = {...}, skipped = {...}, refused = {...}}
+reg:refresh()                    --> {loaded = {...}, retired = {...}, skipped = {...}, refused = {...}, notes = {...}?}
 reg:providers([kind])            --> {{key, id, name, library, version, kinds, configured}, ...}
 reg:bind(key, kind)              --> a handle; raises when the provider has no table of the kind
 reg:retire(key)                  --> true; raises on refusal

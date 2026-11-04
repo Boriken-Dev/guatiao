@@ -738,7 +738,10 @@ class Registry implements Finalizable {
   /// Asks every source and watched directory what it serves now and makes
   /// this registry agree. Answers what changed: `loaded` and `retired`
   /// (each `{source, id, stamp, key}`), `skipped` (`{source, id,
-  /// skipped, ...}`) and `refused` (`{source, id?, why}`).
+  /// skipped, ...}`) and `refused` (`{source, id?, why}`); and `notes`
+  /// (`{source, subject, text, detail}`) only when a source said something
+  /// worth showing that is neither a refusal nor a skip, each note the
+  /// first refresh its source answers it, not again while it stays.
   ///
   /// A new candidate loads; a changed one loads and, once it has, its old
   /// build is retired while an [Instance] of the old keeps working; a

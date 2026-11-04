@@ -213,7 +213,11 @@ default). No table, ctx or borrowed schema taken from it is used again.
 `guatiao_source` (a bridge to another language) and adds the source it
 answers, refusing with its words; `WatchDir(dir, rules...)` watches a
 directory; `Refresh()` makes the registry agree with every source,
-answering `{loaded, retired, skipped, refused}`. Nothing refreshes on its
+answering `{loaded, retired, skipped, refused}`, and `notes`
+(`[{source, subject, text, detail}]`) only when a source said something
+worth showing that is neither, each note the first refresh its source
+answers it (the remote source names its TLS settings weaker than modern
+there, `detail` `{setting, value, modern}`). Nothing refreshes on its
 own.
 
 A Registry is not safe for concurrent use: a host sharing one between

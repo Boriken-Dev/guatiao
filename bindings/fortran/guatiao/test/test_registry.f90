@@ -23,6 +23,7 @@ program test_registry
   call retires_and_unloads()
   call follows_a_watched_directory()
   call a_source_refuses_with_its_own_words()
+  call a_sources_note_is_told_once()
   call a_closed_registry_refuses_use()
   call answers_in_the_registrys_allocator()
   call finish('registry')
@@ -236,6 +237,37 @@ contains
     call reg%add_source_file(library_dir() // '/' // first, guatiao_map(), st, msg)
     call check(st /= GUATIAO_OK, 'a library that is no source is refused')
     call check(len(msg) > 0, 'with words')
+  end subroutine
+
+  ! The source written in Rust tells its configuration's `note`.
+  subroutine a_sources_note_is_told_once()
+    type(guatiao_registry) :: reg
+    type(guatiao_value) :: config, greetings, changed, notes, field
+    character(:), allocatable :: first, second
+    logical :: there
+    call gt_library_file_names('source_library', first, second)
+    inquire (file=library_dir() // '/' // first, exist=there)
+    if (.not. there .and. len(second) > 0) first = second
+    greetings = guatiao_map()
+    call greetings%set('hi', 'hello')
+    config = guatiao_map()
+    call config%set('greetings', greetings)
+    call config%set('note', 'the shelf is dusty, says Rust')
+    reg = guatiao_open_registry('fortran-notes', '0.1')
+    call reg%add_source_file(library_dir() // '/' // first, config)
+    call reg%refresh(changed)
+    notes = changed%key('notes')
+    call check(notes%length() == 1, 'the first refresh tells the note')
+    field = notes%at(1, 'source')
+    call check(index(field%string_or(''), first) > 0, 'by its source')
+    field = notes%at(1, 'subject')
+    call check(field%string_or('?') == '', 'about the whole source')
+    field = notes%at(1, 'text')
+    call check(field%string_or('?') == 'the shelf is dusty, says Rust', 'in its words')
+    field = notes%at(1, 'detail', 'said')
+    call check(field%string_or('?') == 'by Rust', 'with its detail')
+    call reg%refresh(changed)
+    call check(.not. changed%has('notes'), 'and not again while it stays')
   end subroutine
 
   subroutine a_closed_registry_refuses_use()

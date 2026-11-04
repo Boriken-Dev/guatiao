@@ -361,8 +361,12 @@ ctx or remote taken from it is used again.
 `guatiao_source` (a bridge to another language) and adds the source it
 answers, refusing with its own words; `watch_dir(dir, rules = "")`
 watches a directory; `refresh()` makes the registry agree with every
-source, answering `list(loaded, retired, skipped, refused)`. Nothing
-refreshes on its own.
+source, answering `list(loaded, retired, skipped, refused)`, and `notes`
+(`list(source, subject, text, detail)` each) only when a source said
+something worth showing that is neither a refusal nor a skip, each note
+the first refresh its source answers it (the remote source names its TLS
+settings weaker than modern there, `detail` `list(setting, value,
+modern)`). Nothing refreshes on its own.
 
 ## Kinds: calling a table, serving one
 

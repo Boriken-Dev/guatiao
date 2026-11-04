@@ -229,6 +229,26 @@ case("serves libraries that come and go from a source file", with_examples({
   }
 }))
 
+case("tells a source's note once", with_examples({
+  # The shelf written in C answers its configuration's `note` from its
+  # table's `notes` slot.
+  shelf <- build_c_source("r_shelf_note")
+  if (is.null(shelf)) {
+    absent_greeter("c_source", "no C compiler: the source written in C is not built")
+  } else {
+    reg <- registry("r-sources", "0.1")
+    reg$add_source_file(shelf, list(ids = list(), note = "the shelf is dusty, says C"))
+    notes <- reg$refresh()$notes
+    expect_equal(length(notes), 1)
+    expect_equal(notes[[1]]$subject, "shelf")
+    expect_equal(notes[[1]]$text, "the shelf is dusty, says C")
+    expect_equal(notes[[1]]$detail, list(said = "by C"))
+    expect_true(nchar(notes[[1]]$source) > 0)
+    expect_true(is.null(reg$refresh()$notes))
+    reg$close()
+  }
+}))
+
 case("refuses with the source's own words, and a file that is no source", with_examples({
   shelf <- build_c_source("r_shelf_b")
   if (is.null(shelf)) {

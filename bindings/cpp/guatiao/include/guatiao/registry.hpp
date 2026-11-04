@@ -232,7 +232,10 @@ class registry {
     return {};
   }
   /// Asks every source and watched directory what it serves now and makes
-  /// the registry agree: `{"loaded", "retired", "skipped", "refused"}`.
+  /// the registry agree: `{"loaded", "retired", "skipped", "refused"}`, and
+  /// `"notes"` (`{"source", "subject", "text", "detail"}` each) only when a
+  /// source said something worth showing, each note the first refresh its
+  /// source answers it.
   /// Refusals are part of the answer, never a failed call.
   result<value> try_refresh() {
     guatiao_value out = detail::blank();

@@ -305,7 +305,10 @@ library registered rather than mapped, `GUATIAO_ERR_NOT_FOUND` for none;
 `guatiao_source` (a bridge to another language) and adds the source it
 answers, refused with its own words; `watch_dir(dir, rules)` watches a
 directory; `refresh(answer)` makes the registry agree with every source
-(`{loaded, retired, skipped, refused}`). Nothing refreshes on its own.
+(`{loaded, retired, skipped, refused}`, and `notes`, each `{source,
+subject, text, detail}`, only when a source said something worth showing
+that is neither a refusal nor a skip, each note the first refresh its
+source answers it). Nothing refreshes on its own.
 
 ## Kinds: calling a table
 

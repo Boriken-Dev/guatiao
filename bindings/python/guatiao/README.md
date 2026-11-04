@@ -141,6 +141,8 @@ language, or a directory the registry keeps in step with disk.
 reg.add_source_file("/opt/myapp/guatiao_source_py.so", {"dirs": ["/opt/myapp/py"]})
 reg.watch_dir("/opt/myapp/plugins", rules="kind=greeter")
 changed = reg.refresh()        # what loaded, retired, was skipped or refused
+for note in changed.get("notes", []):  # what a source wants you to see
+    print(note["source"], note["text"])
 ```
 
 Every answer that is data comes back as a plain `dict` or `list`.

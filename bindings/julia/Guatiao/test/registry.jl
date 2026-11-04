@@ -242,6 +242,22 @@ end
     end
 end
 
+@testset "tells a source's note once" begin
+    # The shelf written in C answers its configuration's `note` from its
+    # table's `notes` slot.
+    shelf = build_c_source("julia_shelf_note")
+    if shelf === nothing
+        absent_greeter(:c_source, "no C compiler: the source written in C is not built")
+    else
+        Registry("julia-sources", "0.1") do reg
+            name = Guatiao.add_source_file!(reg, shelf, Dict("ids" => String[], "note" => "the shelf is dusty, says C"))
+            @test Guatiao.refresh!(reg)["notes"] == [Dict("source" => name, "subject" => "shelf",
+                "text" => "the shelf is dusty, says C", "detail" => Dict("said" => "by C"))]
+            @test !haskey(Guatiao.refresh!(reg), "notes")
+        end
+    end
+end
+
 @testset "refuses with the source's own words, and a file that is no source" begin
     shelf = build_c_source("julia_shelf_b")
     if shelf === nothing

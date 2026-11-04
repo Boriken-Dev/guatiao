@@ -363,7 +363,11 @@ Both take the LIBRARY key (`%id` by default).
 `guatiao_source` (a bridge to another language) and adds the source it
 answers; `watch_dir(dir, rules)` watches a folder; `refresh()` makes the
 registry agree with every source: struct(loaded, retired, skipped,
-refused). Nothing refreshes on its own.
+refused), and `notes` (a cell of struct(source, subject, text, detail))
+only when a source said something worth showing that is neither, each
+note the first refresh its source answers it (`isfield(r, 'notes')`; the
+remote source names its TLS settings weaker than modern there, `detail`
+struct(setting, value, modern)). Nothing refreshes on its own.
 
 ## Kinds: calling a table, serving one
 

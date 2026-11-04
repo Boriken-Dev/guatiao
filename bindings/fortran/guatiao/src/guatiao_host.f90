@@ -339,7 +339,9 @@ contains
   end subroutine
 
   !> Makes the registry agree with every source: `{loaded, retired,
-  !> skipped, refused}`. Nothing refreshes on its own.
+  !> skipped, refused}`, and `notes` (`{source, subject, text, detail}`
+  !> each) only when a source said something worth showing, each note the
+  !> first refresh its source answers it. Nothing refreshes on its own.
   recursive subroutine reg_refresh(self, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     type(guatiao_value), intent(inout), optional :: answer

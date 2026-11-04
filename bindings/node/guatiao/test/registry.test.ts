@@ -191,6 +191,19 @@ describe('sources', () => {
     expect(() => reg.addSourceFile(path.join(TARGET, 'no-such-file'))).toThrow(NotFound);
   });
 
+  it('tells a source note once', (ctx) => {
+    // The shelf written in C answers its configuration's `note` from its
+    // table's `notes` slot.
+    const shelf = cLibraries()?.shelfB;
+    if (shelf === undefined) return ctx.skip('no C compiler: the source written in C is not built');
+    using reg = new Registry('node-sources', '0.1');
+    const name = reg.addSourceFile(shelf, { ids: [], note: 'the shelf is dusty, says C' });
+    expect(reg.refresh().notes).toEqual([
+      { source: name, subject: 'shelf', text: 'the shelf is dusty, says C', detail: { said: 'by C' } },
+    ]);
+    expect(reg.refresh().notes).toBeUndefined();
+  });
+
   it('follows the files of a watched directory', () => {
     const dir = scratch('watched');
     const watched = path.join(dir, 'watched');

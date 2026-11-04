@@ -457,14 +457,27 @@ export class Registry implements Disposable {
 
   /**
    * Asks every source and watched directory what it serves now and makes
-   * this registry agree: `{ loaded, retired, skipped, refused }`.
+   * this registry agree: `{ loaded, retired, skipped, refused, notes? }`.
+   * `notes` is there only when a source said something worth showing that
+   * is neither a refusal nor a skip (the remote source's TLS settings
+   * weaker than modern, say): each note the first refresh its source
+   * answers it, not again while it stays; `subject` names the part of the
+   * source it concerns (empty: the whole), `detail` is what a program
+   * reads instead of `text`.
    */
-  refresh(): { loaded: Record<string, unknown>[]; retired: Record<string, unknown>[]; skipped: Record<string, unknown>[]; refused: Record<string, unknown>[] } {
+  refresh(): {
+    loaded: Record<string, unknown>[];
+    retired: Record<string, unknown>[];
+    skipped: Record<string, unknown>[];
+    refused: Record<string, unknown>[];
+    notes?: { source: string; subject: string; text: string; detail: Record<string, unknown> }[];
+  } {
     return this.#answer('guatiao_registry_refresh') as {
       loaded: Record<string, unknown>[];
       retired: Record<string, unknown>[];
       skipped: Record<string, unknown>[];
       refused: Record<string, unknown>[];
+      notes?: { source: string; subject: string; text: string; detail: Record<string, unknown> }[];
     };
   }
 

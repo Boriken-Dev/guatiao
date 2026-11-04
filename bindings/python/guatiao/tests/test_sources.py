@@ -71,6 +71,19 @@ def test_a_source_file_serves_libraries_that_come_and_go(shelf):
         ]
 
 
+def test_a_sources_note_is_told_once(shelf):
+    # The shelf written in C answers its configuration's `note` from its
+    # table's `notes` slot.
+    path, _ = shelf
+    with Registry("py-sources", "0.1") as reg:
+        name = reg.add_source_file(path, {"ids": ["shelf_a"], "note": "the shelf is dusty, says C"})
+        first = reg.refresh()
+        assert first["notes"] == [
+            {"source": name, "subject": "shelf", "text": "the shelf is dusty, says C", "detail": {"said": "by C"}}
+        ]
+        assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
+
+
 def test_the_same_library_from_two_sources_is_kept_apart_by_its_source(tmp_path, shelf):
     first, _ = shelf
     second = native.build_c_source(tmp_path / "second", "py_shelf_second")

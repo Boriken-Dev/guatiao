@@ -21,6 +21,7 @@ function cases = t_registry()
     'refuses use once closed, and closes twice quietly', @closed
     'serves libraries that come and go from a source file', @source_file
     'refuses with the source''s own words, and a file that is no source', @source_refusals
+    'tells a source''s note once', @source_note
     'follows the files of a watched folder', @watched
   };
 end
@@ -249,6 +250,25 @@ function source_refusals()
   expect_true(~isempty(strfind(e.message, 'already added')), 'once');
   expect_error(@() reg.add_source_file(gt_env('workspace', 'derived_greeter')), 'guatiao:WrongKind');
   expect_error(@() reg.add_source_file(fullfile(gt_env('dir'), 'no-such-file')), 'guatiao:NotFound');
+  reg.close();
+end
+
+function source_note()
+% The shelf written in C answers its configuration's `note` from its
+% table's `notes` slot.
+  shelf = gt_env('c_source', 'm_shelf_note');
+  if isempty(shelf)
+    skip_case('the C source: no C compiler built it (set GUATIAO_CC)');
+  end
+  reg = guatiao.Registry('m-sources', '0.1');
+  reg.add_source_file(shelf, struct('ids', {{}}, 'note', 'the shelf is dusty, says C'));
+  first = reg.refresh();
+  expect_equal(numel(first.notes), 1);
+  expect_equal(first.notes{1}.subject, 'shelf');
+  expect_equal(first.notes{1}.text, 'the shelf is dusty, says C');
+  expect_equal(first.notes{1}.detail.said, 'by C');
+  expect_true(~isempty(first.notes{1}.source), 'names its source');
+  expect_true(~isfield(reg.refresh(), 'notes'), 'told once');
   reg.close();
 end
 

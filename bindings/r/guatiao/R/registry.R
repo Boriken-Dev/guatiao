@@ -158,7 +158,7 @@
       invisible(.Call(C_registry_watch_dir, .gt_reg(.self), path.expand(dir), rules))
     },
     refresh = function() {
-      "Makes the registry agree with every source: list(loaded, retired, skipped, refused)."
+      "Makes the registry agree with every source: list(loaded, retired, skipped, refused), and notes only when a source said something worth showing."
       .Call(C_registry_refresh, .gt_reg(.self))
     },
     show = function() {

@@ -198,6 +198,22 @@ fn refreshed(lua: &Lua, r: &Refreshed) -> LuaResult<LuaTable> {
         refused.raw_push(one)?;
     }
     out.set("refused", refused)?;
+    // Only when a source said something, as the C answer has it.
+    if !r.notes.is_empty() {
+        let notes = lua.create_table()?;
+        for (source, note) in &r.notes {
+            let one = lua.create_table()?;
+            one.set("source", source.as_str())?;
+            one.set("subject", note.subject())?;
+            one.set("text", note.text())?;
+            one.set(
+                "detail",
+                values::to_lua(lua, &guatiao::Value::from(note.detail().clone()))?,
+            )?;
+            notes.raw_push(one)?;
+        }
+        out.set("notes", notes)?;
+    }
     Ok(out)
 }
 
