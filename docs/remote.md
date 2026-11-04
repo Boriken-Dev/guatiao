@@ -968,10 +968,10 @@ more of its own calls open than the other's `max_calls`. Before the
 handshake ends a body is at most 64 KiB. Where a key PROOF follows the
 WELCOME (the trusted level, and server TLS with a key), that holds until
 the PROOF is checked, so a stranger cannot send a large message in its
-place; a client that pipelines a large call right after its PROOF over a
-message transport (WebSocket, WebTransport) may then lose that call to a
-clean protocol error, as the bound is raised only once the server has read
-the PROOF.
+place. On a message transport (WebSocket, WebTransport) the server
+stages its bound before the WELCOME, so the PROOF is judged small and a
+call a client sends right behind it, large; a transport that cannot stage
+keeps the handshake's bound until the PROOF is through.
 
 At the trusted level the WELCOME's proof is HMAC-SHA256 over the key, of
 `"guatiao-remote server"`, the client's nonce and the server's; the

@@ -60,6 +60,8 @@ pub struct WsConnect {
     url: String,
     timeout: Duration,
     beyond_loopback: bool,
+    /// The local address each connection's socket binds first.
+    local: Option<core::net::SocketAddr>,
     #[cfg(feature = "tls")]
     tls: Option<Wss>,
 }
@@ -90,9 +92,18 @@ impl WsConnect {
             url: url.to_string(),
             timeout: CONNECT_TIMEOUT,
             beyond_loopback: false,
+            local: None,
             #[cfg(feature = "tls")]
             tls: None,
         }
+    }
+
+    /// Binds each connection's socket to `address` before connecting, so
+    /// the server sees that source (a port of 0 lets the system choose).
+    #[must_use]
+    pub fn local_addr(mut self, address: core::net::SocketAddr) -> WsConnect {
+        self.local = Some(address);
+        self
     }
 
     /// Lets a plain `ws://` URL name a host beyond this machine: nothing
@@ -223,6 +234,9 @@ impl Connect for WsConnect {
             .with_limits(limits());
         if self.beyond_loopback {
             dialer = dialer.with_plain_beyond_loopback();
+        }
+        if let Some(address) = self.local {
+            dialer = dialer.with_local_addr(address);
         }
         #[cfg(feature = "tls")]
         let watching = self.tls.as_ref().map(|wss| {

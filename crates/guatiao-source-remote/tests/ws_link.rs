@@ -377,3 +377,73 @@ fn a_peer_outside_the_ranges_is_turned_away() {
     assert_eq!(registry.offers::<dyn Greeter>().count(), 0);
     assert!(!refused.is_empty());
 }
+
+/// A server whose reader is slow to hand over the PROOF: the channel reads
+/// on, so the frames behind it are judged while the server still checks the
+/// PROOF.
+struct SlowAfterFirst {
+    inner: Box<dyn guatiao_source_remote::transport::FrameRead>,
+    reads: usize,
+}
+
+impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
+    fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> std::io::Result<bool> {
+        let read = self.inner.read_frame(buf, max);
+        self.reads += 1;
+        if self.reads == 2 {
+            std::thread::sleep(Duration::from_millis(400));
+        }
+        read
+    }
+
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.inner.set_timeout(timeout)
+    }
+
+    fn set_max_frame(&mut self, bytes: usize) {
+        self.inner.set_max_frame(bytes);
+    }
+
+    fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
+        self.inner.set_max_frame_after(messages, bytes)
+    }
+
+    fn peer_id(&self) -> Option<String> {
+        self.inner.peer_id()
+    }
+}
+
+/// A client sends a large call right behind its PROOF, before the server
+/// has read the PROOF: the server judges the PROOF small and what follows
+/// large, so the call is served rather than ending the link.
+#[test]
+fn a_large_call_pipelined_right_behind_the_proof_is_served() {
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            if let Accepted::Connection(mut conn) = accepted {
+                conn.reader = Box::new(SlowAfterFirst {
+                    inner: conn.reader,
+                    reads: 0,
+                });
+                let server = server.clone();
+                std::thread::spawn(move || {
+                    let _ = server.serve(conn);
+                });
+            }
+        }
+    });
+    let big = "x".repeat(1 << 20);
+    let source = over_ws(
+        port,
+        LinkOptions::new(Trust::Trusted)
+            .key(KEY)
+            .timeout(Some(Duration::from_secs(10))),
+    );
+    let link = source.link().expect("the link is made");
+    let _ = link.open(&big, "stamp");
+    assert!(link.alive(), "the link survives: {}", link.why());
+    link.ping().expect("and answers");
+}

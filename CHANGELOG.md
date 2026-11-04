@@ -1578,8 +1578,10 @@ write now.
     (`BAD_VALUE`, "the server does not trust this client"). A link raises
     its reader's bound (`FrameRead::set_max_frame`) before the peer can
     send a frame past the handshake's, on a server before its reply goes
-    (after the PROOF where one is read), since a message channel judges a
-    message as it arrives. With `allow_resumption` a WebTransport listener
+    (where a PROOF is read, staged so the PROOF is judged at the
+    handshake's bound and what follows at the full one), since a message
+    channel judges a message as it arrives. `WsConnect::local_addr` and
+    `WtConnect::local_addr` bind a connection's socket first. With `allow_resumption` a WebTransport listener
     asks the list's fingerprint rules after the handshake, as a resumed
     session skips the client verifier. A wildcard plain `ws://` listener refuses a
     client on a list rule naming the address or port it came to, as the TLS

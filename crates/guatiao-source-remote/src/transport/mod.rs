@@ -84,6 +84,19 @@ pub trait FrameRead: Send {
         let _ = bytes;
     }
 
+    /// As [`set_max_frame`](FrameRead::set_max_frame), staged: the next
+    /// `messages` frames not yet returned stay under the bound in force,
+    /// every frame after them under `bytes`. Called before the peer can send
+    /// either, so the frame that carries a proof is judged small and the
+    /// calls pipelined behind it large. Answers whether the transport
+    /// stages; a stream, which reads only what is asked, and a transport
+    /// that cannot answer `false`, and the link raises the bound once the
+    /// proof is through.
+    fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
+        let _ = (messages, bytes);
+        false
+    }
+
     /// The peer's identity as the transport proved it, `sha256:<hex>` (a
     /// TLS certificate's fingerprint), once the first read has run the
     /// transport's own handshake; `None` on a transport that proves none.

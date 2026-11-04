@@ -765,10 +765,16 @@ impl Link {
         // The client may send a call as soon as it has this reply, and a
         // message channel judges a message as it arrives: the bound is
         // raised before the reply goes, not when the first call is read.
-        // Where a key PROOF is still to be read, it stays the handshake's
-        // until the proof checks, so a stranger cannot send a large message
-        // in its place.
-        if !proves_key(options) {
+        // Where a key PROOF is still to be read, the next frame (the PROOF)
+        // stays under the handshake's bound and every one after it takes the
+        // full bound, set now because the channel judges a frame as it
+        // arrives: a stranger cannot send a large message in the PROOF's
+        // place, and a client's call right behind it is read at once. A
+        // transport that cannot stage keeps the handshake's bound until the
+        // proof checks.
+        if proves_key(options) {
+            let _ = reader.set_max_frame_after(1, options.max_frame);
+        } else {
             reader.set_max_frame(options.max_frame);
         }
         let nonce = handshake::nonce();

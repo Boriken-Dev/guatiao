@@ -24,7 +24,7 @@ guatiao = { path = "../../../crates/guatiao" }
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 # WebTransport channels, server and client. A git dependency until
 # coqui-web is released.
-coqui-web = { git = "https://github.com/Boriken-Dev/coqui-web.git", rev = "b6f2ad1a5d234376e75853198da3e2fbc56d394c", features = ["webtransport"] }
+coqui-web = { git = "https://github.com/Boriken-Dev/coqui-web.git", rev = "445007acb04f1b11f8f0f7c9fcf104f694189a2b", features = ["webtransport"] }
 # The short-lived certificate a browser accepts by hash, and the TLS
 # configuration that presents it.
 coqui-peer-tls = { version = "=0.0.0-alpha.1", features = ["generate"] }

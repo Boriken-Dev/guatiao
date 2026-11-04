@@ -374,6 +374,91 @@ fn the_list_still_decides_by_fingerprint_where_a_session_may_resume() {
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
 }
 
+/// A session resumed from another address skips the client verifier, so the
+/// list's fingerprint rule that denies the client from that address must be
+/// asked after the handshake: linked from 127.0.0.1 the client is let in,
+/// resuming from 127.0.0.2 it is refused.
+#[test]
+fn a_resumed_webtransport_session_meets_the_lists_fingerprint_rules() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::Policy;
+    let local_2: core::net::SocketAddr = "127.0.0.2:0".parse().unwrap();
+    if std::net::UdpSocket::bind(local_2).is_err() {
+        eprintln!("skipped: this machine does not route 127.0.0.2 on loopback");
+        return;
+    }
+    let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    // Admitted by address from both; denied by fingerprint from 127.0.0.2.
+    let mut deny = Rule::new(Action::Deny, "127.0.0.2/32".parse().unwrap());
+    deny.fingerprint = Some(client_id.fingerprint().canonical());
+    let mut acl = Acl::default();
+    acl.push(deny);
+    acl.push(Rule::new(Action::Permit, "any".parse().unwrap()));
+    let mut policy = Policy::modern();
+    policy.acl = Some(acl);
+    policy.allow_resumption = true;
+    let server = TlsConfig::new(server_id.clone())
+        .pins([client_id.fingerprint()])
+        .policy(policy);
+    let mut resuming = Policy::modern();
+    resuming.allow_resumption = true;
+
+    let listener = WtListen::bind("127.0.0.1:0", &server).unwrap();
+    let at = listener.local_addr().unwrap().to_string();
+    let (told, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            let Accepted::Connection(mut conn) = accepted else {
+                continue;
+            };
+            let told = told.clone();
+            std::thread::spawn(move || {
+                conn.reader
+                    .set_timeout(Some(Duration::from_secs(10)))
+                    .unwrap();
+                let mut buf = Vec::new();
+                let _ = told.send(conn.reader.read_frame(&mut buf, 1 << 10).is_ok());
+                std::thread::sleep(Duration::from_secs(1));
+            });
+        }
+    });
+
+    // One client configuration for both dials, so the second can resume
+    // the first's session.
+    use coqui_peer_tls::{Pins, Trust as Pinned};
+    use coqui_web::{Channel, Dialer as _, Kind};
+    let built = coqui_peer_tls::client_config_with(
+        &client_id,
+        &Pinned::Pinned(Pins::fixed([server_id.fingerprint()])),
+        &[b"h3"],
+        &resuming,
+    )
+    .unwrap();
+    let config = Arc::new(built.config);
+    let target = url::Url::parse(&url(&at)).unwrap();
+    let dial = |from: &str| {
+        coqui_web::webtransport::Dialer::with_tls(Arc::clone(&config))
+            .unwrap()
+            .with_local_addr(from.parse().unwrap())
+            .dial(Kind::WebTransport, &target, Duration::from_secs(5))
+    };
+    let first = dial("127.0.0.1:0").expect("linked from 127.0.0.1");
+    first.send(b"start").unwrap();
+    assert!(
+        heard.recv_timeout(Duration::from_secs(10)).unwrap(),
+        "a client the list permits from 127.0.0.1"
+    );
+    // The ticket reaches the client after the handshake.
+    std::thread::sleep(Duration::from_millis(500));
+    let second = dial(local_2.to_string().as_str())
+        .expect("the resumed session completes its handshake: the verifier is skipped");
+    let _ = second.send(b"start");
+    assert!(
+        !heard.recv_timeout(Duration::from_secs(10)).unwrap(),
+        "the list denies this client from 127.0.0.2, resumed or not"
+    );
+}
+
 /// A trust store backs a mutual WebTransport listener: a stranger is
 /// recorded as waiting under the address it came from, and one the list
 /// never admits is refused in the handshake and not kept waiting.

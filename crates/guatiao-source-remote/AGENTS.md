@@ -422,11 +422,14 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   `FrameRead::set_max_frame`: a channel judges a message by the bound in
   force when it reads it off the socket, ahead of the reader, so a link
   raises it before it can be sent a large frame, on a server before its
-  reply to the HELLO goes (after the PROOF where one is read, so a
-  stranger cannot send a large message in its place; a client pipelining a
-  large call right after its PROOF may then get a clean `Protocol`) and on
-  either side before the link is returned, not when the reader first
-  asks. From a valid HELLO on, a peer can make this side buffer one
+  reply to the HELLO goes (where a PROOF is read, staged with
+  `FrameRead::set_max_frame_after(1, max_frame)` through the channel's
+  `set_max_receive_after`: the PROOF is judged at the handshake's bound
+  and every frame after it at the full one, so a stranger cannot send a
+  large message in its place and a call pipelined behind it is read; a
+  transport that cannot stage keeps the handshake's bound until the PROOF
+  checks) and on either side before the link is returned, not when the
+  reader first asks. From a valid HELLO on, a peer can make this side buffer one
   message up to `max_frame` before the link refuses it; a stream never
   holds more than the handshake's bound before the proof) and what it sends
   (`set_max_send`, `FrameWrite::set_max_frame`, the peer's, known once the

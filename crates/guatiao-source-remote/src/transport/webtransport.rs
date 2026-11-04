@@ -354,6 +354,7 @@ fn authority(url: &str) -> io::Result<String> {
 /// browser does: the QUIC and HTTP/3 handshakes run in
 /// [`connect`](Connect::connect), so a server this side does not trust
 /// fails it there.
+#[derive(Clone)]
 pub struct WtConnect {
     url: String,
     tls: Arc<rustls::ClientConfig>,
@@ -362,6 +363,8 @@ pub struct WtConnect {
     /// Whether the server's certificate is checked: false at no security.
     proves: bool,
     timeout: Duration,
+    /// The local address each connection's socket binds first.
+    local: Option<SocketAddr>,
 }
 
 impl core::fmt::Debug for WtConnect {
@@ -392,7 +395,18 @@ impl WtConnect {
             me: config.me(),
             proves: config.proves_peers(),
             timeout: CONNECT_TIMEOUT,
+            local: None,
         })
+    }
+
+    /// Binds each connection's socket to `address` before connecting, so
+    /// the server sees that source (a port of 0 lets the system choose).
+    /// A clone shares this one's TLS session store, so it can resume
+    /// a session from another address.
+    #[must_use]
+    pub fn local_addr(mut self, address: SocketAddr) -> WtConnect {
+        self.local = Some(address);
+        self
     }
 
     /// To `url` at no security: TLS whose certificate nobody checks, the
@@ -455,6 +469,9 @@ impl Connect for WtConnect {
         let mut dialer = WtDialer::with_tls(Arc::new(tls))
             .map_err(io_error)?
             .with_limits(limits());
+        if let Some(address) = self.local {
+            dialer = dialer.with_local_addr(address);
+        }
         let channel = dialer
             .dial(Kind::WebTransport, &url, self.timeout)
             .map_err(|failure| self.refusal(failure, &watching))?;
