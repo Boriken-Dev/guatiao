@@ -1127,7 +1127,8 @@ static int served_args(served_job *j, mxArray **out, char *msg, size_t msglen) {
 }
 
 /* Calls guatiao.internal.dispatch(kind, slot, ctx, args, answer) and reads
- * {status, message, buffers}. */
+ * {status, message, buffers, took}: took is false when dispatch took none
+ * of what the call handed over, which this then releases. */
 static void served_body(served_job *j) {
   gt_slot *sl = j->slot;
   mxArray *args = NULL;
