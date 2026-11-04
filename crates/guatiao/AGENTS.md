@@ -1995,6 +1995,10 @@ let caller = Caller::new(kind, &Libffi)?;
 unsafe { caller.call_raw(table, size, ctx, slot, args) } -> Result<Answer, ProviderError>
 DescribedRemote::new(provider.view(), Arc::new(caller))? .call(slot, args) .call_named("greet", args)
                                                  // holds the provider's library loaded
+DescribedRemote::instantiate(provider.view(), Arc::new(caller), &config)
+    -> Result<DescribedRemote, InstantiateError> // over an instance built from `config`
+                                                 // (checked as Offer::instantiate checks it);
+                                                 // drop calls the provider's destroy, once
 raw_object.call(&caller, slot, args)  lent.call(..)  handle.call(..)
 
 enum Arg<'a> { Bool, Int(i64), Uint(u64), Float(f64), Str(&str), Bytes(&[u8]), Buffer(&mut [u8]),

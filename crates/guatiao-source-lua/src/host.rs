@@ -10,7 +10,7 @@ use alloc::sync::Arc;
 use std::path::Path;
 
 use guatiao::Map;
-use guatiao::library::kind::DescribedRemote;
+use guatiao::library::kind::{DescribedRemote, InstantiateError};
 use guatiao::library::{ImportSearch, Refreshed, Registry};
 use guatiao_bridge::Held;
 use mlua::prelude::*;
@@ -139,7 +139,8 @@ fn all_kinds(lua: &Lua) -> LuaResult<LuaTable> {
 ///
 /// `registry(id, version)` answers a registry whose methods are
 /// `load_file(path)`, `add_source_file(path, config)`, `refresh()`,
-/// `providers([kind])`, `bind(key, kind)`, `retire(key)`, `collect()`,
+/// `providers([kind])`, `bind(key, kind)`, `create(key, kind, config)`,
+/// `available(key)`, `retire(key)`, `collect()`,
 /// `set_import_search("library" | "path")`, `import_search()` and
 /// `close()`.
 pub fn module(lua: &Lua) -> LuaResult<LuaTable> {
@@ -296,6 +297,60 @@ impl UserData for RegistryView {
                 held: Held::Provider(remote),
                 caller,
             })
+        });
+        methods.add_method_mut(
+            "create",
+            |lua, this, (key, kind, config): (String, LuaValue, LuaValue)| {
+                let described = calls::kind_named(lua, &kind)?;
+                let caller = calls::caller(lua, described.name())?;
+                let config = values::to_value(lua, &config)?;
+                let registry = this.get()?;
+                let provider = registry
+                    .provider(&key)
+                    .ok_or_else(|| LuaError::runtime(format!("no provider `{key}`")))?;
+                if provider.view().table_for(described.name()).is_none() {
+                    return Err(LuaError::runtime(format!(
+                        "`{key}` does not serve `{}`",
+                        described.name()
+                    )));
+                }
+                let mut out = LuaMultiValue::new();
+                match DescribedRemote::instantiate(provider.view(), Arc::clone(&caller), &config) {
+                    Ok(remote) => {
+                        out.push_back(LuaValue::UserData(lua.create_userdata(Handle {
+                            held: Held::Provider(remote),
+                            caller,
+                        })?))
+                    }
+                    Err(e) => {
+                        let message = match &e {
+                            InstantiateError::Refused(why) => why.message().to_string(),
+                            other => other.to_string(),
+                        };
+                        out.push_back(LuaValue::Nil);
+                        out.push_back(LuaValue::UserData(lua.create_userdata(Refusal {
+                            status: e.status(),
+                            message,
+                        })?));
+                    }
+                }
+                Ok(out)
+            },
+        );
+        methods.add_method_mut("available", |lua, this, key: String| {
+            let registry = this.get()?;
+            let provider = registry
+                .provider(&key)
+                .ok_or_else(|| LuaError::runtime(format!("no provider `{key}`")))?;
+            let mut out = LuaMultiValue::new();
+            match provider.available() {
+                Ok(()) => out.push_back(LuaValue::Boolean(true)),
+                Err(why) => {
+                    out.push_back(LuaValue::Boolean(false));
+                    out.push_back(LuaValue::String(lua.create_string(why)?));
+                }
+            }
+            Ok(out)
         });
         methods.add_method_mut("retire", |_, this, key: String| {
             this.get()?

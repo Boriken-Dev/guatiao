@@ -14,6 +14,18 @@ write now.
 
 ### Added
 
+- **Lua providers built from a configuration, and asked whether they
+  run; Lua hosts build them.** A provider table with a `config` (a JSON
+  Schema as a table) and a `new` is built by any host's `instantiate`:
+  `provider:new(config)` answers the instance table, whose functions
+  serve the slots with it as `self`; `instances_only = true` offers no
+  default instance; an `available` function answers `nil` or the reason
+  it cannot run, each time a host asks. A Lua host gains
+  `reg:create(key, kind, config)` (a handle over a new instance, or
+  `nil, err`) and `reg:available(key)`. In Rust,
+  `DescribedRemote::instantiate(view, caller, &config)` builds an
+  instance of a provider for a kind bound at run time, released when the
+  remote drops.
 - **A source tells its host what is worth showing.** A note is neither a
   refusal nor a skip: `{"subject", "text", "detail"}`, words for a person
   and a map a program reads ([the encoding](https://boriken-dev.github.io/guatiao/encodings/#a-sources-note)).

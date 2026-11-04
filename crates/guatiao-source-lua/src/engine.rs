@@ -23,13 +23,15 @@ use mlua::prelude::*;
 
 use crate::calls::{self, Handle, Outcome, ReadBack, Received};
 use crate::limits::Meter;
-use crate::{host, served};
+use crate::{host, served, values};
 
-/// One library opened: its environment, its providers by id, and the
-/// objects its slots answered, by the id each was given.
+/// One library opened: its providers by id, the objects its slots
+/// answered and the instances its providers built, by the id each was
+/// given.
 struct Library {
     providers: BTreeMap<String, LuaTable>,
     objects: RefCell<BTreeMap<u64, LuaTable>>,
+    instances: RefCell<BTreeMap<u64, LuaTable>>,
 }
 
 /// The engine: one Lua state, on the bridge's thread for the life of the
@@ -338,6 +340,7 @@ impl Engine for LuaEngine {
             Rc::new(Library {
                 providers,
                 objects: RefCell::new(BTreeMap::new()),
+                instances: RefCell::new(BTreeMap::new()),
             }),
         );
         Ok(Opened::Described {
@@ -351,6 +354,7 @@ impl Engine for LuaEngine {
         let table = match call.target() {
             Target::Provider(id) => lib.providers.get(id).cloned(),
             Target::Object(id) => lib.objects.borrow().get(id).cloned(),
+            Target::Instance(id) => lib.instances.borrow().get(id).cloned(),
             _ => None,
         }
         .ok_or_else(|| refused(format!("nothing answers `{}`", call.method())))?;
@@ -363,6 +367,77 @@ impl Engine for LuaEngine {
             let gone = lib.objects.borrow_mut().remove(&object);
             drop(gone);
             self.collect();
+        }
+    }
+
+    /// `provider:new(config)`, under the limits: the instance table it
+    /// answers, kept until the instance is destroyed.
+    fn create(&self, handle: &u64, provider: &str, config: &Value) -> Result<u64, ProviderError> {
+        let lua = &self.lua;
+        let lib = self.library(*handle)?;
+        let table = lib
+            .providers
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| refused(format!("no provider `{provider}`")))?;
+        let config = values::to_lua(lua, config).map_err(|e| calls::provider_error(&e))?;
+        let mut results = self.meter.run(lua, || {
+            served::protected_method(lua, &table, "new", vec![config], self.meter.memory())
+        })?;
+        let instance = match results.pop_front().unwrap_or(LuaValue::Nil) {
+            LuaValue::Table(t) => t,
+            LuaValue::Nil => {
+                return Err(match results.pop_front() {
+                    Some(why) if !why.is_nil() => calls::answered_refusal(&why),
+                    _ => refused("`new` answered nothing: an instance is a table"),
+                });
+            }
+            other => {
+                return Err(refused(format!(
+                    "`new` answers an instance table, not a {}",
+                    other.type_name()
+                )));
+            }
+        };
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        lib.instances.borrow_mut().insert(id, instance);
+        Ok(id)
+    }
+
+    /// The instance's table goes; what it held goes with it now.
+    fn destroy(&self, handle: &u64, instance: u64) {
+        if let Ok(lib) = self.library(*handle) {
+            let gone = lib.instances.borrow_mut().remove(&instance);
+            drop(gone);
+            self.collect();
+        }
+    }
+
+    /// `provider:available()`, under the limits: `nil` when it can run,
+    /// else text saying why not; an error raised is the reason, and any
+    /// other answer is unavailable, saying what it answered.
+    fn available(&self, handle: &u64, provider: &str) -> Result<(), String> {
+        let lua = &self.lua;
+        let lib = self.library(*handle).map_err(|e| e.message().to_string())?;
+        let table = lib
+            .providers
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| format!("no provider `{provider}`"))?;
+        let mut results = self
+            .meter
+            .run(lua, || {
+                served::protected_method(lua, &table, "available", Vec::new(), self.meter.memory())
+            })
+            .map_err(|e| e.message().to_string())?;
+        match results.pop_front().unwrap_or(LuaValue::Nil) {
+            LuaValue::Nil => Ok(()),
+            LuaValue::String(why) => Err(why.to_string_lossy()),
+            other => Err(format!(
+                "`available` answered a {}, not nil (it can run) or text saying why it cannot",
+                other.type_name()
+            )),
         }
     }
 
@@ -415,7 +490,8 @@ impl LuaEngine {
                 LuaValue::String(s) => s.to_string_lossy(),
                 _ => key.clone(),
             };
-            let mut declared = Provided::new(&pid).name(&name);
+            let mut declared =
+                self.configured(id, &key, &provider, Provided::new(&pid).name(&name))?;
             for kind in &kinds {
                 if !manifest.kinds().iter().any(|k| k == kind) {
                     return Err(BridgeError::engine(format!(
@@ -445,6 +521,77 @@ impl LuaEngine {
             providers.insert(pid, provider);
         }
         Ok((offered, providers))
+    }
+
+    /// What a provider table says about instances and availability:
+    /// `config` (a JSON Schema as a table) with `new` building an
+    /// instance from a configuration, `instances_only`, and `available`.
+    fn configured(
+        &self,
+        id: &str,
+        key: &str,
+        provider: &LuaTable,
+        mut declared: Provided,
+    ) -> Result<Provided, BridgeError> {
+        let get = |name: &str| provider.get::<LuaValue>(name).map_err(engine_error);
+        let is_function = |name: &str| -> Result<bool, BridgeError> {
+            match get(name)? {
+                LuaValue::Nil => Ok(false),
+                LuaValue::Function(_) => Ok(true),
+                other => Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}`'s `{name}` is a {}, not a function",
+                    other.type_name()
+                ))),
+            }
+        };
+        let builds = is_function("new")?;
+        match get("config")? {
+            LuaValue::Nil if builds => {
+                return Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}` has `new` and no `config`: declare the schema of what `new` is given"
+                )));
+            }
+            LuaValue::Nil => {}
+            LuaValue::Table(t) => {
+                if !builds {
+                    return Err(BridgeError::engine(format!(
+                        "{id}: the provider `{key}` declares a `config` and no `new` to build an instance from it"
+                    )));
+                }
+                let schema = values::to_value(&self.lua, &LuaValue::Table(t)).map_err(|e| {
+                    BridgeError::engine(format!(
+                        "{id}: the provider `{key}`'s `config`: {}",
+                        calls::provider_error(&e).message()
+                    ))
+                })?;
+                declared = declared.config(schema);
+            }
+            other => {
+                return Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}`'s `config` is a {}, not a JSON Schema as a table",
+                    other.type_name()
+                )));
+            }
+        }
+        match get("instances_only")? {
+            LuaValue::Nil | LuaValue::Boolean(false) => {}
+            LuaValue::Boolean(true) if builds => declared = declared.instances_only(),
+            LuaValue::Boolean(true) => {
+                return Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}` is `instances_only` with no `config` and `new` to build one"
+                )));
+            }
+            other => {
+                return Err(BridgeError::engine(format!(
+                    "{id}: the provider `{key}`'s `instances_only` is a {}, not a boolean",
+                    other.type_name()
+                )));
+            }
+        }
+        if is_function("available")? {
+            declared = declared.may_be_unavailable();
+        }
+        Ok(declared)
     }
 }
 

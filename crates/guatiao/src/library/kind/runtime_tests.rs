@@ -960,3 +960,121 @@ fn reasons_from_many_threads_stay_readable_and_are_bounded() {
         assert_eq!(reasons.0.lock().unwrap().len(), REASONS);
     }
 }
+
+// --- an instance built for a kind bound at run time ---------------------------
+
+std::thread_local! {
+    /// What the test provider's `create` built and `destroy` released,
+    /// on this thread.
+    static BUILT: core::cell::RefCell<Vec<usize>> = const { core::cell::RefCell::new(Vec::new()) };
+    static RELEASED: core::cell::RefCell<Vec<(usize, usize)>> =
+        const { core::cell::RefCell::new(Vec::new()) };
+}
+
+/// Builds instance 7 from a map, or refuses one holding `refuse`.
+unsafe extern "C" fn test_create(
+    provider: *mut c_void,
+    config: *const Value,
+    out: *mut *mut c_void,
+    err: *mut ProviderError,
+) -> Status {
+    // SAFETY: the caller hands a live value and writable out-slots.
+    let config = unsafe { &*config };
+    if TryAsRef::<Map>::try_as_ref(config).is_some_and(|m| m.get("refuse").is_some()) {
+        // SAFETY: as above.
+        unsafe {
+            err.write(ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "refused, as asked",
+            ))
+        };
+        return Status::GUATIAO_ERR_BAD_VALUE;
+    }
+    BUILT.with(|b| b.borrow_mut().push(provider.addr()));
+    // SAFETY: as above.
+    unsafe { out.write(ctx(7)) };
+    Status::GUATIAO_OK
+}
+
+unsafe extern "C" fn test_destroy(provider: *mut c_void, instance: *mut c_void) {
+    RELEASED.with(|r| r.borrow_mut().push((provider.addr(), instance.addr())));
+}
+
+#[test]
+fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
+    let mechanism = Direct::default();
+    let serve = Arc::new(Served::default());
+    let greeter = kind("greeter");
+    let table =
+        ServedTable::new(Arc::clone(&greeter), |_| true, serve.clone(), &mechanism).expect("built");
+    let schema = value_of(&serde_json::json!({
+        "type": "object",
+        "properties": {"word": {"type": "string"}, "refuse": {"type": "boolean"}},
+        "additionalProperties": false
+    }));
+    let view = ProviderView {
+        kinds: vec!["greeter".to_string()],
+        id: "built".to_string(),
+        display_name: String::new(),
+        config: Some(schema),
+        vtable: core::ptr::null(),
+        vtable_size: 0,
+        ctx: ctx(3),
+        meta: None,
+        version: None,
+        available: None,
+        create: Some(test_create),
+        destroy: Some(test_destroy),
+        kind_descriptions: None,
+        hold: Hold::None,
+        tables: vec![("greeter".to_string(), table.as_ptr(), table.size())],
+    };
+    let caller = || Arc::new(Caller::new(Arc::clone(&greeter), &mechanism).expect("prepared"));
+    let config = |key: &str, value: Value| {
+        let mut map = Map::new();
+        map.set(key, value);
+        Value::from(map)
+    };
+
+    let remote = DescribedRemote::instantiate(&view, caller(), &config("word", Value::from("hi")))
+        .expect("built");
+    let Ok(Answer::Map(map)) = remote.call_named("greet", vec![Arg::Str("di")]) else {
+        panic!("a map");
+    };
+    assert_eq!(
+        map.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
+        Some("hello, di (7)"),
+        "called with the instance as its ctx"
+    );
+    assert_eq!(BUILT.with(|b| b.borrow().clone()), [3]);
+    assert!(RELEASED.with(|r| r.borrow().is_empty()));
+    drop(remote);
+    assert_eq!(
+        RELEASED.with(|r| r.borrow().clone()),
+        [(3, 7)],
+        "destroyed once"
+    );
+
+    // Refused by the provider, and by the schema before it is asked:
+    // nothing built, nothing destroyed.
+    match DescribedRemote::instantiate(&view, caller(), &config("refuse", Value::from(true))) {
+        Err(InstantiateError::Refused(e)) => assert_eq!(e.message(), "refused, as asked"),
+        other => panic!("refused: {other:?}"),
+    }
+    assert!(matches!(
+        DescribedRemote::instantiate(&view, caller(), &config("wrod", Value::from("x"))),
+        Err(InstantiateError::Invalid(_))
+    ));
+
+    // A view with no table of the kind builds nothing.
+    let other = ProviderView {
+        tables: Vec::new(),
+        ..view.clone()
+    };
+    match DescribedRemote::instantiate(&other, caller(), &config("word", Value::from("hi"))) {
+        Err(InstantiateError::Refused(e)) => assert_eq!(e.status, Status::GUATIAO_ERR_WRONG_KIND),
+        other => panic!("refused: {other:?}"),
+    }
+    assert_eq!(BUILT.with(|b| b.borrow().len()), 1);
+    assert_eq!(RELEASED.with(|r| r.borrow().len()), 1);
+}

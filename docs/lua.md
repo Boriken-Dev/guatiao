@@ -95,6 +95,42 @@ paths = ["."]
 - **Isolation.** Each library runs in an environment of its own, with its
   own `require` over its `paths`. An edit is run afresh at the next
   refresh, while the old build answers the instances taken from it.
+- **Instances from a configuration.** A provider with a `config` (a JSON
+  Schema, written as a table) and a `new` is built by a host from a
+  configuration: `provider:new(config)` answers the instance, a table
+  whose methods serve the slots (`return nil, "why"` refuses), and every
+  call on that instance has it as `self`. The host checks the
+  configuration against the schema before `new` runs. The provider stays
+  callable as itself unless `instances_only = true`.
+- **Availability.** A provider with an `available` function is asked
+  whether it can run each time a host asks: `provider:available()`
+  answers `nil` when it can, or text saying why not.
+
+```lua
+local Lamp = {
+  kinds = { "greeter" },
+  config = {
+    type = "object",
+    properties = { word = { type = "string" } },
+    required = { "word" },
+  },
+}
+Lamp.__index = Lamp
+
+function Lamp:new(config)
+  return setmetatable({ word = config.word }, Lamp)
+end
+
+function Lamp:greet(name)
+  return { greeting = self.word .. ", " .. name }
+end
+
+function Lamp:available()
+  if not self.plugged then return "the lamp is unplugged" end
+end
+```
+
+`new` and `available` run under the same limits as a slot.
 
 A host adds the source with where the manifests and the kinds are, and
 any limits:
@@ -144,6 +180,11 @@ end
 - A slot that can fail answers `nil, err` (`err.status`, `err.message`),
   one that cannot raises; a slot left out answers `unsupported`.
 - An object argument is a handle, or a Lua table of the kind's methods.
+- `registry:create(key, kind, config)` builds an instance of a provider
+  that takes a configuration, as a handle like `bind`'s, released when the
+  handle is collected; a configuration the schema or the provider refuses
+  answers `nil, err`. `registry:available(key)` answers `true`, or
+  `false, reason`.
 - [`examples/lua_host/host.lua`](https://github.com/Boriken-Dev/guatiao/blob/main/examples/lua_host/host.lua)
   calls every slot of every greeter, in Rust, C, Python and Lua.
 

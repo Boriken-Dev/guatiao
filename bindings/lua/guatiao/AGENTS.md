@@ -36,6 +36,8 @@ reg:add_source_file(path, config) --> the source's name; raises on refusal
 reg:refresh()                    --> {loaded = {...}, retired = {...}, skipped = {...}, refused = {...}, notes = {...}?}
 reg:providers([kind])            --> {{key, id, name, library, version, kinds, configured}, ...}
 reg:bind(key, kind)              --> a handle; raises when the provider has no table of the kind
+reg:create(key, kind, config)    --> a handle over an instance built from config | nil, guatiao.error
+reg:available(key)               --> true | false, reason (asked each time)
 reg:retire(key)                  --> true; raises on refusal
 reg:collect()                    --> the keys of the libraries closed
 reg:set_import_search("path")    --> where Windows finds what a file opened from now on imports

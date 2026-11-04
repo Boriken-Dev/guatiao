@@ -19,7 +19,9 @@ use std::sync::Mutex;
 use std::thread::{self, ThreadId};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
-use guatiao::library::kind::{Arg, Caller, InstantiateError, KindDescription, RawObject};
+use guatiao::library::kind::{
+    Answer, Arg, Caller, DescribedRemote, InstantiateError, KindDescription, RawObject,
+};
 use guatiao::library::{Candidate, Host, LocalLibrary, Note, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Status, Value};
@@ -731,6 +733,71 @@ fn a_described_provider_is_built_from_a_configuration_and_destroyed_once() {
     assert_eq!(destroyed.len(), 1, "destroyed once");
     // The other instance is still served after the first went.
     assert_eq!(greeting(&second.greet("cy").expect("greeted")), "hey, cy");
+    drop(second);
+    assert_eq!(
+        source.run(|toy| toy.destroyed.borrow().len()).expect("ran"),
+        2
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_run_time_host_builds_instances_and_each_drop_destroys_one() {
+    let dir = scratch("runtime_instances");
+    put(
+        &dir,
+        "toy_rt",
+        "version = \"1.0.0\"\n",
+        "configured = yes\n",
+    );
+    let (mut registry, source) = serving(&dir, None);
+    assert!(registry.refresh().refused.is_empty());
+    let view = registry
+        .provider("toy_rt_configured")
+        .expect("registered")
+        .view()
+        .clone();
+    let kind = source.kinds().get("greeter").cloned().expect("described");
+    let caller = || Arc::new(Caller::new(Arc::clone(&kind), &Libffi).expect("a caller"));
+    let greet = |remote: &DescribedRemote, name: &str| -> String {
+        match remote.call_named("greet", vec![Arg::Str(name)]) {
+            Ok(Answer::Map(m)) => greeting(&m).to_string(),
+            other => panic!("greeted: {other:?}"),
+        }
+    };
+
+    let mut config = Map::new();
+    config.set("word", "howdy");
+    let first = DescribedRemote::instantiate(&view, caller(), &Value::from(config)).expect("built");
+    let mut other = Map::new();
+    other.set("word", "hey");
+    let second = DescribedRemote::instantiate(&view, caller(), &Value::from(other)).expect("built");
+    assert_eq!(greet(&first, "ana"), "howdy, ana");
+    assert_eq!(greet(&second, "bo"), "hey, bo");
+
+    // Checked against the schema before the engine is asked; the
+    // engine's own refusal crosses in its words.
+    let mut misspelled = Map::new();
+    misspelled.set("wrod", "x");
+    assert!(matches!(
+        DescribedRemote::instantiate(&view, caller(), &Value::from(misspelled)),
+        Err(InstantiateError::Invalid(_))
+    ));
+    let mut nobody = Map::new();
+    nobody.set("word", "nobody");
+    match DescribedRemote::instantiate(&view, caller(), &Value::from(nobody)) {
+        Err(InstantiateError::Refused(e)) => assert_eq!(e.message(), "`nobody` greets nobody"),
+        other => panic!("refused: {other:?}"),
+    }
+    assert_eq!(source.run(|toy| toy.created.get()).expect("ran"), 2);
+
+    drop(first);
+    assert_eq!(
+        source.run(|toy| toy.destroyed.borrow().len()).expect("ran"),
+        1,
+        "destroyed once"
+    );
+    assert_eq!(greet(&second, "cy"), "hey, cy");
     drop(second);
     assert_eq!(
         source.run(|toy| toy.destroyed.borrow().len()).expect("ran"),
