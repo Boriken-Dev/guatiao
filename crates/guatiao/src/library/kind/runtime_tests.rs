@@ -1081,3 +1081,69 @@ fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
     assert_eq!(built(), 1);
     assert_eq!(released(), [7]);
 }
+
+/// Sums a borrowed list of integers, which it can read and not change.
+struct Summer;
+
+impl Serve for Summer {
+    fn call(
+        &self,
+        _ctx: usize,
+        _kind: &KindDescription,
+        _slot: usize,
+        args: Vec<Arg<'_>>,
+    ) -> Result<Answer, ProviderError> {
+        let [Arg::List(items)] = args.as_slice() else {
+            panic!("{args:?}");
+        };
+        let sum = items.iter().filter_map(|v| i64::try_from(v).ok()).sum();
+        Ok(Answer::Int(sum))
+    }
+
+    fn destroy(&self, _ctx: usize) {}
+}
+
+fn summer() -> Arc<KindDescription> {
+    let json = serde_json::json!({
+        "name": "summer", "floor_hash": 1, "object": false,
+        "slots": [{"name": "sum", "required": true, "fallible": false,
+            "args": [{"name": "items", "type": "list", "pass": "borrowed"}],
+            "answer": {"type": "i64"}}]
+    });
+    Arc::new(KindDescription::from_value(&value_of(&json)).expect("a description"))
+}
+
+#[test]
+fn a_borrowed_list_is_read_by_the_slot_and_stays_the_callers() {
+    let summer = summer();
+    let mut items = List::new();
+    for n in [1i64, 2, 39] {
+        items.push(Value::from(n));
+    }
+
+    let mut c = ctx(1);
+    let mut items_p: *const List = &items;
+    let mut out = 0i64;
+    let mut out_p: *mut i64 = &mut out;
+    let args = array(&mut [&mut c, &mut items_p, &mut out_p]);
+    // SAFETY: the array of a call to `sum`: ctx, list, out.
+    let status = unsafe { dispatch(&Summer, &summer, 0, args.as_ptr()) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(out, 42);
+
+    let mut null: *const List = core::ptr::null();
+    let args = array(&mut [&mut c, &mut null, &mut out_p]);
+    // SAFETY: as above, with a null list.
+    let status = unsafe { dispatch(&Summer, &summer, 0, args.as_ptr()) };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+
+    let mechanism = Direct::default();
+    let table = ServedTable::new(Arc::clone(&summer), |_| true, Arc::new(Summer), &mechanism)
+        .expect("built");
+    let caller = Caller::new(summer, &mechanism).expect("prepared");
+    assert!(matches!(
+        call_on(&caller, &table, 1, 0, vec![Arg::List(&items)]),
+        Ok(Answer::Int(42))
+    ));
+    assert_eq!(items.len(), 3, "the caller's list, as it was");
+}

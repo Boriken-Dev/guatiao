@@ -432,6 +432,30 @@
       ],
       "spelled": "provider;first(&str)->Result<Map,ProviderError>;middle(&str)->String;last(u32)->u64",
       "floor_hash": 3036448798
+    },
+    {
+      "name": "a_borrowed_list",
+      "object": false,
+      "trait": "pub trait Summer: Send + Sync { fn sum(&self, items: &List) -> i64; }",
+      "slots": [
+        {
+          "name": "sum",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "items",
+              "type": "list",
+              "pass": "borrowed"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          }
+        }
+      ],
+      "spelled": "provider;sum(&List)->i64",
+      "floor_hash": 2920396019
     }
   ],
   "refused": [
@@ -474,30 +498,6 @@
         }
       ],
       "why": "the table's first field",
-      "by": "every reader"
-    },
-    {
-      "name": "a_borrowed_list",
-      "object": false,
-      "trait": "pub trait Summer: Send + Sync { fn sum(&self, items: &List) -> i64; }",
-      "slots": [
-        {
-          "name": "sum",
-          "required": true,
-          "fallible": false,
-          "args": [
-            {
-              "name": "items",
-              "type": "list",
-              "pass": "borrowed"
-            }
-          ],
-          "answer": {
-            "type": "i64"
-          }
-        }
-      ],
-      "why": "a list is not borrowed",
       "by": "every reader"
     },
     {

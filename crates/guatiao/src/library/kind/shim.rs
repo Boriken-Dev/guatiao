@@ -63,6 +63,18 @@ pub unsafe fn map_arg<'a>(m: *const Map) -> Result<&'a Map, Status> {
     Ok(unsafe { Map::from_ptr(m) }?)
 }
 
+/// A `&List` argument, refusing null. A list has no keys to check: its
+/// elements are read by their own doors, as a `&Value`'s are.
+///
+/// # Safety
+///
+/// `l` is null or addresses a well-formed list for the call.
+#[doc(hidden)]
+pub unsafe fn list_arg<'a>(l: *const List) -> Result<&'a List, Status> {
+    // SAFETY: the caller's contract.
+    unsafe { l.as_ref() }.ok_or(Status::GUATIAO_ERR_NULL)
+}
+
 /// A `Value` argument taken by value: the tree the caller handed over with
 /// the call, owned here from now on. Null owns nothing and is refused.
 ///

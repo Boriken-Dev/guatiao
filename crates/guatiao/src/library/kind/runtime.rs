@@ -941,9 +941,7 @@ unsafe fn read_arg<'a>(ty: &ArgType, at: *const c_void) -> Result<Arg<'a>, Provi
                     }
                     (Tree::Value, Pass::Borrowed) => Arg::Value(Some(value_arg(p.cast())?)),
                     (Tree::Map, Pass::Borrowed) => Arg::Map(map_arg(p.cast())?),
-                    (Tree::List, Pass::Borrowed) => {
-                        Arg::List(p.cast::<List>().as_ref().ok_or(Status::GUATIAO_ERR_NULL)?)
-                    }
+                    (Tree::List, Pass::Borrowed) => Arg::List(list_arg(p.cast())?),
                     (Tree::Value, Pass::Lent) => Arg::LentValue(value_mut_arg(p.cast())?),
                     (Tree::Map, Pass::Lent) => Arg::LentMap(map_mut_arg(p.cast())?),
                     (Tree::List, Pass::Lent) => Arg::LentList(list_mut_arg(p.cast())?),

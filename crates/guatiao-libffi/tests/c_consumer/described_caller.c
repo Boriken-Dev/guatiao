@@ -48,3 +48,21 @@ EXPORT int drive_wide(const wide_vtable *t, void *ctx) {
   }
   return 0;
 }
+
+/* A kind with no header of its own: one slot reading a list borrowed. */
+typedef struct summer_vtable {
+  guatiao_kind_header header;
+  guatiao_status (*sum)(void *ctx, const guatiao_list *items, int64_t *out);
+} summer_vtable;
+
+/* Lends a list of its own, declared over a local array, read-only for the
+ * call; -1 when the call fails or the list is not as it was after. */
+EXPORT int64_t drive_sum(const summer_vtable *t, void *ctx) {
+  guatiao_value items[] = {GUATIAO_VALUE_NUMBER_LIT("40"), GUATIAO_VALUE_NUMBER_LIT("2")};
+  const guatiao_list list = {items, 2, 0, NULL};
+  int64_t out = 0;
+  if (t->sum(ctx, &list, &out) != 0 || list.len != 2 || items[0].tag != GUATIAO_NUMBER) {
+    return -1;
+  }
+  return out;
+}

@@ -1759,7 +1759,7 @@ drop(s);                                                             // the libr
 
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
-  `Option<&Value>`, `&Map`, `Value`, `Map` and `List` by value (handed
+  `Option<&Value>`, `&Map`, `&List`, `Value`, `Map` and `List` by value (handed
   over: a move, nothing copied), `&mut Value`, `&mut Map` and `&mut
   List` (lent: see below), `Object<dyn K>` (handed over), `&mut dyn K`
   and `&dyn K` (lent), any other type by value through `ToValue`.
@@ -1948,7 +1948,7 @@ KindDescription::document_json(text)?               // the same from JSON text; 
 // Refused where it goes wrong: what #[guatiao::kind] refuses to declare (no slot, a slot
 // named twice or `header`, an object kind's `destroy`, an argument named twice in a slot,
 // `bytes_mut` on a kind that is not an object kind, an object passed or answered on a slot
-// that is not fallible, a list passed borrowed) and what no description says. Required and optional slots come in any order.
+// that is not fallible) and what no description says. Required and optional slots come in any order.
 kind.to_value()? / kind.to_value_in(alloc)?         // ToValue: written back key for key, in the
                                                     // order the kind macro writes it
 // C: guatiao_kind_document_read(text, alloc, &out, &why): the checked document as a value;
@@ -2546,8 +2546,8 @@ pub trait Store: Send + Sync {
 }
 ```
 
-- Borrowed (`&Map`, `&Value`, `Option<&Value>`, `&str`, `&[u8]`): read in
-  place for the call.
+- Borrowed (`&Map`, `&List`, `&Value`, `Option<&Value>`, `&str`, `&[u8]`):
+  read in place for the call.
 - `Map`, `Value`, `List` by value: a move. The slot gets the caller's
   node, the caller forgets it, the callee owns it on every path. The tree
   stays in the caller's allocators; a callee keeping it past them calls
@@ -2629,7 +2629,7 @@ container in. Read with `TryAsRef`, `<&Map>::try_from` and
 | a type of yours | a tree | `t.to_value()`, `t.to_value_in(alloc)?` | builds one |
 | a kind's answer | it, owned | the returned tree | never through `<method>_in`, else once at the proxy |
 | a tree for a kind call | kept by the callee | pass it by value | never |
-| a tree for a kind call | read by the callee | pass `&Map`/`&Value` | never |
+| a tree for a kind call | read by the callee | pass `&Map`/`&List`/`&Value` | never |
 | a tree for a kind call | changed in place by the callee | pass `&mut Map`/`&mut List`/`&mut Value` | never; parts built in another allocator moved once |
 | a tree reached through `&mut` | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts not in `alloc` |
 

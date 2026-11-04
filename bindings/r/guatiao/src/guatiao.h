@@ -1803,8 +1803,7 @@ guatiao_status guatiao_wire_receiver_accept(struct guatiao_wire_receiver *recv,
  slot named twice or named `header`, an object kind's `destroy`, an
  argument named twice in one slot, `bytes_mut` on a kind that is not an
  object kind, an object passed or answered on a slot that is not
- fallible, a list passed borrowed. Required and optional slots come in
- any order. `why`, which
+ fallible. Required and optional slots come in any order. `why`, which
  may be null, holds that text as a string built in `alloc`, else stays
  ABSENT. `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
 
