@@ -76,9 +76,75 @@
     }
   }
 
+  // A configuration's schema and how to build the configuration from the
+  // plain data a host checked against it: the Node binding's `s`, the same
+  // JSON Schema written for the same calls.
+  const s = (() => {
+    const leaf = (json, build) => Object.freeze({ json: Object.freeze(json), build });
+    const define = (out, key, value) =>
+      Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
+    const string = (keywords = {}) => leaf({ type: 'string', ...keywords }, (data) => data);
+    const integer = (keywords = {}) =>
+      leaf({ type: 'integer', ...keywords }, (data) => {
+        const value = Number(data);
+        if (!Number.isSafeInteger(value)) throw new RangeError(`${String(data)} does not fit a number exactly`);
+        return value;
+      });
+    const number = (keywords = {}) => leaf({ type: 'number', ...keywords }, (data) => Number(data));
+    const boolean = (keywords = {}) => leaf({ type: 'boolean', ...keywords }, (data) => data);
+    const literal = (...values) => leaf({ enum: [...values] }, (data) => data);
+    const any = (keywords = {}) => leaf({ ...keywords }, (data) => data);
+    const array = (item, keywords = {}) =>
+      leaf({ type: 'array', items: item.json, ...keywords }, (data) => data.map((x) => item.build(x)));
+    const record = (value, keywords = {}) =>
+      leaf({ type: 'object', additionalProperties: value.json, ...keywords }, (data) => {
+        const out = {};
+        for (const [key, item] of Object.entries(data)) define(out, key, value.build(item));
+        return out;
+      });
+    const nullable = (inner) =>
+      leaf({ anyOf: [inner.json, { type: 'null' }] }, (data) => (data === null ? null : inner.build(data)));
+    const optional = (inner, options) => {
+      const hasDefault = options !== undefined && 'default' in options;
+      const json = hasDefault ? { ...inner.json, default: options.default } : inner.json;
+      return Object.freeze({
+        json: Object.freeze(json),
+        build: (data) => inner.build(data),
+        optional: true,
+        hasDefault,
+        fallback: hasDefault ? options.default : undefined,
+      });
+    };
+    const object = (fields, keywords = {}) => {
+      const properties = {};
+      const required = [];
+      for (const [name, member] of Object.entries(fields)) {
+        properties[name] = member.json;
+        if (!member.optional) required.push(name);
+      }
+      const json = { type: 'object', properties, additionalProperties: false, ...keywords };
+      if (required.length) json.required = required;
+      return leaf(json, (given) => {
+        const out = {};
+        for (const [name, member] of Object.entries(fields)) {
+          if (Object.prototype.hasOwnProperty.call(given, name) && given[name] !== undefined) {
+            define(out, name, member.build(given[name]));
+          } else if (member.hasDefault) {
+            out[name] = member.fallback;
+          }
+        }
+        return out;
+      });
+    };
+    const isSchema = (value) =>
+      typeof value === 'object' && value !== null && typeof value.build === 'function' && typeof value.json === 'object';
+    return Object.freeze({ string, integer, number, boolean, literal, any, array, record, nullable, optional, object, isSchema });
+  })();
+
   // What every provider class extends: the kinds it serves, listed in
   // `static kinds`, and the optional statics `named`, `id`, `displayName`,
-  // `meta` and `available()`.
+  // `meta`, `config` (an `s` schema), `configSchema` (a raw JSON Schema),
+  // `default` and `available()`.
   class Provider {
     static kinds = [];
     static available() {
@@ -224,6 +290,7 @@
     errorFor,
     ExactNumber,
     Provider,
+    s,
     kindsOf,
     kindOf,
   };

@@ -18,9 +18,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener, Wide};
+use guatiao::library::kind::InstantiateError;
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, Source};
 use guatiao::value::convert::TryAsRef;
-use guatiao::{List, Map, Status};
+use guatiao::{List, Map, Status, Value};
 use guatiao_bridge::BridgeSource;
 use guatiao_libffi::Libffi;
 use guatiao_source_js::JsEngine;
@@ -1122,7 +1123,7 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
         "js_configured",
         "version = \"1.0.0\"\n",
         &with_kinds(
-            "export class P extends Provider { static kinds = [Greeter]; static config = {}; greet() {} }\n",
+            "export class P extends Provider { static kinds = [Greeter]; static config = { type: 'object' }; greet() {} }\n",
         ),
     );
     put(
@@ -1200,7 +1201,10 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
     );
     has("js_nokinds", "lists no kind");
     has("js_unlisted", "which the manifest does not list");
-    has("js_configured", "declares `config`");
+    has(
+        "js_configured",
+        "P.config is a schema made with s; say a raw JSON Schema with configSchema",
+    );
     has("js_outside", "outside the paths");
     has("js_package", "relative path");
     has("js_promised", "never finishes loading");
@@ -1210,23 +1214,45 @@ fn a_library_that_does_not_load_is_refused_in_its_words() {
 }
 
 #[test]
-fn a_provider_that_says_it_cannot_run_here_is_left_out() {
+fn a_provider_is_asked_whether_it_can_run_each_time_a_host_asks() {
     let dir = scratch("available");
     put(
         &dir,
         "js_unavailable",
         "version = \"1.0.0\"\n",
         &format!(
-            "{}export class Here extends Provider {{ static kinds = [Greeter]; static displayName = 'Over here'; static meta = {{ summary: 'a note', tags: ['a', 'b'] }}; greet() {{ return {{ greeting: 'here' }}; }} }}\nexport class Named extends Provider {{ static kinds = [Greeter]; static named = 'custom'; greet() {{ return {{ greeting: 'named' }}; }} }}\nexport class WithId extends Provider {{ static kinds = [Greeter]; static id = 'chosen_id'; greet() {{ return {{ greeting: 'id' }}; }} }}\nexport class HelloWorld extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: 'snake' }}; }} }}\nexport class There extends Provider {{ static kinds = [Greeter]; static available() {{ return 'not on this machine'; }} greet() {{ return {{ greeting: 'there' }}; }} }}\n",
+            "{}let plugged = false;\nexport class Here extends Provider {{ static kinds = [Greeter]; static displayName = 'Over here'; static meta = {{ summary: 'a note', tags: ['a', 'b'] }}; greet() {{ return {{ greeting: 'here' }}; }} }}\nexport class Named extends Provider {{ static kinds = [Greeter]; static named = 'custom'; greet() {{ return {{ greeting: 'named' }}; }} }}\nexport class WithId extends Provider {{ static kinds = [Greeter]; static id = 'chosen_id'; greet() {{ return {{ greeting: 'id' }}; }} }}\nexport class HelloWorld extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: 'snake' }}; }} }}\nexport class There extends Provider {{ static kinds = [Greeter]; static available() {{ return plugged ? undefined : 'not on this machine'; }} greet() {{ return {{ greeting: 'there' }}; }} }}\nexport class Plug extends Provider {{ static kinds = [Greeter]; greet() {{ plugged = true; return {{ greeting: 'plugged' }}; }} }}\nexport class Broken extends Provider {{ static kinds = [Greeter]; static available() {{ throw new BadValue('the probe broke'); }} greet() {{ return {{ greeting: 'broken' }}; }} }}\n",
             preamble()
         ),
     );
     let mut registry = serving(&config(&dir, None));
     assert!(registry.refresh().refused.is_empty());
+    // Listed, and asked: not at open, but whenever a host asks.
+    let there = registry
+        .provider("js_unavailable_there")
+        .expect("listed though unavailable");
+    assert_eq!(there.available(), Err("not on this machine"));
+    let available: Vec<&str> = registry.available("greeter").map(|p| p.id()).collect();
     assert!(
+        !available.contains(&"js_unavailable_there"),
+        "{available:?}"
+    );
+    assert!(available.contains(&"js_unavailable_here"), "{available:?}");
+    // A provider that never says is available without being asked.
+    assert_eq!(
         registry
-            .offer::<dyn Greeter>("js_unavailable_there")
-            .is_none()
+            .provider("js_unavailable_here")
+            .expect("listed")
+            .available(),
+        Ok(())
+    );
+    // A probe that throws reads as unavailable, in its words.
+    assert_eq!(
+        registry
+            .provider("js_unavailable_broken")
+            .expect("listed")
+            .available(),
+        Err("the probe broke")
     );
     assert_eq!(
         greeting(
@@ -1236,6 +1262,159 @@ fn a_provider_that_says_it_cannot_run_here_is_left_out() {
         ),
         "here"
     );
+    // The script's state changes, and the next answer follows it.
+    assert_eq!(
+        greeting(
+            &greeter(&registry, "js_unavailable_plug")
+                .greet("x")
+                .expect("greeted")
+        ),
+        "plugged"
+    );
+    assert_eq!(
+        registry
+            .provider("js_unavailable_there")
+            .expect("listed")
+            .available(),
+        Ok(())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A library whose providers are built from a configuration, written as a
+/// provider for the Node binding is: `s` from `guatiao/provide`, the
+/// configuration the constructor's argument.
+fn configured_library(dir: &Path) {
+    put(
+        dir,
+        "js_conf",
+        "version = \"1.0.0\"\n",
+        &format!(
+            "{}import {{ s }} from 'guatiao/provide';\nconst disposed = [];\nconst Settings = s.object({{ word: s.string({{ minLength: 1 }}), times: s.optional(s.integer({{ minimum: 1 }}), {{ default: 1 }}) }});\nexport class Shouter extends Provider {{\n  static kinds = [Greeter];\n  static config = Settings;\n  #word; #times;\n  constructor(config) {{\n    super();\n    if (config.word === 'nobody') throw new BadValue('`nobody` greets nobody');\n    this.#word = config.word;\n    this.#times = config.times;\n  }}\n  greet(name) {{ return {{ greeting: `${{this.#word.repeat(this.#times)}}, ${{name}}` }}; }}\n  [Symbol.dispose]() {{ disposed.push(this.#word); }}\n}}\nexport class Both extends Provider {{\n  static kinds = [Greeter];\n  static default = true;\n  static configSchema = {{ type: 'object', properties: {{ word: {{ type: 'string' }} }}, required: ['word'], additionalProperties: false }};\n  #word;\n  constructor(config) {{ super(); this.#word = config === undefined ? 'hi' : config.word; }}\n  greet(name) {{ return {{ greeting: `${{this.#word}}, ${{name}}` }}; }}\n}}\nexport class Witness extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: disposed.join(' ') }}; }} }}\n",
+            preamble()
+        ),
+    );
+}
+
+fn configuration(pairs: &[(&str, Value)]) -> Value {
+    let mut map = Map::new();
+    for (key, value) in pairs {
+        map.set(key, value.clone());
+    }
+    Value::from(map)
+}
+
+#[test]
+fn a_provider_is_built_from_each_configuration_and_disposed_once() {
+    let dir = scratch("configured");
+    configured_library(&dir);
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+
+    let offer = registry
+        .offer::<dyn Greeter>("js_conf_shouter")
+        .expect("served")
+        .expect("as the trait");
+    assert!(offer.builds_instances());
+    assert!(offer.default_instance().is_none(), "instances only");
+    let schema = offer.config_schema().expect("a schema");
+    let schema: &Map = TryAsRef::try_as_ref(schema).expect("a map");
+    assert_eq!(
+        schema
+            .get("additionalProperties")
+            .and_then(TryAsRef::<bool>::try_as_ref),
+        Some(&false)
+    );
+
+    let loud = offer
+        .instantiate(&configuration(&[
+            ("word", Value::from("hey")),
+            ("times", Value::from(2u32)),
+        ]))
+        .expect("built");
+    let soft = offer
+        .instantiate(&configuration(&[("word", Value::from("psst"))]))
+        .expect("built");
+    assert_eq!(
+        greeting(&loud.greet("ana").expect("greeted")),
+        "heyhey, ana"
+    );
+    // `times` left out is the schema's default.
+    assert_eq!(greeting(&soft.greet("bo").expect("greeted")), "psst, bo");
+
+    // Checked against the schema by the host before the script is asked.
+    assert!(matches!(
+        offer.instantiate(&configuration(&[("wrod", Value::from("x"))])),
+        Err(InstantiateError::Invalid(_))
+    ));
+    // The constructor's refusal crosses with its status.
+    match offer.instantiate(&configuration(&[("word", Value::from("nobody"))])) {
+        Err(InstantiateError::Refused(e)) => {
+            assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(e.message(), "`nobody` greets nobody");
+        }
+        other => panic!("{:?}", other.err()),
+    }
+
+    let witness = greeter(&registry, "js_conf_witness");
+    drop(loud);
+    assert_eq!(greeting(&witness.greet("").expect("asked")), "hey");
+    assert_eq!(greeting(&soft.greet("cy").expect("greeted")), "psst, cy");
+    drop(soft);
+    assert_eq!(greeting(&witness.greet("").expect("asked")), "hey psst");
+
+    // `static default = true`: callable as itself, and built too; a raw
+    // `configSchema` gives the constructor the plain data.
+    let both = registry
+        .offer::<dyn Greeter>("js_conf_both")
+        .expect("served")
+        .expect("as the trait");
+    let itself = both.default_instance().expect("callable as itself");
+    assert_eq!(greeting(&itself.greet("ana").expect("greeted")), "hi, ana");
+    let built = both
+        .instantiate(&configuration(&[("word", Value::from("yo"))]))
+        .expect("built");
+    assert_eq!(greeting(&built.greet("ana").expect("greeted")), "yo, ana");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_instance_held_across_an_edit_keeps_its_code() {
+    // A library edited while an instance is held: the instance keeps its
+    // old code until dropped, and the new library builds from the new code.
+    let dir = scratch("configured-edit");
+    configured_library(&dir);
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let offer = registry
+        .offer::<dyn Greeter>("js_conf_shouter")
+        .expect("served")
+        .expect("as the trait");
+    let old = offer
+        .instantiate(&configuration(&[("word", Value::from("old"))]))
+        .expect("built");
+    drop(offer);
+    let code = std::fs::read_to_string(dir.join("js_conf.js")).expect("read");
+    std::thread::sleep(core::time::Duration::from_millis(50));
+    std::fs::write(
+        dir.join("js_conf.js"),
+        code.replace("(this.#times)}, ${name}", "(this.#times)}! ${name}"),
+    )
+    .expect("written");
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let offer = registry
+        .offer::<dyn Greeter>("js_conf_shouter")
+        .expect("served")
+        .expect("as the trait");
+    let new = offer
+        .instantiate(&configuration(&[("word", Value::from("new"))]))
+        .expect("built");
+    assert_eq!(greeting(&old.greet("a").expect("greeted")), "old, a");
+    assert_eq!(greeting(&new.greet("a").expect("greeted")), "new! a");
+    drop(old);
+    drop(new);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
