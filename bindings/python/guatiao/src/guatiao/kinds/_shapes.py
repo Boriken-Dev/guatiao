@@ -29,6 +29,7 @@ from ..value import (
     Ref,
     Value,
     _Claims,
+    _claims_of,
     _make_bytes,
     _make_str,
     wiping_alloc,
@@ -462,10 +463,10 @@ class _Tree(Shape):
                 # Read for the call: a tree this call also lends, or one being
                 # changed or closed on another thread, is refused, as is
                 # lending or changing it until the call returns.
-                owner = value.owner
-                if isinstance(owner, _Claims):
-                    owner._share()
-                    scope.after(owner._unshare)
+                held = _claims_of(value.owner)
+                if held is not None:
+                    held._share()
+                    scope.after(held._unshare)
             return ctypes.byref(self._arm(value._require_node()))
         if self.mode == "lend":
             if not isinstance(value, Ref):
@@ -476,10 +477,10 @@ class _Tree(Shape):
             # Claimed for the call: a provider holding the value can neither
             # reveal, read nor change it while the callee changes it, and the
             # settle moves it; nor can this call borrow it or lend it again.
-            owner = value.owner
-            if isinstance(owner, _Claims):
-                owner._claim(_LENT)
-                scope.after(owner._release)
+            held = _claims_of(value.owner)
+            if held is not None:
+                held._claim(_LENT)
+                scope.after(held._release)
             node = value._require_node()
             # What the callee grew it with may be in its library's
             # allocator: moved into the one the tree records now, which a

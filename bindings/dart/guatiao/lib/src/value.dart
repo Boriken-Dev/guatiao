@@ -50,6 +50,10 @@ Object _revealedAgainst(ValueOwner owner) {
   return at;
 }
 
+/// What a call lending or borrowing through [owner] marks: the value a
+/// borrowed view keeps, else [owner] itself, as a reveal counts.
+Object markedOwnerOf(ValueOwner owner) => _revealedAgainst(owner);
+
 class _BorrowedRoot implements ValueOwner {
   _BorrowedRoot(this._root, {this.keep, this.find});
 

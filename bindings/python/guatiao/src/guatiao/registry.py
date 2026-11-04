@@ -70,6 +70,11 @@ class _Borrowed:
             return cast("_abi.Value", node)
         return cast("_abi.Value", self._fixed)
 
+    @property
+    def _kept(self) -> Any:
+        """The owner whose claims cover this view: what it borrows from."""
+        return self._keep
+
     def _check_open(self) -> None:
         if self._keep is not None:
             self._keep._check_open()
