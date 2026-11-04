@@ -1577,8 +1577,11 @@ write now.
     as on `tls://`; a client the server's TLS refuses is told so
     (`BAD_VALUE`, "the server does not trust this client"). A link raises
     its reader's bound (`FrameRead::set_max_frame`) before the peer can
-    send a frame past the handshake's, on a server before its reply goes,
-    since a message channel judges a message as it arrives. A wildcard plain `ws://` listener refuses a
+    send a frame past the handshake's, on a server before its reply goes
+    (after the PROOF where one is read), since a message channel judges a
+    message as it arrives. With `allow_resumption` a WebTransport listener
+    asks the list's fingerprint rules after the handshake, as a resumed
+    session skips the client verifier. A wildcard plain `ws://` listener refuses a
     client on a list rule naming the address or port it came to, as the TLS
     listeners do.
   - A source an access control list denies, or any connection a

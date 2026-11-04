@@ -277,8 +277,7 @@ fn a_client_the_tls_refuses_is_told_so() {
 
 /// A fingerprint the list denies is refused once the handshake has shown
 /// whose it is, and told so; another is not denied. The list is checked as
-/// the listener is made, and a trust store cannot back a mutual listener:
-/// its handshake has no address to record a waiting client under.
+/// the listener is made.
 #[test]
 fn the_list_decides_a_mutual_webtransport_client_by_its_fingerprint() {
     use guatiao_source_remote::acl::{Acl, Action, Rule};
@@ -330,6 +329,49 @@ fn the_list_decides_a_mutual_webtransport_client_by_its_fingerprint() {
     )
     .unwrap_err();
     assert!(e.to_string().contains("fingerprint"), "{e}");
+}
+
+/// With `allow_resumption` a resumed session skips the client verifier, so
+/// the listener asks the list's fingerprint rules once the handshake is
+/// through: a client the list denies is refused, one it permits links, and
+/// a second link of the permitted one (which may resume) still links.
+#[test]
+fn the_list_still_decides_by_fingerprint_where_a_session_may_resume() {
+    use guatiao_source_remote::acl::{Acl, Action, Rule};
+    use guatiao_source_remote::transport::tls::Policy;
+    let server_id = Identity::generate().unwrap();
+    let (denied, allowed) = (Identity::generate().unwrap(), Identity::generate().unwrap());
+    let mut deny = Rule::new(Action::Deny, "any".parse().unwrap());
+    deny.fingerprint = Some(denied.fingerprint().canonical());
+    let mut acl = Acl::default();
+    acl.push(deny);
+    acl.push(Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap()));
+    let mut policy = Policy::modern();
+    policy.acl = Some(acl);
+    policy.allow_resumption = true;
+    let server = TlsConfig::new(server_id.clone())
+        .pins([denied.fingerprint(), allowed.fingerprint()])
+        .policy(policy.clone());
+    let at = spawn(
+        WtListen::bind("127.0.0.1:0", &server).unwrap(),
+        common::server(LinkOptions::new(Trust::Secure)),
+    );
+    let link = |id: &Identity| {
+        let mut client = TlsConfig::new(id.clone()).pins([server_id.fingerprint()]);
+        let mut kept = Policy::modern();
+        kept.allow_resumption = true;
+        client = client.policy(kept);
+        RemoteSource::new(
+            Box::new(WtConnect::new(&url(&at), &client).unwrap()),
+            LinkOptions::new(Trust::Secure),
+        )
+        .link()
+        .map(|_| ())
+    };
+    link(&allowed).expect("a client the list permits");
+    link(&allowed).expect("and again, as a resumed session may");
+    let e = link(&denied).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{e:?}");
 }
 
 /// A trust store backs a mutual WebTransport listener: a stranger is

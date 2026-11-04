@@ -418,6 +418,25 @@ impl Datagrams for ChannelDatagrams {
     }
 }
 
+/// Refuses a client the listener has decided against after the
+/// handshake: the link's own refusal frame (`BAD_VALUE`, `why` in it), as
+/// the link would send it, then the channel closed with it flushed. The
+/// client reads it as the reply it waits for.
+#[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+pub(super) fn refuse(channel: &dyn Channel, why: &str) {
+    let frame = crate::protocol::Frame::Goodbye {
+        status: guatiao::Status::GUATIAO_ERR_BAD_VALUE.into(),
+        message: why,
+    };
+    let mut out = Vec::new();
+    if frame.encode(&mut out, usize::MAX).is_ok()
+        && let Some(body) = out.get(4..)
+    {
+        let _ = channel.send(body);
+    }
+    channel.close();
+}
+
 /// The two halves of a link over `shared`'s channel: open already
 /// (`open` none), or made by `open` on the first read, which the closer
 /// can cancel by `cancel`.
@@ -472,15 +491,17 @@ impl Refused {
 
 #[cfg(feature = "tls")]
 #[cfg_attr(not(feature = "webtransport"), allow(unused_imports))]
-pub(super) use verified::{Watching, server_config};
+pub(super) use verified::{Watching, canonical_list, list_permits, server_config};
 
 #[cfg(feature = "tls")]
 mod verified {
     use alloc::sync::Arc;
+    use core::net::SocketAddr;
     use std::io;
     use std::sync::Mutex;
 
-    use coqui_peer_tls::Refusal;
+    use coqui_net_acl::{Acl, Outcome};
+    use coqui_peer_tls::{Digest, PeerId, Refusal};
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::server::ResolvesServerCert;
@@ -622,6 +643,57 @@ mod verified {
                 tls.cert_resolver = resolver;
                 Ok(Arc::new(tls))
             }
+        }
+    }
+
+    /// The policy's list with its fingerprints in canonical form, checked
+    /// once: a rule naming something that is not a SHA-256 fingerprint is
+    /// refused here, as a listener is made. `None` where there is no list.
+    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+    pub(crate) fn canonical_list(config: &TlsConfig) -> io::Result<Option<Arc<Acl>>> {
+        let Some(acl) = &config.tls_policy().acl else {
+            return Ok(None);
+        };
+        let mut acl = acl.clone();
+        acl.canonicalize_fingerprints(|index, text| {
+            text.parse::<PeerId>()
+                .ok()
+                .filter(|id| id.digest() == Digest::Sha256)
+                .map(|id| id.canonical())
+                .ok_or_else(|| {
+                    format!("acl rule {index}: the fingerprint is not a SHA-256 peer id")
+                })
+        })
+        .map_err(crate::transport::tls::invalid)?;
+        Ok(Some(Arc::new(acl)))
+    }
+
+    /// Whether the list permits the client that presented `chain` (its own
+    /// certificate first), from `source` to `local`: the fingerprint rules
+    /// of the list, decided after a handshake that had no addresses to
+    /// decide them by.
+    #[cfg_attr(not(feature = "webtransport"), allow(dead_code))]
+    pub(crate) fn list_permits(
+        acl: &Acl,
+        source: SocketAddr,
+        local: SocketAddr,
+        chain: Option<&[Vec<u8>]>,
+    ) -> io::Result<()> {
+        let denied = |why: String| io::Error::new(io::ErrorKind::PermissionDenied, why);
+        let Some(certificate) = chain.and_then(<[Vec<u8>]>::first) else {
+            return Err(denied(
+                "the client presented no certificate to decide the list by".to_string(),
+            ));
+        };
+        let decision = acl.decide_peer(source, local, &PeerId::of(certificate).canonical());
+        match decision.outcome {
+            Outcome::Permit => Ok(()),
+            _ => Err(denied(format!(
+                "the server's access control list refuses this client's certificate (rule {})",
+                decision
+                    .rule_index
+                    .map_or_else(|| "its default".to_string(), |i| i.to_string())
+            ))),
         }
     }
 }

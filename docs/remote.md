@@ -625,8 +625,11 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   Removing a peer from the
   store refuses its next link: TLS session resumption is off at both
   ends unless the policy's `allow_resumption` keeps it, and a resumed
-  session (over `wss://` too) runs no verifier, so the store and the
-  list's fingerprint rules are not asked again for it.
+  session (over `wss://` too) runs no verifier, so the store is not asked
+  again for it. Over WebTransport the listener asks the list's
+  fingerprint rules again after the handshake where resumption is on, so
+  a resumed client is still decided by its fingerprint and address; over
+  `tls://`, `quic://` and `wss://` they are not asked again.
 - **A refusal says why.** The side that refuses names the reason, one
   wording for each of coqui-peer-tls's refusals:
 
@@ -962,7 +965,13 @@ calls it runs at once), and `token` from a client whose server requires
 one. Each
 side sends no frame larger than the other's `max_frame`, and keeps no
 more of its own calls open than the other's `max_calls`. Before the
-handshake ends a body is at most 64 KiB.
+handshake ends a body is at most 64 KiB. Where a key PROOF follows the
+WELCOME (the trusted level, and server TLS with a key), that holds until
+the PROOF is checked, so a stranger cannot send a large message in its
+place; a client that pipelines a large call right after its PROOF over a
+message transport (WebSocket, WebTransport) may then lose that call to a
+clean protocol error, as the bound is raised only once the server has read
+the PROOF.
 
 At the trusted level the WELCOME's proof is HMAC-SHA256 over the key, of
 `"guatiao-remote server"`, the client's nonce and the server's; the

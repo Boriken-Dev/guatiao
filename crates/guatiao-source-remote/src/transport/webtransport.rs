@@ -42,7 +42,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use coqui_net_acl::Acl;
-use coqui_peer_tls::{Identity, PeerId};
+use coqui_peer_tls::{ConnectionConfig, Identity, PeerId};
 use coqui_web::webtransport::{Dialer as WtDialer, Listener};
 use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
 use rustls::ServerConfig;
@@ -51,8 +51,13 @@ use rustls::sign::CertifiedKey;
 use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
-use super::tls::{TlsConfig, host_of, invalid, server_name, unbuilt, untrusted_client, words};
-use super::web::{Open, Refused, Shared, Watching, admits, connection, io_error, server_config};
+use super::tls::{
+    TlsConfig, host_of, invalid, server_name, unbuilt, untrusted_by_server, untrusted_client, words,
+};
+use super::web::{
+    Open, Refused, Shared, Watching, admits, canonical_list, connection, io_error, list_permits,
+    server_config,
+};
 use super::{Connect, Connection};
 use crate::lock;
 
@@ -175,6 +180,16 @@ impl Presenting {
             }
         }
         Ok(())
+    }
+}
+
+/// A resolver that presents nothing: no handshake through it completes.
+#[derive(Debug)]
+struct Nobody;
+
+impl ResolvesServerCert for Nobody {
+    fn resolve(&self, _hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        None
     }
 }
 
@@ -366,7 +381,16 @@ pub struct WtListen {
     presenting: Arc<Presenting>,
     refused: Arc<Refused>,
     config: Arc<TlsConfig>,
+    /// The policy's list, its fingerprints canonical, checked again after
+    /// the handshake when a resumed session would skip the client
+    /// verifier (`allow_resumption`).
+    list: Option<Arc<coqui_net_acl::Acl>>,
+    bound: SocketAddr,
+    /// What each connection's handshake refused it on, by (source, local).
+    reasons: Reasons,
 }
+
+type Reasons = Arc<Mutex<Vec<((SocketAddr, SocketAddr), ConnectionConfig)>>>;
 
 impl core::fmt::Debug for WtListen {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -395,18 +419,26 @@ impl WtListen {
             )),
         });
         // What a connection is given should building its own fail: a
-        // configuration that refuses everyone.
-        let fallback = server_config(
-            config,
-            H3,
-            Some(Arc::clone(&presenting) as Arc<dyn ResolvesServerCert>),
-            true,
-        )?;
+        // configuration that presents nothing, so every handshake fails.
+        let mut nobody = ServerConfig::clone(&*server_config(config, H3, None, true)?);
+        nobody.cert_resolver = Arc::new(Nobody);
+        let fallback = Arc::new(nobody);
         let listener = Listener::bind(address, Arc::clone(&fallback)).map_err(io_error)?;
         let serving = Arc::clone(&presenting);
+        let reasons: Reasons = Arc::default();
+        let kept = Arc::clone(&reasons);
         let listener = listener.with_tls_per_connection(move |source, local| {
             match configs.for_connection(source, local) {
                 Ok(connection) => {
+                    {
+                        let mut held = lock(&kept);
+                        // A connection that never reached its open leaves
+                        // its entry: the oldest go first.
+                        if held.len() >= 1024 {
+                            held.remove(0);
+                        }
+                        held.push(((source, local), connection.clone()));
+                    }
                     let mut tls = ServerConfig::clone(&connection.config());
                     // The address gate of the configuration stays, over the
                     // certificate the listener presents now.
@@ -433,11 +465,22 @@ impl WtListen {
                 }
                 permitted
             });
+        let list = if config.tls_policy().allow_resumption
+            && config.is_mutual()
+            && config.proves_peers()
+        {
+            canonical_list(&config)?
+        } else {
+            None
+        };
         Ok(WtListen {
             listener,
             presenting,
             refused,
             config,
+            list,
+            bound,
+            reasons,
         })
     }
 
@@ -503,11 +546,37 @@ impl WtListen {
                 Ok(pending) => {
                     let source = pending.peer_addr();
                     let cancel = pending.canceller();
+                    let key = (source, pending.local_addr());
+                    let (list, bound) = (self.list.clone(), self.bound);
+                    let reasons = Arc::clone(&self.reasons);
                     let open: Open = Box::new(move || {
-                        pending
-                            .handshake()
-                            .map(|channel| Arc::new(channel) as Arc<dyn Channel>)
-                            .map_err(io_error)
+                        let handshook = pending.handshake();
+                        let kept = {
+                            let mut held = lock(&reasons);
+                            held.iter()
+                                .position(|(k, _)| *k == key)
+                                .map(|at| held.remove(at).1)
+                        };
+                        let channel = match handshook {
+                            Ok(channel) => channel,
+                            Err(e) => {
+                                return Err(match kept.and_then(|k| k.refusal()) {
+                                    Some(refusal) => untrusted_by_server(Some(refusal), e),
+                                    None => io_error(e),
+                                });
+                            }
+                        };
+                        if let Some(list) = &list {
+                            // A resumed session skipped the client verifier,
+                            // so the list's fingerprint rules are asked here.
+                            if let Err(e) =
+                                list_permits(list, source, bound, channel.peer_certificates())
+                            {
+                                super::web::refuse(&channel, &e.to_string());
+                                return Err(e);
+                            }
+                        }
+                        Ok(Arc::new(channel) as Arc<dyn Channel>)
                     });
                     let mutual = self.config.is_mutual() && self.config.proves_peers();
                     let shared = Shared::new(true, true, mutual);
