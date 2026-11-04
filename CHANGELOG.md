@@ -47,8 +47,14 @@ write now.
   with: its own under `meta["form"]`, else the one its schema implies,
   else nothing, skipping what is malformed. Python: `Registry.catalog()`
   and `guatiao_intake.provider_form`; Dart: `Registry.catalog()` and
-  `providerForm`. The `load` feature now pulls `sha2`, and `winapi-util`
-  on Windows.
+  `providerForm`; Node: `Registry.catalog()` and `providerForm`; Go:
+  `Registry.Catalog()` and `intake.ProviderForm`; Julia: `Guatiao.catalog`
+  and `GuatiaoIntake.provider_form`; R: `reg$catalog()` and
+  `intake_provider_form`; MATLAB and Octave: `Registry.catalog()` and
+  `guatiao.intake.provider_form`; Fortran: `reg%catalog` and
+  `guatiao_intake_provider_form`; C++: `registry::catalog()` and
+  `intake::provider_form`. The `load` feature now pulls `sha2`, and
+  `winapi-util` on Windows.
 - **A source file's `import_dirs`.** The configuration given to
   `add_source_file` may hold `import_dirs`, a list of directories the
   registry takes for itself: on Windows, a library the file imports
