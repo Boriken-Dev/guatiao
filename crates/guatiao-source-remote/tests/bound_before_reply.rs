@@ -57,6 +57,14 @@ impl FrameRead for Reading {
             .push(format!("{} stages {messages} then {bytes}", self.side));
         self.inner.set_max_frame_after(messages, bytes)
     }
+
+    fn set_read_ahead(&mut self, frames: usize) -> io::Result<()> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("{} reads ahead {frames}", self.side));
+        self.inner.set_read_ahead(frames)
+    }
 }
 
 struct Writing {
@@ -144,6 +152,62 @@ fn a_link_raises_its_readers_bound_before_the_peer_can_send_a_large_frame() {
     assert!(
         at("client raises to 67108864").is_some(),
         "the client raises its bound before its link is returned: {log:?}"
+    );
+    // With no PROOF to read, the HELLO admits the client: the server reads
+    // ahead before its reply, the client once it has read the reply.
+    let ahead = at("server reads ahead 64").unwrap_or_else(|| panic!("{log:?}"));
+    assert!(ahead < reply, "{log:?}");
+    let client_ahead = at("client reads ahead 64").unwrap_or_else(|| panic!("{log:?}"));
+    let client_read = at("client reads").expect("the reply read");
+    assert!(client_read < client_ahead, "{log:?}");
+}
+
+/// Where a key PROOF is read, the server lets its channel read ahead only
+/// once the PROOF holds: a peer not yet proved makes it hold one message.
+#[cfg(feature = "tcp")]
+#[test]
+fn a_server_that_reads_a_proof_reads_ahead_only_after_it() {
+    let log: Log = Arc::default();
+    let (host_end, server_end) = memory::pair();
+    let key = b"a key both ends hold".as_slice();
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(key));
+    let served = {
+        let log = Arc::clone(&log);
+        let server = server.clone();
+        std::thread::spawn(move || server.serve(watched(server_end, &log, "server")))
+    };
+    let source = RemoteSource::new(
+        Box::new(Once(Mutex::new(Some(watched(host_end, &log, "client"))))),
+        LinkOptions::new(Trust::Trusted).key(key),
+    );
+    let _link = source.link().expect("the link is made");
+    let _served = served.join().unwrap().expect("the server's link is made");
+
+    let log = log.lock().unwrap().clone();
+    let server_events: Vec<&str> = log
+        .iter()
+        .map(String::as_str)
+        .filter(|e| e.starts_with("server"))
+        .collect();
+    let ahead = server_events
+        .iter()
+        .position(|e| *e == "server reads ahead 64")
+        .unwrap_or_else(|| panic!("never read ahead: {log:?}"));
+    let reads_before = server_events[..ahead]
+        .iter()
+        .filter(|e| **e == "server reads")
+        .count();
+    assert_eq!(
+        reads_before, 2,
+        "the HELLO and the PROOF are read before the channel reads ahead: {log:?}"
+    );
+    assert_eq!(
+        server_events
+            .iter()
+            .filter(|e| e.starts_with("server reads ahead"))
+            .count(),
+        1,
+        "{log:?}"
     );
 }
 

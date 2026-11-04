@@ -290,6 +290,10 @@ impl FrameRead for Reader {
         true
     }
 
+    fn set_read_ahead(&mut self, frames: usize) -> io::Result<()> {
+        self.shared.channel()?.set_pending(frames).map_err(io_error)
+    }
+
     fn peer_id(&self) -> Option<String> {
         self.shared.peer_id()
     }

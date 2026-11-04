@@ -209,8 +209,57 @@ fn a_burst_of_large_frames_waits_for_a_slow_peer_to_take_them() {
     assert_eq!(serving.join().unwrap(), [30 << 20; 4]);
 }
 
-/// A peer that takes nothing (its inbox full: coqui-web stops reading at 64
-/// messages) ends a write at the timeout the link set,
+/// How many 1 MiB frames a client writes to a server whose reader has read
+/// only the hello, each write waiting at most 700 ms for room, before one
+/// finds none; the server's channel reads `read_ahead` frames ahead, or what
+/// it starts at.
+fn written_until_full(over: &str, read_ahead: Option<usize>) -> usize {
+    let (mut server, mut client) = pair(over);
+    server.reader.set_max_frame(4 << 20);
+    if let Some(frames) = read_ahead {
+        server.reader.set_read_ahead(frames).unwrap();
+    }
+    client.writer.set_max_frame(4 << 20);
+    client
+        .writer
+        .set_timeout(Some(Duration::from_millis(700)))
+        .unwrap();
+    let body = frame(&vec![3u8; 1 << 20]);
+    let mut written = 0;
+    while written < 400 && client.writer.write_frame(&body).is_ok() {
+        written += 1;
+    }
+    // The server's end first: a WebSocket client's close waits up to 30 s
+    // for its queue to go, which the server's close cuts short.
+    server.writer.shutdown();
+    client.writer.shutdown();
+    written
+}
+
+/// A server's channel reads one frame ahead of its reader until the link
+/// raises it (`set_read_ahead`), so a peer writing to a reader that has
+/// stopped finds no room some 63 frames sooner than at the raised 64. A
+/// stream has no read-ahead to set.
+#[test]
+fn a_server_channel_reads_one_frame_ahead_until_raised() {
+    for over in transports() {
+        if over == "tcp" {
+            let (mut server, _client) = pair(over);
+            let refused = server.reader.set_read_ahead(64).unwrap_err();
+            assert_eq!(refused.kind(), ErrorKind::Unsupported);
+            continue;
+        }
+        let held = written_until_full(over, None);
+        let raised = written_until_full(over, Some(64));
+        assert!(
+            raised >= held + 48,
+            "{over}: {held} frames of 1 MiB went to a server reading one ahead, {raised} to one reading 64 ahead"
+        );
+    }
+}
+
+/// A peer that takes nothing (its channel full: coqui-web stops reading at
+/// its read-ahead) ends a write at the timeout the link set,
 /// as a stream's does.
 #[test]
 fn a_write_the_peer_takes_nothing_of_ends_at_the_timeout() {

@@ -48,9 +48,13 @@ fn invalid(why: impl core::fmt::Display) -> io::Error {
 
 /// The bounds of a link's channel: coqui-web's, with the largest message
 /// the handshake's until the link raises it, so the first message a peer
-/// sends is judged small, as the HELLO is.
+/// sends is judged small, as the HELLO is, and one message read ahead until
+/// the link admits the peer (`FrameRead::set_read_ahead`), so a peer not yet
+/// proved makes this side hold one message, not 64.
 fn limits() -> Limits {
-    Limits::default().with_max_message(crate::protocol::HANDSHAKE_MAX_FRAME)
+    Limits::default()
+        .with_max_message(crate::protocol::HANDSHAKE_MAX_FRAME)
+        .with_pending(1)
 }
 
 /// Connects to a WebSocket URL: `ws://host:port/path` (loopback unless

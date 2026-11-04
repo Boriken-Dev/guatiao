@@ -97,6 +97,17 @@ pub trait FrameRead: Send {
         false
     }
 
+    /// Sets how many frames a message transport may read off the wire and
+    /// hold ahead of the link's reader. A WebSocket or WebTransport channel
+    /// starts at one, so a peer not yet admitted makes it hold one message
+    /// at most; the link raises it once the peer is admitted. A transport
+    /// with no read-ahead to set (a stream reads only what is asked)
+    /// answers `Unsupported` and changes nothing.
+    fn set_read_ahead(&mut self, frames: usize) -> io::Result<()> {
+        let _ = frames;
+        Err(io::ErrorKind::Unsupported.into())
+    }
+
     /// The peer's identity as the transport proved it, `sha256:<hex>` (a
     /// TLS certificate's fingerprint), once the first read has run the
     /// transport's own handshake; `None` on a transport that proves none.
