@@ -57,8 +57,18 @@ code a library runs:
 | `isolated` | exactly the standard library of `home` (else of libpython's own installation) and `paths`: the module search path is set to it, `site` is not run, and from 3.14 CPython is told the executable is the installation's own | everything beside the host's executable, the installation's site-packages, the environment |
 
 `inherit` and the import search `path` (the registry's) are the weaker
-settings. Saying so to a host in every language waits for a channel from
-a source to its host; until then a host that chose one knows it chose it.
+settings. The source tells its host when the environment reaches the
+interpreter, as the refresh's notes (every binding's `refresh` hands them
+over; `docs/encodings.md`, "A source's note"), the first refresh after it
+was added:
+
+| subject | when | detail |
+| --- | --- | --- |
+| `isolation` | this file started the interpreter under `inherit`, or joined one whose `sys.flags.ignore_environment` is 0 | `{"isolation": "inherit", "joined": bool}` |
+| `home` | `home` was named and the interpreter was joined, so it is not applied | `{"home": "<as named, made absolute>"}` |
+
+The import search and `import_dirs` are the registry's, set by the host
+in its own call: no note tells them back.
 
 `home` and `isolation` apply when this file starts the interpreter: the
 first source added decides, and a later one asking for another

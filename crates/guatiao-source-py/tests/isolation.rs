@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use guatiao::library::{Registry, SourceError};
+use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map};
 
 /// The probe library: what its interpreter looks like, written beside it
@@ -130,6 +131,17 @@ fn main() {
             &case.name,
             facts.started() && facts.ran_from(&planted) == runs,
             format!("sitecustomize on PYTHONPATH ran: expected {runs}; {facts:?}"),
+        );
+        // The host is told when the environment reaches the interpreter.
+        let told = if runs {
+            "isolation inherit joined=false"
+        } else {
+            ""
+        };
+        check(
+            &case.name,
+            facts.get("notes") == told,
+            format!("the refresh's notes: expected `{told}`; {facts:?}"),
         );
     }
 
@@ -560,6 +572,26 @@ fn child(args: &[String]) {
     if !changed.refused.is_empty() {
         println!("refused: {:?}", changed.refused);
     }
+    let notes: Vec<String> = changed
+        .notes
+        .iter()
+        .map(|(_, note)| {
+            let isolation = note.detail().get("isolation");
+            let joined = note.detail().get("joined");
+            format!(
+                "{} {} joined={}",
+                note.subject(),
+                isolation
+                    .and_then(TryAsRef::<str>::try_as_ref)
+                    .unwrap_or(""),
+                joined
+                    .and_then(TryAsRef::<bool>::try_as_ref)
+                    .copied()
+                    .unwrap_or_default()
+            )
+        })
+        .collect();
+    println!("fact notes={}", notes.join("; "));
     match std::fs::read_to_string(work.join("facts.txt")) {
         Ok(text) => {
             for line in text.lines() {

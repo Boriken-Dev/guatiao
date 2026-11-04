@@ -8,16 +8,20 @@
 #![forbid(unsafe_code)]
 
 use guatiao::Map;
+use guatiao::library::Note;
 use guatiao::value::convert::TryAsRef;
 use guatiao_bridge::{
     BridgeError, Config, Engine, Manifest, ManifestFormat, Opened, ThreadModel, text_list,
 };
 
-use crate::start::{Isolation, Settings, StartError};
+use crate::start::{Got, Isolation, Settings, StartError};
 
 /// The one interpreter this file keeps for the program: started (or
 /// joined, in a Python host) when the source is added, never finalised.
-pub(crate) struct Python;
+pub(crate) struct Python {
+    /// What this source tells its host about how the interpreter runs.
+    notes: Vec<Note>,
+}
 
 impl Engine for Python {
     /// The handle `bridge.py` answers for an open library.
@@ -39,7 +43,7 @@ impl Engine for Python {
     fn start(config: &Config) -> Result<Python, BridgeError> {
         let settings = settings(config.map())?;
         let paths = text_list(config.map(), "paths")?;
-        crate::start::start(&settings).map_err(|e| match e {
+        let got = crate::start::start(&settings).map_err(|e| match e {
             StartError::Started(why) => BridgeError::Config {
                 key: "isolation".to_string(),
                 why,
@@ -48,7 +52,9 @@ impl Engine for Python {
         })?;
         crate::bridge::start(&paths, crate::exports::own_path().as_deref())
             .map_err(BridgeError::Unavailable)?;
-        Ok(Python)
+        Ok(Python {
+            notes: notes(&settings, got),
+        })
     }
 
     /// The module's `__version__`, read as a literal from its source,
@@ -75,6 +81,53 @@ impl Engine for Python {
     fn close(&self, library: i64) {
         crate::bridge::close(library);
     }
+
+    /// How the interpreter runs where that is looser than `shipped`, the
+    /// default: what [`notes`] found when the source started.
+    fn notes(&self) -> Vec<Note> {
+        self.notes.clone()
+    }
+}
+
+/// A note `isolation` while the environment reaches the interpreter
+/// (`inherit` here, or one joined that does not ignore it), and a note
+/// `home` when `home` was named and the interpreter was joined.
+fn notes(settings: &Settings, got: Got) -> Vec<Note> {
+    let mut notes = Vec::new();
+    let joined = matches!(got, Got::Joined { .. });
+    let environment = match got {
+        Got::Started => settings.isolation == Isolation::Inherit,
+        Got::Joined { environment } => environment,
+    };
+    if environment {
+        let mut detail = Map::new();
+        detail.set("isolation", "inherit");
+        detail.set("joined", joined);
+        let words = if joined {
+            "the interpreter already running in this process is used as it is, and its \
+             environment reaches it: PYTHONPATH, PYTHONHOME, the other PYTHON* variables \
+             and user site-packages"
+        } else {
+            "the interpreter takes its environment (isolation `inherit`): PYTHONPATH, \
+             PYTHONHOME, the other PYTHON* variables and user site-packages"
+        };
+        notes.push(Note::new("isolation", words).with_detail(detail));
+    }
+    if let (true, Some(home)) = (joined, &settings.home) {
+        let mut detail = Map::new();
+        detail.set("home", home.as_str());
+        notes.push(
+            Note::new(
+                "home",
+                format!(
+                    "`home` ({home}) is not applied: the interpreter was already running in \
+                     this process"
+                ),
+            )
+            .with_detail(detail),
+        );
+    }
+    notes
 }
 
 /// `isolation` (`shipped` unless given) and `home`, which `inherit` does

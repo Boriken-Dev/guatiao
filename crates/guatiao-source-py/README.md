@@ -55,7 +55,9 @@ to: `isolation` is `shipped` (the default: a `._pth` or `pyvenv.cfg`
 shipped beside the host's executable, and the configuration's `home`),
 `inherit` (`PYTHONPATH`, `PYTHONHOME` and user site-packages as well, as
 a `python` started there would) or `isolated` (only `home` and `paths`).
-A Python host's own interpreter is used as it is.
+A Python host's own interpreter is used as it is. When the environment
+reaches the interpreter, or a `home` is not applied, the first refresh
+tells the host so in its `notes`.
 
 ## Quick start
 
