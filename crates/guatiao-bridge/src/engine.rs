@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 
 use guatiao::Value;
 use guatiao::library::LocalLibrary;
+use guatiao::library::Note;
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{KindDescription, LentHandle, RawObject, SlotDescription};
 
@@ -143,6 +144,14 @@ pub trait Engine: 'static {
     fn available(&self, library: &Self::Library, provider: &str) -> Result<(), String> {
         let _ = (library, provider);
         Ok(())
+    }
+
+    /// What the engine wants its host to see now that is neither a
+    /// refusal nor a skip (a setting it runs looser than its default, say),
+    /// asked after every listing. Answer the whole set each time: a
+    /// refresh tells a note the first time it appears. None by default.
+    fn notes(&self) -> Vec<Note> {
+        Vec::new()
     }
 
     /// Lets a library go: the registry closed it, nothing holds it.

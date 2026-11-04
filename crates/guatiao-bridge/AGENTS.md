@@ -49,6 +49,7 @@ pub trait Engine: 'static {
         -> Result<u64, ProviderError>;                                  // default: UNSUPPORTED
     fn destroy(&self, lib: &Self::Library, instance: u64);              // default: nothing
     fn available(&self, lib: &Self::Library, provider: &str) -> Result<(), String>; // default: Ok
+    fn notes(&self) -> Vec<Note>;                                      // default: none
     fn close(&self, lib: Self::Library);
 }
 pub enum Opened<L> {
@@ -140,6 +141,11 @@ one such a library is refused, `Unavailable`), `config()`, `kinds()`,
 - **open**: `GUATIAO_ERR_NOT_FOUND` for an id no longer listed;
   `GUATIAO_ERR_BAD_VALUE` with the engine's or the manifest's words.
 - **close**: by the stamp the id was listed under; `Engine::close`.
+- **notes**: `Engine::notes`, asked after every listing where the
+  engine's calls run: what the engine wants its host to see that is
+  neither a refusal nor a skip (`guatiao::library::Note`), the whole set
+  each time; a refresh tells each the first time it appears. An engine
+  that cannot be reached is a refusal.
 
 ## Configuration (`Config::from_map`)
 
