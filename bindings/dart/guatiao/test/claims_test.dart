@@ -48,6 +48,21 @@ void main() {
     expect(v.toDart(), {'k': 'v', 'after': 1});
   });
 
+  test('refuses a list lent and borrowed by one call, in either order', () {
+    final v = Value(['a']);
+    addTearDown(v.close);
+    _inOneCall((c) {
+      c.lendList(v.asList());
+      expect(() => c.borrowList(v.asList()), throwsStateError);
+    });
+    _inOneCall((c) {
+      c.borrowList(v.asList());
+      expect(() => c.lendList(v.asList()), throwsStateError);
+    });
+    v.asList().add('after');
+    expect(v.toDart(), ['a', 'after']);
+  });
+
   test('refuses a node of a value lent while the value is borrowed', () {
     final v = Value({
       'inner': {'k': 'v'},

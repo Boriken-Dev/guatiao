@@ -23,7 +23,7 @@ except _lib.LibraryNotFound:
 from guatiao import Value  # noqa: E402
 from guatiao import value as value_module  # noqa: E402
 from guatiao.kinds import Kind, Method, _serve  # noqa: E402
-from guatiao.kinds.shapes import MAP, VALUE, lent  # noqa: E402
+from guatiao.kinds.shapes import LIST, MAP, VALUE, lent  # noqa: E402
 
 PAIRS = Kind(
     "pairs",
@@ -33,6 +33,8 @@ PAIRS = Kind(
         Method("borrow_then_lend", [MAP, lent(MAP)], fallible=True),
         Method("lend_twice", [lent(MAP), lent(MAP)], fallible=True),
         Method("lend_then_borrow_value", [lent(VALUE), VALUE], fallible=True),
+        Method("lend_then_borrow_list", [lent(LIST), LIST], fallible=True),
+        Method("borrow_then_lend_list", [LIST, lent(LIST)], fallible=True),
         Method("borrow_twice", [MAP, MAP], fallible=True),
         Method("pass_on", [lent(MAP)], fallible=True),
     ],
@@ -58,6 +60,14 @@ class Pairs:
 
     def lend_then_borrow_value(self, a: Any, b: Any) -> None:
         self.calls += 1
+
+    def lend_then_borrow_list(self, a: Any, b: Any) -> None:
+        self.calls += 1
+        a.append(len(b))
+
+    def borrow_then_lend_list(self, a: Any, b: Any) -> None:
+        self.calls += 1
+        b.append(len(a))
 
     def borrow_twice(self, a: Any, b: Any) -> None:
         self.calls += 1
@@ -102,6 +112,24 @@ def test_a_value_is_not_lent_and_borrowed_or_lent_twice_in_one_call(pairs, slot,
     # Every claim the refused call took is given back.
     v.as_map()["after"] = 1
     assert v.to_python() == {"k": "v", "after": 1}
+    v.close()
+
+
+@pytest.mark.parametrize(
+    "slot, words",
+    [
+        ("lend_then_borrow_list", "lent to a call: it cannot be read"),
+        ("borrow_then_lend_list", "being read: it cannot be lent to a call"),
+    ],
+)
+def test_a_list_is_not_lent_and_borrowed_in_one_call(pairs, slot, words):
+    remote, target = pairs
+    v = Value(["a"])
+    with pytest.raises(BufferError, match=words):
+        getattr(remote, slot)(v, v)
+    assert target.calls == 0, "refused before the call"
+    v.as_list().append("after")
+    assert v.to_python() == ["a", "after"]
     v.close()
 
 

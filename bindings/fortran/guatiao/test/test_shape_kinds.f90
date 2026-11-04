@@ -130,11 +130,14 @@ contains
     type(guatiao_value), intent(inout) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
     type(guatiao_value) :: first
+    integer :: st
     call answer%set('m', int(m%length(), int64))
     call answer%set('v', int(v%tag(), int64))
     call answer%set('n', n%is_absent())
     first = l%item(1)
     call answer%set('l', int(l%length(), int64) * 100 + first%int_or(-1_int64))
+    call l%push(6_int64, st)
+    call answer%set('l_push', int(st, int64))
   end subroutine
 
   recursive subroutine shape_lend(self, m, l, answer, error)
@@ -277,6 +280,8 @@ contains
     call check(.not. allocated(error), 'borrow: a map, a value, a null value and a list are borrowed')
     item = answer%key('l')
     call check(item%int_or(-1_int64) == 204, 'borrow: the list is read')
+    item = answer%key('l_push')
+    call check(item%int_or(-1_int64) == GUATIAO_STAT_READ_ONLY, 'borrow: the list borrowed is read-only')
     call check(l%length() == 2, 'borrow: the list borrowed is left as it was')
     item = answer%key('m')
     call check(item%int_or(-1_int64) == 2, 'borrow: the map is read')
