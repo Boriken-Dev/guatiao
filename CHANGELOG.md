@@ -652,6 +652,13 @@ write now.
   instructions, decoding) and takes from it; a trap or a limit discards
   the instance, the next call makes it afresh, and the host carries on.
   Calls run on the caller's thread, each library behind a lock of its own.
+  A provider a module declares with a `config` schema builds instances
+  (`guatiao_guest_create`, its calls named with `object` 2, its drop
+  reaching `guatiao_guest_destroy`), `instances_only` or not, and one
+  declaring `may_be_unavailable` is asked whether it runs
+  (`guatiao_guest_available`): `Provider::config`, `Provider::instances`
+  and `.available` in Rust, `Config`, `Build`, `InstancesOnly` and
+  `Available` in Go, and a configured greeter in both examples.
 - **A provider's meta, and its form, from Go, Julia, R, MATLAB and Octave,
   and Fortran.** `Registry.ProviderMeta` (Go), `Guatiao.provider_meta`
   (Julia), `reg$provider_meta` (R), `reg.provider_meta` (MATLAB and
