@@ -94,7 +94,10 @@ value its wire encoding (`guatiao::value::wire`) in the module's memory.
   `guatiao_guest_alloc` answered, then `guatiao_guest_create(position, at,
   len)`: status 0 and `answer(id)` (a number, the guest's own) builds one,
   whose slots' calls name it with `object` 2; another status refuses, in its
-  words. Dropping the instance's last owner reaches `guatiao_guest_destroy(id)`
+  words. Status 0 with an answer that is not a whole number fitting `i64`
+  refuses the create (`GUATIAO_ERR_BAD_VALUE`) and names no instance to
+  destroy: what the guest built stays in its memory until the library is
+  made afresh. Dropping the instance's last owner reaches `guatiao_guest_destroy(id)`
   once. The provider stays callable as itself unless `instances_only` is
   `true` (refused without `config`).
 - **Availability** (`may_be_unavailable: true`): each time a host asks,

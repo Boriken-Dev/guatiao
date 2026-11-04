@@ -640,8 +640,9 @@ write now.
 - **`guatiao-source-wasm`: libraries compiled to WebAssembly, served to any host,
   sandboxed.** A source file (`crates/guatiao-source-wasm`, built from this
   repository, not published) with wasmtime built in: a library is a core
-  WebAssembly module speaking guatiao ABI 1 (five exports, five imports,
-  every value as its wire encoding in the module's memory), described by a
+  WebAssembly module speaking guatiao ABI 1 (four exports it needs and
+  four it may, five imports, every value as its wire encoding in the
+  module's memory), described by a
   `*.guatiao` manifest of type `wasm` and its kinds' `<crate>.kinds.json`.
   Guests in Rust (`guatiao-wasm-guest`) and in Go 1.24 or later (the
   `guest` package, Go's own `wasip1` toolchain), with example greeters in

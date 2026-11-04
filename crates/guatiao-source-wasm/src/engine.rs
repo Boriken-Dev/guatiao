@@ -722,6 +722,9 @@ impl WasmEngine {
         if status != 0 {
             return Err(instance::refused(&lib.id, status, answer));
         }
+        // A status 0 whose answer is no id names nothing `destroy` could
+        // be told of: what the guest built stays in its memory until its
+        // store is made afresh.
         let refused = |what: &str| {
             ProviderError::new(
                 Status::GUATIAO_ERR_BAD_VALUE,
