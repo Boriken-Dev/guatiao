@@ -161,7 +161,7 @@ type Reporter interface {
 | `string` | `str`; answered, `text` |
 | `[]byte` | `bytes`; marked `mut`, `bytes_mut` |
 | `bool`, `int8`..`int64`, `uint8`..`uint64`, `int`, `uint`, `float32`, `float64` | the scalar (`int` is `isize`, `uint` `usize`) |
-| `guatiao.Ref`, `MapRef`, `ListRef` | a `value`, `map` or `list` borrowed (a list only lent); marked `lent`, lent; a `Ref` marked `nullable`, one that may be null |
+| `guatiao.Ref`, `MapRef`, `ListRef` | a `value`, `map` or `list` borrowed; marked `lent`, lent; a `Ref` marked `nullable`, one that may be null |
 | `*guatiao.Value` | a `value` handed over; answered, a `value` |
 | a struct or map type, a slice, `any` | a `map`, a `list`, a `value` the binding converts: borrowed, or marked `taken`; answered, the same |
 | an object kind's interface | an `object` handed over; marked `lent`, lent; answered, the object |

@@ -108,8 +108,6 @@ func readTable(header, name string) (*cTable, error) {
 			switch {
 			case prm.typ == "guatiao_bytes_mut" && !t.object:
 				return nil, fmt.Errorf("%s.%s(%s): bytes written in place cross on an object kind only", name, s.name, prm.name)
-			case prm.typ == "const guatiao_list *":
-				return nil, fmt.Errorf("%s.%s(%s): a list is not borrowed, but taken or lent", name, s.name, prm.name)
 			case !fallible && strings.HasPrefix(strings.TrimPrefix(prm.typ, "const "), "guatiao_object"):
 				// Its table is checked where it arrives, which only a fallible slot can refuse.
 				return nil, fmt.Errorf("%s.%s(%s): an object crosses on a fallible slot only", name, s.name, prm.name)
