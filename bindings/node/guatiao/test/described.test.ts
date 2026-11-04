@@ -79,6 +79,16 @@ describe('a kind loaded from its description', () => {
     );
     expect(() => kindsOf(one([{ name: 'a_b' }, { name: 'aB' }]))).toThrow(/two slots are aB/);
   });
+
+  it('writes no two arguments of a slot under one name', () => {
+    const args = (...names: string[]): KindsDocument =>
+      ({ kinds: [{ name: 'k', floor_hash: 1, slots: [{ name: 'x', args: names.map((name) => ({ name, type: 'u8' })) }] }] }) as never;
+    for (const pair of [['foo_bar', 'fooBar'], ['foo__bar', 'foo_bar'], ['arg1', '1st']]) {
+      expect(() => generate(args(...pair)), pair.join(' and ')).toThrow(/k\.x: arguments 0 and 1 are both /);
+    }
+    // A reserved word gains `_` past every other argument's name.
+    expect(generate(args('class', 'class_', 'class__')).dts).toContain('x?(class___: number, class_: number, class__: number): void;');
+  });
 });
 
 describe('modules written from two documents', () => {

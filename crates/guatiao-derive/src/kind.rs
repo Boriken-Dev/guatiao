@@ -1075,7 +1075,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             .args
             .iter()
             .filter(|a| a.kind.is_lent_tree())
-            .map(|a| format!("`{}`", c_param(&a.ident)))
+            .map(|a| format!("`{}`", c_param(m, &a.ident)))
             .collect();
         let doc = (!lent.is_empty()).then(|| {
             let line = format!(" Lent for the call, not handed over: {}.", lent.join(", "));
@@ -1847,20 +1847,24 @@ fn ret_c_type(ret: &RetKind) -> Option<TokenStream> {
 }
 
 /// An argument's name in the slot's type, which a C header renders: one
-/// named `ctx`, `out` or `err` gains a `_`, so no two parameters of the
-/// prototype share a name.
-fn c_param(ident: &Ident) -> Ident {
-    if matches!(ident.to_string().as_str(), "ctx" | "out" | "err") {
-        format_ident!("{}_", ident)
-    } else {
-        ident.clone()
+/// named `ctx`, `out` or `err` gains `_` until no argument of `m` has the
+/// name, so no two parameters of the prototype share one.
+fn c_param(m: &MethodPlan, ident: &Ident) -> Ident {
+    let name = ident.unraw().to_string();
+    if !matches!(name.as_str(), "ctx" | "out" | "err") {
+        return ident.clone();
     }
+    let mut renamed = format!("{name}_");
+    while m.args.iter().any(|a| a.ident.unraw() == renamed) {
+        renamed.push('_');
+    }
+    format_ident!("{}", renamed, span = ident.span())
 }
 
 /// The slot's function-pointer type.
 fn slot_type(m: &MethodPlan) -> TokenStream {
     let args = m.args.iter().map(|a| {
-        let ident = c_param(&a.ident);
+        let ident = c_param(m, &a.ident);
         let ty = arg_c_type(&a.kind);
         quote!(#ident: #ty)
     });
@@ -2980,6 +2984,22 @@ mod tests {
         .expect("expands");
         assert!(
             out.contains("object_ret :: < dyn Session , _ > (__out , & * self)"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn an_argument_named_as_the_slots_own_parameters_is_renamed_past_every_other() {
+        let out = expand_str(
+            "",
+            "pub trait G: Send + Sync { fn f(&self, ctx: i64, ctx_: i64, out: i64, err: i64) -> i64; }",
+        )
+        .expect("expands");
+        assert!(
+            out.contains(
+                "unsafe extern \"C\" fn (ctx : * mut :: core :: ffi :: c_void , ctx__ : i64 , \
+                 ctx_ : i64 , out_ : i64 , err_ : i64 , out : * mut i64)"
+            ),
             "{out}"
         );
     }

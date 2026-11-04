@@ -56,10 +56,31 @@ const RESERVED = new Set(
   ).split(' '),
 );
 
-function argName(name: string | undefined, i: number): string {
-  const camel = methodName(name ?? `arg${i}`);
-  const plain = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(camel) ? camel : `arg${i}`;
-  return RESERVED.has(plain) ? `${plain}_` : plain;
+/**
+ * Each argument's name in TypeScript: the description's in camelCase, or
+ * `arg<i>` for one with none or none TypeScript can spell. A reserved word
+ * gains `_` until no other argument has it; two arguments one name in
+ * TypeScript (`foo_bar` and `fooBar`) are refused.
+ */
+function argNames(args: readonly TypeDescription[], where: string): string[] {
+  const plain = args.map((arg, i) => {
+    const camel = methodName(arg.name ?? `arg${i}`);
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(camel) ? camel : `arg${i}`;
+  });
+  plain.forEach((name, i) => {
+    const first = plain.indexOf(name);
+    if (first < i) throw new TypeError(`${where}: arguments ${first} and ${i} are both ${name} in TypeScript; name one otherwise`);
+  });
+  const names: string[] = [];
+  for (const p of plain) {
+    let name = p;
+    if (RESERVED.has(name)) {
+      do name += '_';
+      while (plain.includes(name) || names.includes(name));
+    }
+    names.push(name);
+  }
+  return names;
 }
 
 const NARROW = new Set(['i8', 'i16', 'i32', 'u8', 'u16', 'u32', 'f32', 'f64']);
@@ -173,7 +194,8 @@ function declareKind(kind: KindDescription, names: ReadonlyMap<string, string>):
   for (const slot of kind.slots) {
     const where = `${kind.name}.${slot.name}`;
     const method = methodName(slot.name);
-    const args = (slot.args ?? []).map((arg, i) => ({ name: argName(arg.name, i), ...spellArg(arg, names, `${where} argument ${i}`) }));
+    const named = argNames(slot.args ?? [], where);
+    const args = (slot.args ?? []).map((arg, i) => ({ name: named[i]!, ...spellArg(arg, names, `${where} argument ${i}`) }));
     const answer = spellAnswer(slot.answer, names, `${where} answer`);
     impl.push(...docComment(slot.doc, '  '));
     impl.push(`  ${method}${slot.required ? '' : '?'}(${args.map((a) => `${a.name}: ${a.method}`).join(', ')}): ${answer.method};`);

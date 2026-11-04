@@ -101,10 +101,11 @@ func describedTable(doc *kindsDocument, kind, table string) (*cTable, error) {
 			if err != nil {
 				return nil, err
 			}
+			name := cName(a.Name, s.Args)
 			if a.Pass == "lent" && cTrees[a.Type] != "" {
-				slot.lent[a.Name] = true
+				slot.lent[name] = true
 			}
-			slot.params = append(slot.params, cParam{typ: typ, name: a.Name})
+			slot.params = append(slot.params, cParam{typ: typ, name: name})
 		}
 		if s.Answer != nil {
 			typ, err := cAnswer(*s.Answer, where)
@@ -119,6 +120,29 @@ func describedTable(doc *kindsDocument, kind, table string) (*cTable, error) {
 		t.slots = append(t.slots, slot)
 	}
 	return t, nil
+}
+
+// cName is an argument's name in the slot's prototype, as a kind header
+// renders it: one named ctx, out or err, the prototype's own parameters,
+// gains _ until no argument of the slot has the name, so it neither meets
+// them in the glue nor passes for the answer.
+func cName(name string, args []argDescription) string {
+	switch name {
+	case "ctx", "out", "err":
+	default:
+		return name
+	}
+	taken := func(n string) bool {
+		for _, a := range args {
+			if a.Name == n {
+				return true
+			}
+		}
+		return false
+	}
+	for name += "_"; taken(name); name += "_" {
+	}
+	return name
 }
 
 func cArg(a argDescription, where string) (string, error) {

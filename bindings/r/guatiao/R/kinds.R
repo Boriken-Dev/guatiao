@@ -68,9 +68,10 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
 }
 
 # What #[guatiao::kind] and the library's description reader refuse to
-# declare: a slot named header, a borrowed list, bytes written in place on
-# a kind that is not an object kind, and an object passed or answered on a
-# slot that cannot fail (its table is checked where it arrives).
+# declare: a slot named header, two arguments of one slot with one name, a
+# borrowed list, bytes written in place on a kind that is not an object
+# kind, and an object passed or answered on a slot that cannot fail (its
+# table is checked where it arrives).
 .gt_check_slot <- function(kind, n, s, object) {
   at <- sprintf("%s.%s", kind, n)
   if (n == "header") stop(sprintf("%s: the table's first field is its header; name the slot otherwise", at), call. = FALSE)

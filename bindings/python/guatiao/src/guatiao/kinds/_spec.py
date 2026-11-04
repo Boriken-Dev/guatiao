@@ -75,6 +75,12 @@ class Method:
         names = list(arg_names) + [f"arg{i}" for i in range(len(arg_names), len(self.args))]
         if len(names) != len(self.args):
             raise TypeError(f"`{name}`: {len(arg_names)} names for {len(self.args)} arguments")
+        for i in range(len(arg_names), len(names)):
+            if names[i] in arg_names:
+                raise TypeError(
+                    f"`{name}`: argument {i} is not named, and `{names[i]}`, the name made up for it, "
+                    f"is argument {list(arg_names).index(names[i])}'s: name every argument"
+                )
         self.arg_names = tuple(names)
         self.doc = doc
 

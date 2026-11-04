@@ -120,26 +120,51 @@ const Set<String> _reserved = {
   'noSuchMethod',
 };
 
-String _argName(Object? name, int i) {
-  final camel = name is String ? memberNameOf(name) : 'arg$i';
-  final plain = RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(camel)
-      ? camel
-      : 'arg$i';
-  // These are the generated code's own locals.
-  return _keywords.contains(plain) ||
-          const {
-            'c',
-            's',
-            'out',
-            'err',
-            'status',
-            'ctx',
-            'target',
-            'result',
-            'slot',
-          }.contains(plain)
-      ? '${plain}_'
-      : plain;
+/// The generated code's own locals, which no argument may be called.
+const Set<String> _locals = {
+  'c',
+  's',
+  'out',
+  'err',
+  'status',
+  'ctx',
+  'target',
+  'result',
+  'slot',
+};
+
+/// Each argument's name in Dart: the description's in lowerCamelCase, or
+/// `arg<i>` for one with none or none Dart can spell. A keyword or one of
+/// the generated code's own names gains `_` until no other argument has
+/// it; two arguments one name in Dart (`foo_bar` and `fooBar`) are refused.
+List<String> _argNames(List<Object?> args, String where) {
+  final plain = <String>[];
+  for (final (i, a) in args.indexed) {
+    final name = a is Map ? a['name'] : null;
+    final camel = name is String ? memberNameOf(name) : 'arg$i';
+    final spelled = RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(camel)
+        ? camel
+        : 'arg$i';
+    final first = plain.indexOf(spelled);
+    if (first >= 0) {
+      throw FormatException(
+        '$where: arguments $first and $i are both $spelled in Dart; name '
+        'one otherwise',
+      );
+    }
+    plain.add(spelled);
+  }
+  final names = <String>[];
+  for (final p in plain) {
+    var name = p;
+    if (_keywords.contains(name) || _locals.contains(name)) {
+      do {
+        name = '${name}_';
+      } while (plain.contains(name) || names.contains(name));
+    }
+    names.add(name);
+  }
+  return names;
 }
 
 const Map<String, (String, String)> _scalars = {
@@ -252,8 +277,7 @@ final class _Generator {
     return found;
   }
 
-  _Arg arg(Map<String, Object?> type, int i, String where) {
-    final name = _argName(type['name'], i);
+  _Arg arg(Map<String, Object?> type, String name, String where) {
     final t = type['type'];
     final scalar = _scalars[t];
     if (scalar != null) {
@@ -573,9 +597,15 @@ final class _Generator {
       }
       final isRequired = slot['required'] == true;
       final fallible = slot['fallible'] == true;
+      final described = slot['args'] as List? ?? const [];
+      final argNames = _argNames(described, where);
       final args = [
-        for (final (j, a) in (slot['args'] as List? ?? const []).indexed)
-          arg((a! as Map).cast<String, Object?>(), j, '$where argument $j'),
+        for (final (j, a) in described.indexed)
+          arg(
+            (a! as Map).cast<String, Object?>(),
+            argNames[j],
+            '$where argument $j',
+          ),
       ];
       final sensitive = slot['sensitive'] == true;
       final ans = answer(slot['answer'], '$where answer', sensitive: sensitive);

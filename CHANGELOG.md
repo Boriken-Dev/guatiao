@@ -1965,6 +1965,16 @@ write now.
   read while one of those runs, where before it read memory being freed
   or moved. A Dart call that throws while it is being closed no longer
   leaves its lent values marked lent.
+- **No two arguments of a slot are written under one name.**
+  `#[guatiao::kind]` renders an argument named `ctx`, `out` or `err`
+  with `_` appended until no other argument has the name (`ctx` beside
+  `ctx_` is `ctx__`), where it wrote `ctx_` twice; Go's `guatiao-kind`
+  names such an argument of a description the same way, where `ctx` met
+  the glue's own and `out` in a slot with no answer was taken for it.
+  Dart's and Node's generators refuse two arguments one name in their
+  language (`foo_bar` and `fooBar`), and give a reserved word `_` until
+  it is free; Python names the argument whose made-up name meets a given
+  one.
 - **guatiao-source-remote: a certificate's chain and the policy's TLS
   versions reach every connection.** A QUIC or WebTransport listener at
   mutual TLS, and a TLS listener whose access control list deferred a

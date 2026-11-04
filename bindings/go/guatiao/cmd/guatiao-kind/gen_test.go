@@ -255,6 +255,36 @@ func TestWritesTheGlue(t *testing.T) {
 	}
 }
 
+// A description may name an argument as the slot's own parameters are
+// named: it is renamed as the kind macro renames it in a header, so it
+// meets none of them in the glue and an argument named out is not taken
+// for the answer.
+func TestRenamesAnArgumentNamedAsTheSlotsOwnParameters(t *testing.T) {
+	const doc = `{"kinds": [{"name": "probe", "floor_hash": 42, "object": false, "slots": [
+	  {"name": "mix", "required": true, "fallible": false, "args": [
+	    {"name": "ctx", "type": "i64"}, {"name": "ctx_", "type": "i64"},
+	    {"name": "err", "type": "i64"}, {"name": "out", "type": "i64"}]}]}]}`
+	const src = `package probe
+
+//guatiao:kind probe
+type Probe interface {
+	Mix(ctx int64, ctx2 int64, err int64, out int64) error
+}
+`
+	dir := pkg(t, src, "")
+	if err := os.WriteFile(filepath.Join(dir, "probe.kinds.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(dir, "probe.kinds.json", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	cSrc, _ := os.ReadFile(filepath.Join(dir, "guatiao_kinds.c"))
+	want := "guatiao_status (*)(void * ctx, int64_t ctx__, int64_t ctx_, int64_t err_, int64_t out_)"
+	if !strings.Contains(string(cSrc), want) {
+		t.Errorf("no %q in\n%s", want, cSrc)
+	}
+}
+
 func TestRefusesAGoTypeThatCannotCarryTheSlots(t *testing.T) {
 	cases := map[string]struct{ from, to, says string }{
 		"a text argument":         {"Greet(name string)", "Greet(name int)", "crosses as string"},
