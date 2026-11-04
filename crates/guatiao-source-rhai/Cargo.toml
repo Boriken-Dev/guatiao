@@ -1,6 +1,6 @@
 [package]
 name = "guatiao-source-rhai"
-description = "A guatiao source of Rhai libraries: sandboxed scripts served to any host"
+description = "A guatiao source of Rhai libraries: scripts served to any host"
 version = "0.0.0-alpha.1"
 edition = "2024"
 # The workspace's verified floor; Rhai's own is 1.66.
