@@ -183,6 +183,106 @@ impl Presenting {
     }
 }
 
+/// The list a listener asks again once a handshake is through: only where a
+/// resumed session would skip the client verifier (`allow_resumption` at
+/// mutual TLS), else `None` because the handshake already decided it.
+fn resuming_list(config: &TlsConfig) -> io::Result<Option<Arc<Acl>>> {
+    if config.tls_policy().allow_resumption && config.is_mutual() && config.proves_peers() {
+        canonical_list(config)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Decides a client whose handshake is through, by the list's fingerprint
+/// rules for the certificate it presented (`chain`, its own first), from
+/// `source` to `local`: `Ok` where there is no list or it permits; else the
+/// refusal, after `refuse` is told its words.
+fn after_handshake(
+    list: Option<&Acl>,
+    source: SocketAddr,
+    local: SocketAddr,
+    chain: Option<&[Vec<u8>]>,
+    refuse: impl FnOnce(&str),
+) -> io::Result<()> {
+    let Some(list) = list else {
+        return Ok(());
+    };
+    list_permits(list, source, local, chain).inspect_err(|e| refuse(&e.to_string()))
+}
+
+#[cfg(test)]
+mod after_handshake_tests {
+    use super::*;
+    use crate::transport::tls::Policy;
+    use coqui_net_acl::{Action, Rule};
+
+    fn certificate() -> Vec<u8> {
+        vec![7, 1, 2, 3]
+    }
+
+    /// A list permitting the certificate from 127.0.0.1 only.
+    fn list() -> Acl {
+        let mut permit = Rule::new(Action::Permit, "127.0.0.1/32".parse().unwrap());
+        permit.fingerprint = Some(PeerId::of(&certificate()).canonical());
+        let mut acl = Acl::default();
+        acl.push(permit);
+        acl.push(Rule::new(Action::Deny, "any".parse().unwrap()));
+        acl
+    }
+
+    fn at(ip: &str) -> SocketAddr {
+        format!("{ip}:50000").parse().unwrap()
+    }
+
+    #[test]
+    fn a_fingerprint_permitted_from_one_source_is_refused_from_another() {
+        let (list, chain) = (list(), [certificate()]);
+        let local = at("127.0.0.1");
+        let told = core::cell::Cell::new(false);
+        after_handshake(Some(&list), at("127.0.0.1"), local, Some(&chain), |_| {
+            told.set(true);
+        })
+        .expect("permitted from the source the rule names");
+        assert!(!told.get());
+        let e = after_handshake(Some(&list), at("127.0.0.2"), local, Some(&chain), |_| {
+            told.set(true);
+        })
+        .unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{e}");
+        assert!(told.get(), "the client is told why");
+    }
+
+    #[test]
+    fn no_list_or_no_certificate_decides_nothing_or_refuses() {
+        let local = at("127.0.0.1");
+        after_handshake(None, at("127.0.0.2"), local, None, |_| {}).expect("no list");
+        let list = list();
+        after_handshake(Some(&list), at("127.0.0.1"), local, None, |_| {})
+            .expect_err("a list cannot decide a client that presented none");
+    }
+
+    #[test]
+    fn only_a_mutual_listener_that_may_resume_asks_the_list_again() {
+        let mut policy = Policy::modern();
+        policy.acl = Some(list());
+        let pinned = |policy: Policy| {
+            TlsConfig::new(Identity::generate().unwrap())
+                .pins([Identity::generate().unwrap().fingerprint()])
+                .policy(policy)
+        };
+        assert!(resuming_list(&pinned(policy.clone())).unwrap().is_none());
+        policy.allow_resumption = true;
+        assert!(resuming_list(&pinned(policy.clone())).unwrap().is_some());
+        assert!(
+            resuming_list(&pinned(policy.clone()).server_tls())
+                .unwrap()
+                .is_none(),
+            "server TLS asks no client for a certificate"
+        );
+    }
+}
+
 /// A resolver that presents nothing: no handshake through it completes.
 #[derive(Debug)]
 struct Nobody;
@@ -465,14 +565,7 @@ impl WtListen {
                 }
                 permitted
             });
-        let list = if config.tls_policy().allow_resumption
-            && config.is_mutual()
-            && config.proves_peers()
-        {
-            canonical_list(&config)?
-        } else {
-            None
-        };
+        let list = resuming_list(&config)?;
         Ok(WtListen {
             listener,
             presenting,
@@ -566,16 +659,13 @@ impl WtListen {
                                 });
                             }
                         };
-                        if let Some(list) = &list {
-                            // A resumed session skipped the client verifier,
-                            // so the list's fingerprint rules are asked here.
-                            if let Err(e) =
-                                list_permits(list, source, bound, channel.peer_certificates())
-                            {
-                                super::web::refuse(&channel, &e.to_string());
-                                return Err(e);
-                            }
-                        }
+                        after_handshake(
+                            list.as_deref(),
+                            source,
+                            bound,
+                            channel.peer_certificates(),
+                            |why| super::web::refuse(&channel, why),
+                        )?;
                         Ok(Arc::new(channel) as Arc<dyn Channel>)
                     });
                     let mutual = self.config.is_mutual() && self.config.proves_peers();
