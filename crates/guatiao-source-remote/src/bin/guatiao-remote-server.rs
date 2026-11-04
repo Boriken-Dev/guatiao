@@ -473,6 +473,20 @@ fn pairing(a: &Args) -> Result<(), String> {
     }
 }
 
+/// Prints what a refresh refused and what its sources told: a note is told
+/// by one refresh only, the first, the periodic ones included.
+fn say_refreshed(refreshed: &guatiao::library::Refreshed) {
+    for r in &refreshed.refused {
+        eprintln!("guatiao-remote-server: {}: {}", r.source, r.reason);
+    }
+    for (source, note) in &refreshed.notes {
+        match note.subject() {
+            "" => eprintln!("guatiao-remote-server: {source}: {}", note.text()),
+            about => eprintln!("guatiao-remote-server: {source}: {about}: {}", note.text()),
+        }
+    }
+}
+
 fn run() -> Result<(), String> {
     let a = parse()?;
     if a.waiting || a.accept.is_some() {
@@ -533,22 +547,13 @@ fn run() -> Result<(), String> {
         _ => {}
     }
     let server = Server::new(registry, kinds, options(&a, security.trust(local))?);
-    let refreshed = server.refresh();
-    for r in &refreshed.refused {
-        eprintln!("guatiao-remote-server: {}: {}", r.source, r.reason);
-    }
-    for (source, note) in &refreshed.notes {
-        match note.subject() {
-            "" => eprintln!("guatiao-remote-server: {source}: {}", note.text()),
-            about => eprintln!("guatiao-remote-server: {source}: {about}: {}", note.text()),
-        }
-    }
+    say_refreshed(&server.refresh());
     if let Some(every) = a.refresh {
         let s = server.clone();
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(every);
-                let _ = s.refresh();
+                say_refreshed(&s.refresh());
             }
         });
     }
