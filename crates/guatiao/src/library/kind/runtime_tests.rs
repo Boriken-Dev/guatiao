@@ -963,12 +963,12 @@ fn reasons_from_many_threads_stay_readable_and_are_bounded() {
 
 // --- an instance built for a kind bound at run time ---------------------------
 
-std::thread_local! {
-    /// What the test provider's `create` built and `destroy` released,
-    /// on this thread.
-    static BUILT: core::cell::RefCell<Vec<usize>> = const { core::cell::RefCell::new(Vec::new()) };
-    static RELEASED: core::cell::RefCell<Vec<(usize, usize)>> =
-        const { core::cell::RefCell::new(Vec::new()) };
+/// What the test provider's `create` built and `destroy` released: the
+/// provider's `ctx` points at it.
+#[derive(Default)]
+struct Record {
+    built: Mutex<usize>,
+    released: Mutex<Vec<usize>>,
 }
 
 /// Builds instance 7 from a map, or refuses one holding `refuse`.
@@ -990,18 +990,25 @@ unsafe extern "C" fn test_create(
         };
         return Status::GUATIAO_ERR_BAD_VALUE;
     }
-    BUILT.with(|b| b.borrow_mut().push(provider.addr()));
+    // SAFETY: the provider's ctx is the test's `Record`, alive for the test.
+    let record = unsafe { &*provider.cast::<Record>() };
+    *record.built.lock().unwrap() += 1;
     // SAFETY: as above.
     unsafe { out.write(ctx(7)) };
     Status::GUATIAO_OK
 }
 
 unsafe extern "C" fn test_destroy(provider: *mut c_void, instance: *mut c_void) {
-    RELEASED.with(|r| r.borrow_mut().push((provider.addr(), instance.addr())));
+    // SAFETY: as in `test_create`.
+    let record = unsafe { &*provider.cast::<Record>() };
+    record.released.lock().unwrap().push(instance.addr());
 }
 
 #[test]
 fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
+    let record = Record::default();
+    let built = || *record.built.lock().unwrap();
+    let released = || record.released.lock().unwrap().clone();
     let mechanism = Direct::default();
     let serve = Arc::new(Served::default());
     let greeter = kind("greeter");
@@ -1019,7 +1026,7 @@ fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
         config: Some(schema),
         vtable: core::ptr::null(),
         vtable_size: 0,
-        ctx: ctx(3),
+        ctx: (&raw const record).cast_mut().cast(),
         meta: None,
         version: None,
         available: None,
@@ -1046,14 +1053,10 @@ fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
         Some("hello, di (7)"),
         "called with the instance as its ctx"
     );
-    assert_eq!(BUILT.with(|b| b.borrow().clone()), [3]);
-    assert!(RELEASED.with(|r| r.borrow().is_empty()));
+    assert_eq!(built(), 1);
+    assert!(released().is_empty());
     drop(remote);
-    assert_eq!(
-        RELEASED.with(|r| r.borrow().clone()),
-        [(3, 7)],
-        "destroyed once"
-    );
+    assert_eq!(released(), [7], "destroyed once");
 
     // Refused by the provider, and by the schema before it is asked:
     // nothing built, nothing destroyed.
@@ -1075,6 +1078,6 @@ fn a_described_remote_over_an_instance_calls_it_and_destroys_it_once() {
         Err(InstantiateError::Refused(e)) => assert_eq!(e.status, Status::GUATIAO_ERR_WRONG_KIND),
         other => panic!("refused: {other:?}"),
     }
-    assert_eq!(BUILT.with(|b| b.borrow().len()), 1);
-    assert_eq!(RELEASED.with(|r| r.borrow().len()), 1);
+    assert_eq!(built(), 1);
+    assert_eq!(released(), [7]);
 }
