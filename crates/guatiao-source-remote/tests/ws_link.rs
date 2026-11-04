@@ -384,8 +384,6 @@ fn a_peer_outside_the_ranges_is_turned_away() {
 struct SlowAfterFirst {
     inner: Box<dyn guatiao_source_remote::transport::FrameRead>,
     reads: usize,
-    /// How long it holds the PROOF before handing it over.
-    pause: Duration,
 }
 
 impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
@@ -393,7 +391,7 @@ impl guatiao_source_remote::transport::FrameRead for SlowAfterFirst {
         let read = self.inner.read_frame(buf, max);
         self.reads += 1;
         if self.reads == 2 {
-            std::thread::sleep(self.pause);
+            std::thread::sleep(Duration::from_millis(400));
         }
         read
     }
@@ -433,7 +431,6 @@ fn a_large_call_pipelined_right_behind_the_proof_is_served() {
                 conn.reader = Box::new(SlowAfterFirst {
                     inner: conn.reader,
                     reads: 0,
-                    pause: Duration::from_millis(400),
                 });
                 let server = server.clone();
                 std::thread::spawn(move || {
@@ -633,27 +630,76 @@ fn body(frame: &guatiao_source_remote::protocol::Frame<'_>) -> Vec<u8> {
     out.split_off(4)
 }
 
-/// A stranger past the address rules answers the WELCOME with a junk PROOF
-/// and then 1 MiB messages while the server is slow to check the PROOF: the
-/// channel reads one of those messages ahead and no more, so the stranger's
-/// socket stops taking bytes once that one and the transport's own buffers
-/// are full, rather than the server reading up to 64 of them.
-#[test]
-fn a_stranger_behind_a_junk_proof_has_one_message_read_ahead() {
+/// A server's reader that holds the PROOF until told to hand it over, so the
+/// link has not checked it while a client measures what the server takes.
+/// With `raise`, the channel reads that many messages ahead from the PROOF
+/// on, as it would if the link admitted the peer before checking it.
+struct HeldAtProof {
+    inner: Box<dyn guatiao_source_remote::transport::FrameRead>,
+    reads: usize,
+    raise: Option<usize>,
+    go: std::sync::mpsc::Receiver<()>,
+}
+
+impl guatiao_source_remote::transport::FrameRead for HeldAtProof {
+    fn read_frame(&mut self, buf: &mut Vec<u8>, max: usize) -> std::io::Result<bool> {
+        let read = self.inner.read_frame(buf, max);
+        self.reads += 1;
+        if self.reads == 2 {
+            if let Some(frames) = self.raise {
+                self.inner.set_read_ahead(frames).unwrap();
+            }
+            let _ = self.go.recv_timeout(Duration::from_secs(30));
+        }
+        read
+    }
+
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.inner.set_timeout(timeout)
+    }
+
+    fn set_max_frame(&mut self, bytes: usize) {
+        self.inner.set_max_frame(bytes);
+    }
+
+    fn set_max_frame_after(&mut self, messages: usize, bytes: usize) -> bool {
+        self.inner.set_max_frame_after(messages, bytes)
+    }
+
+    fn set_read_ahead(&mut self, frames: usize) -> std::io::Result<()> {
+        self.inner.set_read_ahead(frames)
+    }
+
+    fn peer_id(&self) -> Option<String> {
+        self.inner.peer_id()
+    }
+}
+
+/// A message of the junk-PROOF tests.
+const MESSAGE: usize = 1 << 20;
+
+/// How many bytes a stranger's socket takes behind a junk PROOF the server
+/// holds unchecked: the client sends HELLO, then the PROOF, then up to 96
+/// messages of 1 MiB until a write finds no room for a second, and only
+/// then lets the server check the PROOF and refuse it. The server's channel
+/// reads `raise` messages ahead from the PROOF on, or what it starts at.
+fn taken_behind_a_junk_proof(raise: Option<usize>) -> usize {
     use guatiao_source_remote::protocol::Frame;
     use std::io::{Read, Write};
-    const MESSAGE: usize = 1 << 20;
-    const SENT: usize = 48;
+    const SENT: usize = 96;
+    const FULL: Duration = Duration::from_secs(1);
     let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
     let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
     let at = listener.local_addr().unwrap();
     let (told, heard) = std::sync::mpsc::channel();
+    let (go, wait) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         if let Ok(Accepted::Connection(mut conn)) = listener.accept() {
-            conn.reader = Box::new(SlowAfterFirst {
+            conn.reader = Box::new(HeldAtProof {
                 inner: conn.reader,
                 reads: 0,
-                pause: Duration::from_secs(4),
+                raise,
+                go: wait,
             });
             let _ = told.send(server.serve(conn).map(|_| ()).map_err(|e| format!("{e:?}")));
         }
@@ -701,16 +747,18 @@ fn a_stranger_behind_a_junk_proof_has_one_message_read_ahead() {
         .unwrap();
 
     // While the server holds the PROOF, how much of what follows the socket
-    // takes before it stops taking any.
-    stream
-        .set_write_timeout(Some(Duration::from_millis(1500)))
-        .unwrap();
+    // takes before it stops taking any. A write that waited out its timeout
+    // found no room: Linux answers with the few bytes it could copy in that
+    // time rather than an error. The PROOF is checked only after, so what
+    // the refused channel drains as it closes is not counted.
+    stream.set_write_timeout(Some(FULL)).unwrap();
     let message = masked(&vec![0u8; MESSAGE]);
     let mut taken = 0;
     'sending: for _ in 0..SENT {
         let mut at = 0;
         while at < message.len() {
             let end = message.len().min(at + (64 << 10));
+            let started = std::time::Instant::now();
             match stream.write(&message[at..end]) {
                 Ok(0) | Err(_) => break 'sending,
                 Ok(n) => {
@@ -718,20 +766,34 @@ fn a_stranger_behind_a_junk_proof_has_one_message_read_ahead() {
                     taken += n;
                 }
             }
+            if started.elapsed() >= FULL {
+                break 'sending;
+            }
         }
     }
-    eprintln!(
-        "the socket took {taken} bytes of {} sent behind the PROOF",
-        SENT * message.len()
-    );
-    assert!(
-        taken < 16 * MESSAGE,
-        "the server read {taken} bytes of {SENT} messages of {MESSAGE} behind a PROOF it had not checked: \
-         more than one message ahead and the transport's buffers"
-    );
+    go.send(()).unwrap();
     let why = heard
         .recv_timeout(Duration::from_secs(20))
         .unwrap()
         .expect_err("the server refuses the junk PROOF");
     assert!(why.contains("does not hold this link's key"), "{why}");
+    taken
+}
+
+/// A stranger past the address rules answers the WELCOME with a junk PROOF
+/// and then 1 MiB messages while the server has not checked the PROOF: the
+/// channel reads one of those messages ahead and no more, so the stranger's
+/// socket stops taking bytes once that one and the transport's buffers are
+/// full. A channel reading 64 ahead takes at least 48 more; the kernel's
+/// buffers, as large as its autotuning makes them, are in both counts.
+#[test]
+fn a_stranger_behind_a_junk_proof_has_one_message_read_ahead() {
+    let held = taken_behind_a_junk_proof(None);
+    let raised = taken_behind_a_junk_proof(Some(64));
+    eprintln!("behind a junk PROOF the socket took {held} bytes, {raised} with 64 read ahead");
+    assert!(
+        raised >= held + 48 * MESSAGE,
+        "the server took {held} bytes behind a PROOF it had not checked, {raised} reading 64 messages \
+         of {MESSAGE} ahead: it reads more than one ahead"
+    );
 }
