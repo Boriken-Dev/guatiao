@@ -758,6 +758,11 @@ final class CallScope extends SlotCall {
   Pointer<guatiao_map> borrowMap(Object value) =>
       _armOf(_borrowed(value, Tag.map)).cast();
 
+  /// A list the callee borrows: a [Ref] onto one, or a `List` built for
+  /// the call.
+  Pointer<guatiao_list> borrowList(Object value) =>
+      _armOf(_borrowed(value, Tag.list)).cast();
+
   Pointer<guatiao_value> _borrowed(Object value, Tag? tag) {
     final Ref ref;
     if (value is Ref) {
@@ -1078,6 +1083,10 @@ final class ServeScope extends SlotCall {
   /// A map the caller lends read-only, through a node of this call's own.
   MapRef borrowedMap(Pointer<guatiao_map> p) =>
       _borrowedView(_nodeIn(_nonNull(p, 'map'), Tag.map), this).asMap();
+
+  /// A list the caller lends read-only, through a node of this call's own.
+  ListRef borrowedList(Pointer<guatiao_list> p) =>
+      _borrowedView(_nodeIn(_nonNull(p, 'list'), Tag.list), this).asList();
 
   /// A tree handed over, which the method owns and may keep: moved out of
   /// the caller's allocators, which may go with the caller's library.

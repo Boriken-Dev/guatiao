@@ -27,7 +27,7 @@ String _fixture(String name) =>
 
 const _head = '''
 import 'package:guatiao/describe.dart';
-import 'package:guatiao/guatiao.dart' show MapRef, Ref;
+import 'package:guatiao/guatiao.dart' show ListRef, MapRef, Ref;
 ''';
 
 Map<String, Object?> _describe(String body) =>
@@ -81,6 +81,20 @@ abstract interface class Between {
     final kind = (doc['kinds'] as List).single as Map;
     expect(jsonEncode(kind['slots']), jsonEncode(between['slots']));
     expect(kind['floor_hash'], between['floor_hash']);
+  });
+
+  test('a list is borrowed as a ListRef, as the vector says', () {
+    final doc = _describe('''
+abstract interface class Summer {
+  int sum(ListRef items);
+}
+''');
+    final borrowed = (vectorFile()['vectors'] as List).cast<Map>().singleWhere(
+      (v) => v['name'] == 'a_borrowed_list',
+    );
+    final kind = (doc['kinds'] as List).single as Map;
+    expect(jsonEncode(kind['slots']), jsonEncode(borrowed['slots']));
+    expect(kind['floor_hash'], borrowed['floor_hash']);
   });
 
   test(
@@ -231,8 +245,6 @@ abstract interface class Store {
       'abstract interface class A { void f([int x]); }':
           'not optional or named',
       'abstract interface class A { void f() {} }': 'declared, not defined',
-      'abstract interface class A { void f(ListRef l); }':
-          'a list is not borrowed',
       'abstract interface class A { void f(Value v); }': 'Taken<Ref>',
       'abstract interface class A { void f(B b); }\nabstract interface class B implements ObjectKind {}':
           'an object is passed Taken<B> or Lent<B>',

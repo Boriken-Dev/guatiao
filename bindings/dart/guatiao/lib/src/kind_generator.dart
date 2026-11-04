@@ -386,6 +386,17 @@ final class _Generator {
               toC: 'c.borrowMap($name)',
               fromC: 's.borrowedMap($name)',
             );
+          case 'borrowed' when t == 'list':
+            imports.add('ListRef');
+            return _Arg(
+              name: name,
+              native: 'Pointer<$c>',
+              dart: 'Pointer<$c>',
+              caller: 'Object',
+              callee: 'ListRef',
+              toC: 'c.borrowList($name)',
+              fromC: 's.borrowedList($name)',
+            );
         }
         throw FormatException('$where: a $t cannot be passed $pass');
       case 'object':
