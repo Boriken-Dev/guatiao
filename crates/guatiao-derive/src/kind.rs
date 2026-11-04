@@ -890,6 +890,44 @@ fn sensitive_answer(ret: &RetKind, output: &ReturnType, roots: Roots<'_>) -> syn
     ))
 }
 
+/// The type a method answers, as spelled: `()` for none, `X` of a
+/// `Result<X, _>`, else the return type.
+fn answer_type(output: &ReturnType) -> Type {
+    let ty = match output {
+        ReturnType::Default => return syn::parse_quote!(()),
+        ReturnType::Type(_, ty) => &**ty,
+    };
+    if let Type::Path(p) = ty
+        && let Some(last) = p.path.segments.last()
+        && last.ident == "Result"
+        && let PathArguments::AngleBracketed(a) = &last.arguments
+        && let Some(GenericArgument::Type(ok)) = a.args.first()
+    {
+        return ok.clone();
+    }
+    ty.clone()
+}
+
+/// For each `#[sensitive]` method, a check that its answer's type is one
+/// the caller can wipe ([`sensitive_answer`] read its spelling; this
+/// reads the type, which an alias or a type of the caller's shares a
+/// spelling with).
+fn sensitive_checks(methods: &[MethodPlan]) -> TokenStream {
+    let tys: Vec<Type> = methods
+        .iter()
+        .filter(|m| m.sensitive)
+        .map(|m| answer_type(&m.ret_ty))
+        .collect();
+    if tys.is_empty() {
+        return TokenStream::new();
+    }
+    quote! {
+        const _: () = {
+            #(::guatiao::__private::sensitive_answer::<#tys>();)*
+        };
+    }
+}
+
 fn plain_ret(ty: &Type, roots: Roots<'_>) -> syn::Result<RetKind> {
     if let Some(inner) = object_inner(ty, roots)? {
         return Ok(RetKind::Object(inner));
@@ -1383,10 +1421,14 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         tr.items.push(item);
     }
 
+    let sensitive_checks = sensitive_checks(methods);
+
     quote! {
         #live_static
 
         #tr
+
+        #sensitive_checks
 
         /// The kind's function table: a header, then one slot per method,
         /// in declaration order.
@@ -2707,6 +2749,10 @@ mod tests {
         assert!(!out.contains("# [sensitive]"), "{out}");
         assert!(out.contains("Alloc :: wiping ()"), "{out}");
         assert!(out.contains(r#"\"sensitive\":true"#), "{out}");
+        // The answer's type, not only its spelling, is checked.
+        assert!(out.contains("sensitive_answer :: < Value > ()"), "{out}");
+        let unmarked = expand_str("", &marked.replace("#[sensitive]", "")).expect("expands");
+        assert!(!unmarked.contains("sensitive_answer"), "{unmarked}");
         for (item, why) in [
             (
                 "pub trait V: Send + Sync { #[sensitive(yes)] fn read(&self) -> Result<Value, ProviderError>; }",
