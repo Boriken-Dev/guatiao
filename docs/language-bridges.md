@@ -193,11 +193,27 @@ Provided::new("greeters_custom")
   attached`). Every distinct reason is kept until the library closes, so
   answer with words that do not change from one call to the next.
 
+The Lua, JavaScript, Rhai and WebAssembly sources declare both in their
+own terms, and differ in the details:
+
+| source | what builds an instance | `config` with nothing to build it | callable as itself too | `available` answers |
+| --- | --- | --- | --- | --- |
+| Lua ([guatiao-source-lua](lua.md)) | `provider:new(config)`, the instance table | refuses the library | yes, unless `instances_only = true` | `nil` when it can run; text is the reason; anything else is unavailable, saying what it answered |
+| JavaScript ([guatiao-source-js](js.md)) | the class, `new Class(config)` | the class is always there | no, unless `static default = true` | `undefined` or `null` when it can run; anything else is the reason, as text |
+| Rhai ([guatiao-source-rhai](rhai.md)) | `create(config)`, the instance's state | the state is the configuration itself | yes, unless `instances_only` | `()` when it can run; text is the reason; anything else is unavailable, saying what it answered |
+| WebAssembly ([guatiao-source-wasm](wasm.md)) | the export `guatiao_guest_create`, an instance id | refuses the library | yes, unless declared `instances_only` | the export `guatiao_guest_available`: nothing when it can run, else the reason |
+
+In Lua, JavaScript and Rhai an error raised while answering `available`
+is unavailable, in its words. In all four, building an instance runs
+under the same limits as a call.
+
 The tables come from the kinds' descriptions, the same documents the
 bindings read. Core offers them to any Rust code, bridge or not, with no
 feature: `ServedTable` builds a table of a described kind over one
 handler, and `Caller` calls any table of one, so an engine can call an
-object it was handed or a provider a registry offers (`DescribedRemote`).
+object it was handed or a provider a registry offers (`DescribedRemote`),
+or an instance of one built from a configuration
+(`DescribedRemote::instantiate`).
 Both take the mechanism (`&Libffi`); another one, written against
 `guatiao::library::kind::Mechanism`, plugs in the same way.
 

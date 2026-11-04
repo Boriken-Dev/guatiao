@@ -357,9 +357,8 @@ write now.
   each distinct reason is kept as long as the provider's slots (64 at
   most). A `CSignature` says what it returns (`returns() -> CReturn`: a
   status, a C `bool`, or nothing) in place of `returns_status()`, and a
-  `Mechanism` honours it; `Libffi` does. The
-  Lua, Rhai, JavaScript and WebAssembly sources do not declare instances
-  yet.
+  `Mechanism` honours it; `Libffi` does. The Lua, JavaScript, Rhai and
+  WebAssembly sources declare both, each in its own terms.
 - **Go, R, Octave and Fortran run on 32-bit ARM too.** Each suite passes
   on armv7 under qemu-user (Go's examples and R and Octave with every
   greeter, Octave at its 8.4 floor). What that took: Go's `civil` package
