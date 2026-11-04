@@ -1994,6 +1994,9 @@ pub struct DescribedRemote {
     table: *const c_void,
     size: usize,
     ctx: *mut c_void,
+    /// For a remote over an instance it built: the provider's own `ctx`
+    /// and its `destroy`, called once on drop.
+    built: Option<(*mut c_void, Option<DestroyFn>)>,
     _hold: Hold,
 }
 
@@ -2056,8 +2059,28 @@ impl DescribedRemote {
             table,
             size,
             ctx: view.ctx,
+            built: None,
             _hold: view.hold.clone(),
         })
+    }
+
+    /// An instance of the provider built from `config`, called through its
+    /// table for `caller`'s kind: the run-time counterpart of
+    /// [`Offer::instantiate`]. The table is checked as [`new`](Self::new)
+    /// checks it before anything is built, `config` against the
+    /// provider's schema when it can be read; dropping the remote releases
+    /// the instance through the provider's `destroy`, once.
+    pub fn instantiate(
+        view: &ProviderView,
+        caller: Arc<Caller>,
+        config: &Value,
+    ) -> Result<DescribedRemote, InstantiateError> {
+        let mut remote = DescribedRemote::new(view, caller)
+            .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))?;
+        let instance = create_instance(view, config)?;
+        remote.built = Some((view.ctx, view.destroy));
+        remote.ctx = instance;
+        Ok(remote)
     }
 
     /// The kind this remote calls.
@@ -2101,6 +2124,17 @@ impl DescribedRemote {
             ProviderError::new(Status::GUATIAO_ERR_NOT_FOUND, "the kind has no such slot")
         })?;
         self.call(slot, args)
+    }
+}
+
+impl Drop for DescribedRemote {
+    fn drop(&mut self) {
+        if let Some((provider_ctx, Some(destroy))) = self.built {
+            // SAFETY: the instance came from this provider's `create` and
+            // is released once, here, while the hold, a field dropped
+            // after this, keeps the library.
+            unsafe { destroy(provider_ctx, self.ctx) };
+        }
     }
 }
 
