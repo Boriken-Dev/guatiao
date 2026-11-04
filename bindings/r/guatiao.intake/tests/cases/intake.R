@@ -137,3 +137,14 @@ case("a provider's form is its own, else the one its schema implies", with_libra
   close(form)
   expect_true(is.null(intake_provider_form(NULL, setNames(list("a form"), intake_provider_form_key))))
 }))
+
+case("a provider's form refuses a closed value cleanly", with_library({
+  meta <- value(list(other = 1L))
+  close(meta)
+  expect_error(intake_provider_form(list(type = "object"), meta), "guatiao_closed")
+  expect_error(intake_provider_form(meta, NULL), "guatiao_closed")
+  # and nothing is left broken for the next call
+  form <- intake_provider_form(list(type = "object"), NULL)
+  expect_true(!is.null(form))
+  close(form)
+}))
