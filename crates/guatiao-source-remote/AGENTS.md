@@ -258,7 +258,10 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   ends unless the policy sets `allow_resumption` (a weakening), so a peer
   removed from the store is refused at its next link; a resumed session
   (a mutual `wss://` too) runs no verifier, so the store and the list's
-  fingerprint rules are not asked again for it. A refusal names its
+  fingerprint rules are not asked again for it. A WebTransport listener
+  keeps a post-handshake check of the list's fingerprint rules
+  (`web::list_permits`) where resumption is on, so resumption does not
+  skip them there. A refusal names its
   reason, one wording for each of coqui-peer-tls's `Refusal`s (the
   list by address or by fingerprint, `rule N` counted in tens or `its
   default`; not pinned; not accepted; a chain where a pinned peer
@@ -419,11 +422,13 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   `FrameRead::set_max_frame`: a channel judges a message by the bound in
   force when it reads it off the socket, ahead of the reader, so a link
   raises it before it can be sent a large frame, on a server before its
-  reply to the HELLO goes and on either side before the link is returned,
-  not when the reader first asks. From a valid HELLO on, a peer can make
-  this side buffer one message up to `max_frame` before the link refuses
-  it; a stream never holds more than the handshake's bound before the
-  proof) and what it sends
+  reply to the HELLO goes (after the PROOF where one is read, so a
+  stranger cannot send a large message in its place; a client pipelining a
+  large call right after its PROOF may then get a clean `Protocol`) and on
+  either side before the link is returned, not when the reader first
+  asks. From a valid HELLO on, a peer can make this side buffer one
+  message up to `max_frame` before the link refuses it; a stream never
+  holds more than the handshake's bound before the proof) and what it sends
   (`set_max_send`, `FrameWrite::set_max_frame`, the peer's, known once the
   handshake agreed it); a frame past the peer's is refused by the writer
   (`InvalidInput`) and the reader keeps its own size check. A write waits
