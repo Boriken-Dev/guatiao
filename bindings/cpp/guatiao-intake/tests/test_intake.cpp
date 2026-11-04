@@ -152,9 +152,46 @@ void flat_store() {
   CHECK_NONE_LEFT("the flat store both ways");
 }
 
+void provider_forms() {
+  {
+    guatiao::value schema = MUST(guatiao::try_make(item::map({
+        {"type", "object"},
+        {"properties", item::map({{"user", item::map({{"type", "string"}, {"x-section", "account"}})},
+                                  {"token", item::map({{"type", "string"}, {"x-sensitive", true}})}})},
+    })));
+    guatiao::value declared = MUST(guatiao::try_make(
+        item::map({{"sections", item::list({item::map({{"id", "account"}, {"title", "Account"}})})}})));
+    guatiao::value meta = MUST(guatiao::try_make(item::map({{intake::provider_form_key, declared}, {"other", 1}})));
+
+    // The one a provider declares.
+    guatiao::value own = MUST(intake::try_provider_form(schema, meta));
+    CHECK(own == declared);
+
+    // None declared: the one its schema implies.
+    guatiao::value made = MUST(intake::try_provider_form(schema, guatiao::view{}));
+    CHECK(made["sections"].size() == 1 && made["sections"][0]["id"].string_or("") == "account");
+    CHECK(made["fields"]["token"]["widget"].string_or("") == "password");
+    guatiao::value other = MUST(guatiao::try_make(item::map({{"other", 1}})));
+    CHECK(MUST(intake::try_provider_form(schema, other)) == made);
+
+    // Nothing to show is not an error.
+    CHECK(MUST(intake::try_provider_form(guatiao::view{}, guatiao::view{})).is_absent());
+    CHECK(MUST(intake::try_provider_form(guatiao::view{}, other)).is_absent());
+
+    // What is not a form is skipped, as reading the key by hand skips it.
+    guatiao::value list_form = MUST(guatiao::try_make(
+        item::map({{intake::provider_form_key, item::list({"not", "a", "form"})}})));
+    CHECK(MUST(intake::try_provider_form(schema, list_form)) == made);
+    guatiao::value text_form = MUST(guatiao::try_make(item::map({{intake::provider_form_key, "a form"}})));
+    CHECK(MUST(intake::try_provider_form(guatiao::view{}, text_form)).is_absent());
+  }
+  CHECK_NONE_LEFT("a provider's form");
+}
+
 }  // namespace
 
 int main() {
+  provider_forms();
   forms();
   paths();
   flat_store();

@@ -34,6 +34,12 @@ A form is a value: a map of `sections` (a list, in display order) and
   "fields": [key, ...]}`, in order.
 - `for_schema(schema, alloc)`: the form a schema implies, for when nobody
   wrote one.
+- `provider_form(schema, meta, alloc)`: the form a provider's settings
+  are shown with, the one it declares in `meta` under
+  `provider_form_key`, else the one `schema` implies; either argument
+  an empty `view` or ABSENT (the `config` and `meta` of an entry
+  `registry::catalog` lists). What is not a map is skipped; ABSENT
+  when nothing is left to show.
 - `form_for(form, schema, path, alloc)`: the form to show a field with,
   the assigned one or the one its schema implies; ABSENT when neither.
 - `is_visible(schema, form, key, values)`: whether a field is shown given

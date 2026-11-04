@@ -254,6 +254,20 @@ class registry {
     guatiao_value out = detail::blank();
     return detail::answered(guatiao_registry_providers(r_, detail::str(kind), alloc_, &out), out, "no answer");
   }
+  /// Every provider of every loaded library, best first, with what a
+  /// settings screen shows about each, and none of them built: a list of
+  /// maps holding what `providers` does, plus `available` (asked now) and
+  /// `reason` when it cannot run, `config` (its schema) and `meta` when it
+  /// declares them, `library_key`, `library_version`, and `digest`
+  /// (`"sha256:"` and the hex of the file its library was mapped from, while
+  /// it is still that file, unchanged; absent for a library from no file) or
+  /// `digest_error` saying why not. The first call reads each library file in
+  /// full. `guatiao::intake::try_provider_form(entry["config"], entry["meta"])`
+  /// answers the form to show an entry with.
+  result<value> try_catalog() const {
+    guatiao_value out = detail::blank();
+    return detail::answered(guatiao_registry_catalog(r_, alloc_, &out), out, "no answer");
+  }
   /// One provider by the key it is filed under; NOT_FOUND for none.
   result<value> try_provider(std::string_view key) const {
     guatiao_value out = detail::blank();
@@ -385,6 +399,7 @@ class registry {
   value refresh() { return try_refresh().value(); }
   value libraries() const { return try_libraries().value(); }
   value providers(std::string_view kind = {}) const { return try_providers(kind).value(); }
+  value catalog() const { return try_catalog().value(); }
   value provider(std::string_view key) const { return try_provider(key).value(); }
   value available(std::string_view kind) const { return try_available(kind).value(); }
   value why_not(std::string_view kind) const { return try_why_not(kind).value(); }

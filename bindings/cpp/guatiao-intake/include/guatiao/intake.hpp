@@ -67,6 +67,22 @@ inline result<value> try_for_schema(view schema, const guatiao_alloc* alloc = de
   return detail::answer(guatiao_intake_for_schema(schema.raw(), alloc, &out), out, "no form");
 }
 
+/// The form a provider's settings are shown with: the one it declares in
+/// its `meta` under `provider_form_key`, or else the one its configuration
+/// `schema` implies (`try_for_schema`).
+///
+/// `schema` and `meta` are what the registry answers for the provider
+/// (`provider_config` and `provider_meta`, or `entry["config"]` and
+/// `entry["meta"]` of an entry `registry::try_catalog` lists); either may be
+/// an empty `view` or ABSENT. What is not a map is skipped, as reading the
+/// key by hand skips it. The answer is ABSENT when that leaves nothing to
+/// show: not an error. A declared form is not checked against the schema
+/// here; `try_check` does that.
+inline result<value> try_provider_form(view schema, view meta, const guatiao_alloc* alloc = default_alloc()) {
+  guatiao_value out = detail::blank();
+  return detail::answer(guatiao_intake_provider_form(schema.raw(), meta.raw(), alloc, &out), out, "no form");
+}
+
 /// The form to show the field at `path` with: the one `form` assigns, or
 /// the one its schema implies; ABSENT for a field with neither, or a path
 /// naming no field.
@@ -137,6 +153,9 @@ inline value layout(view schema, view form, const guatiao_alloc* alloc = default
 }
 inline value for_schema(view schema, const guatiao_alloc* alloc = default_alloc()) {
   return try_for_schema(schema, alloc).value();
+}
+inline value provider_form(view schema, view meta, const guatiao_alloc* alloc = default_alloc()) {
+  return try_provider_form(schema, meta, alloc).value();
 }
 inline value form_for(view form, view schema, std::string_view path, const guatiao_alloc* alloc = default_alloc()) {
   return try_form_for(form, schema, path, alloc).value();

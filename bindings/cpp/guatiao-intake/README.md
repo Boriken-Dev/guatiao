@@ -40,7 +40,7 @@ guatiao::value back = intake::unflatten(schema, "auth", flat);
 
 | Name | Purpose |
 | --- | --- |
-| `check`, `layout`, `for_schema`, `form_for`, `is_visible` | forms |
+| `check`, `layout`, `for_schema`, `provider_form`, `form_for`, `is_visible` | forms |
 | `at`, `resolve` | paths into a value and a schema |
 | `flat_keys`, `flatten`, `unflatten` | the flat store |
 
