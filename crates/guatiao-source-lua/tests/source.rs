@@ -581,15 +581,23 @@ local Word = {
   },
 }
 Word.__index = Word
-local made = 0
+-- Every instance built, weakly: one the engine let go is collected.
+local alive = setmetatable({}, { __mode = "k" })
 function Word:new(config)
   if config.word == "nobody" then return nil, "`nobody` greets nobody" end
   if config.word == "loop" then while true do end end
-  made = made + 1
-  return setmetatable({ word = config.word }, Word)
+  local instance = setmetatable({ word = config.word }, Word)
+  alive[instance] = true
+  return instance
 end
-function Word:greet(name) return { greeting = self.word .. ", " .. name } end
-function Word:made() return made end
+function Word:greet(name)
+  if name == "alive" then
+    local n = 0
+    for _ in pairs(alive) do n = n + 1 end
+    return { greeting = tostring(n) }
+  end
+  return { greeting = self.word .. ", " .. name }
+end
 
 local Only = {
   kinds = { "greeter" },
@@ -610,7 +618,14 @@ local Broken = { kinds = { "greeter" } }
 function Broken:available() error("the probe broke") end
 function Broken:greet(name) return { greeting = name } end
 
-return { _VERSION = "1.0.0", providers = { word = Word, only = Only, down = Down, broken = Broken } }
+local Yes = { kinds = { "greeter" } }
+function Yes:available() return true end
+function Yes:greet(name) return { greeting = name } end
+
+return {
+  _VERSION = "1.0.0",
+  providers = { word = Word, only = Only, down = Down, broken = Broken, yes = Yes },
+}
 "#;
 
 fn word(word: &str) -> guatiao::Value {
@@ -671,8 +686,22 @@ fn a_configured_provider_builds_instances_each_with_its_own_settings() {
         }
         other => panic!("stopped: {other:?}"),
     }
+    let alive = |offer: &guatiao::library::kind::Offer<dyn Greeter>| -> String {
+        greeting(
+            &offer
+                .default_instance()
+                .expect("itself")
+                .greet("alive")
+                .expect("counted"),
+        )
+        .to_string()
+    };
+    assert_eq!(alive(&offer), "2");
     drop(howdy);
+    assert_eq!(alive(&offer), "1", "the dropped instance was destroyed");
     assert_eq!(greeting(&hey.greet("di").expect("greeted")), "hey, di");
+    drop(hey);
+    assert_eq!(alive(&offer), "0");
 
     let only = registry
         .offer::<dyn Greeter>("lua_conf_only")
@@ -702,6 +731,10 @@ fn a_provider_says_whether_it_can_run_each_time_it_is_asked() {
     let broken = registry.provider("lua_avail_broken").expect("registered");
     let why = broken.available().unwrap_err();
     assert!(why.contains("the probe broke"), "{why}");
+    // Only nil is available: any other answer is a reason saying so.
+    let yes = registry.provider("lua_avail_yes").expect("registered");
+    let why = yes.available().unwrap_err();
+    assert!(why.contains("answered a boolean"), "{why}");
     // Without `available`, a provider is available.
     let plain = registry.provider("lua_avail_word").expect("registered");
     assert_eq!(plain.available(), Ok(()));
