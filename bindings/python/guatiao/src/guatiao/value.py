@@ -252,8 +252,10 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
         check(lib.guatiao_value_absent(ctypes.byref(raw)))
         return
     if isinstance(obj, Ref):
-        node = obj._require_node()
-        check(lib.guatiao_value_clone(ctypes.byref(alloc), ctypes.byref(node), ctypes.byref(raw)))
+        # Read while it is copied, so its value is not closed or changed
+        # on another thread meanwhile.
+        with _reading(obj) as node:
+            check(lib.guatiao_value_clone(ctypes.byref(alloc), node, ctypes.byref(raw)))
         return
     if isinstance(obj, bool):
         check(lib.guatiao_value_bool(bool(obj), ctypes.byref(raw)))
@@ -743,11 +745,8 @@ class Map(Ref):
         """Copies every entry of `src`, replacing collisions in place."""
         self._writable()
         alloc = self.owner._ensure_alloc()
-        check(
-            _lib.core().guatiao_map_copy_from(
-                ctypes.byref(alloc), self._ptr(), src._ptr()
-            )
-        )
+        with _reading(src) as source:
+            check(_lib.core().guatiao_map_copy_from(ctypes.byref(alloc), self._ptr(), source))
 
 
 class List(Ref):

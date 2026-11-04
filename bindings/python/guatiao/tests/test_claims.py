@@ -197,6 +197,27 @@ def test_a_read_refuses_a_close_or_change_on_another_thread_until_it_returns(mon
     other(v)
 
 
+_COPIES = {
+    "setitem": ("guatiao_value_clone", lambda into, w: into.as_map().__setitem__("copy", w.as_map()["k"])),
+    "append": ("guatiao_value_clone", lambda into, w: into.as_map()["items"].as_list().append(w.as_map()["k"])),
+    "Value": ("guatiao_value_clone", lambda into, w: Value(w.as_map()["k"]).close()),
+    "copy_from": ("guatiao_map_copy_from", lambda into, w: into.as_map().copy_from(w.as_map())),
+}
+
+
+@pytest.mark.parametrize("copy", sorted(_COPIES))
+def test_copying_from_another_value_refuses_its_close_on_another_thread(monkeypatch, copy):
+    name, use = _COPIES[copy]
+    into = Value({"items": []})
+    w = Value({"k": "v"})
+    seen = _racing(monkeypatch, _lib.core(), name, w, _close)
+    use(into, w)
+    assert seen == [BufferError]
+    monkeypatch.undo()
+    w.close()
+    into.close()
+
+
 def test_a_read_on_another_thread_while_a_value_changes_is_refused(monkeypatch):
     core = _lib.core()
     v = Value({"k": "v"})
