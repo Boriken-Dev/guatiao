@@ -11,7 +11,7 @@ program test_registry
   use harness
   use guatiao
   use guatiao_serde
-  use guatiao_loader, only: gt_library_file_names
+  use guatiao_loader, only: gt_library_file_names, gt_windows
   implicit none
 
   call setup()
@@ -26,6 +26,8 @@ program test_registry
   call a_sources_note_is_told_once()
   call a_closed_registry_refuses_use()
   call answers_in_the_registrys_allocator()
+  call the_catalog_lists_every_provider_of_a_directory_and_builds_none()
+  call a_catalog_names_why_a_library_has_no_digest()
   call finish('registry')
 
 contains
@@ -296,6 +298,136 @@ contains
     call providers%close()
     call check(counting_live(c) == before, 'and freed there')
     call reg%close()
+  end subroutine
+
+
+  ! The catalog library written in C, built into `folder` under the file
+  ! name a scan finds; '' without a C compiler.
+  function catalog_library(folder) result(file)
+    character(*), intent(in) :: folder
+    character(:), allocatable :: file
+    character(:), allocatable :: first, second
+    call gt_library_file_names('fortran_catalog_library', first, second)
+    file = build_c('catalog_library.c', folder // '/' // first)
+  end function
+
+  ! The catalog entry whose id is `id`, as a view into the list.
+  function entry_of(catalog, id) result(entry)
+    type(guatiao_value), intent(in) :: catalog
+    character(*), intent(in) :: id
+    type(guatiao_value) :: entry, found
+    integer :: i
+    do i = 1, catalog%length()
+      entry = catalog%item(i)
+      found = entry%key('id')
+      if (found%string_or('') == id) return
+    end do
+    call check(.false., 'the catalog lists ' // id)
+  end function
+
+  subroutine the_catalog_lists_every_provider_of_a_directory_and_builds_none()
+    type(guatiao_registry) :: reg
+    type(guatiao_instance) :: inst
+    type(guatiao_value) :: report, loaded, failed, catalog, e, f, config
+    character(:), allocatable :: file, digest, msg
+    integer :: st
+    file = catalog_library('build/catalog_a')
+    if (len(file) == 0) then
+      call skip('the C catalog library: no C compiler built it (set CC)')
+      return
+    end if
+    reg = guatiao_open_registry('catalog-host', '1.0')
+    call reg%scan_dir('build/catalog_a', answer=report)
+    loaded = report%key('loaded')
+    failed = report%key('failed')
+    call check(loaded%length() == 1 .and. failed%length() == 0, 'the library loads')
+    call reg%catalog(catalog)
+    call check(catalog%length() == 4, 'four providers are listed')
+    digest = 'sha256:' // sha256_of(file)
+    call check(len(digest) == 71, 'a digest was computed for the file')
+
+    e = entry_of(catalog, 'catalog_configured')
+    f = e%at('kinds', 1)
+    call check_text(f%string_or(''), 'counter', 'its kind')
+    f = e%key('display_name')
+    call check_text(f%string_or(''), 'Configured, with a form', 'its display name')
+    f = e%key('version')
+    call check_text(f%string_or(''), '2.0', 'its version')
+    f = e%key('library')
+    call check_text(f%string_or(''), 'catalog_library', 'its library')
+    f = e%key('library_version')
+    call check_text(f%string_or(''), '1.0', 'its library version')
+    f = e%key('digest')
+    call check_text(f%string_or(''), digest, 'the digest of the file')
+    f = e%key('available')
+    call check(f%bool_or(.false.), 'it runs here')
+    call check(.not. e%has('reason'), 'and says no reason')
+    f = e%at('config', 'required', 2)
+    call check_text(f%string_or(''), 'port', 'its schema, copied')
+    f = e%at('meta', 'form', 'sections', 1, 'title')
+    call check_text(f%string_or(''), 'Network', 'its form, in its meta')
+
+    e = entry_of(catalog, 'catalog_implied')
+    f = e%key('version')
+    call check_text(f%string_or(''), '1.0', 'the library''s version when it names none')
+    call check(.not. e%has('meta'), 'declaring no meta')
+    f = e%at('config', 'properties', 'token', 'x-sensitive')
+    call check(f%bool_or(.false.), 'a sensitive field')
+
+    e = entry_of(catalog, 'catalog_unavailable')
+    f = e%key('available')
+    call check(.not. f%bool_or(.true.), 'it cannot run')
+    f = e%key('reason')
+    call check_text(f%string_or(''), 'no device here', 'and says why')
+    call check(.not. e%has('config'), 'taking no configuration')
+    f = e%key('has_config')
+    call check(.not. f%bool_or(.true.), 'which has_config says')
+    e = entry_of(catalog, 'catalog_plain')
+    f = e%key('available')
+    call check(f%bool_or(.false.), 'a plain provider runs')
+
+    ! Listing asked the library for nothing: its count says so, and so does
+    ! its refusal of the first instance asked for afterwards.
+    call check(catalog_built(file) == 0, 'nothing was built by listing')
+    call guatiao_parse('{"host": "localhost", "port": 8080}', GUATIAO_FORMAT_JSON, config)
+    call reg%create('catalog_configured', config, inst, st, msg)
+    call check(st /= GUATIAO_OK, 'the first create is refused')
+    call check(index(msg, 'built nothing: the first create this library was asked') > 0, 'saying it was the first')
+    call check(catalog_built(file) == 1, 'and the count is one')
+    call reg%close()
+  end subroutine
+
+  subroutine a_catalog_names_why_a_library_has_no_digest()
+    type(guatiao_registry) :: reg
+    type(guatiao_value) :: catalog, e, f
+    character(:), allocatable :: file, first, second
+    integer :: i, u, code
+    file = catalog_library('build/catalog_b')
+    if (len(file) == 0) then
+      call skip('the C catalog library: no C compiler built it (set CC)')
+      return
+    end if
+    reg = guatiao_open_registry('catalog-host', '1.0')
+    call reg%load_file(file)
+    ! Another file at the path, before anything asked: renaming a mapped
+    ! file works on every platform, where overwriting one does not.
+    call gt_library_file_names('fortran_catalog_library', first, second)
+    if (gt_windows) then
+      call execute_command_line('move "build\catalog_b\' // first // '" "build\catalog_b\moved_away.bin" > NUL', exitstat=code)
+    else
+      call execute_command_line('mv build/catalog_b/' // first // ' build/catalog_b/moved_away.bin', exitstat=code)
+    end if
+    open (newunit=u, file=file, access='stream', form='unformatted', status='replace')
+    write (u) 'not the library'
+    close (u)
+    call reg%catalog(catalog)
+    call check(catalog%length() == 4, 'every provider is still listed')
+    do i = 1, catalog%length()
+      e = catalog%item(i)
+      call check(.not. e%has('digest'), 'no digest for a file that changed')
+      f = e%key('digest_error')
+      call check_text(f%string_or(''), 'the file changed since it was loaded', 'and the reason')
+    end do
   end subroutine
 
 end program test_registry

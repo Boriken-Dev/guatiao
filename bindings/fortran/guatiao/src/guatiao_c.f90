@@ -276,7 +276,7 @@ module guatiao_c
     character(len=8) :: feature
   end type
 
-  type(gt_export), parameter :: gt_core_exports(86) = [ &
+  type(gt_export), parameter :: gt_core_exports(87) = [ &
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
@@ -343,6 +343,7 @@ module guatiao_c
     gt_export('guatiao_registry_scan_path         ', 6, 'load'), &
     gt_export('guatiao_registry_libraries         ', 3, 'load'), &
     gt_export('guatiao_registry_providers         ', 4, 'load'), &
+    gt_export('guatiao_registry_catalog           ', 3, 'load'), &
     gt_export('guatiao_registry_provider          ', 4, 'load'), &
     gt_export('guatiao_registry_available         ', 4, 'load'), &
     gt_export('guatiao_registry_why_not           ', 4, 'load'), &
@@ -781,6 +782,13 @@ module guatiao_c
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
+    function guatiao_registry_catalog_i(reg, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: reg
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
     function guatiao_registry_providers_i(reg, kind, alloc, out) bind(c) result(r)
       import :: c_int32_t, c_ptr, gt_str
       type(c_ptr), value :: reg
@@ -1042,6 +1050,7 @@ module guatiao_c
   procedure(gt_scan_split), pointer :: gt_registry_scan_path_split => null()
   procedure(guatiao_registry_libraries_i), pointer :: gt_registry_libraries => null()
   procedure(guatiao_registry_providers_i), pointer :: gt_registry_providers => null()
+  procedure(guatiao_registry_catalog_i), pointer :: gt_registry_catalog => null()
   procedure(guatiao_registry_provider_i), pointer :: gt_registry_provider => null()
   procedure(guatiao_registry_available_i), pointer :: gt_registry_available => null()
   procedure(guatiao_registry_why_not_i), pointer :: gt_registry_why_not => null()
@@ -1137,6 +1146,7 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_path'), gt_registry_scan_path_split)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_libraries'), gt_registry_libraries)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_providers'), gt_registry_providers)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_catalog'), gt_registry_catalog)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider'), gt_registry_provider)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_available'), gt_registry_available)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_why_not'), gt_registry_why_not)

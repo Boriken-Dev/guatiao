@@ -253,7 +253,7 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 | `guatiao_kinds` | the helpers a kind's module writes its glue with |
 | `guatiao_serde` | `guatiao_parse` / `guatiao_emit` for JSON, TOML, YAML; `guatiao_visit` / `guatiao_emit_walker` into and out of your own types |
 | `guatiao_visitors` | `guatiao_visitor`, `guatiao_walker`, `guatiao_sink` |
-| `guatiao_intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
+| `guatiao_intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `provider_form`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths, `guatiao_normalize` |
 | `guatiao_c`, `guatiao_serde_c`, `guatiao_intake_c` | the C headers as `bind(c)` mirrors and procedure pointers |
 

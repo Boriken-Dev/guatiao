@@ -129,6 +129,14 @@ a configuration against the provider's schema and builds an instance;
 `add_source_file`, `watch_dir` and `refresh` keep libraries that come and
 go, the guatiao-source-py bridge serving Python modules among them.
 
+A settings screen lists every provider of every loaded library at once, none
+of them built, with `reg%catalog(list)` (a list of maps, best first: what
+`providers` holds plus availability, `config`, `meta`, the library's `digest`
+or a `digest_error`), and takes the form to show one with
+`guatiao_intake_provider_form(config, meta, form)`, where `config` and `meta`
+are the entry's `key('config')` and `key('meta')`; `form` is absent when the
+entry has nothing to show.
+
 ## As a provider
 
 ```fortran
