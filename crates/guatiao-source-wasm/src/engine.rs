@@ -139,7 +139,14 @@ pub struct WasmLibrary {
     module: Module,
     providers: Vec<String>,
     slot: Mutex<Slot>,
-    deferred: Mutex<Vec<u64>>,
+    deferred: Mutex<Vec<Gone>>,
+}
+
+/// What was let go of while the library was busy on the thread doing it.
+#[derive(Clone, Copy)]
+enum Gone {
+    Object(u64),
+    Instance(u64),
 }
 
 impl core::fmt::Debug for WasmLibrary {
@@ -151,20 +158,24 @@ impl core::fmt::Debug for WasmLibrary {
     }
 }
 
-/// The instance, made again after a stop, and the objects it answered:
-/// the host's id for each, and the guest's.
+/// The instance, made again after a stop, and the objects it answered
+/// and the instances it built: the host's id for each, and the guest's.
 struct Slot {
     live: Option<Live>,
     objects: BTreeMap<u64, i64>,
     next_object: u64,
+    instances: BTreeMap<u64, i64>,
+    next_instance: u64,
 }
 
 impl Slot {
     /// After a stop the guest's state is unknown: its instance goes, and
-    /// with it every object it answered and every host object it held.
+    /// with it every object it answered, every instance it built and
+    /// every host object it held.
     fn discard(&mut self) {
         self.live = None;
         self.objects.clear();
+        self.instances.clear();
     }
 }
 
@@ -281,12 +292,15 @@ fn shape(ty: &FuncType) -> String {
 /// Checks what a module exports and imports before any of its code runs;
 /// `metered` when the host's rewrite added the charge.
 fn check_shape(module: &Module, id: &str, metered: bool) -> Result<(), BridgeError> {
-    const WANTED: [(&str, &str, bool); 6] = [
+    const WANTED: [(&str, &str, bool); 9] = [
         (export::ABI, "() -> (i32)", true),
         (export::ALLOC, "(i32) -> (i32)", true),
         (export::DECLARE, "() -> (i32)", true),
         (export::CALL, "(i32, i64, i32, i32) -> (i32)", true),
         (export::RELEASE, "(i64) -> ()", false),
+        (export::CREATE, "(i64, i32, i32) -> (i32)", false),
+        (export::DESTROY, "(i64) -> ()", false),
+        (export::AVAILABLE, "(i64) -> (i32)", false),
         (export::INITIALIZE, "() -> ()", false),
     ];
     let refuse = |why: String| BridgeError::engine(format!("{id}: {why}"));
@@ -375,26 +389,60 @@ impl WasmEngine {
         Ok(slot.live.as_mut().expect("made just above"))
     }
 
-    /// Tells the guest one object it answered is gone.
-    fn release_in(&self, slot: &mut Slot, object: u64) {
-        let Some(guest) = slot.objects.remove(&object) else {
+    /// Tells the guest one object it answered, or one instance it built,
+    /// is gone. One that went with a discarded store reaches no guest.
+    fn let_go(&self, slot: &mut Slot, gone: Gone) {
+        let guest = match gone {
+            Gone::Object(id) => slot.objects.remove(&id),
+            Gone::Instance(id) => slot.instances.remove(&id),
+        };
+        let (Some(guest), Some(live)) = (guest, slot.live.as_mut()) else {
             return;
         };
-        if let Some(live) = slot.live.as_mut()
-            && live.release(&self.limits, guest).is_err()
-        {
+        let told = match gone {
+            Gone::Object(_) => live.release(&self.limits, guest),
+            Gone::Instance(_) => live.destroy(&self.limits, guest),
+        };
+        if told.is_err() {
             slot.discard();
         }
     }
 
-    /// Releases what was destroyed while the library was busy on this
+    /// Lets go of what was destroyed while the library was busy on this
     /// thread.
     fn settle(&self, lib: &WasmLibrary, slot: &mut Slot) {
-        let deferred: Vec<u64> =
+        let deferred: Vec<Gone> =
             core::mem::take(&mut *lib.deferred.lock().unwrap_or_else(PoisonError::into_inner));
-        for object in deferred {
-            self.release_in(slot, object);
+        for gone in deferred {
+            self.let_go(slot, gone);
         }
+    }
+
+    /// Lets go of `gone` now, or at the library's next entry when it is
+    /// busy and this thread is inside a call.
+    fn let_go_or_defer(&self, lib: &WasmLibrary, gone: Gone) {
+        match lib.enter() {
+            Some(mut entered) => self.let_go(&mut entered.slot, gone),
+            None => lib
+                .deferred
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(gone),
+        }
+    }
+
+    /// The position of the provider declared as `id`.
+    fn position(lib: &WasmLibrary, id: &str) -> Result<i64, ProviderError> {
+        lib.providers
+            .iter()
+            .position(|p| p == id)
+            .map(|at| at as i64)
+            .ok_or_else(|| {
+                ProviderError::new(
+                    Status::GUATIAO_ERR_NOT_FOUND,
+                    &format!("{} declares no provider `{id}`", lib.id),
+                )
+            })
     }
 
     /// The providers a guest declared, as the bridge serves them.
@@ -409,6 +457,15 @@ impl WasmEngine {
         for provider in declared {
             let pid = format!("{}_{}", id.replace('.', "_"), provider.id);
             let mut served = Provided::new(&pid).name(&provider.name);
+            if let Some(schema) = &provider.config {
+                served = served.config(schema.clone());
+            }
+            if provider.instances_only {
+                served = served.instances_only();
+            }
+            if provider.may_be_unavailable {
+                served = served.may_be_unavailable();
+            }
             for (kind, slots) in &provider.serves {
                 if !manifest.kinds().iter().any(|k| k == kind) {
                     return Err(BridgeError::engine(format!(
@@ -519,14 +576,31 @@ impl Engine for WasmEngine {
     /// call when the library is busy and this thread is inside a call.
     fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
         let _running = self.running();
-        with_stack(|| match lib.enter() {
-            Some(mut entered) => self.release_in(&mut entered.slot, object),
-            None => lib
-                .deferred
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(object),
-        });
+        with_stack(|| self.let_go_or_defer(lib, Gone::Object(object)));
+    }
+
+    /// `guatiao_guest_create`, under the limits as a call is.
+    fn create(
+        &self,
+        lib: &Arc<WasmLibrary>,
+        provider: &str,
+        config: &Value,
+    ) -> Result<u64, ProviderError> {
+        let _running = self.running();
+        with_stack(|| self.create_here(lib, provider, config))
+    }
+
+    /// Tells the guest its instance was dropped; deferred as `release` is.
+    fn destroy(&self, lib: &Arc<WasmLibrary>, instance: u64) {
+        let _running = self.running();
+        with_stack(|| self.let_go_or_defer(lib, Gone::Instance(instance)));
+    }
+
+    /// `guatiao_guest_available`, under the limits as a call is: a stop
+    /// or a refusal is unavailable, in its words.
+    fn available(&self, lib: &Arc<WasmLibrary>, provider: &str) -> Result<(), String> {
+        let _running = self.running();
+        with_stack(|| self.available_here(lib, provider)).map_err(|e| e.message().to_string())?
     }
 
     fn close(&self, lib: Arc<WasmLibrary>) {
@@ -583,6 +657,24 @@ impl WasmEngine {
         }
         let declared = abi::read_declaration(&answer, budget::of(&self.limits))
             .map_err(|why| BridgeError::engine(format!("{id}: {why}")))?;
+        let exports = |name: &str| module.exports().any(|e| e.name() == name);
+        for provider in &declared {
+            for (declares, needs, key) in [
+                (provider.config.is_some(), export::CREATE, "config"),
+                (
+                    provider.may_be_unavailable,
+                    export::AVAILABLE,
+                    "may_be_unavailable",
+                ),
+            ] {
+                if declares && !exports(needs) {
+                    return Err(BridgeError::engine(format!(
+                        "{id}: the provider `{}` declares `{key}`, and the module exports no `{needs}`",
+                        provider.id
+                    )));
+                }
+            }
+        }
         let (providers, ids) = self.provided(manifest, declared)?;
         Ok(Opened::Described {
             library: Arc::new(WasmLibrary {
@@ -593,6 +685,8 @@ impl WasmEngine {
                     live: Some(live),
                     objects: BTreeMap::new(),
                     next_object: 0,
+                    instances: BTreeMap::new(),
+                    next_instance: 0,
                 }),
                 deferred: Mutex::new(Vec::new()),
             }),
@@ -600,26 +694,119 @@ impl WasmEngine {
         })
     }
 
+    fn create_here(
+        &self,
+        lib: &WasmLibrary,
+        provider: &str,
+        config: &Value,
+    ) -> Result<u64, ProviderError> {
+        let position = Self::position(lib, provider)?;
+        let bytes = guatiao::value::wire::to_bytes(config).map_err(|e| {
+            ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                &format!("the configuration: {e}"),
+            )
+        })?;
+        let mut entered = lib.enter().ok_or_else(busy)?;
+        let slot = &mut *entered.slot;
+        self.settle(lib, slot);
+        let live = self.live(lib, slot)?;
+        let (status, answer) = match live.create(&self.limits, position, &bytes) {
+            Ok(done) => done,
+            Err(Stopped(e)) => {
+                let error = self.stopped(lib, &e, live.store.data());
+                slot.discard();
+                return Err(error);
+            }
+        };
+        if status != 0 {
+            return Err(instance::refused(&lib.id, status, answer));
+        }
+        // A status 0 whose answer is no id names nothing `destroy` could
+        // be told of: what the guest built stays in its memory until its
+        // store is made afresh.
+        let refused = |what: &str| {
+            ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                &format!(
+                    "{} built an instance of `{provider}` and answered {what}, not its id",
+                    lib.id
+                ),
+            )
+        };
+        let bytes = answer.ok_or_else(|| refused("nothing"))?;
+        let value = budget::decode(&bytes, budget::of(&self.limits))
+            .map_err(|_| refused("bytes that are not a value"))?;
+        let guest = i64::from_value(&value).map_err(|_| refused("something else"))?;
+        slot.next_instance += 1;
+        let id = slot.next_instance;
+        slot.instances.insert(id, guest);
+        Ok(id)
+    }
+
+    fn available_here(
+        &self,
+        lib: &WasmLibrary,
+        provider: &str,
+    ) -> Result<Result<(), String>, ProviderError> {
+        let position = Self::position(lib, provider)?;
+        let mut entered = lib.enter().ok_or_else(busy)?;
+        let slot = &mut *entered.slot;
+        self.settle(lib, slot);
+        let live = self.live(lib, slot)?;
+        let (status, answer) = match live.available(&self.limits, position) {
+            Ok(done) => done,
+            Err(Stopped(e)) => {
+                let error = self.stopped(lib, &e, live.store.data());
+                slot.discard();
+                return Err(error);
+            }
+        };
+        if status != 0 {
+            return Err(instance::refused(&lib.id, status, answer));
+        }
+        let Some(bytes) = answer else {
+            return Ok(Ok(()));
+        };
+        let unreadable = || {
+            ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                &format!(
+                    "{} answered whether `{provider}` runs with neither nothing nor a reason",
+                    lib.id
+                ),
+            )
+        };
+        let value = budget::decode(&bytes, budget::of(&self.limits)).map_err(|_| unreadable())?;
+        if matches!(value.tag(), Ok(guatiao::Tag::GUATIAO_NULL)) {
+            return Ok(Ok(()));
+        }
+        TryAsRef::<str>::try_as_ref(&value)
+            .map(|why| Err(why.to_string()))
+            .ok_or_else(unreadable)
+    }
+
     fn call_here(&self, lib: &WasmLibrary, call: &mut Call) -> Result<Reply, ProviderError> {
         let mut entered = lib.enter().ok_or_else(busy)?;
         let slot = &mut *entered.slot;
         self.settle(lib, slot);
         let (object, target) = match call.target() {
-            Target::Provider(id) => (
-                false,
-                lib.providers.iter().position(|p| p == id).ok_or_else(|| {
-                    ProviderError::new(
-                        Status::GUATIAO_ERR_NOT_FOUND,
-                        &format!("{} declares no provider `{id}`", lib.id),
-                    )
-                })? as i64,
-            ),
+            Target::Provider(id) => (0, Self::position(lib, id)?),
             Target::Object(id) => (
-                true,
+                1,
                 *slot.objects.get(id).ok_or_else(|| {
                     ProviderError::new(
                         Status::GUATIAO_ERR_GONE,
                         "the object went with the instance that answered it, which stopped",
+                    )
+                })?,
+            ),
+            Target::Instance(id) => (
+                2,
+                *slot.instances.get(id).ok_or_else(|| {
+                    ProviderError::new(
+                        Status::GUATIAO_ERR_GONE,
+                        "the instance went with the guest's store that built it, which stopped",
                     )
                 })?,
             ),

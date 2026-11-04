@@ -184,9 +184,22 @@ toolchain (`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`) with the
 ([`examples/wasm_greeter_go`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/wasm_greeter_go)).
 Both serve every slot of the example kinds and pass the same host tests.
 
+**Settings and availability.** A provider may be built from a
+configuration: it declares the configuration's JSON Schema, a host checks
+what it is given against it and builds instances (`instantiate` in Rust,
+the bindings' own call elsewhere), each answering with the state its
+configuration gave it. It may also be asked whether it can run now, and
+answer why not. In Rust, `Provider::config(schema, build)`,
+`Provider::instances(id, schema, build)` for one served only through its
+instances, and `.available(f)`; in Go, a `Provider`'s `Config`, `Build`,
+`InstancesOnly` and `Available`. Both examples have a `configured`
+greeter built from `{"word": "howdy"}`.
+
 **Any other language** that emits a core WebAssembly module speaks
-**guatiao ABI 1**: five exports (`guatiao_guest_abi`, `_alloc`, `_declare`,
-`_call`, and optionally `_release`) and five imports from `guatiao`
+**guatiao ABI 1**: its memory and four functions it must export
+(`guatiao_guest_abi`, `_alloc`, `_declare`, `_call`), four it may
+(`_release`, and `_create`, `_destroy` and `_available` for instances and
+availability), and five imports from `guatiao`
 (`answer`, `write_back`, `object_call`, `result`, `drop`), every value as
 its [wire encoding](encodings.md#values-on-the-wire) in the module's
 memory. A call is the wire list `[kind, method, arg...]`; its answer a
@@ -197,7 +210,8 @@ A module that imports anything else, beyond fifteen WASI preview-1
 functions that grant stdio, a clock and randomness, is refused before it
 runs.
 
-**Limits** are per call, opening included: `operations` (wasmtime's fuel),
+**Limits** are per call (a create, a destroy and an availability question
+each count as one), opening included: `operations` (wasmtime's fuel),
 `time_ms` and `memory`. A limit stops the call (`GUATIAO_ERR_INTERNAL`,
 `GUATIAO_ERR_ALLOC` for memory, "stopped at its operations limit
 (10000000)"); so does a trap, named with what the module last said. Either

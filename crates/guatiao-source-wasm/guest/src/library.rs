@@ -11,15 +11,39 @@ use alloc::vec::Vec;
 
 use guatiao::{List, Map, Value};
 
-use crate::call::Handler;
+use crate::call::{Answer, Call, Handler, Refusal};
+
+/// What builds an instance from its configuration.
+pub(crate) type Build = Box<dyn FnMut(Value) -> Result<Box<dyn Handler>, Refusal>>;
+
+/// What answers whether a provider can run now.
+pub(crate) type Available = Box<dyn FnMut() -> Result<(), String>>;
 
 /// One provider: an id unique in its library, a name for a person, the
-/// kinds it serves with the slots it answers, and its handler.
+/// kinds it serves with the slots it answers, and its handler; and, when
+/// it has them, what builds its instances and what says whether it runs.
 pub struct Provider {
     pub(crate) id: String,
     name: String,
     serves: Vec<(String, Vec<String>)>,
     pub(crate) handler: Box<dyn Handler>,
+    config: Option<Value>,
+    instances_only: bool,
+    pub(crate) build: Option<Build>,
+    pub(crate) available: Option<Available>,
+}
+
+/// The handler of a provider served only through its instances: the host
+/// never calls it.
+struct NotItself;
+
+impl Handler for NotItself {
+    fn call(&mut self, call: &mut Call) -> Result<Answer, Refusal> {
+        Err(Refusal::unsupported(alloc::format!(
+            "`{}` is called on an instance, not on the provider",
+            call.method()
+        )))
+    }
 }
 
 impl Provider {
@@ -31,7 +55,52 @@ impl Provider {
             name: String::new(),
             serves: Vec::new(),
             handler: Box::new(handler),
+            config: None,
+            instances_only: false,
+            build: None,
+            available: None,
         }
+    }
+
+    /// A provider served only through instances `build` makes from a
+    /// configuration fitting `schema`: [`config`](Provider::config) with
+    /// no provider to call as itself.
+    pub fn instances<H: Handler>(
+        id: &str,
+        schema: impl Into<Value>,
+        build: impl FnMut(Value) -> Result<H, Refusal> + 'static,
+    ) -> Provider {
+        let mut provider = Provider::new(id, NotItself).config(schema, build);
+        provider.instances_only = true;
+        provider
+    }
+
+    /// Builds instances from a configuration fitting `schema` (a JSON
+    /// Schema as a value, checked by the host first): `build` makes each
+    /// one's handler, which its calls reach until the host drops it. The
+    /// provider stays callable as itself.
+    #[must_use]
+    pub fn config<H: Handler>(
+        mut self,
+        schema: impl Into<Value>,
+        mut build: impl FnMut(Value) -> Result<H, Refusal> + 'static,
+    ) -> Provider {
+        self.config = Some(schema.into());
+        self.build = Some(Box::new(move |config| {
+            build(config).map(|h| Box::new(h) as Box<dyn Handler>)
+        }));
+        self
+    }
+
+    /// Asked whether it can run each time a host asks: `Err(words)` is the
+    /// reason it cannot. Without this it is always available.
+    #[must_use]
+    pub fn available(
+        mut self,
+        available: impl FnMut() -> Result<(), String> + 'static,
+    ) -> Provider {
+        self.available = Some(Box::new(available));
+        self
     }
 
     /// A name to show a person (default: its id).
@@ -71,6 +140,15 @@ impl Provider {
         };
         out.set("name", name.as_str());
         out.set("serves", serves);
+        if let Some(schema) = &self.config {
+            out.set("config", schema.clone());
+        }
+        if self.instances_only {
+            out.set("instances_only", true);
+        }
+        if self.available.is_some() {
+            out.set("may_be_unavailable", true);
+        }
         out
     }
 }
@@ -95,7 +173,8 @@ impl Library {
     }
 
     /// The declaration the host reads: `{"providers": [{"id", "name",
-    /// "serves": {kind: [slot, ..]}}, ..]}`.
+    /// "serves": {kind: [slot, ..]}, "config"?, "instances_only"?,
+    /// "may_be_unavailable"?}, ..]}`.
     pub(crate) fn declaration(&self) -> Value {
         let mut providers = List::new();
         for p in &self.providers {
