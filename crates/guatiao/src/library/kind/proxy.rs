@@ -433,36 +433,14 @@ impl<K: ?Sized + Kind> Instance<K> {
         view: &ProviderView,
         config: &Value,
     ) -> Result<Instance<K>, InstantiateError> {
-        let Some(create) = view.create else {
-            return Err(ProviderError::new(
-                Status::GUATIAO_ERR_NULL,
-                "this provider builds no instances; it is its one instance",
-            )
-            .into());
-        };
+        if view.create.is_none() {
+            return Err(no_create().into());
+        }
         // The table is validated first, so a provider whose table does not
         // fit `K` never builds an instance it would then have to destroy.
         let remote = Remote::<K>::from_view(view)
             .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))?;
-        if let Some(schema) = view.config.as_ref().and_then(SchemaRef::new) {
-            validate_map(schema, config)?;
-        }
-        let mut instance: *mut c_void = core::ptr::null_mut();
-        let mut err = ProviderError::none();
-        // SAFETY: the slot is the descriptor's own, read under its guard;
-        // `config` is a well-formed value; the out-slots are writable
-        // locals; the library is mapped for the call.
-        let status = unsafe { create(view.ctx, config, &mut instance, &mut err) };
-        if status != Status::GUATIAO_OK {
-            return Err(take_err(err, status).into());
-        }
-        if instance.is_null() {
-            return Err(ProviderError::new(
-                Status::GUATIAO_ERR_NULL,
-                "the provider answered OK and built nothing",
-            )
-            .into());
-        }
+        let instance = create_instance(view, config)?;
         Ok(Instance {
             remote: Remote {
                 ctx: instance,
@@ -483,6 +461,46 @@ impl<K: ?Sized + Kind> Instance<K> {
     pub fn ctx(&self) -> *mut c_void {
         self.remote.ctx
     }
+}
+
+/// What a provider with no `create` answers an `instantiate`.
+fn no_create() -> ProviderError {
+    ProviderError::new(
+        Status::GUATIAO_ERR_NULL,
+        "this provider builds no instances; it is its one instance",
+    )
+}
+
+/// An instance built through `view`'s `create` slot from `config`, after
+/// checking `config` against its schema when that can be read: never
+/// null. The caller releases it through `view`'s `destroy`.
+pub(crate) fn create_instance(
+    view: &ProviderView,
+    config: &Value,
+) -> Result<*mut c_void, InstantiateError> {
+    let Some(create) = view.create else {
+        return Err(no_create().into());
+    };
+    if let Some(schema) = view.config.as_ref().and_then(SchemaRef::new) {
+        validate_map(schema, config)?;
+    }
+    let mut instance: *mut c_void = core::ptr::null_mut();
+    let mut err = ProviderError::none();
+    // SAFETY: the slot is the descriptor's own, read under its guard;
+    // `config` is a well-formed value; the out-slots are writable
+    // locals; the library is mapped for the call.
+    let status = unsafe { create(view.ctx, config, &mut instance, &mut err) };
+    if status != Status::GUATIAO_OK {
+        return Err(take_err(err, status).into());
+    }
+    if instance.is_null() {
+        return Err(ProviderError::new(
+            Status::GUATIAO_ERR_NULL,
+            "the provider answered OK and built nothing",
+        )
+        .into());
+    }
+    Ok(instance)
 }
 
 impl<K: ?Sized + Kind> core::ops::Deref for Instance<K> {
