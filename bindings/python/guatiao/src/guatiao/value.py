@@ -407,6 +407,17 @@ class _Claims:
             self._readers -= 1
 
 
+def _claims_of(owner: Any) -> "_Claims | None":
+    """What holds `owner`'s tree: `owner` itself, or for a view that
+    borrows from a value (`_kept`, as `guatiao.ffi.borrow` answers), that
+    value; `None` for memory no claim covers."""
+    while not isinstance(owner, _Claims):
+        owner = getattr(owner, "_kept", None)
+        if owner is None:
+            return None
+    return owner
+
+
 def _changes(method: _F) -> _F:
     """A method changing its node's tree: the owning `Value` is claimed
     for it, so a `reveal()`, a read, a close or another change on another
@@ -431,8 +442,8 @@ def _reads(method: _F) -> _F:
 
     @functools.wraps(method)
     def reading(self: "Ref", *args: Any, **kwargs: Any) -> Any:
-        owner = self.owner
-        if not isinstance(owner, _Claims):
+        owner = _claims_of(self.owner)
+        if owner is None:
             return method(self, *args, **kwargs)
         owner._share()
         try:
@@ -447,8 +458,8 @@ def _reads(method: _F) -> _F:
 def _reading(ref: "Ref") -> Iterator[Any]:
     """A pointer to `ref`'s node, its owner read until the block ends: for
     a call that reads the tree."""
-    owner = ref.owner
-    if not isinstance(owner, _Claims):
+    owner = _claims_of(ref.owner)
+    if owner is None:
         yield ref._ptr()
         return
     owner._share()

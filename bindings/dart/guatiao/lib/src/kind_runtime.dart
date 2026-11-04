@@ -763,8 +763,9 @@ final class CallScope extends SlotCall {
     if (value is Ref) {
       ref = value;
       // Read for the call: a tree this call also lends is refused, and so
-      // are changing, freeing and lending it until the call returns.
-      final owner = ref.owner;
+      // are changing, freeing and lending it until the call returns. A
+      // view that borrows from a value marks that value.
+      final owner = markedOwnerOf(ref.owner);
       markBorrowed(owner);
       after(() => unmarkBorrowed(owner));
     } else {
@@ -796,7 +797,7 @@ final class CallScope extends SlotCall {
     // moves it: inside a reveal of it, the bytes being read. Until the call
     // ends, a reveal or change of it (a provider holding the value) is
     // refused as well, and so are borrowing it and lending it again.
-    final owner = ref.owner;
+    final owner = markedOwnerOf(ref.owner);
     checkUnrevealed(owner);
     markLent(owner);
     after(() => unmarkLent(owner));
