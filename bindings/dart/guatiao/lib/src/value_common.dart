@@ -49,9 +49,19 @@ final class RevealedBytes extends ListBase<int> {
 /// How many reveals of each owner's tree are running.
 final Expando<int> _revealing = Expando<int>('reveals running');
 
+/// How many calls each owner's tree is lent to.
+final Expando<int> _lending = Expando<int>('lends running');
+
 /// Runs [use] over [view], the bytes of a node of [owner]'s tree, refusing
-/// every change to and free of that tree until it returns.
+/// every change to and free of that tree until it returns. Throws while
+/// the tree is lent to a call, which may change it under the bytes.
 R revealBytes<R>(Object owner, Uint8List view, R Function(RevealedBytes) use) {
+  if ((_lending[owner] ?? 0) > 0) {
+    throw StateError(
+      'this value is lent to a call: it cannot be revealed until the call '
+      'returns',
+    );
+  }
   final bytes = RevealedBytes._(view);
   _revealing[owner] = (_revealing[owner] ?? 0) + 1;
   try {
@@ -63,8 +73,9 @@ R revealBytes<R>(Object owner, Uint8List view, R Function(RevealedBytes) use) {
   }
 }
 
-/// Throws while a reveal of [owner]'s tree runs: changing or freeing the
-/// tree then would move or free the bytes being read.
+/// Throws while a reveal of [owner]'s tree runs, or while the tree is
+/// lent to a call: changing or freeing the tree then would move or free
+/// the bytes being read, or what the call changes.
 void checkUnrevealed(Object owner) {
   if ((_revealing[owner] ?? 0) > 0) {
     throw StateError(
@@ -72,6 +83,23 @@ void checkUnrevealed(Object owner) {
       'until the call that lent the bytes returns',
     );
   }
+  if ((_lending[owner] ?? 0) > 0) {
+    throw StateError(
+      'this value is lent to a call: it cannot be changed, freed or lent '
+      'again until the call returns',
+    );
+  }
+}
+
+/// Marks [owner]'s tree lent to a call until [unmarkLent].
+void markLent(Object owner) {
+  _lending[owner] = (_lending[owner] ?? 0) + 1;
+}
+
+/// Ends what [markLent] began.
+void unmarkLent(Object owner) {
+  final left = (_lending[owner] ?? 1) - 1;
+  _lending[owner] = left == 0 ? null : left;
 }
 
 /// `guatiao_tag`: which arm of a value's payload is live.

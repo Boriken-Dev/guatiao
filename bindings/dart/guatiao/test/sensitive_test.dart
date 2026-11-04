@@ -63,6 +63,12 @@ final Pointer<guatiao_alloc> _watching = () {
 }();
 
 final class Keeper implements DartVault {
+  /// A value of the caller's that [touch] tries to read and change while
+  /// the caller has lent it, and what each attempt came to.
+  Value? captured;
+  String? revealed;
+  String? changed;
+
   @override
   Object? read(String key) => {'key': key, 'secret': _secret};
 
@@ -76,7 +82,22 @@ final class Keeper implements DartVault {
   String label() => 'keeper';
 
   @override
-  void touch(MapRef map) {}
+  void touch(MapRef map) {
+    final v = captured;
+    if (v == null) return;
+    try {
+      v.asMap()['token']!.reveal((bytes) => bytes[0]);
+      revealed = 'read';
+    } on StateError {
+      revealed = 'refused';
+    }
+    try {
+      v.asMap()['user'] = 'bob';
+      changed = 'changed';
+    } on StateError {
+      changed = 'refused';
+    }
+  }
 
   @override
   void keep(Value value) => value.close();
@@ -188,11 +209,34 @@ void main() {
     },
   );
 
+  test('a reveal through a borrowed view holds the value it reads', () {
+    final v = Value({'pin': _secret});
+    addTearDown(v.close);
+    final borrowed = Ref.borrowedFrom(v, () => v.asMap()['pin']!.node());
+    expect(
+      () => borrowed.reveal((bytes) {
+        v.asMap()['pin'] = 'y';
+        return bytes[0];
+      }),
+      throwsStateError,
+    );
+    expect(
+      () => borrowed.reveal((bytes) {
+        v.close();
+        return bytes[0];
+      }),
+      throwsStateError,
+    );
+    expect(v.isClosed, isFalse);
+    expect(_holds(borrowed, _secret), isTrue);
+  });
+
   group('a slot its kind marks sensitive', () {
     late DartVaultRemote vault;
     late int ctx;
+    late Keeper keeper;
     setUp(() {
-      final keeper = Keeper();
+      keeper = Keeper();
       ctx = hold(keeper);
       vault = DartVault.kind.remote(
         DartVault.kind.tableFor(keeper),
@@ -239,6 +283,19 @@ void main() {
       expect(plain.isSensitive, isTrue);
       vault.keep(secret);
       expect(secret.isAbsent, isTrue);
+    });
+
+    test('refuses a reveal or a change of a value while it is lent', () {
+      final plain = Value({'user': 'alice'});
+      addTearDown(plain.close);
+      plain.asMap()['token'] = _secret;
+      keeper.captured = plain;
+      vault.touch(plain.asMap());
+      expect(keeper.revealed, 'refused');
+      expect(keeper.changed, 'refused');
+      // Lent no longer: both go through.
+      plain.asMap()['token']!.reveal((bytes) => bytes[0]);
+      plain.asMap()['user'] = 'bob';
     });
 
     test('leaves a secret in a lent map in the wiping allocator', () {

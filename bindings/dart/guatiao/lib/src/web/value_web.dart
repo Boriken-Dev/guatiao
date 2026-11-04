@@ -27,6 +27,19 @@ abstract class ValueOwner {
 
 /// A root this binding reads but does not own. See [Ref.borrowed] and
 /// [Ref.borrowedFrom].
+/// What a reveal through [owner] counts against: the value a borrowed view
+/// keeps, whose change or close would free the bytes being read, else
+/// [owner] itself.
+Object _revealedAgainst(ValueOwner owner) {
+  var at = owner;
+  while (at is _BorrowedRoot) {
+    final kept = at.keep;
+    if (kept == null) break;
+    at = kept;
+  }
+  return at;
+}
+
 class _BorrowedRoot implements ValueOwner {
   _BorrowedRoot(this._root, {this.keep, this.find});
 
@@ -339,7 +352,7 @@ class Ref {
         final view = len == 0 || at.isNull
             ? Uint8List(0)
             : _m.data.buffer.asUint8List(at.value, len);
-        return revealBytes(owner, view, use);
+        return revealBytes(_revealedAgainst(owner), view, use);
       default:
         throw StateError('only a string, a number or bytes can be revealed');
     }

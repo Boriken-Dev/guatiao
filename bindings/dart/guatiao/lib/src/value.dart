@@ -37,6 +37,19 @@ abstract class ValueOwner {
 /// With a [keep] it holds that owner and refuses access once it is closed;
 /// with a [find] it asks for the node again on every access, so a tree that
 /// changed since is read as it is now, or not at all.
+/// What a reveal through [owner] counts against: the value a borrowed view
+/// keeps, whose change or close would free the bytes being read, else
+/// [owner] itself.
+Object _revealedAgainst(ValueOwner owner) {
+  var at = owner;
+  while (at is _BorrowedRoot) {
+    final kept = at.keep;
+    if (kept == null) break;
+    at = kept;
+  }
+  return at;
+}
+
 class _BorrowedRoot implements ValueOwner {
   _BorrowedRoot(this._root, {this.keep, this.find});
 
@@ -468,7 +481,7 @@ class Ref {
       _ => throw StateError('only a string, a number or bytes can be revealed'),
     };
     final view = len == 0 ? Uint8List(0) : at.asTypedList(len);
-    return revealBytes(owner, view, use);
+    return revealBytes(_revealedAgainst(owner), view, use);
   }
 
   bool get isAbsent => tag == Tag.absent;

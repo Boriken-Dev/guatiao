@@ -788,8 +788,13 @@ final class CallScope extends SlotCall {
     // changes would have nowhere to go.
     ref.owner.allocator;
     // The callee may grow or replace the tree, and the settle afterwards
-    // moves it: inside a reveal of it, the bytes being read.
-    checkUnrevealed(ref.owner);
+    // moves it: inside a reveal of it, the bytes being read. Until the call
+    // ends, a reveal or change of it (a provider holding the value) is
+    // refused as well.
+    final owner = ref.owner;
+    checkUnrevealed(owner);
+    markLent(owner);
+    after(() => unmarkLent(owner));
     final node = ref.requireNode();
     if (tag != null && node.ref.tag != tag.code) {
       throw ArgumentError('expected a ${tag.name}, got a ${ref.tag.name}');
