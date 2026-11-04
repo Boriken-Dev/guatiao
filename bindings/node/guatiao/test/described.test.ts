@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { WORD } from '../src/abi.js';
-import { BadValue, Registry } from '../src/index.js';
+import { BadValue, Registry, Value } from '../src/index.js';
 import { generate } from '../src/generate.js';
 import { Kind, type KindsDocument, type Remote, describeKinds, kind, kindOf, kindsOf, slot, t } from '../src/kinds.js';
 import { Provider, library } from '../src/provide.js';
@@ -66,7 +66,6 @@ describe('a kind loaded from its description', () => {
     expect(() => kindsOf({ name: 'k' } as never)).toThrow(/\{ kinds: \[\.\.\.\] \}/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'u128' }] }]))).toThrow(/k\.x argument 0: u128/);
     expect(() => kindsOf(one([{ name: 'x', answer: { type: 'str' } }]))).toThrow(/k\.x answer: an answer cannot be str/);
-    expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'list' }] }]))).toThrow(/a list is not borrowed/);
     expect(() => kindsOf(one([{ name: 'x', args: [{ type: 'object', kind: 'nowhere', pass: 'lent' }] }]))).toThrow(
       /no kind nowhere/,
     );
@@ -213,6 +212,45 @@ class Leaf {
     return other.label().length;
   }
 }
+
+/** A list lent read-only for the call, as a map is. */
+const SUMMER: KindsDocument = {
+  kinds: [
+    {
+      name: 'summer',
+      floor_hash: 2920396019,
+      object: false,
+      slots: [{ name: 'sum', required: true, fallible: true, args: [{ name: 'items', type: 'list', pass: 'borrowed' }], answer: { type: 'i64' } }],
+    },
+  ],
+};
+
+describe('a list passed borrowed', () => {
+  it('is read by the callee, which cannot change it, and stays the caller\'s', () => {
+    const { summer } = kindsOf(SUMMER);
+    expect(describeKinds([summer!])).toEqual(SUMMER);
+    const refused: string[] = [];
+    class Adds extends Provider {
+      static override readonly kinds = [summer as never];
+      sum(items: { toJS(): unknown; push(...v: unknown[]): number }): bigint {
+        try {
+          items.push(0);
+        } catch (e) {
+          refused.push((e as Error).message);
+        }
+        return (items.toJS() as number[]).reduce((a, b) => a + BigInt(b), 0n);
+      }
+    }
+    using reg = new Registry('summer', '0.1');
+    reg.registerLibrary(library('adds', '1.0', { providers: [Adds] }));
+    const adds = reg.bind('adds_adds', summer!) as unknown as { sum(items: unknown): bigint };
+    expect(adds.sum([40, 2])).toBe(42n);
+    using held = new Value([1, 2, 3]);
+    expect(adds.sum(held)).toBe(6n);
+    expect(held.toJS()).toEqual([1, 2, 3]);
+    expect(refused).toEqual(['a borrowed value is read-only', 'a borrowed value is read-only']);
+  });
+});
 
 describe('a kind that names itself through its slots', () => {
   it('loads, is described as given, and its objects answer objects of itself', () => {

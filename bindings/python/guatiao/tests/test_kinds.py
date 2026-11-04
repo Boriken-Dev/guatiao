@@ -157,8 +157,8 @@ def test_a_description_that_is_not_one_is_refused_naming_where():
         kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "u128"}]}]))
     with pytest.raises(TypeError, match="answer cannot be 'str'"):
         kinds.kinds_of(one([{"name": "x", "answer": {"type": "str"}}]))
-    with pytest.raises(TypeError, match="a list is not borrowed"):
-        kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "list", "pass": "borrowed"}]}]))
+    borrowed = kinds.kinds_of(one([{"name": "x", "args": [{"name": "a", "type": "list", "pass": "borrowed"}]}]))
+    assert borrowed["k"].methods[0].args[0] is LIST
     loop = {
         "name": "node",
         "floor_hash": 2,
@@ -242,10 +242,10 @@ def test_what_no_trait_declares_is_refused_with_no_description_and_no_library():
         class Opener(KindProtocol, Protocol, kind="opener", floor_hash=7):
             def open(self) -> Listener: ...
 
-    with pytest.raises(TypeError, match="a list is not borrowed"):
+    class Summer(KindProtocol, Protocol, kind="summer", floor_hash=7):
+        def sum(self, items: List) -> kinds.I64: ...
 
-        class Summer(KindProtocol, Protocol, kind="summer", floor_hash=7):
-            def sum(self, items: List) -> kinds.I64: ...
+    assert Summer.kind.methods[0].args[0] is LIST
 
     fine = Kind("k", floor_hash=1, methods=[Method("open", [lent(memo)], memo, fallible=True)])
     assert fine.method("open").fallible
@@ -616,6 +616,7 @@ PROBE = Kind(
         Method("take", [taken(MAP)], MAP, fallible=True),
         Method("grow", [lent(MAP)], fallible=True),
         Method("push", [lent(LIST)]),
+        Method("total", [LIST], I64, fallible=True),
         Method("boom", [], fallible=True),
         Method("refuse", [], fallible=True),
         Method("keep", [MAP], fallible=True),
@@ -628,6 +629,7 @@ class Prober:
     def __init__(self) -> None:
         self.kept = None
         self.taken = None
+        self.refused = None
 
     def add(self, a, b):
         return a + b
@@ -667,6 +669,14 @@ class Prober:
 
     def push(self, items):
         items.append("more")
+
+    def total(self, items):
+        total = sum(items.to_python())
+        try:
+            items.append(0)
+        except TypeError as e:
+            self.refused = str(e)
+        return total
 
     def boom(self):
         raise ValueError("on purpose")
@@ -721,6 +731,11 @@ def test_trees_cross_in_every_mode(probe):
     with Value(["a"]) as items:
         remote.push(items)
         assert items.to_python() == ["a", "more"]
+    assert remote.total([40, 2]) == 42
+    assert target.refused == "a borrowed value is read-only"
+    with Value([1, 2, 3]) as borrowed:
+        assert remote.total(borrowed) == 6
+        assert borrowed.to_python() == [1, 2, 3]
 
 
 def test_a_view_kept_past_its_call_raises(probe):
@@ -782,11 +797,6 @@ def test_a_kind_class_refuses_what_has_no_shape_when_it_is_written() -> None:
 
         class Bare(KindProtocol, Protocol, kind="bare", floor_hash=1):
             def take(self, listener: Listener) -> None: ...
-
-    with pytest.raises(TypeError, match="a list is not borrowed"):
-
-        class Borrowed(KindProtocol, Protocol, kind="borrowed", floor_hash=1):
-            def take(self, items: List) -> None: ...
 
     with pytest.raises(TypeError, match="annotation"):
 
