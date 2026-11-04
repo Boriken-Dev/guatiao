@@ -1141,16 +1141,21 @@ static void served_body(served_job *j) {
   int ok = gt_call_m_quiet("guatiao.internal.dispatch", 1, &res, 5, in, msg, sizeof msg);
   for (int i = 0; i < 5; i++) mxDestroyArray(in[i]);
   if (!ok) {
+    release_handed(j);
     j->status = GUATIAO_ERR_INTERNAL;
     snprintf(j->msg, sizeof j->msg, "%s", msg);
     return;
   }
-  if (!res || !mxIsCell(res) || mxGetNumberOfElements(res) < 2) {
+  if (!res || !mxIsCell(res) || mxGetNumberOfElements(res) < 4) {
+    release_handed(j);
     j->status = GUATIAO_ERR_INTERNAL;
     snprintf(j->msg, sizeof j->msg, "the dispatcher answered something else");
     if (res) mxDestroyArray(res);
     return;
   }
+  /* The dispatcher says whether it took what was handed over; when it
+   * answered before it knew the slot, it did not. */
+  if (!mxGetScalar(mxGetCell(res, 3))) release_handed(j);
   j->status = (guatiao_status)mxGetScalar(mxGetCell(res, 0));
   const mxArray *m = mxGetCell(res, 1);
   j->msg[0] = '\0';
@@ -1162,7 +1167,7 @@ static void served_body(served_job *j) {
     gt_scratch_release(&tmp);
   }
   /* A lent buffer is written back with what the method left in it. */
-  const mxArray *bufs = mxGetNumberOfElements(res) > 2 ? mxGetCell(res, 2) : NULL;
+  const mxArray *bufs = mxGetCell(res, 2);
   for (int k = 0; k < sl->nargs && bufs && mxIsCell(bufs) && (int)mxGetNumberOfElements(bufs) == sl->nargs; k++) {
     if (sl->args[k] != S_LENT_BYTES) continue;
     guatiao_bytes_mut bm = *(guatiao_bytes_mut *)j->args[1 + k];

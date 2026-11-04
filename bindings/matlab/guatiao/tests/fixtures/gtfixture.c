@@ -395,6 +395,24 @@ static int dispatch(const char *cmd, int nlhs, mxArray *plhs[], int nrhs, const 
     plhs[0] = mxCreateDoubleScalar((double)st);
     return 1;
   }
+  if (!strcmp(cmd, "put_two")) {
+    /* put_two(table, ctx) -> the status of a pocket2's put(label, a, b):
+     * two listeners of this file's handed over */
+    if (nrhs < 3 || !addr(prhs[1])) return 0;
+    typedef guatiao_status (*put_fn)(void *ctx, guatiao_str label, guatiao_object a, guatiao_object b,
+                                     guatiao_provider_error *err);
+    put_fn put;
+    memcpy(&put, (const char *)addr(prhs[1]) + sizeof(guatiao_kind_header), sizeof put);
+    guatiao_object a = {&FX_LISTENER, sizeof FX_LISTENER, &listeners_destroyed};
+    guatiao_object b = {&FX_LISTENER, sizeof FX_LISTENER, &listeners_destroyed};
+    guatiao_provider_error err;
+    memset(&err, 0, sizeof err);
+    guatiao_str label = {(const uint8_t *)"x", 1};
+    guatiao_status st = put(addr(prhs[2]), label, a, b, &err);
+    if (err.message.cap) err.message.alloc->free(err.message.alloc->ctx, (void *)err.message.ptr, err.message.cap, 1);
+    plhs[0] = mxCreateDoubleScalar((double)st);
+    return 1;
+  }
   if (!strcmp(cmd, "listeners_destroyed")) {
     /* listeners_destroyed() -> how many of this file's listeners were destroyed */
     plhs[0] = mxCreateDoubleScalar((double)listeners_destroyed);
