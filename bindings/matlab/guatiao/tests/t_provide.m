@@ -17,6 +17,7 @@ function cases = t_provide()
     'a map handed over and kept is all the provider''s own', @kept_handed_over
     'nothing crosses when an argument is refused before the call', @refused_before
     'a call refused at one handed-over argument still takes the others', @refused_handed
+    'a call whose wrapping fails still lets go of everything handed over', @wrapping_fails
     'an instance per configuration, closed when its host destroys it', @configured
     'create builds nothing when it has nowhere to put the instance', @create_null_out
     'a provider says why it cannot run here', @availability
@@ -227,6 +228,23 @@ function refused_handed()
   st = guatiao.serving(@() gtfixture('put_refused', t.table, t.ctx));
   expect_equal(st, 7, 'refused as text that is not UTF-8');
   expect_equal(gtfixture('listeners_destroyed'), gone + 1, 'the listener destroyed');
+end
+
+function wrapping_fails()
+  if ~gt_env('fixture')
+    skip_case('no compiler built the gtfixture MEX file');
+  end
+  reg = preg();
+  reg.register_library(guatiao.Library('m_pocket2', '0.1.0', {'gtt.Pockets2'}));
+  t = reg.provider_table('m_pocket2_pockets2', 'pocket2');
+  remotes = guatiao_mex('handles', 5);
+  owners = guatiao_mex('handles', 1);
+  gone = gtfixture('listeners_destroyed');
+  st = guatiao.serving(@() gtfixture('put_two', t.table, t.ctx));
+  expect_true(st ~= 0, 'refused: the first listener cannot be wrapped');
+  expect_equal(gtfixture('listeners_destroyed'), gone + 2, 'both listeners destroyed');
+  expect_equal(guatiao_mex('handles', 5), remotes, 'no remote left filed');
+  expect_equal(guatiao_mex('handles', 1), owners, 'no owner left filed');
 end
 
 function configured()
