@@ -17,11 +17,12 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import decimal
+import functools
 import math
 import threading
 import weakref
 from collections.abc import Mapping
-from typing import Any, Iterator, Protocol, Union
+from typing import Any, Callable, Iterator, Protocol, TypeVar, Union, cast
 
 from . import _abi, _lib
 from .errors import check, raise_for_status
@@ -320,6 +321,33 @@ def wiping_alloc() -> "_abi.Alloc":
     return _lib.core().wiping_alloc
 
 
+# What a `Value` is claimed for while one operation has its tree: a reveal,
+# and every other claim, is refused until it ends.
+_CLOSING = "being closed"
+_WIPING = "being wiped"
+_HANDING = "being handed over"
+_CHANGING = "being changed"
+_LENT = "lent to a call"
+
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _changes(method: _F) -> _F:
+    """A method changing its node's tree: the owning `Value` is claimed
+    for it, so a `reveal()`, a close or another change on another thread
+    waits for nothing and is refused instead of reading what it frees."""
+
+    @functools.wraps(method)
+    def changing(self: "Ref", *args: Any, **kwargs: Any) -> Any:
+        owner = self.owner
+        if not isinstance(owner, Value):
+            return method(self, *args, **kwargs)
+        with owner._claimed(_CHANGING):
+            return method(self, *args, **kwargs)
+
+    return cast(_F, changing)
+
+
 class _Owner(Protocol):
     """What a `Ref` walks from: a root node, and whether and how it may
     be read and changed. A `Value` is one; so is every view a call or a
@@ -406,8 +434,8 @@ class Ref:
                 yield view
             return
         with owner._lock:
-            if owner._ending:
-                raise BufferError("this value is being closed, wiped or handed over")
+            if owner._busy is not None:
+                raise BufferError(f"this value is {owner._busy}: it cannot be revealed now")
             storage = self._revealable()
             holder = None if storage.len == 0 else _revealed(owner, storage.ptr, storage.len)
         if holder is None:
@@ -528,6 +556,7 @@ class Map(Ref):
             raise KeyError(key)
         return Ref(self.owner, self.path + (key,))
 
+    @_changes
     def __setitem__(self, key: str, value: Any) -> None:
         self._writable()
         alloc = self.owner._ensure_alloc()
@@ -543,6 +572,7 @@ class Map(Ref):
         finally:
             _free(tmp)
 
+    @_changes
     def __delitem__(self, key: str) -> None:
         self._writable()
         key_view, _buf = _make_str(key.encode("utf-8"))
@@ -568,10 +598,12 @@ class Map(Ref):
         for key in self.keys():
             yield key, self[key]
 
+    @_changes
     def clear(self) -> None:
         self._writable()
         check(_lib.core().guatiao_map_clear(self._ptr()))
 
+    @_changes
     def copy_from(self, src: Ref) -> None:
         """Copies every entry of `src`, replacing collisions in place."""
         self._writable()
@@ -613,6 +645,7 @@ class List(Ref):
         index = self._checked_index(index)
         return Ref(self.owner, self.path + (index,))
 
+    @_changes
     def __delitem__(self, index: int) -> None:
         self._writable()
         index = self._checked_index(index)
@@ -622,6 +655,7 @@ class List(Ref):
         for i in range(len(self)):
             yield Ref(self.owner, self.path + (i,))
 
+    @_changes
     def append(self, value: Any) -> None:
         self._writable()
         alloc = self.owner._ensure_alloc()
@@ -632,6 +666,7 @@ class List(Ref):
         finally:
             _free(tmp)
 
+    @_changes
     def clear(self) -> None:
         self._writable()
         check(_lib.core().guatiao_list_clear(self._ptr()))
@@ -666,6 +701,7 @@ class List(Ref):
         for tmp in elements:
             check(lib.guatiao_list_push(ctypes.byref(alloc), self._ptr(), ctypes.byref(tmp)))
 
+    @_changes
     def __setitem__(self, index: int, value: Any) -> None:
         self._writable()
         elements = self._cloned_elements()
@@ -681,6 +717,7 @@ class List(Ref):
         finally:
             _free_all(elements)
 
+    @_changes
     def insert(self, index: int, value: Any) -> None:
         self._writable()
         elements = self._cloned_elements()
@@ -718,10 +755,14 @@ class Value(Ref):
         self._alloc_override = alloc
         # The holders of views `reveal()` answered that are still alive.
         self._reveals: "weakref.WeakValueDictionary[int, Any]" = weakref.WeakValueDictionary()
-        # Held while a reveal is recorded or the tree is claimed to be
-        # freed or moved, so the two never interleave across threads.
+        # Held while a reveal is recorded or the tree is claimed, so the two
+        # never interleave across threads. `_busy` says what has the tree
+        # (`_CLOSING`, `_CHANGING`, ...), `_busy_by` which thread, and
+        # `_depth` how many changes that thread has nested.
         self._lock = threading.Lock()
-        self._ending = False
+        self._busy: "str | None" = None
+        self._busy_by = 0
+        self._depth = 0
         self._closed = False
         Ref.__init__(self, self, ())
         if obj is _UNSET and not fields:
@@ -752,20 +793,33 @@ class Value(Ref):
         self._check_open()
         self._check_unrevealed()
 
-    @contextlib.contextmanager
-    def _ending_tree(self) -> Iterator[None]:
-        """Claims the tree for an operation that frees or moves all of
-        it: refused while a view `reveal()` answered lives, and a
-        `reveal()` on another thread is refused until it is done, so none
-        reads what it frees."""
+    def _claim(self, what: str) -> None:
+        """Claims the tree for `what` until `_release()`: `BufferError`
+        while a view `reveal()` answered lives or another claim holds it,
+        except a change nested in a change on the same thread."""
         with self._lock:
             self._check_open()
+            if self._busy is not None:
+                if what == _CHANGING == self._busy and self._busy_by == threading.get_ident():
+                    self._depth += 1
+                    return
+                raise BufferError(f"this value is {self._busy}: it cannot be {what} now")
             self._check_unrevealed()
-            self._ending = True
+            self._busy, self._busy_by, self._depth = what, threading.get_ident(), 1
+
+    def _release(self) -> None:
+        with self._lock:
+            self._depth -= 1
+            if self._depth == 0:
+                self._busy = None
+
+    @contextlib.contextmanager
+    def _claimed(self, what: str) -> Iterator[None]:
+        self._claim(what)
         try:
             yield
         finally:
-            self._ending = False
+            self._release()
 
     def _ensure_alloc(self) -> "_abi.Alloc":
         if self._alloc_override is not None:
@@ -780,20 +834,30 @@ class Value(Ref):
         allocator each part lives, then frees it: this value is null
         afterwards. What a secret built outside the wiping allocator needs
         before it goes; one built there is wiped by `close()` as well."""
-        with self._ending_tree():
+        with self._claimed(_WIPING):
             check(_lib.core().guatiao_value_wipe(ctypes.byref(self._raw)))
 
     def close(self) -> None:
         """Frees the tree, wiping what lives in the wiping allocator.
         `BufferError` while a view `reveal()` answered, or a slice of one,
-        lives."""
+        lives, or while the value is lent to a call, changed, wiped, handed
+        over or closed on another thread."""
         if getattr(self, "_closed", True):
             return
-        with self._ending_tree():
-            try:
-                _lib.core().guatiao_value_free(ctypes.byref(self._raw))
-            finally:
+        with self._lock:
+            if self._closed:
+                return
+            if self._busy is not None:
+                raise BufferError(f"this value is {self._busy}: it cannot be closed now")
+            self._check_unrevealed()
+            self._busy, self._busy_by, self._depth = _CLOSING, threading.get_ident(), 1
+        try:
+            _lib.core().guatiao_value_free(ctypes.byref(self._raw))
+        finally:
+            # Closed before the claim ends, so nothing claims a freed tree.
+            with self._lock:
                 self._closed = True
+                self._busy, self._depth = None, 0
 
     def __del__(self) -> None:
         # A view still alive here is in a cycle being collected, or the

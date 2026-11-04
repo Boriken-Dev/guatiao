@@ -126,6 +126,10 @@ class Keeper:
     # Whether `touch` keeps a slice of the lent map's token, and the slice.
     peek = False
     kept: "memoryview | None" = None
+    # A value of the caller's `touch` tries to reveal and change while the
+    # caller has lent it, and what each attempt came to.
+    captured: "Value | None" = None
+    outcomes: "list[str]" = []
 
     def read(self, key: str) -> ValueAnswer:
         return {"key": key, "secret": SECRET}
@@ -137,6 +141,18 @@ class Keeper:
         return "keeper"
 
     def touch(self, map: Map) -> None:
+        if self.captured is not None:
+            self.outcomes = []
+            try:
+                with self.captured.as_map()["token"].reveal():
+                    self.outcomes.append("revealed")
+            except BufferError:
+                self.outcomes.append("refused")
+            try:
+                self.captured.as_map()["user"] = "bob"
+                self.outcomes.append("changed")
+            except BufferError:
+                self.outcomes.append("refused")
         if self.peek:
             with map["token"].reveal() as view:
                 self.kept = view[:]
@@ -373,3 +389,82 @@ def test_a_reveal_on_another_thread_while_a_value_ends_is_refused(monkeypatch, e
     else:
         secret.wipe()
     assert seen == [BufferError]
+
+
+@pytest.mark.parametrize("second", ["close", "wipe"])
+def test_a_value_is_freed_once_when_two_threads_end_it(monkeypatch, second):
+    # The other thread ends the value while this one frees it: refused, and
+    # the tree is freed once.
+    core = _lib.core()
+    real = core.guatiao_value_free
+    secret = Value(SECRET, alloc=wiping_alloc())
+    frees: "list[int]" = []
+    seen: "list[object]" = []
+
+    def other() -> None:
+        try:
+            getattr(secret, second)()
+            seen.append("ended")
+        except BufferError:
+            seen.append(BufferError)
+
+    def racing(ptr: object) -> int:
+        frees.append(1)
+        if len(frees) == 1:
+            thread = threading.Thread(target=other)
+            thread.start()
+            thread.join()
+        return int(real(ptr))
+
+    monkeypatch.setattr(core, "guatiao_value_free", racing)
+    monkeypatch.setattr(core, "guatiao_value_wipe", racing)
+    secret.close()
+    assert seen == [BufferError]
+    assert len(frees) == 1
+    secret.close()  # closed once, and closing again is nothing
+
+
+def test_a_value_is_not_revealed_while_another_thread_changes_it(monkeypatch):
+    core = _lib.core()
+    real = core.guatiao_map_set
+    secret = Value({"token": SECRET}, alloc=wiping_alloc())
+    seen: "list[object]" = []
+
+    def reveal() -> None:
+        try:
+            with secret.as_map()["token"].reveal() as view:
+                seen.append(view.tobytes())
+        except BufferError as e:
+            seen.append(type(e))
+
+    def racing(*args: object) -> int:
+        if not seen:
+            thread = threading.Thread(target=reveal)
+            thread.start()
+            thread.join()
+        return int(real(*args))
+
+    monkeypatch.setattr(core, "guatiao_map_set", racing)
+    secret.as_map()["user"] = "alice"
+    assert seen == [BufferError]
+    secret.close()
+
+
+def test_a_value_lent_to_a_call_is_not_revealed_or_changed_by_a_provider_holding_it():
+    keeper = Keeper()
+    raw = _serve.serve(PlainVault.kind, keeper)
+    try:
+        vault = PlainVault.kind.bind(raw.table, raw.size, raw.ctx)
+        plain = Value({"user": "alice"})
+        plain.as_map()["token"] = Value(SECRET, alloc=wiping_alloc())
+        keeper.captured = plain
+        vault.touch(plain.as_map())
+        assert keeper.outcomes == ["refused", "refused"]
+        keeper.captured = None
+        # Lent no longer: both go through.
+        with plain.as_map()["token"].reveal() as view:
+            assert view.tobytes() == SECRET.encode()
+        plain.as_map()["user"] = "bob"
+        plain.close()
+    finally:
+        _serve.release(raw.ctx)

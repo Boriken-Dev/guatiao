@@ -546,8 +546,11 @@ other.wipe()                             # any Value: overwritten, freed, left n
   ends; `TypeError` for any other node. The view and every slice of it
   hold the value alive, and while any lives `close()`, `wipe()`, handing
   the value to a slot, lending it and every change to it raise
-  `BufferError`; so does a `reveal()` on another thread while the value
-  is being closed, wiped or handed over. Of a node a call lends or
+  `BufferError`. Each of those claims the value under its lock for as long
+  as it runs (a lend for the whole call), and while one holds it a
+  `reveal()`, a close, a wipe and any other claim raise `BufferError`,
+  from any thread: a provider holding a value its caller lent can neither
+  reveal nor change it, and two threads ending one value free it once. Of a node a call lends or
   borrows (a provider's argument), the view is over a copy in the wiping
   allocator, wiped when its last view and slice go. A slice in a
   reference cycle holds the value until the cycle is collected; one alive
