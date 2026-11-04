@@ -1300,6 +1300,35 @@ building a `Refreshed` or a `SourceInfo` by hand adds `notes: Vec::new()` or
 `notes: None`
 ([what a note is](encodings.md#a-sources-note)).
 
+### A JavaScript provider unavailable at open is listed, and asked each time
+
+Under guatiao-source-js, a provider whose `static available()` answered a
+reason when its library opened was left out of the library, and a host
+never saw it. Now it is listed, and `static available()` is asked each
+time a host asks (`available()` in Rust, `guatiao_registry_provider_available`
+in C, `Registry.provider_available` in Python), as the Node binding asks
+it. The method is written the same way; what changes is when it runs, so
+make it cheap, and let it answer from what the provider knows now rather
+than from what it knew when the library loaded.
+
+Before:
+
+```text
+// Asked once, as the library opened: a reason left the provider out.
+static available() { return deviceFound ? undefined : 'no device'; }
+```
+
+Now:
+
+```js
+// Asked whenever a host asks: the provider is listed either way, and a
+// host reads the reason before it uses it.
+static available() { return findDevice() ? undefined : 'no device'; }
+```
+
+A host that took a listed JavaScript provider to be one that runs asks
+first: `registry.available("greeter")` in Rust lists only those that can.
+
 ### The source crates are `guatiao-source-<kind>`, and manifests are `<name>.guatiao`
 
 No release carried the source crates or their manifests: this is for a
