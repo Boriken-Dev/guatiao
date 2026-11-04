@@ -33,17 +33,41 @@ use crate::prelude::{self, Core};
 use crate::served::{self, Outcome, ReadBack};
 use crate::values;
 
-/// One library opened: its context, its providers by id, and the objects
-/// its slots answered, by the id each was given.
+/// One library opened: its context, its providers by id, the instances
+/// hosts built of them and the objects its slots answered, each by the id
+/// it was given.
 struct Library {
-    providers: BTreeMap<String, Persistent<Object<'static>>>,
+    providers: BTreeMap<String, Served>,
+    instances: RefCell<BTreeMap<u64, Persistent<Object<'static>>>>,
     objects: RefCell<BTreeMap<u64, Persistent<Object<'static>>>>,
     entry: Entry,
 }
 
+/// A provider class as a library serves it.
+#[derive(Clone)]
+struct Served {
+    /// The class, whose statics are asked `available()` and whose
+    /// constructor builds an instance.
+    class: Persistent<Object<'static>>,
+    /// Its `static config`, an `s` schema whose `build` makes the
+    /// configuration a constructor receives.
+    config: Option<Persistent<Object<'static>>>,
+    /// `new Class()`, which a call on the provider as itself reaches; none
+    /// for a class only built from a configuration.
+    itself: Option<Persistent<Object<'static>>>,
+}
+
 /// What a library's module declares: the providers it offers, and each
-/// one's instance by id.
-type Declared = (Vec<Provided>, BTreeMap<String, Persistent<Object<'static>>>);
+/// one as it is served, by id.
+type Declared = (Vec<Provided>, BTreeMap<String, Served>);
+
+/// What a handle the host lets go of named: an object a slot answered or
+/// an instance a host built.
+#[derive(Clone, Copy)]
+enum Kept {
+    Object,
+    Instance,
+}
 
 /// The engine: one QuickJS runtime, on the bridge's thread for the life of
 /// the source. Not `Send`.
@@ -54,9 +78,10 @@ pub struct JsEngine {
     frames: Frames,
     libraries: RefCell<BTreeMap<u64, Rc<Library>>>,
     next: Cell<u64>,
-    /// Objects released while a frame was open: their cleanup is script,
-    /// which may not run inside another script's frame, so it waits.
-    deferred: RefCell<Vec<(u64, u64)>>,
+    /// Objects released and instances destroyed while a frame was open:
+    /// their cleanup is script, which may not run inside another script's
+    /// frame, so it waits.
+    deferred: RefCell<Vec<(u64, Kept, u64)>>,
     /// A collection a closed library asked for while a frame was open.
     collect_due: Cell<bool>,
     /// Last, so that it outlives everything that holds a value in it.
@@ -218,8 +243,8 @@ impl JsEngine {
                 break;
             }
             drop(dead);
-            for (library, object) in released {
-                self.release_now(library, object);
+            for (library, kept, id) in released {
+                self.release_now(library, kept, id);
             }
             if collect {
                 self.runtime.run_gc();
@@ -227,11 +252,15 @@ impl JsEngine {
         }
     }
 
-    fn release_now(&self, handle: u64, object: u64) {
+    fn release_now(&self, handle: u64, kept: Kept, id: u64) {
         let Ok(lib) = self.library(handle) else {
             return;
         };
-        let Some(gone) = lib.objects.borrow_mut().remove(&object) else {
+        let held = match kept {
+            Kept::Object => &lib.objects,
+            Kept::Instance => &lib.instances,
+        };
+        let Some(gone) = held.borrow_mut().remove(&id) else {
             return;
         };
         let _ = self.meter.run::<(), BridgeError>(|| {
@@ -414,9 +443,7 @@ impl JsEngine {
         let mut offered = Vec::new();
         let mut providers = BTreeMap::new();
         for (_, class) in classes {
-            let Some((declared, instance)) = self.declare(ctx, manifest, &core, &class)? else {
-                continue;
-            };
+            let (declared, served) = self.declare(ctx, manifest, &core, &class)?;
             let key = declared.id().to_string();
             if providers.contains_key(&key) {
                 return Err(BridgeError::engine(format!(
@@ -424,20 +451,19 @@ impl JsEngine {
                 )));
             }
             offered.push(declared);
-            providers.insert(key, Persistent::save(ctx, instance));
+            providers.insert(key, served);
         }
         Ok((offered, providers))
     }
 
-    /// What a provider class declares, checked, and its one instance;
-    /// `None` when it says it cannot run here.
+    /// What a provider class declares, checked, and how it is served.
     fn declare<'js>(
         &self,
         ctx: &Ctx<'js>,
         manifest: &Manifest,
         core: &Core<'js>,
         class: &Constructor<'js>,
-    ) -> Result<Option<(Provided, Object<'js>)>, BridgeError> {
+    ) -> Result<(Provided, Served), BridgeError> {
         let id = manifest.id();
         let words = self.words();
         let failed = |e: rquickjs::Error| {
@@ -452,29 +478,50 @@ impl JsEngine {
             Ok(v.as_string().and_then(|s| s.to_string().ok()))
         };
         let class_name = text("name")?.unwrap_or_default();
-        let defined = |key: &str| -> Result<bool, BridgeError> {
+        let stated = |key: &str| -> Result<Option<Js<'js>>, BridgeError> {
             let v: Js<'js> = statics.get(key).map_err(failed)?;
-            Ok(!v.is_undefined() && !v.is_null())
+            Ok((!v.is_undefined() && !v.is_null()).then_some(v))
         };
-        for key in ["config", "configSchema"] {
-            if defined(key)? {
-                return Err(BridgeError::engine(format!(
-                    "{id}: {class_name} declares `{key}`: a provider built from a configuration is not served here"
-                )));
-            }
+
+        // `static config` (an `s` schema) or `static configSchema` (a raw
+        // JSON Schema): built from a configuration, as the Node binding builds it.
+        let config = match stated("config")? {
+            Some(config) => Some(is_schema(&config).ok_or_else(|| {
+                BridgeError::engine(format!(
+                    "{id}: {class_name}.config is a schema made with s; say a raw JSON Schema with configSchema"
+                ))
+            })?),
+            None => None,
+        };
+        let schema = match (stated("configSchema")?, &config) {
+            (Some(raw), _) => Some(raw),
+            (None, Some(config)) => Some(config.get::<_, Js<'js>>("json").map_err(failed)?),
+            (None, None) => None,
+        };
+        let schema = schema
+            .map(|schema| {
+                values::to_value(core, &schema).map_err(|e| {
+                    BridgeError::engine(format!(
+                        "{id}: {class_name}: its configuration's schema: {e}"
+                    ))
+                })
+            })
+            .transpose()?;
+        let callable = match stated("default")? {
+            Some(v) => v.get::<rquickjs::Coerced<bool>>().map_err(failed)?.0,
+            None => schema.is_none(),
+        };
+        if !callable && schema.is_none() {
+            return Err(BridgeError::engine(format!(
+                "{id}: {class_name} sets `default` false and is built from no configuration"
+            )));
         }
 
-        // `static available()`: a reason it cannot run is the provider left out.
+        // `static available()`, when the class has its own, is asked each
+        // time a host asks.
         let available: Function<'js> = statics.get("available").map_err(failed)?;
         let base: Function<'js> = core.provider.get("available").map_err(failed)?;
-        if available.as_value() != base.as_value() {
-            let why: Js<'js> = available
-                .call((rquickjs::function::This(class.clone()),))
-                .map_err(failed)?;
-            if why.as_string().is_some() {
-                return Ok(None);
-            }
-        }
+        let asks_available = available.as_value() != base.as_value();
 
         let named = text("named")?.unwrap_or_else(|| snake(&class_name));
         let provider_id = text("id")?.unwrap_or_else(|| format!("{id}_{named}"));
@@ -544,9 +591,40 @@ impl JsEngine {
             })?;
             declared = declared.meta(map);
         }
-        let instance: Object<'js> = class.construct(()).map_err(failed)?;
-        Ok(Some((declared, instance)))
+        if let Some(schema) = schema {
+            declared = declared.config(schema);
+            if !callable {
+                declared = declared.instances_only();
+            }
+        }
+        if asks_available {
+            declared = declared.may_be_unavailable();
+        }
+        let itself = if callable {
+            let instance: Object<'js> = class.construct(()).map_err(failed)?;
+            Some(Persistent::save(ctx, instance))
+        } else {
+            None
+        };
+        let class_object: Object<'js> = statics.clone();
+        Ok((
+            declared,
+            Served {
+                class: Persistent::save(ctx, class_object),
+                config: config.map(|c| Persistent::save(ctx, c)),
+                itself,
+            },
+        ))
     }
+}
+
+/// `value` as an `s` schema: an object with a `build` function and a
+/// `json` object, as the Node binding's `isSchema` reads one.
+fn is_schema<'js>(value: &Js<'js>) -> Option<Object<'js>> {
+    let object = value.as_object()?;
+    let build: Js<'js> = object.get("build").ok()?;
+    let json: Js<'js> = object.get("json").ok()?;
+    (build.is_function() && json.is_object()).then(|| object.clone())
 }
 
 fn words_of(error: ProviderError) -> String {
@@ -670,12 +748,34 @@ impl Engine for JsEngine {
     /// The object goes; its `Symbol.dispose`, if it has one, runs first,
     /// when no script is running.
     fn release(&self, handle: &u64, object: u64) {
-        if self.frames.inside() {
-            self.deferred.borrow_mut().push((*handle, object));
-        } else {
-            self.release_now(*handle, object);
-            self.leave();
-        }
+        self.let_go(*handle, Kept::Object, object);
+    }
+
+    /// `new Class(made)`, `made` the configuration as plain data, or what
+    /// the class's `s` schema builds from it.
+    fn create(
+        &self,
+        handle: &u64,
+        provider: &str,
+        config: &guatiao::Value,
+    ) -> Result<u64, ProviderError> {
+        let answer = self.create_inside(*handle, provider, config);
+        self.leave();
+        answer
+    }
+
+    /// The instance goes as an object does: its `Symbol.dispose`, if it
+    /// has one, runs first, when no script is running.
+    fn destroy(&self, handle: &u64, instance: u64) {
+        self.let_go(*handle, Kept::Instance, instance);
+    }
+
+    /// The class's `static available()`: `undefined` or `null` is
+    /// available, anything else the reason as text; a throw its words.
+    fn available(&self, handle: &u64, provider: &str) -> Result<(), String> {
+        let answer = self.available_inside(*handle, provider);
+        self.leave();
+        answer
     }
 
     fn close(&self, handle: u64) {
@@ -690,6 +790,106 @@ impl Engine for JsEngine {
 }
 
 impl JsEngine {
+    fn let_go(&self, handle: u64, kept: Kept, id: u64) {
+        if self.frames.inside() {
+            self.deferred.borrow_mut().push((handle, kept, id));
+        } else {
+            self.release_now(handle, kept, id);
+            self.leave();
+        }
+    }
+
+    fn served(lib: &Library, provider: &str) -> Result<Served, ProviderError> {
+        lib.providers.get(provider).cloned().ok_or_else(|| {
+            ProviderError::new(
+                Status::GUATIAO_ERR_NOT_FOUND,
+                &format!("no provider `{provider}`"),
+            )
+        })
+    }
+
+    fn create_inside(
+        &self,
+        handle: u64,
+        provider: &str,
+        config: &guatiao::Value,
+    ) -> Result<u64, ProviderError> {
+        let lib = self.library(handle)?;
+        let served = Self::served(&lib, provider)?;
+        let words = self.words();
+        let made = Cell::new(None);
+        let answer = self.meter.run(|| {
+            self.enter(&lib.entry, |ctx| {
+                let core = prelude::core(&ctx, self.shared.bounds)
+                    .map_err(|e| errors::caught(&ctx, None, &e, words))?;
+                let caught = |e: rquickjs::Error| errors::caught(&ctx, Some(&core), &e, words);
+                let class: Object<'_> = served.class.clone().restore(&ctx).map_err(caught)?;
+                let class = class.into_value().into_constructor().ok_or_else(|| {
+                    ProviderError::new(
+                        Status::GUATIAO_ERR_INTERNAL,
+                        "the class is not a constructor",
+                    )
+                })?;
+                let plain = values::to_js(&core, &ctx, config)
+                    .map_err(|e| errors::conversion(&ctx, Some(&core), &e, words))?;
+                let built = match &served.config {
+                    Some(schema) => {
+                        let schema = schema.clone().restore(&ctx).map_err(caught)?;
+                        let build: Function<'_> = schema.get("build").map_err(caught)?;
+                        build
+                            .call((rquickjs::function::This(schema), plain))
+                            .map_err(caught)?
+                    }
+                    None => plain,
+                };
+                let instance: Object<'_> = class.construct((built,)).map_err(caught)?;
+                let id = self.next.get() + 1;
+                self.next.set(id);
+                lib.instances
+                    .borrow_mut()
+                    .insert(id, Persistent::save(&ctx, instance));
+                made.set(Some(id));
+                Ok(id)
+            })
+        });
+        if answer.is_err()
+            && let Some(id) = made.get()
+        {
+            // Built by a call a limit stopped: nobody was told of it.
+            drop(lib.instances.borrow_mut().remove(&id));
+        }
+        answer
+    }
+
+    fn available_inside(&self, handle: u64, provider: &str) -> Result<(), String> {
+        let lib = self.library(handle).map_err(|e| words(&e))?;
+        let served = Self::served(&lib, provider).map_err(|e| words(&e))?;
+        let reason = self.meter.run(|| {
+            self.enter(&lib.entry, |ctx| {
+                let words = self.words();
+                let core = prelude::core(&ctx, self.shared.bounds)
+                    .map_err(|e| errors::caught(&ctx, None, &e, words))?;
+                // A `GuatiaoError` thrown is its message alone, as Node reads it.
+                let caught = |e: rquickjs::Error| errors::caught(&ctx, Some(&core), &e, words);
+                let class: Object<'_> = served.class.clone().restore(&ctx).map_err(caught)?;
+                let available: Function<'_> = class.get("available").map_err(caught)?;
+                let why: Js<'_> = available
+                    .call((rquickjs::function::This(class),))
+                    .map_err(caught)?;
+                if why.is_undefined() || why.is_null() {
+                    return Ok(None);
+                }
+                let text = why.get::<rquickjs::Coerced<String>>().map_err(caught)?.0;
+                Ok::<_, ProviderError>(Some(text))
+            })
+        });
+        match reason {
+            Ok(None) => Ok(()),
+            Ok(Some(why)) => Err(why),
+            Err(e) => Err(words(&e)),
+        }
+    }
+
     fn forget_roots(&self, entry: &Entry) {
         let _ = self.meter.run::<(), BridgeError>(|| {
             self.enter(entry, |ctx| self.roots.forget(&ctx));
@@ -753,6 +953,7 @@ impl JsEngine {
             handle,
             Rc::new(Library {
                 providers,
+                instances: RefCell::new(BTreeMap::new()),
                 objects: RefCell::new(BTreeMap::new()),
                 entry: entry_point,
             }),
@@ -766,8 +967,9 @@ impl JsEngine {
     fn call_inside(&self, handle: u64, call: &mut Call) -> Result<Reply, ProviderError> {
         let lib = self.library(handle)?;
         let receiver = match call.target() {
-            Target::Provider(id) => lib.providers.get(id).cloned(),
+            Target::Provider(id) => lib.providers.get(id).and_then(|p| p.itself.clone()),
             Target::Object(id) => lib.objects.borrow().get(id).cloned(),
+            Target::Instance(id) => lib.instances.borrow().get(id).cloned(),
             _ => None,
         }
         .ok_or_else(|| {
