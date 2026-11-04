@@ -103,14 +103,12 @@ SEXP C_intake_for_schema(SEXP schema) {
   return api->value_new(&out, api->binding_alloc, R_NilValue);
 }
 
-/* Either argument may be R's NULL: it reaches the library as no value. */
+/* Either argument may be R's NULL: it builds a null node, which is no form. */
 SEXP C_intake_provider_form(SEXP schema, SEXP meta) {
   guatiao_value ts, tm, out;
   set_absent(&out);
-  set_absent(&ts);
-  set_absent(&tm);
-  const guatiao_value *s = schema == R_NilValue ? NULL : api->tree_arg(schema, &ts);
-  const guatiao_value *m = meta == R_NilValue ? NULL : api->tree_arg(meta, &tm);
+  const guatiao_value *s, *m;
+  api->tree_args(schema, &ts, &s, meta, &tm, &m, R_NilValue, NULL, NULL);
   guatiao_status st = INTAKE(guatiao_intake_provider_form)(s, m, api->binding_alloc, &out);
   api->free(&ts);
   api->free(&tm);
