@@ -14,6 +14,18 @@ write now.
 
 ### Added
 
+- **A kind slot takes a list borrowed, as it takes a map.**
+  `#[guatiao::kind]` accepts a `&List` argument, a `const guatiao_list *`
+  the callee reads for the call (null refused), its floor hash spelling it
+  `&List`; a description says `"type": "list", "pass": "borrowed"`, which
+  the library's reader and every binding take: Python's `LIST` and a
+  `List` annotation, Node's `t.list` and `ListRef`, Dart's `ListRef`
+  (`dart run guatiao:kind` writes it), Go's `ListRef` or a slice not
+  marked `taken` (and `-header` on `const guatiao_list *`), Julia's
+  `ListRef`, R's and MATLAB's `"list"`, the Fortran writer's
+  `guatiao_borrowed_list`, C++'s `list_view`. The shared floor-hash
+  vectors list it (`provider;sum(&List)->i64`, 2920396019); no existing
+  kind's hash changes.
 - **Lua providers built from a configuration, and asked whether they
   run; Lua hosts build them.** A provider table with a `config` (a JSON
   Schema as a table) and a `new` is built by any host's `instantiate`:
@@ -1796,8 +1808,7 @@ write now.
   header too, not only from its own interfaces.
 - **The library's reader refuses the rest of what the kind attribute
   refuses.** A description passing or answering an `object` on a slot
-  that is not `fallible`, passing a `list` `borrowed`, or naming a slot
-  `header` is refused where it says so, by `guatiao_kind_document_read`,
+  that is not `fallible`, or naming a slot `header`, is refused where it says so, by `guatiao_kind_document_read`,
   `guatiao_kind_floor_hash` and a provider's carried document, and so
   through every describer; Node's `kind()` and `kindsOf`, Python's
   `Kind`, Go's `-header`, Julia's `@kind`, R's `kind()`, MATLAB's and
@@ -1805,7 +1816,7 @@ write now.
   a kind without the library, refuse them themselves, and Julia's, R's
   and MATLAB's declarations now refuse `bytes_mut` on a kind that is not
   an object kind too. The kind attribute words an object on a slot that
-  cannot fail, and a `&List` argument, as refusals of their own.
+  cannot fail as a refusal of its own.
 - **A kind needs a slot, and a slot names each argument once.** The
   library's reader, and every binding that builds a kind without it,
   refuse a kind with no slot (an object kind with only `destroy` too) and

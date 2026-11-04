@@ -602,7 +602,7 @@ a file beside the header (`include/<crate>.kinds.json`):
 | `bytes` | `guatiao_bytes`, the caller's | -- |
 | `bytes_mut` | `guatiao_bytes_mut`, the caller's memory, written in place (object kinds only) | -- |
 | `text` | -- | `guatiao_string *`: owned text |
-| `value`, `map`, `list` | `pass` says how: `borrowed` (`const guatiao_value *` / `const guatiao_map *`, never a list; a borrowed `value` may be null when `nullable` is true), `taken` (a non-`const` pointer to a tree the callee then owns) or `lent` (a non-`const` pointer to the caller's tree, for the call) | `guatiao_value *` / `guatiao_map *` / `guatiao_list *`, holding a carrier: the answer is built in the allocator it names |
+| `value`, `map`, `list` | `pass` says how: `borrowed` (`const guatiao_value *` / `const guatiao_map *` / `const guatiao_list *`, read for the call; a borrowed `value` may be null when `nullable` is true), `taken` (a non-`const` pointer to a tree the callee then owns) or `lent` (a non-`const` pointer to the caller's tree, for the call) | `guatiao_value *` / `guatiao_map *` / `guatiao_list *`, holding a carrier: the answer is built in the allocator it names |
 | `object` | `kind` names an object kind; `pass` is `taken` (`guatiao_object` by value: the callee owns it) or `lent` (`const guatiao_object *`, for the call); on a fallible slot only | `guatiao_object *`: the caller owns it; on a fallible slot only |
 
 A `kind` an argument or answer names is found in the same document, or
@@ -622,8 +622,8 @@ or `object` and every slot in table order, optional ones too, each as
 `name(arguments)->answer` spelled as Rust spells them, joined by `;`
 (`provider;greet(&str)->Result<Map,ProviderError>;shout(&str)->String`).
 An argument is `&str`, `&[u8]`, `&mut[u8]`, a scalar's name, a tree as
-`&Value`, `Option<&Value>` (nullable), `&mutMap` (lent) or `List`
-(taken), an object as `Object<dynK>` (taken) or `&mutdynK` (lent), where
+`&Value`, `&Map` or `&List` (borrowed), `Option<&Value>` (nullable),
+`&mutMap` (lent) or `List` (taken), an object as `Object<dynK>` (taken) or `&mutdynK` (lent), where
 `K` is the kind's name in PascalCase (split at every character that is
 not an ASCII letter or digit); an answer is a scalar, `String`, a tree's
 name, `Object<dynK>` or `()`; a fallible one is
@@ -639,8 +639,7 @@ provider's carried document), as `#[guatiao::kind]` refuses to declare
 it: a kind with no slot (an object kind's `destroy` alone included), a
 slot named twice or named `header` (the table's first field), an object
 kind's `destroy`, an argument named twice in one slot, `bytes_mut` on a
-kind that is not an object kind,
-a `list` passed `borrowed` (a list is lent or taken), and an `object`
+kind that is not an object kind, and an `object`
 argument or answer on a slot that is not `fallible` (the object's table is
 checked where it arrives, and only a fallible slot can say it was
 refused). A describer reading declarations (Node's

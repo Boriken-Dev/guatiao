@@ -607,14 +607,12 @@ callee would have written.
 The library's description reader, and every binding that builds a kind
 (Node's `kind()` and `kindsOf`, Python's `Kind`, Go's glue, Julia's
 `@kind`, R's `kind()`, MATLAB's and Octave's `guatiao.Kind.describe` and
-`guatiao.write_kinds`), now refuse five more things `#[guatiao::kind]`
+`guatiao.write_kinds`), now refuse four more things `#[guatiao::kind]`
 has always refused:
 
 - a slot that passes or answers an `object` without `"fallible": true`:
   make the slot fallible (its table gains `guatiao_provider_error *err`
   last), since the object's table is checked where it arrives;
-- a `list` passed `borrowed`: lend it (`"pass": "lent"`) or hand it over
-  (`"pass": "taken"`);
 - a slot named `header`, the table's first field: rename it;
 - a kind with no slot, an object kind with only its `destroy` included:
   give it a slot, or drop it;
