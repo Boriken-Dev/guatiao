@@ -93,7 +93,7 @@ export interface Sink extends ObjectKind {
 export interface Shapes {
   scalars(a: i8, b: i16, c: i32, d: i64, e: isize, f: u8, g: u16, h: u32, i: u64, j: usize, l: f32, m: f64, n: boolean): void;
   bytes(a: Uint8Array): u32;
-  trees(a: Ref, b: Ref | null, c: MapRef, d: Borrowed<MapRef>): void;
+  trees(a: Ref, b: Ref | null, c: MapRef, d: Borrowed<MapRef>, e: ListRef): void;
   taken(a: Taken<Ref>, b: Taken<MapRef>, c: Taken<ListRef>): void;
   lent(a: Lent<Ref>, b: Lent<MapRef>, c: Lent<ListRef>): void;
   /** @throws */
@@ -126,6 +126,7 @@ export interface Shapes {
         tree('b', 'value', 'borrowed', { nullable: true }),
         tree('c', 'map', 'borrowed'),
         tree('d', 'map', 'borrowed'),
+        tree('e', 'list', 'borrowed'),
       ]),
       slotOf('taken', [tree('a', 'value', 'taken'), tree('b', 'map', 'taken'), tree('c', 'list', 'taken')]),
       slotOf('lent', [tree('a', 'value', 'lent'), tree('b', 'map', 'lent'), tree('c', 'list', 'lent')]),
@@ -311,7 +312,6 @@ export interface Near {
       refusal('export interface A { f(x: MapRef | null): void }', /only a borrowed value \(`Ref \| null`\) may be null/),
       refusal('export interface L extends ObjectKind { g(): void }\nexport interface A { f(x: L): void }', /an object is passed as Taken<L> or Lent<L>/),
       refusal('export interface N { g(): void }\nexport interface A { f(x: Lent<N>): void }', /N is not a tree \(Ref, MapRef, ListRef\) or an object kind/),
-      refusal('export interface A { f(x: ListRef): void }', /A: .*slots\[0\]\.args\[0\]\.pass.*a list is not borrowed/),
       refusal('export interface A { header(): void }', /A: .*slots\[0\].*the table's first field/),
       refusal(
         'export interface L extends ObjectKind { g(): void }\nexport interface A { f(x: Lent<L>): void }',

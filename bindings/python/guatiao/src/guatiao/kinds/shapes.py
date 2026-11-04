@@ -5,8 +5,8 @@
 """The shapes a slot can carry, for building a `Kind` by hand with
 `Method(...)`: what a kind class's annotations are read into.
 
-`STR`, `BYTES`, `BYTES_MUT`, `TEXT` (a `String` answer), `VALUE` and
-`MAP` (borrowed arguments, or answers), `LIST` (an answer), the scalars
+`STR`, `BYTES`, `BYTES_MUT`, `TEXT` (a `String` answer), `VALUE`, `MAP`
+and `LIST` (borrowed arguments, or answers), the scalars
 `BOOL`, `I8` .. `U64`, `USIZE`, `ISIZE`, `F32`, `F64`, and `taken(x)` /
 `lent(x)` for a tree or an object kind handed over or lent.
 """

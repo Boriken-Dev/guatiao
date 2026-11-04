@@ -1067,8 +1067,8 @@ export const t = {
   value: new Tree('value', undefined, 'borrow') as unknown as Shape<Ref | Plain | null, Ref | null, Value, Ref | Plain>,
   /** A map: borrowed as an argument (`const guatiao_map *`), or an answer. */
   map: new Tree('map', Tag.MAP, 'borrow') as unknown as Shape<Ref | MapAnswer, MapRef, Value, MapAnswer>,
-  /** A list, as an answer; `t.taken(t.list)` and `t.lent(t.list)` as arguments. */
-  list: new Tree('list', Tag.LIST, 'answer') as unknown as Shape<never, never, Value, ListAnswer>,
+  /** A list: borrowed as an argument (`const guatiao_list *`), or an answer. */
+  list: new Tree('list', Tag.LIST, 'borrow') as unknown as Shape<Ref | ListAnswer, ListRef, Value, ListAnswer>,
   /** An argument handed over with the call: the callee owns it on every path. */
   taken,
   /** An argument lent for the call (`&mut`): the callee may change it where it stands. */
@@ -1450,8 +1450,7 @@ function shapeOf(
       const pass = given.pass ?? 'borrowed';
       if (pass === 'taken') return taken(tree as typeof t.map);
       if (pass === 'lent') return lent(tree as typeof t.map);
-      if (pass === 'borrowed' && type !== 'list') return tree;
-      if (pass === 'borrowed') throw new TypeError(`${where}: a list is not borrowed, but taken or lent`);
+      if (pass === 'borrowed') return tree;
       throw new TypeError(`${where}: a ${type} cannot be passed ${String(pass)}`);
     }
     case 'object': {

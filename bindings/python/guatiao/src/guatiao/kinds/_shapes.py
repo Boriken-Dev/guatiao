@@ -627,8 +627,6 @@ def taken(what: Any) -> Shape:
     `taken(LIST)`, or an object of an object kind, `taken(LISTENER)`."""
     if isinstance(what, _Tree) and what.mode == "borrow":
         return _Tree(f"taken({what.name})", what.tag, "take")
-    if what is LIST:
-        return _TAKEN_LIST
     if getattr(what, "is_object", False):
         return _ObjectShape(what, "take")
     raise TypeError(f"taken() takes VALUE, MAP, LIST or an object kind, not {what!r}")
@@ -639,8 +637,6 @@ def lent(what: Any) -> Shape:
     `lent(VALUE)`, `lent(LIST)`, or an object, `lent(LISTENER)`."""
     if isinstance(what, _Tree) and what.mode == "borrow":
         return _Tree(f"lent({what.name})", what.tag, "lend")
-    if what is LIST:
-        return _LENT_LIST
     if getattr(what, "is_object", False):
         return _ObjectShape(what, "lend")
     raise TypeError(f"lent() takes VALUE, MAP, LIST or an object kind, not {what!r}")
@@ -663,7 +659,7 @@ def answer_shape(what: Any) -> Shape:
     if getattr(what, "is_object", False):
         return _ObjectShape(what, "answer")
     if isinstance(what, _Tree):
-        if what.mode == "borrow" or what is LIST:
+        if what.mode == "borrow":
             return _Tree(what.name, what.tag, "answer")
     if isinstance(what, Shape) and what.c_out is not None:
         return what
@@ -689,11 +685,7 @@ BYTES_MUT = _BytesMut()
 TEXT = _Text()
 VALUE = _Tree("VALUE", None, "borrow")
 MAP = _Tree("MAP", _abi.Tag.MAP, "borrow")
-# A list is never borrowed (the macro has no `&List` argument), so LIST is
-# an answer, and `taken(LIST)` / `lent(LIST)` the arguments.
-LIST = _Tree("LIST", _abi.Tag.LIST, "answer")
-_TAKEN_LIST = _Tree("taken(LIST)", _abi.Tag.LIST, "take")
-_LENT_LIST = _Tree("lent(LIST)", _abi.Tag.LIST, "lend")
+LIST = _Tree("LIST", _abi.Tag.LIST, "borrow")
 
 __all__ = [
     "Shape",

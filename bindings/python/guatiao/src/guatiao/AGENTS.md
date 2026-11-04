@@ -266,8 +266,9 @@ as `#[guatiao::kind]` and the library's reader do, a kind with no method,
 two arguments of one method with one name (`arg_names`), a method named
 `header`, a `bytearray` (`BYTES_MUT`) argument on a kind that is not an
 object kind, and an object passed or answered on a method that is not
-`fallible` (`TypeError`); a list argument is `Lent[List]` or
-`Taken[List]`, never borrowed.
+`fallible` (`TypeError`). A `Map`, `List` or `Value` argument is
+borrowed, read-only for the call; `Lent[...]` lends it, `Taken[...]`
+hands it over.
 
 What crosses, each way:
 
