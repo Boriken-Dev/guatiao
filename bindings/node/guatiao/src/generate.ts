@@ -115,8 +115,7 @@ function spellArg(arg: TypeDescription, names: ReadonlyMap<string, string>, wher
       if (pass === 'taken') return { caller: plain, method: 'g.Value' };
       if (pass === 'lent') return { caller: 'g.Ref', method: view };
       if (type === 'value') return { caller: 'unknown', method: arg.nullable ? 'g.Ref | null' : 'g.Ref' };
-      if (type === 'map') return { caller: plain, method: view };
-      throw new TypeError(`${where}: a list is passed taken or lent`);
+      return { caller: plain, method: view };
     }
     case 'object': {
       const kind = objectName(arg, names, where);

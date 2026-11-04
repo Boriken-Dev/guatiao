@@ -250,6 +250,12 @@ describe('a list passed borrowed', () => {
     expect(held.toJS()).toEqual([1, 2, 3]);
     expect(refused).toEqual(['a borrowed value is read-only', 'a borrowed value is read-only']);
   });
+
+  it('is written by the generator as the map is: a ListRef the method reads, a list or a Ref the caller passes', () => {
+    const { dts } = generate(SUMMER);
+    expect(dts).toContain('  sum(items: g.ListRef): number | bigint;');
+    expect(dts).toContain('  sum(items: g.Ref | k.ListAnswer): bigint;');
+  });
 });
 
 describe('a kind that names itself through its slots', () => {
