@@ -414,8 +414,9 @@ impl Engine for LuaEngine {
         }
     }
 
-    /// `provider:available()`, under the limits: `nil` or `true` when it
-    /// can run, else text saying why not; an error raised is the reason.
+    /// `provider:available()`, under the limits: `nil` when it can run,
+    /// else text saying why not; an error raised is the reason, and any
+    /// other answer is unavailable, saying what it answered.
     fn available(&self, handle: &u64, provider: &str) -> Result<(), String> {
         let lua = &self.lua;
         let lib = self.library(*handle).map_err(|e| e.message().to_string())?;
@@ -431,10 +432,10 @@ impl Engine for LuaEngine {
             })
             .map_err(|e| e.message().to_string())?;
         match results.pop_front().unwrap_or(LuaValue::Nil) {
-            LuaValue::Nil | LuaValue::Boolean(true) => Ok(()),
+            LuaValue::Nil => Ok(()),
             LuaValue::String(why) => Err(why.to_string_lossy()),
             other => Err(format!(
-                "`available` answered a {}: nil when it can run, or why it cannot",
+                "`available` answered a {}, not nil (it can run) or text saying why it cannot",
                 other.type_name()
             )),
         }

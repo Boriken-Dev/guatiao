@@ -83,9 +83,10 @@ return M
   default instance. `config` without `new`, `new` without `config`, or
   `instances_only` without both, refuses the library.
 - **Availability**: an optional `available` function, called
-  `provider:available()` each time a host asks: `nil` or `true` is
-  available, text is the reason it is not, a raised error's message the
-  reason too. Without one the provider is always available. `new` and
+  `provider:available()` each time a host asks: `nil` is available, text
+  is the reason it is not, a raised error's message the reason too, and
+  any other answer (`true` included) is unavailable, saying what it
+  answered. Without one the provider is always available. `new` and
   `available` run under the limits, as a slot does.
 - **A slot is called** as `provider:slot(args...)`. Arguments: numbers,
   booleans, text as Lua's; `bytes` as a string; a tree as a table (a lent
