@@ -145,6 +145,57 @@ impl Handler for Polite {
     }
 }
 
+/// A greeter built from a configuration, `{"word": "howdy"}`: it greets
+/// with that word. Each instance a host builds is one of these.
+struct Configured {
+    word: String,
+}
+
+impl Handler for Configured {
+    fn call(&mut self, call: &mut Call) -> Result<Answer, Refusal> {
+        match call.method() {
+            "greet" => {
+                let name = call.text(0)?;
+                if name.is_empty() {
+                    return Err("nobody to greet".into());
+                }
+                Ok(as_answer(&format!("{}, {name}", self.word)))
+            }
+            _ => Err(unknown(call)),
+        }
+    }
+}
+
+/// The configuration `configured` is built from, as a JSON Schema the host
+/// checks before the module is asked.
+fn word_schema() -> Map {
+    let mut word = Map::new();
+    word.set("type", "string");
+    let mut properties = Map::new();
+    properties.set("word", word);
+    let mut required = guatiao_wasm_guest::List::new();
+    required.push("word");
+    let mut schema = Map::new();
+    schema.set("type", "object");
+    schema.set("properties", properties);
+    schema.set("required", required);
+    schema.set("additionalProperties", false);
+    schema
+}
+
+fn configured(config: Value) -> Result<Configured, Refusal> {
+    let word = TryAsRef::<Map>::try_as_ref(&config)
+        .and_then(|m| m.get("word"))
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .unwrap_or("");
+    if word.is_empty() {
+        return Err("a greeting needs a word".into());
+    }
+    Ok(Configured {
+        word: word.to_string(),
+    })
+}
+
 /// 64-bit integers, both ways, at their limits.
 struct Wide;
 
@@ -179,6 +230,12 @@ fn library() -> Library {
             Provider::new("wide", Wide)
                 .name("Wide, in Rust (wasm)")
                 .serves("wide", ["echo_i64", "echo_u64"]),
+        )
+        .provider(
+            Provider::instances("configured", word_schema(), configured)
+                .name("Configured, in Rust (wasm)")
+                .serves("greeter", ["greet"])
+                .available(|| Ok(())),
         )
 }
 
