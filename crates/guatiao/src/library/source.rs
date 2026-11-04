@@ -36,7 +36,7 @@ use super::scan::{ScanRules, admit, candidate};
 use crate::value::status::Status;
 use crate::value::types::{Map, Value};
 
-pub use super::serving::{Candidate, Source};
+pub use super::serving::{Candidate, Note, Source};
 
 /// A library a refresh loaded or retired.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,15 +80,20 @@ pub struct Refreshed {
     pub skipped: Vec<(String, String, Skipped)>,
     /// What could not be done.
     pub refused: Vec<Refused>,
+    /// What a source wants its host to see, by the source's name: each
+    /// note the first refresh its source answers it, not again while it
+    /// stays.
+    pub notes: Vec<(String, Note)>,
 }
 
 impl Refreshed {
-    /// Whether nothing changed and nothing was refused.
+    /// Whether nothing changed, nothing was refused and nothing was noted.
     pub fn is_empty(&self) -> bool {
         self.loaded.is_empty()
             && self.retired.is_empty()
             && self.skipped.is_empty()
             && self.refused.is_empty()
+            && self.notes.is_empty()
     }
 }
 
@@ -232,6 +237,8 @@ pub(crate) struct SourceState {
     /// The stamp each id was last opened, or tried, under: not tried again
     /// until it changes.
     tried: BTreeMap<String, String>,
+    /// The notes it answered last: a refresh reports only the new ones.
+    noted: Vec<Note>,
 }
 
 /// One directory the registry watches, and what it last saw there.
@@ -278,6 +285,7 @@ impl Registry {
             cell,
             serving: BTreeMap::new(),
             tried: BTreeMap::new(),
+            noted: Vec::new(),
         });
         Ok(())
     }
@@ -452,16 +460,34 @@ impl Registry {
             id: id.map(str::to_string),
             reason,
         };
-        let (candidates, wrong) = match cell.list(host) {
+        let listed = cell.list(host);
+        // Asked after every listing, a failed one too: what a source has to
+        // say often matters most when it cannot serve.
+        let (notes, wrong_notes) = cell.notes();
+        let noted = &mut self.sources[at].noted;
+        report.notes.extend(
+            notes
+                .iter()
+                .filter(|note| !noted.contains(note))
+                .map(|note| (name.clone(), note.clone())),
+        );
+        *noted = notes;
+        let (candidates, wrong) = match listed {
             Ok(listed) => listed,
             Err(reason) => {
                 report.refused.push(refuse(None, reason));
+                report
+                    .refused
+                    .extend(wrong_notes.into_iter().map(|reason| refuse(None, reason)));
                 return;
             }
         };
-        report
-            .refused
-            .extend(wrong.into_iter().map(|reason| refuse(None, reason)));
+        report.refused.extend(
+            wrong
+                .into_iter()
+                .chain(wrong_notes)
+                .map(|reason| refuse(None, reason)),
+        );
 
         let listed: BTreeSet<&str> = candidates.iter().map(Candidate::id).collect();
         let gone: Vec<String> = self.sources[at]

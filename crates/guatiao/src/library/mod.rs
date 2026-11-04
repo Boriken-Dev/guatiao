@@ -131,6 +131,6 @@ pub use scan::{
     declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
     scan_path, scan_path_with,
 };
-pub use serving::{Candidate, Source};
+pub use serving::{Candidate, Note, Source};
 #[cfg(feature = "load")]
 pub use source::{Refreshed, Refused, Served, SourceError};

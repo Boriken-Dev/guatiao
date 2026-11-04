@@ -12,7 +12,7 @@ use super::check::{Bounds, Refusal};
 use super::*;
 use crate::library::desc::SourceInfo;
 use crate::library::kind::ProviderError;
-use crate::library::source::{Candidate, Source};
+use crate::library::source::{Candidate, Note, Source};
 use crate::value::types::List;
 
 /// The slots of a source table, read out and checked.
@@ -28,6 +28,7 @@ pub(crate) struct Table {
         *mut ProviderError,
     ) -> Status,
     close: Option<unsafe extern "C" fn(*mut c_void, Str, *const LibraryInfo<'static>)>,
+    notes: Option<unsafe extern "C" fn(*mut c_void, *mut List) -> Status>,
 }
 
 /// One source a registry holds: a source a Rust host linked, or a table
@@ -147,6 +148,53 @@ impl SourceCell {
             }
         };
         Ok(read_candidates(&list))
+    }
+
+    /// What the source wants its host to see now, and a sentence for each
+    /// entry of its answer that is not a note, or for a failed answer.
+    pub(crate) fn notes(&self) -> (Vec<Note>, Vec<String>) {
+        let list = match &self.imp {
+            SourceImpl::Rust(source) => {
+                return match catch_unwind(AssertUnwindSafe(|| source.notes())) {
+                    Ok(Ok(notes)) => (notes, Vec::new()),
+                    Ok(Err(e)) => (
+                        Vec::new(),
+                        vec![format!(
+                            "the source could not tell its notes: {}",
+                            e.message()
+                        )],
+                    ),
+                    Err(payload) => {
+                        core::mem::forget(payload);
+                        (
+                            Vec::new(),
+                            vec!["the source panicked while telling its notes".to_string()],
+                        )
+                    }
+                };
+            }
+            SourceImpl::Table(table) => {
+                let Some(notes) = table.notes else {
+                    return (Vec::new(), Vec::new());
+                };
+                let mut out = <List as crate::library::kind::Carrier>::carrier(Alloc::rust());
+                let status = crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || {
+                    // SAFETY: the slot the table declared, called as its
+                    // contract says: its `ctx` and an out slot holding a
+                    // carrier.
+                    unsafe { notes(table.ctx, &mut out) }
+                });
+                if status != Status::GUATIAO_OK {
+                    drop(out);
+                    return (
+                        Vec::new(),
+                        vec![format!("the source could not tell its notes ({status:?})")],
+                    );
+                }
+                out
+            }
+        };
+        read_notes(&list)
     }
 
     /// Opens the candidate `id`, listed under `stamp`.
@@ -278,6 +326,59 @@ fn read_candidates(list: &List) -> (Vec<Candidate>, Vec<String>) {
     (found, wrong)
 }
 
+/// The notes in a list a source answered: a map each, with text `text`,
+/// and optionally text `subject` and a map `detail`. An entry that is not
+/// one is a sentence in the second list, and the rest still count.
+fn read_notes(list: &List) -> (Vec<Note>, Vec<String>) {
+    use crate::value::convert::TryAsRef;
+    let mut found = Vec::new();
+    let mut wrong = Vec::new();
+    for (at, entry) in list.iter().enumerate() {
+        let Some(map) = TryAsRef::<Map>::try_as_ref(entry) else {
+            wrong.push(format!("note {at} of the source's notes is not a map"));
+            continue;
+        };
+        let Some(text) = map
+            .get("text")
+            .and_then(|v| TryAsRef::<str>::try_as_ref(v))
+            .filter(|t| !t.is_empty())
+        else {
+            wrong.push(format!(
+                "note {at} of the source's notes has no text `text`"
+            ));
+            continue;
+        };
+        let subject = match map.get("subject") {
+            None => "",
+            Some(v) => match TryAsRef::<str>::try_as_ref(v) {
+                Some(subject) => subject,
+                None => {
+                    wrong.push(format!(
+                        "note {at} of the source's notes has a `subject` that is not text"
+                    ));
+                    continue;
+                }
+            },
+        };
+        let detail = match map.get("detail") {
+            None => Map::new(),
+            Some(v) => match TryAsRef::<Map>::try_as_ref(v) {
+                // Copied into this binary's allocator: the source's answer is
+                // freed once read.
+                Some(detail) => Map::clone(detail),
+                None => {
+                    wrong.push(format!(
+                        "note {at} of the source's notes has a `detail` that is not a map"
+                    ));
+                    continue;
+                }
+            },
+        };
+        found.push(Note::new(subject, text).with_detail(detail));
+    }
+    (found, wrong)
+}
+
 /// Reads a source table under the checks every descriptor gets and, for
 /// a mapped source, its image's bounds for the slots.
 ///
@@ -323,11 +424,15 @@ unsafe fn read_source(raw: *const SourceInfo, bounds: Bounds) -> Result<Table, R
     if let Some(close) = info.close {
         code(close as usize, "the source's `close` slot")?;
     }
+    if let Some(notes) = info.notes {
+        code(notes as usize, "the source's `notes` slot")?;
+    }
     Ok(Table {
         ctx: info.ctx,
         list,
         open,
         close: info.close,
+        notes: info.notes,
     })
 }
 
@@ -431,6 +536,7 @@ mod tests {
             list: Some(list_nothing),
             open: Some(open_nothing),
             close: None,
+            notes: None,
         }
     }
 
@@ -466,5 +572,52 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id(), "a");
         assert_eq!(wrong.len(), 2, "{wrong:?}");
+    }
+
+    #[test]
+    fn a_note_needs_its_text_and_the_rest_still_count() {
+        let mut list = List::new();
+        let mut whole = Map::new();
+        whole.set("text", "the source as a whole");
+        list.push(whole);
+        let mut detailed = Map::new();
+        detailed.set("subject", "peer");
+        detailed.set("text", "about one peer");
+        let mut detail = Map::new();
+        detail.set("setting", "allow_resumption");
+        detailed.set("detail", detail.clone());
+        list.push(detailed);
+        list.push(Value::from(5i64));
+        let mut wordless = Map::new();
+        wordless.set("subject", "peer");
+        list.push(wordless);
+        let mut empty = Map::new();
+        empty.set("text", "");
+        list.push(empty);
+        let mut numbered = Map::new();
+        numbered.set("text", "words");
+        numbered.set("subject", 3i64);
+        list.push(numbered);
+        let mut flat = Map::new();
+        flat.set("text", "words");
+        flat.set("detail", "not a map");
+        list.push(flat);
+        let (found, wrong) = read_notes(&list);
+        assert_eq!(
+            found,
+            [
+                Note::new("", "the source as a whole"),
+                Note::new("peer", "about one peer").with_detail(detail)
+            ]
+        );
+        assert_eq!(wrong.len(), 5, "{wrong:?}");
+        assert!(wrong[0].starts_with("note 2 "), "{wrong:?}");
+    }
+
+    #[test]
+    fn a_table_without_a_notes_slot_has_nothing_to_say() {
+        let cell = SourceCell::table("s", &a_table(size_of::<SourceInfo>())).expect("a table");
+        let (notes, wrong) = cell.notes();
+        assert!(notes.is_empty() && wrong.is_empty());
     }
 }

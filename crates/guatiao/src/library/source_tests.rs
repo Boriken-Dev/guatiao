@@ -24,6 +24,12 @@ struct Shelf {
     calls_itself: Mutex<Option<(String, String)>>,
     opened: Mutex<Vec<(String, String)>>,
     closed: Mutex<Vec<(String, String)>>,
+    /// What it tells its host, answered whole on every refresh.
+    notes: Mutex<Vec<Note>>,
+    /// Panics while telling its notes.
+    tongue_tied: Mutex<bool>,
+    /// Fails to tell its notes, in these words.
+    hoarse: Mutex<Option<String>>,
 }
 
 impl Shelf {
@@ -100,6 +106,16 @@ impl Source for OnShelf {
             .lock()
             .unwrap()
             .push((id.to_string(), stamp.to_string()));
+    }
+
+    fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+        if *self.0.tongue_tied.lock().unwrap() {
+            panic!("asked to");
+        }
+        if let Some(why) = self.0.hoarse.lock().unwrap().clone() {
+            return Err(ProviderError::new(Status::GUATIAO_ERR_GONE, &why));
+        }
+        Ok(self.0.notes.lock().unwrap().clone())
     }
 }
 
@@ -370,4 +386,97 @@ fn the_same_library_from_two_sources_is_two_libraries_under_source_keys() {
     assert_eq!(two.closed(), [pair("device", "1")]);
     assert!(one.closed().is_empty(), "the other source's library stays");
     assert!(apart.provider("device_p@device-0").is_some());
+}
+
+fn noted(report: &Refreshed) -> Vec<(&str, &str, &str)> {
+    report
+        .notes
+        .iter()
+        .map(|(source, note)| (source.as_str(), note.subject(), note.text()))
+        .collect()
+}
+
+#[test]
+fn a_note_is_reported_the_first_refresh_its_source_answers_it() {
+    let shelf = Arc::new(Shelf::default());
+    shelf.put("a", "1");
+    let mut detail = Map::new();
+    detail.set("setting", "dust");
+    *shelf.notes.lock().unwrap() = vec![
+        Note::new("", "the shelf is dusty").with_detail(detail.clone()),
+        Note::new("a", "a is on loan"),
+    ];
+    let mut registry = a_registry_with(&shelf);
+
+    let first = registry.refresh();
+    assert_eq!(
+        noted(&first),
+        [
+            ("shelf", "", "the shelf is dusty"),
+            ("shelf", "a", "a is on loan")
+        ]
+    );
+    assert_eq!(first.notes[0].1.detail(), &detail);
+    assert_eq!(first.loaded.len(), 1);
+
+    let second = registry.refresh();
+    assert!(
+        second.is_empty(),
+        "a note that stays is not told again: {second:?}"
+    );
+
+    // A new note is told; one that went and came back is told again.
+    *shelf.notes.lock().unwrap() = vec![Note::new("a", "a is back")];
+    assert_eq!(noted(&registry.refresh()), [("shelf", "a", "a is back")]);
+    *shelf.notes.lock().unwrap() = vec![
+        Note::new("a", "a is back"),
+        Note::new("", "the shelf is dusty"),
+    ];
+    assert_eq!(
+        noted(&registry.refresh()),
+        [("shelf", "", "the shelf is dusty")],
+        "the note without its detail is another note"
+    );
+}
+
+#[test]
+fn a_source_that_cannot_list_still_tells_its_notes() {
+    let shelf = Arc::new(Shelf::default());
+    *shelf.unlistable.lock().unwrap() = true;
+    *shelf.notes.lock().unwrap() = vec![Note::new("", "the shelf leans")];
+    let mut registry = a_registry_with(&shelf);
+    let report = registry.refresh();
+    assert_eq!(noted(&report), [("shelf", "", "the shelf leans")]);
+    assert_eq!(report.refused.len(), 1, "{report:?}");
+    assert!(report.refused[0].reason.contains("fell over"), "{report:?}");
+}
+
+#[test]
+fn a_panic_while_telling_notes_is_refused_and_the_refresh_goes_on() {
+    let shelf = Arc::new(Shelf::default());
+    shelf.put("a", "1");
+    *shelf.tongue_tied.lock().unwrap() = true;
+    let mut registry = a_registry_with(&shelf);
+    let report = registry.refresh();
+    assert_eq!(report.loaded.len(), 1, "{report:?}");
+    assert!(report.notes.is_empty());
+    assert_eq!(report.refused.len(), 1, "{report:?}");
+    assert!(report.refused[0].reason.contains("notes"), "{report:?}");
+    assert_eq!(report.refused[0].id, None);
+}
+
+#[test]
+fn a_source_failing_to_tell_its_notes_is_refused_in_its_words() {
+    let shelf = Arc::new(Shelf::default());
+    shelf.put("a", "1");
+    *shelf.hoarse.lock().unwrap() = Some("the shelf lost its voice".to_string());
+    let mut registry = a_registry_with(&shelf);
+    let report = registry.refresh();
+    assert_eq!(report.loaded.len(), 1, "{report:?}");
+    assert!(report.notes.is_empty());
+    assert_eq!(report.refused.len(), 1, "{report:?}");
+    assert_eq!(
+        report.refused[0].reason,
+        "the source could not tell its notes: the shelf lost its voice"
+    );
 }

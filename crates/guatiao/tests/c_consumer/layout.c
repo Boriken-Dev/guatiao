@@ -142,6 +142,7 @@ static const layout_entry ENTRIES[] = {
     AT(guatiao_source_info, list),
     AT(guatiao_source_info, open),
     AT(guatiao_source_info, close),
+    AT(guatiao_source_info, notes),
     SIZE(guatiao_merge_override),
     AT(guatiao_merge_override, path),
     AT(guatiao_merge_override, mode),

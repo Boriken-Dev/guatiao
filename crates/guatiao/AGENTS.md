@@ -2261,7 +2261,7 @@ when there is one.
 ### Sources: libraries that come and go while the host runs
 
 ```rust
-use guatiao::library::{Candidate, Registry, Refreshed, ScanRules, Source};
+use guatiao::library::{Candidate, Note, Registry, Refreshed, ScanRules, Source};
 
 reg.add_source("shelf", MySource)?;                          // a Source the host links
 reg.add_source_table("shelf_c", &table)?;                    // a guatiao_source_info the host links
@@ -2271,6 +2271,7 @@ let changed: Refreshed = reg.refresh();                     // when the host cho
 changed.loaded / changed.retired                            // Vec<Served { source, id, stamp, key }>
 changed.skipped                                             // Vec<(source, id, Skipped)>
 changed.refused                                             // Vec<Refused { source, id: Option<String>, reason }>
+changed.notes                                               // Vec<(source, Note)>: told once, when it appears
 ```
 
 A **source** serves libraries that are not files a scan can probe — an
@@ -2303,8 +2304,22 @@ the registry closes nothing.
 `trait Source: Send + Sync { fn list(&self, host: Host) ->
 Result<Vec<Candidate>, ProviderError>; fn open(&self, host: Host, id: &str)
 -> Result<LocalLibrary<'static>, ProviderError>; fn close(&self, id: &str,
-stamp: &str) {} }`. `Candidate::new(id, version, kinds, stamp)`. Calls are
-one at a time, from the thread calling the registry, panics caught.
+stamp: &str) {} fn notes(&self) -> Result<Vec<Note>, ProviderError> {
+Ok(vec![]) } }`.
+`Candidate::new(id, version, kinds, stamp)`. Calls are one at a time, from
+the thread calling the registry, panics caught.
+
+**Notes**: what a source wants its host to see that is neither a refusal
+nor a skip (a setting it runs looser than its default, say).
+`Note::new(subject, text)` (`subject` the part of the source it concerns,
+empty for the whole; `text` words for a person), `.with_detail(map)` (what
+a program reads instead, keys of the source's choosing); `subject()`,
+`text()`, `detail()`. `notes()` is asked after every `list`, a failed one
+too, and answers the whole set each time: `Refreshed::notes` carries a
+note the first refresh its source answers it and not again while it
+stays (one that goes and comes back is told again). An error or a panic in `notes()`
+is a refusal. A library never prints; showing or logging a note is the
+host's.
 
 **The C table**, `guatiao_source_info` (`SourceInfo`): `struct_size`,
 `abi_version`, `ctx`, then
@@ -2316,7 +2331,12 @@ one at a time, from the thread calling the registry, panics caught.
   guatiao_provider_error *err)`: the descriptor, valid until `close`, or
   a refusal with words;
 - `close(ctx, id, info)`: once per descriptor `open` answered, after the
-  registry closed it (null when nothing needs letting go).
+  registry closed it (null when nothing needs letting go);
+- `notes(ctx, guatiao_list *out)`: one map per note, `{"subject"?,
+  "text", "detail"?}` (`text` required, `detail` a map), written over a
+  carrier as `list`'s; asked after every `list`; a non-OK status or an
+  entry that is not a note is a refusal (null when there is nothing to
+  say).
 
 A source **file** exports `guatiao_status guatiao_source(const
 guatiao_host_info *host, const guatiao_value *config, const
@@ -2349,8 +2369,9 @@ source's own status),
 `guatiao_registry_watch_dir(reg, dir, rules)`, and
 `guatiao_registry_refresh(reg, &alloc, &answer)`, answering `{"loaded":
 [{"source", "id", "stamp", "key"}…], "retired": […], "skipped": [{"source",
-"id", "skipped", …}…], "refused": [{"source", "id"?, "why"}…]}`. A scan
-report's `skipped` gains `"source"` with `"serves"`.
+"id", "skipped", …}…], "refused": [{"source", "id"?, "why"}…],
+"notes"?: [{"source", "subject", "text", "detail"}…]}`, `notes` only when
+there is one. A scan report's `skipped` gains `"source"` with `"serves"`.
 
 ### Notices ride on `meta`
 
