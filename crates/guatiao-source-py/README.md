@@ -48,7 +48,10 @@ decides where one build runs:
 On Windows a host that is not Python names the directory holding
 `python3.dll` (`sys.base_prefix`) in the configuration's `import_dirs`,
 which the registry takes for itself; or it puts that directory on `PATH`
-and sets its registry's import search to `path`.
+and sets its registry's import search to `path`. The registry maps
+`python3.dll` before the bridge reads its configuration, so `home` alone
+does not bring it; the installation in `import_dirs` is the interpreter's
+`home` as well unless another is named.
 
 The interpreter it starts takes nothing from the environment unless told
 to: `isolation` is `shipped` (the default: a `._pth` or `pyvenv.cfg`

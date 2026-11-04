@@ -230,9 +230,12 @@ says how much it takes:
 
 `inherit`, and the registry's import search `path` that reaches
 `python3.dll` through `PATH`, are the weaker settings; naming the
-installation in the bridge's `import_dirs` keeps the default search. A
-source cannot yet say to its host, in every language, that it runs under
-one: that waits for a channel from a source to its host.
+installation in the bridge's `import_dirs` keeps the default search, and
+makes it the interpreter's `home` unless another is named (`home` alone
+does not bring `python3.dll`: the registry maps it before the bridge
+reads its configuration). A source cannot yet say to its host, in every
+language, that it runs under one: that waits for a channel from a source
+to its host.
 
 An interpreter already running (a Python host's own) is joined as it is:
 asking it for `isolated`, or naming `shipped`, when its flags do not hold
