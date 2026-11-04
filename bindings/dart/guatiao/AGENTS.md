@@ -747,7 +747,10 @@ other.wipe();                                          // any Value: overwritten
   change, `close()`, `wipe()` and a lend do. So one call never has a value
   lent and borrowed, or lent twice (`remote.f(v, v)` for a slot
   `f(&mut Map, &Map)` throws before the call), nor a node of it and the
-  value itself. One isolate runs one call at a
+  value itself. A mark holds the whole value, so lending `v['a']` and
+  borrowing `v['b']` in one call throws too (`clone()` one first); a view
+  `Ref.borrowedFrom(v, ..)` answers, `intake.at(v, ..)`'s included, counts
+  as `v`. One isolate runs one call at a
   time, so two `close()`s cannot interleave: nothing more is needed there. `StateError` for any other node.
 - `Ref.isSensitive`; `toString` of a `Value` holding anything in the
   wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites

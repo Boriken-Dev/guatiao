@@ -658,6 +658,9 @@ call borrowing it reads it for the whole call. A change, `close()`,
 raises it while one of those runs; nothing waits, so nothing deadlocks.
 So one call never has a value lent and borrowed, or lent twice
 (`remote.f(v, v)` for a slot `f(&mut Map, &Map)` raises before the
-call), and a call's views are held the same way. `ffi.node_of` takes no
+call), and a call's views are held the same way. A claim holds the whole
+value: lending `v["a"]` and borrowing `v["b"]` in one call is refused
+too (`clone()` one first). A view `ffi.borrow(v, ...)` answers (what
+`guatiao_intake.at` gives) counts as `v`, for reads and for calls. `ffi.node_of` takes no
 claim: a package reading through it reads unclaimed. Where two threads
 must both succeed, share a value under a lock of your own.
