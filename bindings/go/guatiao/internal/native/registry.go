@@ -76,6 +76,8 @@ func RegistryAnswer(name string, r unsafe.Pointer, text string, alloc, out unsaf
 		return uint32(C.gt_core_guatiao_registry_libraries(reg(r), a(alloc), n(out)))
 	case "providers":
 		return uint32(C.gt_core_guatiao_registry_providers(reg(r), t, a(alloc), n(out)))
+	case "catalog":
+		return uint32(C.gt_core_guatiao_registry_catalog(reg(r), a(alloc), n(out)))
 	case "provider":
 		return uint32(C.gt_core_guatiao_registry_provider(reg(r), t, a(alloc), n(out)))
 	case "provider_meta":

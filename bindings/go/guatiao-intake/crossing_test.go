@@ -112,3 +112,42 @@ func TestAProvidersFormFromItsMetaFitsItsSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestACatalogEntryGivesEachProviderItsForm(t *testing.T) {
+	reg, err := guatiao.NewRegistry("go-intake-tests", "0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	if _, err := reg.ScanDir(testenv.Workspace(), guatiao.Rules("kind=greeter")); err != nil {
+		t.Fatal(err)
+	}
+	list, err := reg.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := map[string]map[string]any{}
+	for _, entry := range list {
+		catalog[entry["id"].(string)] = entry
+	}
+	shouter := catalog["derived_greeter_shouter"]
+	form, err := intake.ProviderForm(shouter["config"], shouter["meta"])
+	if err != nil || form == nil {
+		t.Fatalf("%v %v", form, err)
+	}
+	defer form.Close()
+	var sections []map[string]any
+	if err := form.Key("sections").Decode(&sections); err != nil {
+		t.Fatal(err)
+	}
+	if len(sections) != 2 || sections[0]["id"] != "words" || sections[1]["id"] != "volume" {
+		t.Fatalf("%v", sections)
+	}
+	if why, err := intake.Check(shouter["config"], form); why != nil || err != nil {
+		t.Fatalf("%v %v", why, err)
+	}
+	hello := catalog["derived_greeter_hello"]
+	if none, err := intake.ProviderForm(hello["config"], hello["meta"]); none != nil || err != nil {
+		t.Fatalf("%v %v", none, err)
+	}
+}

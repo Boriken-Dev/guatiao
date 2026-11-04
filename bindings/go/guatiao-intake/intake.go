@@ -198,6 +198,43 @@ func ForSchema(schema any) (*guatiao.Value, error) {
 	return form, err
 }
 
+// ProviderForm is the form a provider's settings are shown with: the one
+// it declares in its meta under ProviderFormKey, or else the one its
+// configuration schema implies, as ForSchema makes it.
+//
+// schema and meta are what the registry answers for the provider
+// (ProviderConfig and ProviderMeta, or the "config" and "meta" of an entry
+// Registry.Catalog lists): each a *guatiao.Value, a view, plain data, or
+// nil. What is not a map is skipped, as reading the key by hand skips it.
+// The Value is nil when that leaves nothing to show; the caller closes
+// what comes back. A declared form is not checked against the schema here;
+// Check does that.
+func ProviderForm(schema, meta any) (*guatiao.Value, error) {
+	given := []any{schema, meta}
+	var present []any
+	for _, item := range given {
+		if item != nil {
+			present = append(present, item)
+		}
+	}
+	var form *guatiao.Value
+	err := guatiao.WithNodes(present, func(nodes []unsafe.Pointer) error {
+		var s, m unsafe.Pointer
+		next := 0
+		if schema != nil {
+			s = nodes[next]
+			next++
+		}
+		if meta != nil {
+			m = nodes[next]
+		}
+		return answer("guatiao_intake_provider_form", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callTwo(fn, s, m, alloc, out)
+		}, owned(&form))
+	})
+	return form, err
+}
+
 // FormFor is the form to show the field at path with, a Value to close,
 // or nil when there is none.
 func FormFor(form, schema any, path string) (*guatiao.Value, error) {

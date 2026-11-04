@@ -318,3 +318,76 @@ func TestTakesAViewWhereItTakesAValue(t *testing.T) {
 		t.Fatal("PATH")
 	}
 }
+
+func TestAProvidersFormIsItsOwnElseTheOneItsSchemaImplies(t *testing.T) {
+	providerSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"user":  map[string]any{"type": "string", "x-section": "account"},
+			"token": map[string]any{"type": "string", "x-sensitive": true},
+		},
+	}
+	declared := map[string]any{"sections": []any{map[string]any{"id": "account", "title": "Account"}}}
+
+	own, err := intake.ProviderForm(providerSchema, map[string]any{intake.ProviderFormKey: declared, "other": 1})
+	if err != nil || own == nil {
+		t.Fatalf("%v %v", own, err)
+	}
+	defer own.Close()
+	var got map[string]any
+	if err := own.Decode(&got); err != nil || !reflect.DeepEqual(got, declared) {
+		t.Fatalf("%v %v", got, err)
+	}
+
+	implied, err := intake.ProviderForm(providerSchema, nil)
+	if err != nil || implied == nil {
+		t.Fatalf("%v %v", implied, err)
+	}
+	defer implied.Close()
+	var made struct {
+		Sections []map[string]any          `guatiao:"sections"`
+		Fields   map[string]map[string]any `guatiao:"fields"`
+	}
+	if err := implied.Decode(&made); err != nil {
+		t.Fatal(err)
+	}
+	if len(made.Sections) != 1 || made.Sections[0]["id"] != "account" || made.Fields["token"]["widget"] != "password" {
+		t.Fatalf("%v", made)
+	}
+
+	// Meta without a form is the same as none; values work as plain data does.
+	held, _ := guatiao.NewValue(providerSchema)
+	defer held.Close()
+	meta, _ := guatiao.NewValue(map[string]any{"other": 1})
+	defer meta.Close()
+	again, err := intake.ProviderForm(held, meta)
+	if err != nil || again == nil {
+		t.Fatalf("%v %v", again, err)
+	}
+	again.Close()
+}
+
+func TestAProvidersFormSkipsWhatIsMalformedAndIsNilWhenNothingIsLeft(t *testing.T) {
+	providerSchema := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"user": map[string]any{"type": "string", "x-section": "account"}},
+	}
+	for _, meta := range []any{nil, map[string]any{"other": 1}} {
+		if form, err := intake.ProviderForm(nil, meta); form != nil || err != nil {
+			t.Fatalf("%v %v %v", meta, form, err)
+		}
+	}
+	if form, err := intake.ProviderForm(nil, map[string]any{intake.ProviderFormKey: "a form"}); form != nil || err != nil {
+		t.Fatalf("%v %v", form, err)
+	}
+	// A value under the key that is no form gives the schema's form.
+	form, err := intake.ProviderForm(providerSchema, map[string]any{intake.ProviderFormKey: []any{"not", "a", "form"}})
+	if err != nil || form == nil {
+		t.Fatalf("%v %v", form, err)
+	}
+	defer form.Close()
+	var sections []map[string]any
+	if err := form.Key("sections").Decode(&sections); err != nil || len(sections) != 1 || sections[0]["id"] != "account" {
+		t.Fatalf("%v %v", sections, err)
+	}
+}
