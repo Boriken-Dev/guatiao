@@ -842,4 +842,29 @@ impl Source for RemoteSource {
             Peers::Described(d) => d.close(id, stamp),
         }
     }
+
+    /// Each setting [`weakened`](RemoteSource::weakened) lists, about its
+    /// peer (empty for the one peer of a `connect` or `child`
+    /// configuration), with `{"setting", "value", "modern"}` as its detail.
+    #[cfg(any(feature = "tls", feature = "ws"))]
+    fn notes(&self) -> Result<Vec<guatiao::library::Note>, ProviderError> {
+        Ok(self
+            .weakened()
+            .into_iter()
+            .map(|(peer, w)| {
+                let mut detail = Map::new();
+                detail.set("setting", w.setting.as_str());
+                detail.set("value", w.value.as_str());
+                detail.set("modern", w.strict.as_str());
+                guatiao::library::Note::new(
+                    peer,
+                    format!(
+                        "weaker than modern: {} = {} (modern: {})",
+                        w.setting, w.value, w.strict
+                    ),
+                )
+                .with_detail(detail)
+            })
+            .collect())
+    }
 }

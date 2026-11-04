@@ -684,7 +684,11 @@ let connect = WsConnect::new("wss://192.0.2.21:7443/").tls(&host)?;
   host's own are listed by `RemoteSource::weakened()`: each setting its
   configuration or a peer manifest names looser than modern, by peer (a
   manifest's after a refresh has read it), for the host to show or log;
-  nothing is printed for it.
+  nothing is printed for it. A host in any language reads the same as its
+  refresh's `notes` ([a source's note](encodings.md#a-sources-note)): one
+  per setting, about its peer, `weaker than modern: S = V (modern: M)`
+  with the detail `{"setting", "value", "modern"}`, told by the first
+  refresh that finds it.
 - **From C, Python or any language** mutual TLS is the source file's
   configuration keys above. A peer in another language speaks the
   same protocol inside TLS 1.3 with the same files: OpenSSL presents the

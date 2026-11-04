@@ -42,6 +42,14 @@ source.disconnect(); source.objects_out() -> usize  // every peer's
 source.weakened() -> Vec<(String, Weakening)>      // `tls`: the configured policy's settings looser than modern (TLS 1.3 only), by peer name ("" for one peer); described peers after a refresh
 ```
 
+- **Notes**: every setting `weakened()` lists is also a note
+  (`Source::notes`, so a host in any language reads it in its refresh's
+  `notes`): subject the peer's name (empty for the one peer of a `connect`
+  or `child` configuration), text `weaker than modern: S = V (modern: M)`,
+  detail `{"setting", "value", "modern"}`, each told the first refresh
+  that finds it. `guatiao-remote-server` prints its sources' notes as
+  `guatiao-remote-server: SOURCE: [SUBJECT: ]TEXT`.
+
 - **Peers described by manifests** (`dirs`, `manifests` in the
   configuration): every refresh reads the `type = "remote"` manifests
   there, a peer per manifest, named by its `name`. A peer's libraries and

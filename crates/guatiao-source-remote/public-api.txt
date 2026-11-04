@@ -17,6 +17,7 @@ pub fn guatiao_source_remote::client::RemoteSource::fmt(&self, &mut core::fmt::F
 impl guatiao::library::serving::Source for guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::close(&self, &str, &str)
 pub fn guatiao_source_remote::client::RemoteSource::list(&self, guatiao::library::raw::host::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::client::RemoteSource::notes(&self) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Note>, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::client::RemoteSource::open(&self, guatiao::library::raw::host::Host, &str) -> core::result::Result<guatiao::library::raw::entry::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
 pub mod guatiao_source_remote::config
 #[non_exhaustive] pub enum guatiao_source_remote::config::Security
@@ -814,6 +815,7 @@ pub fn guatiao_source_remote::client::RemoteSource::fmt(&self, &mut core::fmt::F
 impl guatiao::library::serving::Source for guatiao_source_remote::client::RemoteSource
 pub fn guatiao_source_remote::client::RemoteSource::close(&self, &str, &str)
 pub fn guatiao_source_remote::client::RemoteSource::list(&self, guatiao::library::raw::host::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao_source_remote::client::RemoteSource::notes(&self) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Note>, guatiao::library::kind::ProviderError>
 pub fn guatiao_source_remote::client::RemoteSource::open(&self, guatiao::library::raw::host::Host, &str) -> core::result::Result<guatiao::library::raw::entry::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
 pub struct guatiao_source_remote::Server
 impl guatiao_source_remote::server::Server

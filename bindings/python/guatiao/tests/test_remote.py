@@ -76,6 +76,31 @@ def test_a_remote_rust_and_a_remote_c_greeter_are_called(reg, tmp_path):
         c.greet("")
 
 
+def test_a_host_is_told_what_its_tls_policy_weakens(reg):
+    # Nobody listens on the port: the refresh refuses the peer and still
+    # tells what the policy weakens, once.
+    name = reg.add_source_file(
+        _REMOTE,
+        {
+            "connect": "tls://127.0.0.1:9",
+            "security": "server-tls",
+            "pins": ["sha256:" + "0" * 64],
+            "policy": {"allow_resumption": True},
+        },
+    )
+    first = reg.refresh()
+    assert len(first["refused"]) == 1, first
+    assert first["notes"] == [
+        {
+            "source": name,
+            "subject": "",
+            "text": "weaker than modern: allow_resumption = true (modern: false)",
+            "detail": {"setting": "allow_resumption", "value": "true", "modern": "false"},
+        }
+    ]
+    assert "notes" not in reg.refresh()
+
+
 @pytest.fixture()
 def devices(tmp_path):
     """Two identical devices on loopback, each a server of the Rust
