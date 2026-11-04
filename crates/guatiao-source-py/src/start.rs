@@ -82,6 +82,16 @@ enum Started {
 
 static STARTED: Mutex<Option<Started>> = Mutex::new(None);
 
+/// How the interpreter was had.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Got {
+    /// This file started it under the settings asked.
+    Started,
+    /// It was running before this file was asked, and is used as it is;
+    /// `environment` when it does not ignore its environment.
+    Joined { environment: bool },
+}
+
 /// Why the interpreter could not be had as asked.
 pub(crate) enum StartError {
     /// It runs, under other settings than these.
@@ -106,7 +116,7 @@ impl From<&str> for StartError {
 /// A second source asking for other settings than the interpreter started
 /// with is refused: there is one interpreter for the program. A start that
 /// failed answers every later one.
-pub(crate) fn start(settings: &Settings) -> Result<(), StartError> {
+pub(crate) fn start(settings: &Settings) -> Result<Got, StartError> {
     let mut started = STARTED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -117,7 +127,7 @@ pub(crate) fn start(settings: &Settings) -> Result<(), StartError> {
             )));
         }
         Some(Started::Running) => return joined(settings),
-        Some(Started::Here(first)) if first.same(settings) => return Ok(()),
+        Some(Started::Here(first)) if first.same(settings) => return Ok(Got::Started),
         Some(Started::Here(first)) => {
             return Err(StartError::Started(format!(
                 "asks for `{}`{}, and the program's one interpreter already started with `{}`{}",
@@ -150,7 +160,7 @@ pub(crate) fn start(settings: &Settings) -> Result<(), StartError> {
                 name_the_prefix(home);
             }
             *started = Some(Started::Here(settings.clone()));
-            Ok(())
+            Ok(Got::Started)
         }
         Err(why) => {
             *started = Some(Started::Failed(why.clone()));
@@ -162,18 +172,24 @@ pub(crate) fn start(settings: &Settings) -> Result<(), StartError> {
 /// Joins an interpreter running before this file was asked, which is used
 /// as it is: refused when the configuration asked for `isolated`, or named
 /// `shipped`, and its flags do not say so.
-fn joined(settings: &Settings) -> Result<(), StartError> {
+fn joined(settings: &Settings) -> Result<Got, StartError> {
+    let read = |flag: &str| {
+        Python::attach(|py| -> pyo3::PyResult<i64> {
+            py.import("sys")?.getattr("flags")?.getattr(flag)?.extract()
+        })
+        .map_err(|e| StartError::Failed(format!("the running interpreter's flags: {e}")))
+    };
+    let got = Got::Joined {
+        environment: read("ignore_environment")? == 0,
+    };
     let (flag, needs) = match settings.isolation {
         Isolation::Isolated => ("isolated", true),
         Isolation::Shipped if settings.asked => ("ignore_environment", true),
-        _ => return Ok(()),
+        _ => return Ok(got),
     };
-    let set = Python::attach(|py| -> pyo3::PyResult<i64> {
-        py.import("sys")?.getattr("flags")?.getattr(flag)?.extract()
-    })
-    .map_err(|e| StartError::Failed(format!("the running interpreter's flags: {e}")))?;
+    let set = read(flag)?;
     if (set != 0) == needs {
-        return Ok(());
+        return Ok(got);
     }
     Err(StartError::Started(format!(
         "asks for `{}`, and the interpreter already running in this process does not hold to it \

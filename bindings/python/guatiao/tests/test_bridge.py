@@ -83,6 +83,21 @@ def test_the_examples_are_served_and_called(reg):
     assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
 
 
+def test_the_host_is_told_what_the_interpreter_it_joined_takes(reg, tmp_path):
+    # This interpreter is the host: the bridge joins it as it is, so a
+    # `home` is not applied, and the environment reaches it unless this
+    # Python ignores it.
+    name = reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)], "home": sys.base_prefix})
+    notes = reg.refresh()["notes"]
+    assert all(n["source"] == name for n in notes), notes
+    told = {n["subject"]: n["detail"] for n in notes}
+    expected = {"home": {"home": sys.base_prefix}}
+    if not sys.flags.ignore_environment:
+        expected["isolation"] = {"isolation": "inherit", "joined": True}
+    assert told == expected, notes
+    assert "notes" not in reg.refresh()
+
+
 def test_an_edit_serves_new_code_while_an_instance_of_the_old_answers(reg, tmp_path):
     source = _copy_greeter(tmp_path / "edited", "py_edited")
     reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)]})
