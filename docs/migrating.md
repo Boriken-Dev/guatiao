@@ -622,8 +622,7 @@ Node's TypeScript reader, Dart's `describe` and Go's `-document` refuse the
 same declarations through the library (Dart's `describe` reads two
 arguments whose names snake-case alike, `fooBar` and `foo_bar`, as one
 name): mark such a method `@throws`,
-`@fallible` or fallible (no `//guatiao:infallible`), and pass a list
-`Lent<ListRef>`/`Taken<ListRef>` or marked `lent`/`taken`.
+`@fallible` or fallible (no `//guatiao:infallible`).
 
 ## Loader and handles
 

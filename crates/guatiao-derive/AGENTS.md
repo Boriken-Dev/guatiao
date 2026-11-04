@@ -257,8 +257,7 @@ self`/`self`/no receiver, a `&mut` argument other than a lent tree
 (`&mut Value`/`&mut Map`/`&mut List`), a lent object or `&mut [u8]` on
 an object kind, `Option<&mut T>`, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
-`&List` (a list is lent or handed over), a borrowed argument of any
-other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
+a borrowed argument of any other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
 error is not `ProviderError`, two arguments of one name, a method named `header` (or `destroy` or
 `into_object` on an object kind), a method named `<m>_in` beside a method

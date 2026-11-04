@@ -249,7 +249,7 @@ last (a Rust method answering `Result`).
 | `bytes` / `bytearray` | `guatiao_bytes` / `guatiao_bytes_mut` (an object kind's only) | -- |
 | `bool`, `float` (F64), `kinds.I8`..`I64`, `U8`..`U64`, `USIZE`, `ISIZE`, `F32` | the scalar | the scalar |
 | `int` | refused: say its width | refused |
-| `Map`, `Ref` / `Value` / `Optional[Ref]` | `const guatiao_map *`, `const guatiao_value *` (null for `None`) | -- |
+| `Map`, `List`, `Ref` / `Value` / `Optional[Ref]` | `const guatiao_map *`, `const guatiao_list *`, `const guatiao_value *` (null for `None`) | -- |
 | `kinds.MapAnswer` (or `Map`), `kinds.ListAnswer` (or `List`), `kinds.ValueAnswer` (or `Value`) | -- | `guatiao_map/list/value *out`, a carrier |
 | `Taken[Map]`, `Taken[List]`, `Taken[Value]` | a tree handed over | -- |
 | `Lent[Map]`, `Lent[List]`, `Lent[Ref]` | a tree lent (`&mut`) | -- |
@@ -277,7 +277,7 @@ What crosses, each way:
 | scalars | `bool`/`int`/`float`, range-checked (`OverflowError`) | the same |
 | text in | `str` | `str` (`BadValue` if not UTF-8) |
 | bytes / out-buffer | bytes-like / a writable buffer | `bytes` / a `bytearray`, copied back when it returns |
-| borrowed `Ref`, `Map` | a `Value`, `Ref` or plain data | a read-only `Ref`/`Map`, valid for the call |
+| borrowed `Ref`, `Map`, `List` | a `Value`, `Ref` or plain data | a read-only `Ref`/`Map`/`List`, valid for the call |
 | `Taken[..]` tree | a `Value` (moved: left ABSENT), a `Ref` (cloned) or plain data | a `Map`/`List` over a whole tree it owns, or a `Value`, moved into this binding's allocator on arrival (copied only where the caller built it elsewhere), so it may be kept past the caller's library; taken, and freed, even when another argument refuses the call |
 | `Lent[..]` tree | a `Value` or `Ref`, changed where it stands; what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent, and a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value) | a writable `Map`/`List`/`Ref`, valid for the call; what it adds is built in the allocator the tree records |
 | tree answer | a `Value` the caller closes | a `Value` or a view of a whole one (moved), another `Ref`, or plain data, built in the allocator the carrier names |
