@@ -49,6 +49,25 @@ fn text_list(items: &[PathBuf]) -> List {
     list
 }
 
+/// On Windows, the Python installation the bridge's `python3.dll` is
+/// mapped from: the first directory on `PATH` holding it beside a `Lib`.
+fn python_home() -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .find(|dir| dir.join("python3.dll").is_file() && dir.join("Lib").is_dir())
+}
+
+/// A configuration naming, on Windows, the Python installation in
+/// `import_dirs`: the registry maps `python3.dll` from there under its
+/// default import search, which never reaches `PATH`.
+fn with_python(mut config: Map) -> Map {
+    if cfg!(windows) {
+        let home =
+            python_home().expect("a Python installation on PATH, as the bridge built against");
+        config.set("import_dirs", text_list(&[home]));
+    }
+    config
+}
+
 fn config() -> Map {
     let mut config = Map::new();
     config.set(
@@ -62,7 +81,7 @@ fn config() -> Map {
             repo().join("examples/greeter_kind/python"),
         ]),
     );
-    config
+    with_python(config)
 }
 
 #[test]
@@ -72,8 +91,9 @@ fn a_rust_host_serves_python_libraries() {
         return;
     };
     let mut registry = Registry::new("rust-host", "1.0");
-    // python3.dll, which the bridge imports, is in the Python installation, on PATH.
-    registry.set_import_search(ImportSearch::Path);
+    // The default: the bridge's imports are found beside it, beside the
+    // host, in the system directory and in `import_dirs`, never on `PATH`.
+    assert_eq!(registry.import_search(), ImportSearch::Library);
     let name = registry
         .add_source_file(&bridge, &config())
         .unwrap_or_else(|e| panic!("the bridge was refused: {e}"));
@@ -146,9 +166,8 @@ fn a_slot_named_close_is_served_from_python() {
         "paths",
         text_list(&[repo().join("bindings/python/guatiao/src")]),
     );
+    let config = with_python(config);
     let mut registry = Registry::new("close-host", "1.0");
-    // python3.dll, which the bridge imports, is in the Python installation, on PATH.
-    registry.set_import_search(ImportSearch::Path);
     registry
         .add_source_file(&bridge, &config)
         .unwrap_or_else(|e| panic!("the bridge was refused: {e}"));
