@@ -7,6 +7,20 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/GuatiaoTests.cmake")
 guatiao_cpp_test(cpp_values SOURCES test_values.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
 guatiao_cpp_test(cpp_vectors SOURCES test_vectors.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
 guatiao_cpp_test(cpp_frees SOURCES test_frees.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES)
+# The library of four providers a settings screen lists, written in C: the
+# catalog test copies this file to a directory of its own and scans it.
+enable_language(C)
+add_library(catalog_library SHARED "${GUATIAO_REPO}/crates/guatiao/tests/c_consumer/catalog_library.c")
+target_include_directories(catalog_library PRIVATE "${GUATIAO_REPO}/crates/guatiao/include"
+                           "${GUATIAO_REPO}/examples/greeter_kind/include")
+set_target_properties(catalog_library PROPERTIES C_STANDARD 11)
+if(WIN32)
+  set_target_properties(catalog_library PROPERTIES PREFIX "")
+endif()
+guatiao_cpp_test(cpp_catalog SOURCES test_catalog.cpp LIBS guatiao::guatiao ${CMAKE_DL_LIBS} BOTH_EXCEPTION_MODES
+                 DEFINITIONS "GUATIAO_CATALOG_LIBRARY=\"$<TARGET_FILE:catalog_library>\"")
+add_dependencies(cpp_catalog catalog_library)
+add_dependencies(cpp_catalog_noexcept catalog_library)
 guatiao_cpp_test(cpp_throwing SOURCES test_throwing.cpp LIBS guatiao::guatiao
                  INCLUDES "${GUATIAO_REPO}/examples/greeter_kind/include" "${GUATIAO_REPO}/examples/greeter_kind/cpp")
 guatiao_cpp_test(cpp_kinds SOURCES test_kinds.cpp LIBS guatiao::guatiao Threads::Threads BOTH_EXCEPTION_MODES

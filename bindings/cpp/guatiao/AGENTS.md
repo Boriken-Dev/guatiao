@@ -212,7 +212,15 @@ nothing. Not safe to call from two threads at once. Each method has its
   refusal nor a skip, each note the first refresh its source answers it.
   Nothing refreshes on its own.
 - asking: `libraries()`, `providers(kind)` (best first; every provider
-  for an empty kind), `provider(key)`, `available(kind)`, `why_not(kind)`,
+  for an empty kind), `catalog()` (every provider of every loaded
+  library, best first, for a settings screen, with none built: a list
+  of maps holding what `providers` does plus `available` (asked now)
+  and `reason`, `config` and `meta` when it declares them,
+  `library_key`, `library_version`, and `digest` (`"sha256:"` and the
+  hex of the file its library was mapped from, while it is still that
+  file) or `digest_error` saying why not; the first call reads each
+  library file in full; `guatiao::intake::provider_form(entry["config"],
+  entry["meta"])` answers the form to show an entry with), `provider(key)`, `available(kind)`, `why_not(kind)`,
   `best(kind)`, `provider_unavailable(key)` (`std::optional<std::string>`,
   asked every time), `provider_config(key)` (a borrowed `view`, until the
   library is retired), `provider_meta(key)` (a copy), `provider_table(key,

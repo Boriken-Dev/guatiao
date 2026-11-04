@@ -86,6 +86,13 @@ keeps sources (watched directories, a bridge to another language) for
 `refresh()`, ranks providers, builds instances from a configuration it
 checks against the provider's schema, and retires and unloads libraries.
 
+A settings screen lists every provider of every loaded library at once, none
+of them built, with `reg.catalog()` (a list of maps, best first: what
+`providers()` holds plus availability, `config`, `meta`, the library's
+`digest` or a `digest_error`), and takes the form to show one with
+`guatiao::intake::provider_form(entry["config"], entry["meta"])` of
+`guatiao-intake`, ABSENT when the entry has nothing to show.
+
 ## A kind
 
 A kind is the table its C header declares. In C++ it is declared once,
