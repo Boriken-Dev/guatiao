@@ -430,7 +430,7 @@ would refuse.
 | `String` | `str`; answered, `text` |
 | `Uint8List`, `BytesMut` | `bytes`, `bytes_mut` |
 | `bool`, `int`, `double`; `I8`..`I64`, `U8`..`U64`, `Isize`, `Usize`, `F32`, `F64` | the scalar (`int` is `i64`, `double` `f64`) |
-| `Ref`, `Ref?`, `MapRef` | `value`, `value` nullable, `map`, borrowed (a `ListRef` is refused: lend or take it) |
+| `Ref`, `Ref?`, `MapRef`, `ListRef` | `value`, `value` nullable, `map`, `list`, borrowed: read-only for the call |
 | `Lent<T>`, `Taken<T>` of `Ref`, `MapRef`, `ListRef` or an object kind's class | lent, taken (a bare object kind's class is refused) |
 | `ValueAnswer`, `MapAnswer`, `ListAnswer`; an object kind's class | the tree answered; the object answered |
 | `void` | no answer |

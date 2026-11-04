@@ -1,0 +1,28 @@
+{
+  "kinds": [
+    {
+      "name": "summer",
+      "floor_hash": 2920396019,
+      "object": false,
+      "doc": "Reads a list it is lent for the call.",
+      "slots": [
+        {
+          "name": "sum",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "items",
+              "type": "list",
+              "pass": "borrowed"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "The integers in `items`, added."
+        }
+      ]
+    }
+  ]
+}
