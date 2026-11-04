@@ -2014,6 +2014,12 @@ write now.
 
 ### Fixed
 
+- **MATLAB and Octave let go of what a call handed over when the
+  dispatcher fails before the method runs.** A slot whose provider could
+  not be found, or whose argument could not be wrapped, left the values
+  and objects the caller handed over filed and never destroyed; the
+  gateway now releases them, and `dispatch` says whether it took them.
+
 - **Python and Dart: one call never has a value lent and borrowed, or lent
   twice.** A slot taking `&mut Map` and `&Map`, called as `f(v, v)` (in
   either order, or with a node of `v` and `v`), handed Rust a `&mut` and
