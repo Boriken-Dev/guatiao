@@ -1085,7 +1085,10 @@ every object it held for the other. A peer that takes in nothing of a
 frame for as long as a call may wait has stalled, and the side writing
 ends the link. A call beyond the receiver's
 `max_calls`, or one the receiver cannot start a thread for, is refused
-`GUATIAO_ERR_BUSY`; a body over `max_frame` ends the link. A call whose
+`GUATIAO_ERR_BUSY`. A call counts against `max_calls` until its answer
+is sent, not until the thread that ran it is free, so a caller keeping to
+`max_calls` may call again the moment it has an answer. A body over
+`max_frame` ends the link. A call whose
 serving fails without an answer of its own (a Rust panic on the receiver)
 is answered `GUATIAO_ERR_INTERNAL`; a write that panics in the transport
 ends the link as a failed write does.
