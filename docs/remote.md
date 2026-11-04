@@ -836,13 +836,12 @@ under HTTP/3's application protocol `h3`, at mutual TLS, server TLS or
 none: a native peer at mutual TLS presents its certificate, which the
 channel reports, and each end names the other by its fingerprint
 (`Link::peer_id()`). The list's fingerprint rules are decided once the
-certificate is known and before any frame is read, and a client it denies
-is told so (`BAD_VALUE`); a mutual listener backed by a trust store is
-refused when it binds, with a list or without, since its handshake has no
-connection address to record a waiting client under (pin the clients
-instead). A client TLS itself refuses is reported by coqui-web as a lost
-path, and told `GONE`. A source the list denies, or any connection the server
-declines, is QUIC's CONNECTION_REFUSED, and the client says it was
+certificate is known, in the handshake: each connection's TLS
+configuration is built from its source and local address, so the list's
+fingerprint rules and a trust store's waiting entries (recorded under the
+source) work as on `tls://`. A client the server's TLS refuses is told so
+(`BAD_VALUE`, "the server does not trust this client"). A source the
+list denies, or any connection the server declines, is QUIC's CONNECTION_REFUSED, and the client says it was
 "refused the connection (by its access control list, or the server
 refused the connection)": it cannot tell which. A
 page uses server TLS (the key or a token inside the link) or none (the

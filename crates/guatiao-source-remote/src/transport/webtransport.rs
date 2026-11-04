@@ -19,9 +19,11 @@
 //! At mutual TLS a client presents a certificate, which the channel
 //! reports (`peer_certificates`) once the handshake is through: the link
 //! names the peer by it. The handshake of a connection runs on coqui-web's
-//! threads, where coqui-peer-tls has no connection addresses to decide the
-//! policy's list by, so the list's address rules are decided before the
-//! handshake and its fingerprint rules after it.
+//! threads, so each connection's TLS configuration is built from its
+//! source and local address (`with_tls_per_connection`, through
+//! coqui-peer-tls's `ServerConfigs`): the policy's list, with its
+//! fingerprint rules, and a trust store's waiting entries see the
+//! connection's addresses.
 //!
 //! A browser trusts a certificate no authority issued when the page pins
 //! it by its SHA-256 (`serverCertificateHashes`), and only one valid for
@@ -43,16 +45,14 @@ use coqui_net_acl::Acl;
 use coqui_peer_tls::{Identity, PeerId};
 use coqui_web::webtransport::{Dialer as WtDialer, Listener};
 use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
+use rustls::ServerConfig;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
-use super::tls::{TlsConfig, host_of, invalid, server_name, unbuilt, words};
-use super::web::{
-    Open, Refused, Shared, Watching, admits, canonical_list, connection, io_error, list_permits,
-    server_config,
-};
+use super::tls::{TlsConfig, host_of, invalid, server_name, unbuilt, untrusted_client, words};
+use super::web::{Open, Refused, Shared, Watching, admits, connection, io_error, server_config};
 use super::{Connect, Connection};
 use crate::lock;
 
@@ -178,6 +178,22 @@ impl Presenting {
     }
 }
 
+/// A connection's certificate resolver: the configuration's own (which
+/// refuses a hello from an address the list denies) deciding, then the
+/// certificate the listener presents now.
+#[derive(Debug)]
+struct Gated {
+    gate: Arc<dyn ResolvesServerCert>,
+    presenting: Arc<Presenting>,
+}
+
+impl ResolvesServerCert for Gated {
+    fn resolve(&self, hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        self.gate.resolve(hello)?;
+        self.presenting.current().ok().map(|p| Arc::clone(&p.key))
+    }
+}
+
 impl ResolvesServerCert for Presenting {
     fn resolve(&self, _hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         self.current().ok().map(|p| Arc::clone(&p.key))
@@ -293,6 +309,9 @@ impl WtConnect {
                 io::ErrorKind::ConnectionRefused,
                 format!("the WebTransport handshake with the server at {addr} did not finish"),
             ),
+            // The server's TLS refused this client's certificate (not pinned,
+            // not accepted, denied by the list's fingerprint rules).
+            Failure::Certificate => untrusted_client(&self.me),
             // QUIC's CONNECTION_REFUSED, which a list's refusal is and so is
             // any server declining a connection: the client cannot tell
             // which.
@@ -347,9 +366,6 @@ pub struct WtListen {
     presenting: Arc<Presenting>,
     refused: Arc<Refused>,
     config: Arc<TlsConfig>,
-    /// The policy's list, its fingerprints in canonical form.
-    list: Option<Arc<coqui_net_acl::Acl>>,
-    bound: SocketAddr,
 }
 
 impl core::fmt::Debug for WtListen {
@@ -365,22 +381,44 @@ impl WtListen {
     /// presenting its identity.
     pub fn bind(address: &str, config: &TlsConfig) -> io::Result<WtListen> {
         let address = bind_address(address)?;
-        // A rule naming something that is not a fingerprint is refused
-        // here, as the listener is made.
-        let list = canonical_list(config)?;
+        // Built once here, so a policy or a rule coqui-peer-tls refuses
+        // (a fingerprint that is not SHA-256) fails the bind, not each
+        // client.
+        let configs = Arc::new(config.server_configs(config.identity(), H3)?);
+        configs
+            .for_connection(address, address)
+            .map_err(|e| unbuilt(&e))?;
         let presenting = Arc::new(Presenting {
             certs: Mutex::new(Certs::new(
                 Arc::new(Presented::of(config.identity().clone())?),
                 None,
             )),
         });
-        let tls = server_config(
+        // What a connection is given should building its own fail: a
+        // configuration that refuses everyone.
+        let fallback = server_config(
             config,
             H3,
             Some(Arc::clone(&presenting) as Arc<dyn ResolvesServerCert>),
-            false,
+            true,
         )?;
-        let listener = Listener::bind(address, tls).map_err(io_error)?;
+        let listener = Listener::bind(address, Arc::clone(&fallback)).map_err(io_error)?;
+        let serving = Arc::clone(&presenting);
+        let listener = listener.with_tls_per_connection(move |source, local| {
+            match configs.for_connection(source, local) {
+                Ok(connection) => {
+                    let mut tls = ServerConfig::clone(&connection.config());
+                    // The address gate of the configuration stays, over the
+                    // certificate the listener presents now.
+                    tls.cert_resolver = Arc::new(Gated {
+                        gate: Arc::clone(&tls.cert_resolver),
+                        presenting: Arc::clone(&serving),
+                    });
+                    Arc::new(tls)
+                }
+                Err(_) => Arc::clone(&fallback),
+            }
+        });
         let bound = listener.local_addr();
         let refused = Arc::new(Refused::default());
         let turned = Arc::clone(&refused);
@@ -400,8 +438,6 @@ impl WtListen {
             presenting,
             refused,
             config,
-            list,
-            bound,
         })
     }
 
@@ -467,21 +503,11 @@ impl WtListen {
                 Ok(pending) => {
                     let source = pending.peer_addr();
                     let cancel = pending.canceller();
-                    let mutual = self.config.is_mutual() && self.config.proves_peers();
-                    let (list, bound) = (self.list.clone(), self.bound);
                     let open: Open = Box::new(move || {
-                        let channel = pending.handshake().map_err(io_error)?;
-                        if let (true, Some(list)) = (mutual, &list) {
-                            // The list's fingerprint rules: the handshake had
-                            // no addresses to decide them by.
-                            if let Err(e) =
-                                list_permits(list, source, bound, channel.peer_certificates())
-                            {
-                                super::web::refuse(&channel, &e.to_string());
-                                return Err(e);
-                            }
-                        }
-                        Ok(Arc::new(channel) as Arc<dyn Channel>)
+                        pending
+                            .handshake()
+                            .map(|channel| Arc::new(channel) as Arc<dyn Channel>)
+                            .map_err(io_error)
                     });
                     let mutual = self.config.is_mutual() && self.config.proves_peers();
                     let shared = Shared::new(true, true, mutual);

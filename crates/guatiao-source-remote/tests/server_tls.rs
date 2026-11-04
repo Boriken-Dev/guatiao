@@ -260,15 +260,6 @@ fn a_mutual_tls_server_refuses_a_client_with_no_certificate() {
             LinkOptions::new(Trust::ServerTls).key(KEY),
         );
         let e = source.link().unwrap_err();
-        // A QUIC handshake the server ends reaches a WebTransport client as
-        // a connection that did not finish, which coqui-web cannot tell
-        // from a lost path (`GONE`); the refusal itself is shown with raw
-        // channels in `webtransport.rs`.
-        #[cfg(feature = "webtransport")]
-        if matches!(over, Over::Wt) {
-            assert_eq!(e.status, Status::GUATIAO_ERR_GONE, "{over:?}: {e:?}");
-            continue;
-        }
         assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE, "{over:?}: {e:?}");
     }
 }

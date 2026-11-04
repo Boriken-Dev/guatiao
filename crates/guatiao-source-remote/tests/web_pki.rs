@@ -286,27 +286,16 @@ fn a_chained_identity_is_presented_whole_on_every_transport() {
     let client_id = Identity::generate().unwrap();
     let mut policy = guatiao_source_remote::transport::tls::Policy::modern();
     policy.acl = Some(only(&client_id, None));
-    let server = TlsConfig::open(&state).unwrap().policy(policy.clone());
+    let server = TlsConfig::open(&state).unwrap().policy(policy);
     assert_eq!(server.identity().intermediates_der().len(), 1);
     coqui_peer_tls::TrustStoreExt::accept_certificate(
         server.trust_store().unwrap(),
         client_id.certificate_der(),
     )
     .unwrap();
-    // A WebTransport listener cannot hold a store beside a list naming a
-    // fingerprint (its handshake has no addresses): it pins the client.
-    let pinned = TlsConfig::open(&state)
-        .unwrap()
-        .pins([client_id.fingerprint()])
-        .policy(policy);
     let client = TlsConfig::new(client_id).roots(Roots::bundle_file(&bundle));
     for over in every() {
-        let config = if format!("{over:?}") == "Wt" {
-            &pinned
-        } else {
-            &server
-        };
-        let port = listen_as(over, config, LinkOptions::new(Trust::Secure));
+        let port = listen_as(over, &server, LinkOptions::new(Trust::Secure));
         let source = RemoteSource::new(
             connect(over, "localhost", port, &client),
             LinkOptions::new(Trust::Secure),
