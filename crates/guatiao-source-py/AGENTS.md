@@ -64,7 +64,7 @@ was added:
 
 | subject | when | detail |
 | --- | --- | --- |
-| `isolation` | this file started the interpreter under `inherit`, or joined one whose `sys.flags.ignore_environment` is 0 | `{"isolation": "inherit", "joined": bool}` |
+| `isolation` | this file started the interpreter under `inherit`, or joined one whose `sys.flags.ignore_environment` is 0 | `{"effective": "inherit", "configured": "<the configuration's isolation, shipped when unnamed>", "joined": bool}` |
 | `home` | `home` was named and the interpreter was joined, so it is not applied | `{"home": "<as named, made absolute>"}` |
 
 The import search and `import_dirs` are the registry's, set by the host
