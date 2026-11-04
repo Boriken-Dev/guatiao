@@ -966,12 +966,21 @@ one. Each
 side sends no frame larger than the other's `max_frame`, and keeps no
 more of its own calls open than the other's `max_calls`. Before the
 handshake ends a body is at most 64 KiB. Where a key PROOF follows the
-WELCOME (the trusted level, and server TLS with a key), that holds until
-the PROOF is checked, so a stranger cannot send a large message in its
+WELCOME (the trusted level, and server TLS with a key), the PROOF itself
+is at most 64 KiB, so a stranger cannot send a large message in its
 place. On a message transport (WebSocket, WebTransport) the server
-stages its bound before the WELCOME, so the PROOF is judged small and a
-call a client sends right behind it, large; a transport that cannot stage
-keeps the handshake's bound until the PROOF is through.
+stages its bound before the WELCOME: the PROOF is judged small and every
+message behind it at `max_frame`, so a call a client sends right behind
+its PROOF is read; a transport that cannot stage keeps the handshake's
+bound until the PROOF is through. The cost: the channel reads ahead of
+the link (coqui-web's `pending`, 64 messages), so a client past the
+address rules that sends a junk PROOF and then large messages makes the
+server hold what it transmits before the server reads the PROOF, checks
+it and closes the channel: up to `pending` messages of `max_frame` each
+(4 GiB at the defaults), for the few milliseconds that takes, or at most
+the handshake timeout if the thread serving the link stalls. A smaller
+`LinkOptions::max_frame` shrinks it; the read-ahead cannot be lowered for
+a channel's first messages only.
 
 At the trusted level the WELCOME's proof is HMAC-SHA256 over the key, of
 `"guatiao-remote server"`, the client's nonce and the server's; the

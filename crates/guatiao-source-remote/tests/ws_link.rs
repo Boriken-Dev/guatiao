@@ -447,3 +447,131 @@ fn a_large_call_pipelined_right_behind_the_proof_is_served() {
     assert!(link.alive(), "the link survives: {}", link.why());
     link.ping().expect("and answers");
 }
+
+/// A client's writer that puts a large message where its second frame (the
+/// PROOF) goes.
+struct ProofReplaced {
+    inner: Box<dyn guatiao_source_remote::transport::FrameWrite>,
+    writes: usize,
+}
+
+impl guatiao_source_remote::transport::FrameWrite for ProofReplaced {
+    fn write_frame(&mut self, frame: &[u8]) -> std::io::Result<()> {
+        self.writes += 1;
+        if self.writes == 2 {
+            // The client may send past the handshake's bound only once it has
+            // agreed a larger one, so the wrapper agrees it for this frame.
+            self.inner.set_max_frame(64 << 20);
+            let body = vec![0u8; 3 << 20];
+            let mut big = u32::try_from(body.len()).unwrap().to_le_bytes().to_vec();
+            big.extend_from_slice(&body);
+            return self.inner.write_frame(&big);
+        }
+        self.inner.write_frame(frame)
+    }
+
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.inner.set_timeout(timeout)
+    }
+
+    fn shutdown(&mut self) {
+        self.inner.shutdown();
+    }
+}
+
+struct SendsBigProof(WsConnect);
+
+impl guatiao_source_remote::transport::Connect for SendsBigProof {
+    fn connect(&self) -> std::io::Result<guatiao_source_remote::transport::Connection> {
+        let mut conn = self.0.connect()?;
+        conn.writer = Box::new(ProofReplaced {
+            inner: conn.writer,
+            writes: 0,
+        });
+        Ok(conn)
+    }
+
+    fn describe(&self) -> String {
+        self.0.describe()
+    }
+}
+
+/// A stranger puts a 3 MiB message where the PROOF goes: the channel judges
+/// it at the handshake's 64 KiB (the staged bound), refusing it as it
+/// arrives, not after buffering it under the full bound.
+#[test]
+fn a_large_message_in_the_proofs_place_is_refused_under_64_kib() {
+    let server = common::server(LinkOptions::new(Trust::Trusted).key(KEY));
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (told, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(accepted) = listener.accept() {
+            if let Accepted::Connection(conn) = accepted {
+                let server = server.clone();
+                let told = told.clone();
+                std::thread::spawn(move || {
+                    let _ = told.send(server.serve(conn).map(|_| ()).map_err(|e| format!("{e:?}")));
+                });
+            }
+        }
+    });
+    let source = guatiao_source_remote::RemoteSource::new(
+        Box::new(SendsBigProof(WsConnect::new(&format!(
+            "ws://127.0.0.1:{port}/remote"
+        )))),
+        LinkOptions::new(Trust::Trusted)
+            .key(KEY)
+            .timeout(Some(Duration::from_secs(10))),
+    );
+    // The client returns once its PROOF is written; the server judges it.
+    let _client = source.link();
+    let why = heard
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .expect_err("the server refuses it");
+    assert!(
+        why.contains("breaks the wire"),
+        "refused by the channel ending at its bound (not read whole and found too large): {why}"
+    );
+}
+
+/// A 1 MiB message sent in one burst with the upgrade is the first the
+/// channel judges: under the handshake's bound, not coqui-web's default.
+#[test]
+fn a_one_mib_first_message_sent_with_the_upgrade_is_refused() {
+    use std::io::Write;
+    let listener = WsListen::bind("127.0.0.1:0", common::permit(&["127.0.0.1"])).unwrap();
+    let at = listener.local_addr().unwrap();
+    let sending = std::thread::spawn(move || {
+        let mut stream = std::net::TcpStream::connect(at).unwrap();
+        let mut burst = format!(
+            "GET /remote HTTP/1.1\r\nHost: {at}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        )
+        .into_bytes();
+        let payload = vec![0u8; 1 << 20];
+        burst.push(0x82);
+        burst.push(0x80 | 127);
+        burst.extend_from_slice(&u64::try_from(payload.len()).unwrap().to_be_bytes());
+        burst.extend_from_slice(&[0, 0, 0, 0]);
+        burst.extend_from_slice(&payload);
+        let _ = stream.write_all(&burst);
+        std::thread::sleep(Duration::from_secs(2));
+    });
+    let Accepted::Connection(mut conn) = listener.accept().unwrap() else {
+        panic!("admitted");
+    };
+    conn.reader
+        .set_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut buf = Vec::new();
+    let e = conn
+        .reader
+        .read_frame(&mut buf, 64 << 10)
+        .expect_err("a 1 MiB first message is refused");
+    assert!(
+        e.to_string().contains("broke the wire format"),
+        "refused by the channel's bound: {e}"
+    );
+    sending.join().unwrap();
+}
