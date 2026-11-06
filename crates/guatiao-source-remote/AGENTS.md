@@ -13,9 +13,9 @@ coqui-peer-tls: coqui-net-acl at `=0.0.0-alpha.0`, coqui-peer and coqui-peer-tls
 `=0.0.0-alpha.1`.
 
 **Not publishable yet.** `ws` and `webtransport` take their channels from
-[coqui-web](https://github.com/Boriken-Dev/coqui-web), a git dependency
+[coqui-web-channel](https://github.com/Boriken-Dev/coqui-web-channel), a git dependency
 pinned to a revision, and a crate with a git dependency cannot be
-published: this crate waits for coqui-web's first release. coqui-web
+published: this crate waits for coqui-web-channel's first release. coqui-web-channel
 brings tungstenite and wtransport (and mio, tokio) with it; this crate
 names none of them.
 
@@ -27,8 +27,8 @@ names none of them.
 | `quic` | `tls` and `transport::quic`: QUIC, at mutual TLS or no security, with datagrams (`quinn` with rustls on ring, `tokio` inside the transport) |
 | `local` | `transport::local`: a Unix socket (std) or a named pipe (`interprocess`, Windows only) |
 | `shm` | `local` and `transport::shm`: two rings in a mapped file (`memmap2`) |
-| `ws` | `tcp` and `transport::ws`: WebSocket, what a browser opens (`coqui-web`, `url`, `coqui-peer`); `ws://` with no TLS and on loopback unless named, `wss://` over `tls`'s |
-| `webtransport` | `tls` and `transport::webtransport`: WebTransport (HTTP/3 over QUIC), what a browser opens with the server's certificate pinned by its hash (`coqui-web`, `url`); mutual TLS, server TLS or no security, with datagrams |
+| `ws` | `tcp` and `transport::ws`: WebSocket, what a browser opens (`coqui-web-channel`, `url`, `coqui-peer`); `ws://` with no TLS and on loopback unless named, `wss://` over `tls`'s |
+| `webtransport` | `tls` and `transport::webtransport`: WebTransport (HTTP/3 over QUIC), what a browser opens with the server's certificate pinned by its hash (`coqui-web-channel`, `url`); mutual TLS, server TLS or no security, with datagrams |
 | `rdma` | `tcp` and `transport::rdma`: RDMA, experimental, Linux only; libibverbs opened at run time (`libloading`, `libc`, Linux only), so building needs no rdma-core |
 
 ## A host
@@ -252,7 +252,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   configuration built per connection by coqui-peer-tls's
   `ServerConfigs::for_connection`, which shares the listener's sessions
   and keeps the refusal for the server's words). `WsListen` and `WtListen`
-  decide a source's address in coqui-web's admission, before any handshake,
+  decide a source's address in coqui-web-channel's admission, before any handshake,
   and report the sources it turned away as `Accepted::Refused`. A listener whose list
   names something that is not a SHA-256 fingerprint is refused as it is
   made.
@@ -323,17 +323,17 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   certificate it generated and nobody checks either: the list decides
   by address alone, the link's key proof decides the link, and
   `peer_id()` answers `None`.
-- **WebTransport** (`webtransport`, through coqui-web): the session's
+- **WebTransport** (`webtransport`, through coqui-web-channel): the session's
   TLS from the same `TlsConfig` (identity, pins, trust store, roots,
   policy) under ALPN `h3`, at mutual TLS, server TLS or no security. The
   channel reports the certificate the peer presented (`peer_certificates`,
   the chain TLS accepted), and `peer_id()` is its fingerprint at mutual
   TLS on both ends and a client's at server TLS. One bidirectional stream
-  per session carries the frames as over QUIC (coqui-web's own `u32` length
+  per session carries the frames as over QUIC (coqui-web-channel's own `u32` length
   framing, the same bytes), and `datagrams()` are HTTP/3 datagrams. At no
   security the client presents no certificate and a native one checks
   none. Each connection's TLS configuration is built from its source
-  and local address (coqui-web's `with_tls_per_connection`, through
+  and local address (coqui-web-channel's `with_tls_per_connection`, through
   coqui-peer-tls's `ServerConfigs::for_connection`, built once at bind so
   a policy or a rule it refuses, a fingerprint that is not SHA-256 among
   them, fails the bind): the policy's list decides in the TLS, its
@@ -342,13 +342,13 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   resolver over the configuration's own keeps its address gate and
   presents the certificate the listener holds now (rotation); the
   listener's base configuration is the fail-closed fallback. The list's
-  address rules are also decided in coqui-web's admission, which reports the
+  address rules are also decided in coqui-web-channel's admission, which reports the
   sources turned away as `Accepted::Refused`. A client the server's TLS
   refuses (not pinned, not accepted, denied by the list) fails its dial
   with `Failure::Certificate` and is told `BAD_VALUE`, "the server does not
   trust this client". A source the list denies by address, or any
   connection the server declines, is QUIC's CONNECTION_REFUSED, which
-  coqui-web reports as `Failure::Permission`; a client cannot tell which,
+  coqui-web-channel reports as `Failure::Permission`; a client cannot tell which,
   and says "refused the connection (by its access control list, ... or the
   server refused the connection)" (`BAD_VALUE`).
   A browser takes a certificate pinned by hash only when it is valid for
@@ -409,16 +409,16 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   closing its end ends that read. **Shared memory** gives the bound to
   the local connection it waits on for the peer's bytes, and its closer
   is that connection's too.
-- **WebSocket** (`ws`, through coqui-web): a frame's body is one binary
-  message, with no length in front (coqui-web's binary frames). `WsListen`
+- **WebSocket** (`ws`, through coqui-web-channel): a frame's body is one binary
+  message, with no length in front (coqui-web-channel's binary frames). `WsListen`
   admits peers by its access control list as `TcpListen` does, by address,
-  in coqui-web's admission, and reports the sources it turned away as
+  in coqui-web-channel's admission, and reports the sources it turned away as
   `Accepted::Refused`; `accept` reads nothing, and a connection answers
   the HTTP upgrade on its first read, on the thread serving the link,
   which the `closer` cancels at once (the socket closes), so a client that
-  connects and stalls holds only that thread, for coqui-web's handshake
+  connects and stalls holds only that thread, for coqui-web-channel's handshake
   bound (10 s); a write before the upgrade is refused (`NotConnected`).
-  **`ws://` is for this machine alone** unless named: coqui-web refuses to
+  **`ws://` is for this machine alone** unless named: coqui-web-channel refuses to
   listen on, or dial, a plain WebSocket beyond loopback (`PermissionDenied`,
   naming `plain_beyond_loopback` and `wss://`), and
   `WsListen::bind_beyond_loopback` / `WsConnect::beyond_loopback` (the
@@ -445,15 +445,15 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   transport that cannot stage keeps the handshake's bound until the PROOF
   checks) and on either side before the link is returned, not when the
   reader first asks. The first message is judged at the handshake's bound
-  from the channel's start (`limits()` sets coqui-web's `max_message`).
+  from the channel's start (`limits()` sets coqui-web-channel's `max_message`).
   A channel also reads one message ahead of the link (`limits()` sets
-  coqui-web's `pending` to 1) until the link admits the peer and raises it
+  coqui-web-channel's `pending` to 1) until the link admits the peer and raises it
   to 64 (`FrameRead::set_read_ahead`, through the channel's `set_pending`;
   a transport without one answers `Unsupported` and changes nothing): a
   server once the PROOF holds, or before its reply where no PROOF is read,
   a client once the WELCOME and its proof hold. So a client past the
   address rules that sends a junk PROOF and then large messages makes this
-  side hold one message of `max_frame` behind the PROOF, plus coqui-web's
+  side hold one message of `max_frame` behind the PROOF, plus coqui-web-channel's
   buffers below whole messages (under 128 KiB on a WebSocket, under 16 KiB
   on WebTransport, TLS's, and the TCP receive buffer or QUIC stream
   window), until the link checks the PROOF and closes the channel
@@ -463,7 +463,7 @@ rdma::{RdmaPort::first(), RdmaPort::named("rxe0").port(1).gid_index(1), devices(
   (`set_max_send`, `FrameWrite::set_max_frame`, the peer's, known once the
   handshake agreed it); a frame past the peer's is refused by the writer
   (`InvalidInput`) and the reader keeps its own size check. A write waits
-  for room in coqui-web's send queue for the link's write timeout
+  for room in coqui-web-channel's send queue for the link's write timeout
   (`FrameWrite::set_timeout`, through `send_timeout`; none: while the
   channel lives) and then fails `TimedOut`; a dead worker is `PathLost`,
   which ends the link (`GONE`). **`wss://`** (with `tls`): `WsConnect::tls`

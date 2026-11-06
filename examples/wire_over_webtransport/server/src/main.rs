@@ -3,9 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Serves WebTransport on UDP port 4433 (`WIRE_PORT`) through
-//! coqui-web: to each session that opens its stream and says hello it
+//! coqui-web-channel: to each session that opens its stream and says hello it
 //! announces the schema on channel 1, then sends a value every
-//! `WIRE_INTERVAL_MS` (default 1000). Each channel frame is one coqui-web
+//! `WIRE_INTERVAL_MS` (default 1000). Each channel frame is one coqui-web-channel
 //! message.
 //!
 //! The certificate is self-signed and short-lived, which a browser accepts
@@ -20,8 +20,8 @@ use core::net::{Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
 use coqui_peer_tls::{Identity, Policy};
-use coqui_web::Channel;
-use coqui_web::webtransport::{Listener, Pending};
+use coqui_web_channel::Channel;
+use coqui_web_channel::webtransport::{Listener, Pending};
 use guatiao::value::wire::channel;
 use wire_over_webtransport::{CHANNEL, nth, schema};
 
@@ -54,7 +54,7 @@ fn main() -> Result<(), Failure> {
         coqui_peer_tls::server_config_without_client_auth_with(&identity, &[], &Policy::modern())?
             .config;
     // A client that resolves `localhost` to `::1` first falls back to
-    // the IPv4 address (coqui-web dials each address a name resolves to).
+    // the IPv4 address (coqui-web-channel dials each address a name resolves to).
     let bind = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
     let listener = Listener::bind(bind, Arc::new(tls))
         .map_err(|e| format!("cannot listen on UDP {bind}: {e}"))?;

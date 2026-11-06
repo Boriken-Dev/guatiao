@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! TLS under a WebSocket (`wss://`) through coqui-web: mutual TLS (pins,
+//! TLS under a WebSocket (`wss://`) through coqui-web-channel: mutual TLS (pins,
 //! the trust store, refusals) with the WebSocket's upgrade inside it, as a
 //! browser holding a client certificate would connect, and server TLS.
 
@@ -262,8 +262,8 @@ fn a_server_the_client_does_not_pin_is_refused_as_a_trust_failure() {
 #[test]
 fn a_resumed_session_still_names_the_client() {
     use coqui_peer_tls::{Pins, Trust as Pinned};
-    use coqui_web::websocket::{Dialer, Frames};
-    use coqui_web::{Channel, Dialer as _, Kind};
+    use coqui_web_channel::websocket::{Dialer, Frames};
+    use coqui_web_channel::{Channel, Dialer as _, Kind};
     use guatiao_source_remote::transport::tls::Policy;
     let (server_id, client_id) = (Identity::generate().unwrap(), Identity::generate().unwrap());
     let mut resuming = Policy::modern();

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What a message transport (coqui-web's WebSocket and WebTransport) must
+//! What a message transport (coqui-web-channel's WebSocket and WebTransport) must
 //! do as a stream does: carry a frame past the largest this side reads, up
 //! to what the peer takes, and wait for a peer slow to take a burst rather
 //! than end the link.
@@ -170,7 +170,7 @@ fn a_frame_past_what_the_peer_takes_is_refused_by_the_writer() {
 }
 
 /// Four 30 MiB frames written to a peer slow to take them all arrive:
-/// the writer waits while coqui-web's queue is full.
+/// the writer waits while coqui-web-channel's queue is full.
 #[test]
 fn a_burst_of_large_frames_waits_for_a_slow_peer_to_take_them() {
     let (mut server, mut client) = pair("ws");
@@ -258,7 +258,7 @@ fn a_server_channel_reads_one_frame_ahead_until_raised() {
     }
 }
 
-/// A peer that takes nothing (its channel full: coqui-web stops reading at
+/// A peer that takes nothing (its channel full: coqui-web-channel stops reading at
 /// its read-ahead) ends a write at the timeout the link set,
 /// as a stream's does.
 #[test]

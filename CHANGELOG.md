@@ -1622,15 +1622,15 @@ write now.
   never looked for. What was mapped is let go with the file. A refusal
   names each import found nowhere.
 - **guatiao-source-remote: WebSocket and WebTransport run on
-  [coqui-web](https://github.com/Boriken-Dev/coqui-web).** Its channels
+  [coqui-web-channel](https://github.com/Boriken-Dev/coqui-web-channel).** Its channels
   replace the tungstenite and wtransport code in `transport::ws` and
   `transport::webtransport`, and in `examples/wire_over_webtransport`; the
   remote protocol, the frames on the wire and the Dart and TypeScript
-  clients are unchanged. **coqui-web is a git dependency, pinned to a
+  clients are unchanged. **coqui-web-channel is a git dependency, pinned to a
   revision, until it is released, so `guatiao-source-remote` cannot be
   published until then.** What changes for a user of the crate:
   - `ws://` listens and dials on this machine alone (loopback) unless
-    named: coqui-web carries no plain WebSocket past it, and a listener on
+    named: coqui-web-channel carries no plain WebSocket past it, and a listener on
     another address or a connect to one is `PermissionDenied` naming
     `wss://` and the setting below.
   - A plain `ws://` beyond loopback is a named weakening, off by default:
@@ -1640,7 +1640,7 @@ write now.
     Rust. `RemoteSource::weakened()` lists it and the server says it at
     start. `weakened()` is now built with `ws` as well as `tls`, and its
     items are `coqui_peer::Weakening` (the type the TLS ones are).
-  - Mutual TLS runs over `wss://` and `https://`: coqui-web reports the
+  - Mutual TLS runs over `wss://` and `https://`: coqui-web-channel reports the
     certificate each side presented (`Channel::peer_certificates`, a
     resumed TLS 1.3 session's included), and `Link::peer_id()` names the
     peer by it. A WebTransport server's link is named `https <address>`.
@@ -1671,7 +1671,7 @@ write now.
     control list, or the server refused the connection)" (`BAD_VALUE`).
   - A write to a WebSocket or WebTransport channel waits for room for the
     link's write timeout, as a stream's does, and a handshake under way is
-    cancelled by the link's closer. coqui-web bounds what a channel reads
+    cancelled by the link's closer. coqui-web-channel bounds what a channel reads
     and what it sends apart (the link's `max_frame` and the peer's), so an
     answer larger than this side's own `max_frame` crosses as it does over
     `tcp://`. `FrameWrite::set_max_frame` is new, a default that does
@@ -1680,9 +1680,9 @@ write now.
     the address the listener is bound to, and refuses every client only on
     a wildcard bind.
   - `WsListen::from_listener`, `from_listener_tls`, `WtListen::from_socket`
-    and `from_socket_trusted` are gone: coqui-web binds the address itself.
+    and `from_socket_trusted` are gone: coqui-web-channel binds the address itself.
   - The `webtransport` feature no longer enables `quic`, and `ws` and
-    `webtransport` bring coqui-web (with tungstenite, wtransport, mio and
+    `webtransport` bring coqui-web-channel (with tungstenite, wtransport, mio and
     tokio) instead of tungstenite and wtransport directly.
   - `examples/wire_over_webtransport`: the page opens one bidirectional
     stream and says hello on it, and the server answers on it, where the

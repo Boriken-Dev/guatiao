@@ -168,7 +168,7 @@ enum Reached {
 /// server `pin`, dialling `at`.
 fn raw(id: Option<&Identity>, pin: PeerId, at: &str) -> Reached {
     use coqui_peer_tls::{Pins, Policy, Trust as Pinned};
-    use coqui_web::{Channel, Dialer, Kind};
+    use coqui_web_channel::{Channel, Dialer, Kind};
     let trust = Pinned::Pinned(Pins::fixed([pin]));
     let built = match id {
         Some(id) => coqui_peer_tls::client_config_with(id, &trust, &[b"h3"], &Policy::modern()),
@@ -178,13 +178,14 @@ fn raw(id: Option<&Identity>, pin: PeerId, at: &str) -> Reached {
     }
     .unwrap();
     let mut dialer =
-        coqui_web::webtransport::Dialer::with_tls(alloc::sync::Arc::new(built.config)).unwrap();
+        coqui_web_channel::webtransport::Dialer::with_tls(alloc::sync::Arc::new(built.config))
+            .unwrap();
     let url = url::Url::parse(&url(at)).unwrap();
     match dialer.dial(Kind::WebTransport, &url, Duration::from_secs(5)) {
         // TLS 1.3 lets a client finish before the server has judged its
         // certificate: the refusal then arrives as the first read.
         Ok(channel) => match channel.receive(Some(Duration::from_secs(2))) {
-            Err(coqui_web::Failure::Timeout) => Reached::Held,
+            Err(coqui_web_channel::Failure::Timeout) => Reached::Held,
             _ => Reached::Refused,
         },
         Err(_) => Reached::Refused,
@@ -426,7 +427,7 @@ fn a_resumed_webtransport_session_meets_the_lists_fingerprint_rules() {
     // One client configuration for both dials, so the second can resume
     // the first's session.
     use coqui_peer_tls::{Pins, Trust as Pinned};
-    use coqui_web::{Channel, Dialer as _, Kind};
+    use coqui_web_channel::{Channel, Dialer as _, Kind};
     let built = coqui_peer_tls::client_config_with(
         &client_id,
         &Pinned::Pinned(Pins::fixed([server_id.fingerprint()])),
@@ -437,7 +438,7 @@ fn a_resumed_webtransport_session_meets_the_lists_fingerprint_rules() {
     let config = Arc::new(built.config);
     let target = url::Url::parse(&url(&at)).unwrap();
     let dial = |from: &str| {
-        coqui_web::webtransport::Dialer::with_tls(Arc::clone(&config))
+        coqui_web_channel::webtransport::Dialer::with_tls(Arc::clone(&config))
             .unwrap()
             .with_local_addr(from.parse().unwrap())
             .dial(Kind::WebTransport, &target, Duration::from_secs(5))
@@ -791,7 +792,7 @@ fn the_server_binary_serves_webtransport_and_writes_the_hashes_a_page_pins() {
 /// a validity of at most 14 days, ECDSA P-256) reaches a rotating listener.
 #[test]
 fn a_client_pinning_by_hash_as_a_browser_does_reaches_a_rotating_listener() {
-    use coqui_web::{CertificatePin, Dialer as _, Kind};
+    use coqui_web_channel::{CertificatePin, Dialer as _, Kind};
     let config = TlsConfig::new(Identity::generate().unwrap()).server_tls();
     let listener = WtListen::bind("127.0.0.1:0", &config)
         .unwrap()
@@ -806,7 +807,7 @@ fn a_client_pinning_by_hash_as_a_browser_does_reaches_a_rotating_listener() {
         .iter()
         .map(|h| h.canonical().parse().unwrap())
         .collect();
-    let mut dialer = coqui_web::webtransport::Dialer::pinned(&pins).unwrap();
+    let mut dialer = coqui_web_channel::webtransport::Dialer::pinned(&pins).unwrap();
     let url = url::Url::parse(&url(&at)).unwrap();
     dialer
         .dial(Kind::WebTransport, &url, Duration::from_secs(10))

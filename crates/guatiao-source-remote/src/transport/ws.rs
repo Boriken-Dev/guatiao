@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! WebSocket (RFC 6455), what a browser can open, through coqui-web:
+//! WebSocket (RFC 6455), what a browser can open, through coqui-web-channel:
 //! `ws://` with no TLS, on loopback unless told otherwise, and `wss://`
 //! over a server certificate (feature `tls`). Each frame's body is one binary message,
 //! with no length in front. A listener admits peers by an access control
@@ -10,7 +10,7 @@
 //! the upgrade; a connection upgrades on its first read, on the thread
 //! serving it.
 //!
-//! coqui-web runs the TLS of a `wss://` link itself, from a rustls
+//! coqui-web-channel runs the TLS of a `wss://` link itself, from a rustls
 //! configuration, and reports the certificate each side presented
 //! (`peer_certificates`), by which a link names its peer at mutual TLS.
 //! The handshake of a connection runs on the thread serving it, which is
@@ -30,8 +30,8 @@ use core::time::Duration;
 use std::io;
 
 use coqui_net_acl::{Acl, Outcome};
-use coqui_web::websocket::{Dialer as WsDialer, Frames, Listener};
-use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
+use coqui_web_channel::websocket::{Dialer as WsDialer, Frames, Listener};
+use coqui_web_channel::{Channel, Dialer as _, Failure, Kind, Limits};
 use url::Url;
 
 use super::tcp::{Accepted, CONNECT_TIMEOUT, bind_address};
@@ -46,7 +46,7 @@ fn invalid(why: impl core::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, why.to_string())
 }
 
-/// The bounds of a link's channel: coqui-web's, with the largest message
+/// The bounds of a link's channel: coqui-web-channel's, with the largest message
 /// the handshake's until the link raises it, so the first message a peer
 /// sends is judged small, as the HELLO is, and one message read ahead until
 /// the link admits the peer (`FrameRead::set_read_ahead`), so a peer not yet
@@ -332,7 +332,7 @@ impl core::fmt::Debug for WsListen {
     }
 }
 
-/// A bind's failure in words: coqui-web refuses a plain listener beyond
+/// A bind's failure in words: coqui-web-channel refuses a plain listener beyond
 /// loopback.
 fn bind_failed(failure: Failure, address: SocketAddr, tls: bool) -> io::Error {
     match failure {

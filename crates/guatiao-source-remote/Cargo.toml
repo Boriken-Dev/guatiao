@@ -71,14 +71,14 @@ shm = ["local", "dep:memmap2"]
 # elsewhere than Linux the transport answers `Unsupported`.
 rdma = ["tcp", "dep:libloading", "dep:libc"]
 
-# WebSocket, what a browser can open, through coqui-web: `ws://` on
+# WebSocket, what a browser can open, through coqui-web-channel: `ws://` on
 # loopback with no TLS, `wss://` (with `tls`) with a server certificate.
 # Each frame's body is one binary message.
-ws = ["tcp", "dep:coqui-web", "coqui-web/websocket", "dep:url", "dep:coqui-peer"]
+ws = ["tcp", "dep:coqui-web-channel", "coqui-web-channel/websocket", "dep:url", "dep:coqui-peer"]
 
 # WebTransport (HTTP/3 over QUIC), what a browser opens with the server's
-# certificate pinned by its hash, through coqui-web.
-webtransport = ["tls", "dep:coqui-web", "coqui-web/webtransport", "dep:url"]
+# certificate pinned by its hash, through coqui-web-channel.
+webtransport = ["tls", "dep:coqui-web-channel", "coqui-web-channel/webtransport", "dep:url"]
 
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
@@ -111,10 +111,10 @@ tokio = { version = "1.47", optional = true, default-features = false, features 
 # The shared rings' file, mapped.
 memmap2 = { version = "0.9", optional = true }
 # WebSocket and WebTransport channels (features `ws`, `webtransport`).
-# A git dependency until coqui-web is released: it keeps this crate from
+# A git dependency until coqui-web-channel is released: it keeps this crate from
 # publishing.
-coqui-web = { git = "https://github.com/Boriken-Dev/coqui-web.git", rev = "3b39c0025e2da422d01b514f03cea028d709675e", optional = true }
-# The URLs coqui-web's dialers take.
+coqui-web-channel = { git = "https://github.com/Boriken-Dev/coqui-web-channel.git", rev = "0b5b05c9af3417f6b13edc0fc7d9c86c02a63eca", optional = true }
+# The URLs coqui-web-channel's dialers take.
 url = { version = "2.5", optional = true }
 
 # Named pipes on Windows: overlapped I/O, so one thread reads while

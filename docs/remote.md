@@ -154,7 +154,7 @@ await link.close();
 
 The server listens with `--listen ws://127.0.0.1:PORT --security none`,
 as `tcp://` does with no TLS: peers admitted by address range, the key
-proved both ways, no encryption. coqui-web, which carries the
+proved both ways, no encryption. coqui-web-channel, which carries the
 WebSocket, listens and dials a plain `ws://` on this machine alone
 (loopback) unless told otherwise (`--plain-beyond-loopback`, the
 `plain_beyond_loopback` key, `WsListen::bind_beyond_loopback`: nothing is
@@ -332,8 +332,8 @@ from 5 ms up to a second while the failures last.
 | `child` | a server the host starts, over its stdin and stdout: a crash takes down the child, not the host | 16–36 µs |
 | `tcp://host:port` | another machine: with no TLS (feature `tcp`), or TLS 1.3 (feature `tls`; `tls://` names the same) | no TLS 22–36 µs on loopback, 114–123 µs from a host to a VM on it; mutual TLS 33–37 µs on loopback |
 | `quic://host:port` | any network (feature `quic`): TLS 1.3 inside QUIC, with datagrams beside the calls | 58–83 µs on loopback (Windows), about 220 µs in WSL, at mutual TLS |
-| `ws://host:port/path`, `wss://host:port/path` | a browser, or any WebSocket client (feature `ws`, through coqui-web; `wss://` with `tls`): one binary message per frame body; `ws://` with no TLS and on this machine alone, `wss://` with TLS | not measured |
-| `https://host:port/path` | WebTransport, HTTP/3 over QUIC (feature `webtransport`, through coqui-web): what a browser opens with the server's certificate pinned by its hash; one stream per link, datagrams beside it | not measured |
+| `ws://host:port/path`, `wss://host:port/path` | a browser, or any WebSocket client (feature `ws`, through coqui-web-channel; `wss://` with `tls`): one binary message per frame body; `ws://` with no TLS and on this machine alone, `wss://` with TLS | not measured |
+| `https://host:port/path` | WebTransport, HTTP/3 over QUIC (feature `webtransport`, through coqui-web-channel): what a browser opens with the server's certificate pinned by its hash; one stream per link, datagrams beside it | not measured |
 | `rdma://host:port` | another machine with an RDMA device, with no TLS; experimental, Linux only (below) | 11 µs on Soft-RoCE loopback, which says nothing of RDMA hardware |
 
 A call is a greeter's `count` through the host's table, there and back,
@@ -836,7 +836,7 @@ a time.
 
 `https://host:port/path` (feature `webtransport`) is WebTransport: an
 HTTP/3 session over QUIC, what a browser opens with `new
-WebTransport(url)`. It runs the session's TLS through coqui-web (the
+WebTransport(url)`. It runs the session's TLS through coqui-web-channel (the
 configuration's identity, pins, roots, policy, and the list's address
 rules, with a Retry proving a source's address before the list decides)
 under HTTP/3's application protocol `h3`, at mutual TLS, server TLS or

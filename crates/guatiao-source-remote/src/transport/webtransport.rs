@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! WebTransport: HTTP/3 over QUIC, what a browser opens with
-//! `new WebTransport("https://host:port/")`, through coqui-web. A link is
+//! `new WebTransport("https://host:port/")`, through coqui-web-channel. A link is
 //! one WebTransport session carrying one bidirectional stream, the frames
 //! on it as on `quic://` (each behind its `u32` length); [`Datagrams`](super::Datagrams)
 //! are the session's own.
@@ -18,7 +18,7 @@
 //!
 //! At mutual TLS a client presents a certificate, which the channel
 //! reports (`peer_certificates`) once the handshake is through: the link
-//! names the peer by it. The handshake of a connection runs on coqui-web's
+//! names the peer by it. The handshake of a connection runs on coqui-web-channel's
 //! threads, so each connection's TLS configuration is built from its
 //! source and local address (`with_tls_per_connection`, through
 //! coqui-peer-tls's `ServerConfigs`): the policy's list, with its
@@ -43,8 +43,8 @@ use std::time::SystemTime;
 
 use coqui_net_acl::Acl;
 use coqui_peer_tls::{ConnectionConfig, Identity, PeerId};
-use coqui_web::webtransport::{Dialer as WtDialer, Listener};
-use coqui_web::{Channel, Dialer as _, Failure, Kind, Limits};
+use coqui_web_channel::webtransport::{Dialer as WtDialer, Listener};
+use coqui_web_channel::{Channel, Dialer as _, Failure, Kind, Limits};
 use rustls::ServerConfig;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
@@ -324,7 +324,7 @@ fn trusted(acl: Acl) -> io::Result<TlsConfig> {
     Ok(config.policy(policy))
 }
 
-/// The bounds of a link's channel: coqui-web's, with the largest message
+/// The bounds of a link's channel: coqui-web-channel's, with the largest message
 /// the handshake's until the link raises it, so the first message a peer
 /// sends is judged small, as the HELLO is, and one message read ahead until
 /// the link admits the peer (`FrameRead::set_read_ahead`), so a peer not yet
