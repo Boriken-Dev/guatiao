@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What the WebSocket and WebTransport transports share: a coqui-web
+//! What the WebSocket and WebTransport transports share: a coqui-web-channel
 //! channel as a link's two halves. A channel carries whole messages, so
 //! a frame crosses as its body with no length in front; the channel
 //! frames its messages itself where its wire needs it (WebTransport's
@@ -20,15 +20,15 @@ use core::time::Duration;
 use std::io;
 use std::sync::{Mutex, OnceLock};
 
-use coqui_web::{Cancel, Channel, Failure};
+use coqui_web_channel::{Cancel, Channel, Failure};
 
 use super::{Connection, Datagrams, FrameRead, FrameWrite};
 use crate::lock;
 
-/// Opens a server's channel: the handshake coqui-web has not run yet.
+/// Opens a server's channel: the handshake coqui-web-channel has not run yet.
 pub(super) type Open = Box<dyn FnOnce() -> io::Result<Arc<dyn Channel>> + Send>;
 
-/// A coqui-web failure as the error kind a link tells apart. A rejected
+/// A coqui-web-channel failure as the error kind a link tells apart. A rejected
 /// certificate is `PermissionDenied`, as a refusal is elsewhere.
 pub(super) fn io_error(failure: Failure) -> io::Error {
     use io::ErrorKind::{
@@ -337,7 +337,7 @@ impl Writer {
                 ),
             ));
         }
-        // coqui-web waits for room in its send queue for the link's write
+        // coqui-web-channel waits for room in its send queue for the link's write
         // timeout, as a stream's write waits for the peer.
         channel
             .send_timeout(message, self.timeout)
@@ -395,7 +395,7 @@ struct ChannelDatagrams {
 }
 
 impl ChannelDatagrams {
-    fn inner(&self) -> io::Result<&dyn coqui_web::Datagrams> {
+    fn inner(&self) -> io::Result<&dyn coqui_web_channel::Datagrams> {
         self.shared.channel()?.datagrams().ok_or_else(|| {
             io::Error::new(io::ErrorKind::Unsupported, "the peer takes no datagrams")
         })
@@ -485,7 +485,7 @@ pub(super) fn connection(
     }
 }
 
-/// A refusal queue for a listener whose admission coqui-web applies
+/// A refusal queue for a listener whose admission coqui-web-channel applies
 /// before it hands a connection over: the sources it turned away, for
 /// `Accepted::Refused`.
 #[derive(Default)]
@@ -630,7 +630,7 @@ mod verified {
         }
     }
 
-    /// The server configuration coqui-web's listeners take: `config`'s
+    /// The server configuration coqui-web-channel's listeners take: `config`'s
     /// identity (or `resolver`'s certificates), policy and trust, naming
     /// `alpn`.
     ///
@@ -639,7 +639,7 @@ mod verified {
     /// policy's access control list can stay in the TLS at mutual TLS: a
     /// WebSocket listener. Otherwise the list is left out of it, because
     /// coqui-peer-tls would find no addresses and refuse every client, and
-    /// the listener decides its address rules in coqui-web's admission. A
+    /// the listener decides its address rules in coqui-web-channel's admission. A
     /// WebTransport listener takes a configuration per connection instead
     /// (`ServerConfigs`), and this one only as the fail-closed fallback.
     pub(crate) fn server_config(

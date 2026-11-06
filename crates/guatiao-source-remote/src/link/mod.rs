@@ -534,7 +534,7 @@ fn proves_key(options: &LinkOptions) -> bool {
 }
 
 /// Frames a message transport may read ahead of the link's reader once the
-/// peer is admitted (coqui-web's default); until then its channel holds one.
+/// peer is admitted (coqui-web-channel's default); until then its channel holds one.
 const READ_AHEAD: usize = 64;
 
 /// A token that proves nothing, refused at both ends.

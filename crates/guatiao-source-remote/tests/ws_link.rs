@@ -541,7 +541,7 @@ fn a_large_message_in_the_proofs_place_is_refused_under_64_kib() {
 }
 
 /// A 1 MiB message sent in one burst with the upgrade is the first the
-/// channel judges: under the handshake's bound, not coqui-web's default.
+/// channel judges: under the handshake's bound, not coqui-web-channel's default.
 #[test]
 fn a_one_mib_first_message_sent_with_the_upgrade_is_refused() {
     use std::io::Write;

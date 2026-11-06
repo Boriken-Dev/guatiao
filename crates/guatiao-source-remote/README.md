@@ -60,11 +60,11 @@ guatiao-source-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `quic` | `tls`, `quinn`, `tokio` | QUIC, with datagrams |
 | `local` | `interprocess`, `windows-sys` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
-| `ws` | `tcp`, `coqui-web`, `coqui-peer`, `url` | WebSocket: what a browser page connects to; `ws://` on this machine alone unless named, `wss://` with `tls` |
-| `webtransport` | `tls`, `coqui-web`, `url` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash; mutual TLS, server TLS or no security |
+| `ws` | `tcp`, `coqui-web-channel`, `coqui-peer`, `url` | WebSocket: what a browser page connects to; `ws://` on this machine alone unless named, `wss://` with `tls` |
+| `webtransport` | `tls`, `coqui-web-channel`, `url` | WebTransport: HTTP/3 over QUIC, a page's link with the server's certificate pinned by its hash; mutual TLS, server TLS or no security |
 
 `ws` and `webtransport` take their channels from
-[coqui-web](https://github.com/Boriken-Dev/coqui-web), a git dependency
+[coqui-web-channel](https://github.com/Boriken-Dev/coqui-web-channel), a git dependency
 until it is released, which keeps this crate from being published to
 crates.io before then.
 

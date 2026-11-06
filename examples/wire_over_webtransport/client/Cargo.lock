@@ -161,9 +161,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "coqui-web"
+name = "coqui-web-channel"
 version = "0.0.0-alpha.0"
-source = "git+https://github.com/Boriken-Dev/coqui-web.git?rev=3b39c0025e2da422d01b514f03cea028d709675e#3b39c0025e2da422d01b514f03cea028d709675e"
+source = "git+https://github.com/Boriken-Dev/coqui-web-channel.git?rev=0b5b05c9af3417f6b13edc0fc7d9c86c02a63eca#0b5b05c9af3417f6b13edc0fc7d9c86c02a63eca"
 dependencies = [
  "rustls",
  "tokio",
@@ -1334,7 +1334,7 @@ name = "wire_over_webtransport"
 version = "0.1.0"
 dependencies = [
  "coqui-peer-tls",
- "coqui-web",
+ "coqui-web-channel",
  "guatiao",
 ]
 

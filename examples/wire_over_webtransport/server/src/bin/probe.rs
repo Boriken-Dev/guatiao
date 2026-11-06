@@ -11,8 +11,8 @@
 use core::error::Error;
 use core::time::Duration;
 
-use coqui_web::webtransport::Dialer;
-use coqui_web::{CertificatePin, Channel, Dialer as _, Kind};
+use coqui_web_channel::webtransport::Dialer;
+use coqui_web_channel::{CertificatePin, Channel, Dialer as _, Kind};
 use guatiao::value::read::Dump;
 use guatiao::value::wire::channel::{Received, Receiver};
 use wire_over_webtransport::HELLO;
