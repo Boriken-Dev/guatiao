@@ -218,6 +218,25 @@ void main() {
       expect(copy.isSensitive, isTrue);
     });
 
+    test('a field shown as a password makes the value sensitive', () {
+      final m = FormModel(
+        schema: obj({
+          'p': {'type': 'string'},
+        }),
+        form: {
+          'fields': {
+            'p': {'widget': 'password'},
+          },
+        },
+        value: {'p': 'x'},
+      );
+      addTearDown(m.dispose);
+      expect(m.tree.isSensitive, isTrue);
+      final copy = m.copyOf('p')!;
+      addTearDown(copy.close);
+      expect(copy.isSensitive, isTrue);
+    });
+
     test('a schema with no secret is not made sensitive', () {
       final m = plain(
         obj({

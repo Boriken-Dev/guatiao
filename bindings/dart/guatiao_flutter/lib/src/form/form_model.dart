@@ -89,7 +89,10 @@ class FormModel extends ChangeNotifier {
       // A schema with a secret in it keeps the whole value in the wiping
       // allocator, so what is freed is overwritten first.
       final initial = value ?? const <String, Object?>{};
-      tree = _hasSecret(schema) || (value is guatiao.Ref && value.isSensitive)
+      tree =
+          _hasSecret(schema) ||
+              _hasPasswordWidget(form) ||
+              (value is guatiao.Ref && value.isSensitive)
           ? guatiao.Value.sensitive(initial)
           : value is guatiao.Ref
           ? value.clone()
@@ -135,6 +138,17 @@ class FormModel extends ChangeNotifier {
       return node.values.any(_hasSecret);
     }
     if (node is List) return node.any(_hasSecret);
+    return false;
+  }
+
+  /// Whether the form shows any field as a password (`widget: password`),
+  /// which makes it a secret whatever the schema says.
+  static bool _hasPasswordWidget(Object? node) {
+    if (node is Map) {
+      if (node['widget'] == 'password') return true;
+      return node.values.any(_hasPasswordWidget);
+    }
+    if (node is List) return node.any(_hasPasswordWidget);
     return false;
   }
 
