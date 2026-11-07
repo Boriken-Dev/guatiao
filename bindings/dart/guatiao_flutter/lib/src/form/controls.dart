@@ -1264,7 +1264,7 @@ class _ListOfValuesState extends State<_ListOfValues> {
                 final reason =
                     form.choiceReason(path, entries[at]) ??
                     form.unavailable[entryPath(path, at)];
-                final lock = form.lockReason(entryPath(path, at));
+                final lock = form.removeLock(path, at, entries.length);
                 return withReason(
                   InputChip(
                     key: Key('form-entry-$path-$at'),
@@ -1349,7 +1349,7 @@ class _ListOfGroups extends StatelessWidget {
             key: ValueKey('form-entry-$path-#${ids[at]}'),
             title: '${schema.title} ${at + 1}',
             reason: form.unavailable[entryPath(path, at)],
-            lock: form.lockReason(entryPath(path, at)),
+            lock: form.removeLock(path, at, ids.length),
             onRemove: editable ? () => model.removeFromList(path, at) : null,
             child: _Fields(
               form: form,

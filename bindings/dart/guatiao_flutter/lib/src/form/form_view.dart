@@ -160,6 +160,17 @@ class _FormContext {
   String? lockReason(String path) =>
       unavailableReason(path) ?? unavailableUnder(path);
 
+  /// Why the entry at position [at] of the [length] entries of the list at
+  /// [path] may not be taken out: taking it out moves each later entry up
+  /// one, so an unavailable path at or under any of them holds it.
+  String? removeLock(String path, int at, int length) {
+    for (var next = at; next < length; next++) {
+      final reason = lockReason(entryPath(path, next));
+      if (reason != null) return reason;
+    }
+    return null;
+  }
+
   /// Why the choice [value] of [path] may not be picked, or `null`.
   String? choiceReason(String path, Object? value) =>
       value == null ? null : unavailableChoices[path]?[value];
