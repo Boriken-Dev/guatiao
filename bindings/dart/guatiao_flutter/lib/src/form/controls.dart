@@ -639,7 +639,7 @@ class _RadioChoice extends StatelessWidget {
 /// A field that names something from a list the app supplies, or that
 /// the schema offers (`examples`): a choice when the list is complete, a
 /// box with suggestions when it cannot be.
-class _Picker extends StatelessWidget {
+class _Picker extends StatefulWidget {
   const _Picker(this.form, this.path, this.schema, this.choices);
 
   final _FormContext form;
@@ -648,7 +648,18 @@ class _Picker extends StatelessWidget {
   final FieldChoices choices;
 
   @override
+  State<_Picker> createState() => _PickerState();
+}
+
+class _PickerState extends State<_Picker> {
+  _TextSync? _sync;
+
+  @override
   Widget build(BuildContext context) {
+    final form = widget.form;
+    final path = widget.path;
+    final schema = widget.schema;
+    final choices = widget.choices;
     final stored = form.model.text(path);
     final editable = form.canEdit(path, schema);
     // What is held, not what was typed and refused.
@@ -711,6 +722,9 @@ class _Picker extends StatelessWidget {
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
             builder: (context, typed, _) {
+              // The box follows a value the app sets, not what is typed.
+              final sync = _sync ??= _TextSync(controller, stored ?? '');
+              sync.sync(form.model.text(path) ?? '');
               final refused = form.choiceReason(path, typed.text);
               return TextField(
                 controller: controller,
@@ -727,6 +741,7 @@ class _Picker extends StatelessWidget {
                 // one typed in is not taken.
                 onChanged: editable && heldReason == null
                     ? (text) {
+                        _sync?.typed();
                         final reason = form.choiceReason(path, text);
                         if (reason == null) {
                           form.model.setText(path, text, at: schema);

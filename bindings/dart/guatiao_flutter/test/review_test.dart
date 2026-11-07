@@ -1051,6 +1051,20 @@ void main() {
       expect(m.issues, isEmpty);
     });
 
+    testWidgets('an open picker follows a value the app sets', (tester) async {
+      final m = await show(
+        tester,
+        obj({
+          'h': {'type': 'string', 'format': 'host'},
+        }),
+        value: {'h': 'good'},
+        choicesFor: (format) => FieldChoices(const ['good', 'bad'], open: true),
+      );
+      m.setValue('h', 'bad');
+      await tester.pump();
+      expect(textFieldIn(tester, 'h').controller!.text, 'bad');
+    });
+
     testWidgets('a held unavailable choice locks an open picker', (
       tester,
     ) async {
