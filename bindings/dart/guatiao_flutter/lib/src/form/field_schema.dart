@@ -100,6 +100,25 @@ class FieldSchema {
   static Object? _bound(Object? value) =>
       value is num || value is BigInt ? value : null;
 
+  /// `minimum` as the least whole number inside it, or `null`.
+  BigInt? get minimumWhole => _whole(minimum, up: true);
+
+  /// `maximum` as the greatest whole number inside it, or `null`.
+  BigInt? get maximumWhole => _whole(maximum, up: false);
+
+  /// A bound as the nearest whole number inside it, or `null` when there
+  /// is none or it is not finite.
+  static BigInt? _whole(Object? bound, {required bool up}) {
+    if (bound == null) return null;
+    if (bound is BigInt) return bound;
+    final number = bound as num;
+    if (!number.isFinite) return null;
+    if (number is int || number == number.truncateToDouble()) {
+      return BigInt.from(number);
+    }
+    return BigInt.from(up ? number.ceil() : number.floor());
+  }
+
   /// A bound as a double, for a slider's ends.
   static double boundToDouble(Object bound) =>
       bound is BigInt ? bound.toDouble() : (bound as num).toDouble();

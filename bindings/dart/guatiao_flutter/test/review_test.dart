@@ -122,6 +122,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a slider reaches both ends of a 64-bit range exactly', (
+      tester,
+    ) async {
+      final m = await show(
+        tester,
+        obj({
+          'n': {'type': 'integer', 'minimum': 0, 'maximum': big},
+        }),
+        form: {
+          'fields': {
+            'n': {'widget': 'slider'},
+          },
+        },
+      );
+      await tester.drag(find.byType(Slider), const Offset(3000, 0));
+      await tester.pump();
+      expect(m.text('n'), '18446744073709551615');
+      expect(m.issues, isEmpty);
+      await tester.drag(find.byType(Slider), const Offset(-3000, 0));
+      await tester.pump();
+      expect(m.text('n'), '0');
+    });
+
     testWidgets('typing a large integer into the box is read', (tester) async {
       final m = await show(
         tester,
