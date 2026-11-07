@@ -9,8 +9,8 @@ import 'package:guatiao_flutter/guatiao_flutter.dart';
 import 'support.dart';
 
 // The README's example, as it is written there.
-Widget readmeExample() {
-  final model = FormModel(
+FormModel readmeModel() {
+  return FormModel(
     schema: {
       'type': 'object',
       'properties': {
@@ -21,6 +21,9 @@ Widget readmeExample() {
     },
     value: {'name': 'demo', 'retries': 3},
   );
+}
+
+Widget readmeExample(FormModel model) {
   return MaterialApp(
     home: Scaffold(
       body: SingleChildScrollView(child: IntakeFormView(model: model)),
@@ -32,10 +35,14 @@ void main() {
   setUpAll(setUpGuatiao);
 
   testWidgets('the README example draws its three fields', (tester) async {
-    await tester.pumpWidget(readmeExample());
+    final model = readmeModel();
+    addTearDown(model.dispose);
+    await tester.pumpWidget(readmeExample(model));
     expect(find.text('Name'), findsWidgets);
     expect(find.text('Retries'), findsWidgets);
     expect(find.text('Verbose'), findsWidgets);
     expect(find.text('demo'), findsOneWidget);
+    // What the README says the model answers.
+    expect(model.value(), {'name': 'demo', 'retries': 3});
   });
 }

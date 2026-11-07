@@ -43,7 +43,7 @@ final model = FormModel(
 IntakeFormView(model: model)
 ```
 
-`model.read('')` answers the value as plain Dart; call `model.dispose()`
+`model.value()` answers the value as plain Dart; call `model.dispose()`
 when done. A provider's configuration form comes from
 `FormModel.forProvider(schema: ..., meta: ...)`.
 
