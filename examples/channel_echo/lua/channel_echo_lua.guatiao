@@ -1,0 +1,6 @@
+# What guatiao-source-lua reads before running the echo: the module, the
+# kind its provider serves, and where it is.
+type = "lua"
+module = "channel_echo_lua"
+kinds = ["channel_echo"]
+paths = ["."]
