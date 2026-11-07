@@ -4,5 +4,5 @@
 pubspec.lock
 /build/
 /doc/api/
-/test/web_module/
+/lib/web_module/
 pubspec_overrides.yaml
