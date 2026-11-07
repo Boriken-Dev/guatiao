@@ -90,11 +90,29 @@ class FieldSchema {
   Object? get defaultValue => node['default'];
   bool get hasDefault => node.containsKey('default');
 
-  /// `minimum`, when it is a number.
-  num? get minimum => node['minimum'] as num?;
+  /// `minimum`, when it is a number: a `num`, or a `BigInt` past what a
+  /// 64-bit integer (or, on the web, a double) holds exactly.
+  Object? get minimum => _bound(node['minimum']);
 
-  /// `maximum`, when it is a number.
-  num? get maximum => node['maximum'] as num?;
+  /// `maximum`, as [minimum] is.
+  Object? get maximum => _bound(node['maximum']);
+
+  static Object? _bound(Object? value) =>
+      value is num || value is BigInt ? value : null;
+
+  /// A bound as a double, for a slider's ends.
+  static double boundToDouble(Object bound) =>
+      bound is BigInt ? bound.toDouble() : (bound as num).toDouble();
+
+  /// Whether `minimum` and `maximum` are both there, the first below the
+  /// second: what a slider needs.
+  bool get hasRange {
+    final low = minimum;
+    final high = maximum;
+    return low != null &&
+        high != null &&
+        boundToDouble(low) < boundToDouble(high);
+  }
 
   /// `contentEncoding`, such as `base64` for bytes written as text.
   String? get contentEncoding => node['contentEncoding'] as String?;

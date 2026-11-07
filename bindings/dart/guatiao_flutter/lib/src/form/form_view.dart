@@ -145,6 +145,21 @@ class _FormContext {
     return found;
   }
 
+  /// Why something under [path] may not be changed (the first of its
+  /// entries in [unavailable]), or `null`.
+  String? unavailableUnder(String path) {
+    for (final MapEntry(:key, :value) in unavailable.entries) {
+      if (key != path && isAtOrUnder(key, path)) return value;
+    }
+    return null;
+  }
+
+  /// Why [path] may not be replaced or taken out as a whole: it is
+  /// unavailable, or something under it is, and a replacement would drop
+  /// that.
+  String? lockReason(String path) =>
+      unavailableReason(path) ?? unavailableUnder(path);
+
   /// Why the choice [value] of [path] may not be picked, or `null`.
   String? choiceReason(String path, Object? value) =>
       value == null ? null : unavailableChoices[path]?[value];
@@ -357,9 +372,7 @@ class _Control extends StatelessWidget {
       );
     } else if (widget == 'slider' &&
         (schema.isInteger || schema.isNumber) &&
-        schema.minimum != null &&
-        schema.maximum != null &&
-        schema.minimum! < schema.maximum!) {
+        schema.hasRange) {
       control = _SliderControl(form, path, schema, hints);
     } else {
       control = _TextControl(form, path, schema, hints, required);

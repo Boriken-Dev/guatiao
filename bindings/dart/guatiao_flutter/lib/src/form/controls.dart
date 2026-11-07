@@ -114,6 +114,34 @@ Widget _choiceLabel(BuildContext context, String label, String? reason) {
   );
 }
 
+/// What a hidden secret shows in its box: a fixed mask, never its length.
+const _mask = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+
+/// Keeps a text box in step with the model when the app changes the value
+/// under it, and leaves it alone while the person is typing.
+class _TextSync {
+  _TextSync(this.controller, this._seen);
+
+  final TextEditingController controller;
+  String _seen;
+  bool _typing = false;
+
+  /// Call from the box's `onChanged`, before the model hears the text.
+  void typed() => _typing = true;
+
+  /// Call from `build` with what the model shows now.
+  void sync(String current) {
+    if (_typing) {
+      _typing = false;
+      _seen = current;
+      return;
+    }
+    if (current == _seen) return;
+    _seen = current;
+    if (controller.text != current) controller.text = current;
+  }
+}
+
 /// A field's title, its description and its problem, above what it holds.
 class _Titled extends StatelessWidget {
   const _Titled({
@@ -180,6 +208,7 @@ class _TextControlState extends State<_TextControl> {
   late final guatiao.Value? _stored = _sensitive
       ? widget.form.model.copyOf(widget.path)
       : null;
+  late final _sync = _TextSync(_controller, _controller.text);
 
   @override
   void dispose() {
@@ -198,6 +227,7 @@ class _TextControlState extends State<_TextControl> {
         ? 'Set; type to replace it'
         : widget.hints.placeholder ?? _defaultText(schema);
     final editable = widget.form.canEdit(widget.path, schema);
+    if (!_sensitive) _sync.sync(model.text(widget.path) ?? '');
     return TextField(
       key: Key('form-field-${widget.path}'),
       controller: _controller,
@@ -229,6 +259,7 @@ class _TextControlState extends State<_TextControl> {
       ),
       onChanged: editable
           ? (text) {
+              _sync.typed();
               final stored = _stored;
               if (_sensitive && text.isEmpty) {
                 if (stored != null) {
@@ -270,8 +301,16 @@ class _SecretViewState extends State<_SecretView> {
 
   @override
   Widget build(BuildContext context) {
-    final text = widget.form.model.text(widget.path);
-    if (_controller.text != (text ?? '')) _controller.text = text ?? '';
+    final model = widget.form.model;
+    final held = model.holds(widget.path);
+    // The plaintext is read only to show it on a reveal: hidden, the box
+    // holds a fixed mask.
+    final shown = !held
+        ? ''
+        : _revealed
+        ? model.text(widget.path) ?? ''
+        : _mask;
+    if (_controller.text != shown) _controller.text = shown;
     return TextField(
       key: Key('form-field-${widget.path}'),
       controller: _controller,
@@ -283,8 +322,8 @@ class _SecretViewState extends State<_SecretView> {
         widget.form,
         widget.path,
         widget.schema,
-        hint: text == null ? 'Not set' : null,
-        suffixIcon: text == null
+        hint: !held ? 'Not set' : null,
+        suffixIcon: !held
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,
@@ -301,8 +340,9 @@ class _SecretViewState extends State<_SecretView> {
                     key: Key('form-copy-${widget.path}'),
                     tooltip: 'Copy',
                     icon: const Icon(Icons.copy),
-                    onPressed: () =>
-                        Clipboard.setData(ClipboardData(text: text)),
+                    onPressed: () => Clipboard.setData(
+                      ClipboardData(text: model.text(widget.path) ?? ''),
+                    ),
                   ),
                 ],
               ),
@@ -322,8 +362,8 @@ class _SliderControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final low = schema.minimum!.toDouble();
-    final high = schema.maximum!.toDouble();
+    final low = FieldSchema.boundToDouble(schema.minimum!);
+    final high = FieldSchema.boundToDouble(schema.maximum!);
     final held = num.tryParse(form.model.text(path) ?? '');
     final fallback = schema.defaultValue;
     final shown = (held ?? (fallback is num ? fallback : low)).toDouble().clamp(
@@ -379,7 +419,11 @@ class _Switch extends StatelessWidget {
     final held = form.model.read(path);
     final on = held is bool ? held : schema.defaultValue == true;
     final problem = form.problemAt(path);
-    final locked = form.choiceReason(path, !on);
+    // A held unavailable choice is locked, and an unavailable one is not
+    // newly chosen.
+    final locked =
+        form.choiceReason(path, !on) ??
+        (held is bool ? form.choiceReason(path, held) : null);
     final editable = form.canEdit(path, schema) && locked == null;
     final theme = Theme.of(context);
     final subtitle = problem != null
@@ -595,13 +639,11 @@ class _Picker extends StatelessWidget {
   Widget build(BuildContext context) {
     final stored = form.model.text(path);
     final editable = form.canEdit(path, schema);
+    final heldReason = stored == null ? null : form.choiceReason(path, stored);
     if (!choices.open) {
       final values = <String>[
-        ...{...choices.values, ...?schema.suggestions, ?stored},
+        ...{...choices.values, ...?schema.suggestions, ?stored}..remove(''),
       ];
-      final heldReason = stored == null
-          ? null
-          : form.choiceReason(path, stored);
       String label(String value) => choices.labels[value] ?? value;
       final none = _defaultText(schema) ?? 'None';
       return DropdownButtonFormField<String>(
@@ -647,17 +689,35 @@ class _Picker extends StatelessWidget {
       },
       displayStringForOption: (value) => value,
       onSelected: (value) => form.model.setText(path, value, at: schema),
-      fieldViewBuilder: (context, controller, focus, onSubmitted) => TextField(
-        controller: controller,
-        focusNode: focus,
-        enabled: form.enabled && form.unavailableReason(path) == null,
-        readOnly: schema.readOnly,
-        decoration: _decoration(form, path, schema, hint: _defaultText(schema)),
-        onChanged: editable
-            ? (text) => form.model.setText(path, text, at: schema)
-            : null,
-        onSubmitted: (_) => onSubmitted(),
-      ),
+      fieldViewBuilder: (context, controller, focus, onSubmitted) =>
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, typed, _) {
+              final refused = form.choiceReason(path, typed.text);
+              return TextField(
+                controller: controller,
+                focusNode: focus,
+                enabled: form.enabled && form.unavailableReason(path) == null,
+                readOnly: schema.readOnly,
+                decoration: _decoration(
+                  form,
+                  path,
+                  schema,
+                  hint: _defaultText(schema),
+                ).copyWith(errorText: refused ?? form.problemAt(path)),
+                // A held unavailable choice is locked, and an unavailable
+                // one typed in is not taken.
+                onChanged: editable && heldReason == null
+                    ? (text) {
+                        if (form.choiceReason(path, text) == null) {
+                          form.model.setText(path, text, at: schema);
+                        }
+                      }
+                    : null,
+                onSubmitted: (_) => onSubmitted(),
+              );
+            },
+          ),
     );
   }
 }
@@ -682,6 +742,7 @@ class _NumberOrWordState extends State<_NumberOrWord> {
         ? ''
         : widget.form.model.text(widget.path) ?? '',
   );
+  late final _sync = _TextSync(_controller, _controller.text);
 
   @override
   void dispose() {
@@ -696,6 +757,10 @@ class _NumberOrWordState extends State<_NumberOrWord> {
     final lifted = model.read(widget.path) == _word;
     final wordArm = schema.wordArm!;
     final editable = widget.form.canEdit(widget.path, schema);
+    // The word is a choice like any other: held unavailable, it is
+    // locked; unavailable, it is not newly chosen.
+    final wordReason = widget.form.choiceReason(widget.path, _word);
+    _sync.sync(lifted ? '' : model.text(widget.path) ?? '');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -711,7 +776,10 @@ class _NumberOrWordState extends State<_NumberOrWord> {
             hint: _defaultText(schema),
             suffix: widget.hints.unit,
           ),
-          onChanged: (text) => model.setText(widget.path, text, at: schema),
+          onChanged: (text) {
+            _sync.typed();
+            model.setText(widget.path, text, at: schema);
+          },
         ),
         CheckboxListTile(
           key: Key('form-word-${widget.path}'),
@@ -719,8 +787,9 @@ class _NumberOrWordState extends State<_NumberOrWord> {
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           title: Text(wordArm.labelOf(_word)),
+          subtitle: wordReason == null ? null : Text(wordReason),
           value: lifted,
-          onChanged: editable
+          onChanged: editable && wordReason == null
               ? (value) => value == true
                     ? model.setValue(widget.path, _word)
                     : model.setText(widget.path, _controller.text, at: schema)
@@ -755,6 +824,15 @@ class _ArmChoice extends StatelessWidget {
     final heldReason = usesMembers ? null : form.choiceReason(path, current);
     final memberLabel = member.title.isEmpty ? 'Custom' : member.title;
     String label(String word) => schema.wordArm!.labelOf(word);
+    // What is held but not offered (a word the schema does not list, a
+    // number) is listed too, so the box can show it.
+    final unlisted =
+        current.isEmpty || current == _memberValue || words.contains(current)
+        ? null
+        : current;
+    // Switching arms drops what is under the fields, so it waits while
+    // something under them is unavailable.
+    final dropsLocked = usesMembers ? form.unavailableUnder(path) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -766,6 +844,7 @@ class _ArmChoice extends StatelessWidget {
           selectedItemBuilder: (context) => [
             const Text('Default'),
             for (final word in words) Text(label(word)),
+            if (unlisted != null) Text(unlisted),
             Text(memberLabel),
           ],
           items: [
@@ -780,13 +859,28 @@ class _ArmChoice extends StatelessWidget {
                   form.choiceReason(path, word),
                 ),
               ),
+            if (unlisted != null)
+              DropdownMenuItem(value: unlisted, child: Text(unlisted)),
             DropdownMenuItem(value: _memberValue, child: Text(memberLabel)),
           ],
-          onChanged: form.canEdit(path, schema) && heldReason == null
+          onChanged:
+              form.canEdit(path, schema) &&
+                  heldReason == null &&
+                  dropsLocked == null
               ? (value) =>
                     model.chooseArm(path, value == _memberValue ? null : value)
               : null,
         ),
+        if (dropsLocked != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 12),
+            child: Text(
+              dropsLocked,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).disabledColor,
+              ),
+            ),
+          ),
         if (usesMembers)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -822,6 +916,9 @@ class _VariantChoice extends StatelessWidget {
       if (!control.required) 'Not set',
       for (final arm in arms) arm.label,
     ];
+    // A new arm drops the fields it does not declare, so the choice waits
+    // while something under the variant is unavailable.
+    final dropsLocked = form.unavailableUnder(path);
     final fields = <Widget>[];
     if (current != null) {
       final arm = arms[current];
@@ -885,7 +982,7 @@ class _VariantChoice extends StatelessWidget {
                 ),
               ),
           ],
-          onChanged: editable
+          onChanged: editable && dropsLocked == null
               ? (i) => model.chooseVariant(
                   path,
                   schema,
@@ -893,11 +990,11 @@ class _VariantChoice extends StatelessWidget {
                 )
               : null,
         ),
-        if (heldReason != null)
+        if ((heldReason ?? dropsLocked) case final reason?)
           Padding(
             padding: const EdgeInsets.only(top: 4, left: 12),
             child: Text(
-              heldReason,
+              reason,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).disabledColor,
               ),
@@ -1006,17 +1103,21 @@ class _BytesControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final held = form.model.read(path);
+    final secret = schema.sensitive;
+    // A secret's bytes are copied out of the value only to hand them to
+    // the save callback.
+    final present = form.model.holds(path);
+    final held = secret || !present ? null : form.model.read(path);
     final bytes = held is Uint8List ? held : null;
     final media = schema.contentMediaType;
     final editable = form.canEdit(path, schema);
     final pick = form.onPickBytes;
     final save = form.onSaveBytes;
-    final size = bytes == null
+    final size = !present
         ? 'Empty'
-        : schema.sensitive
+        : secret
         ? 'Set'
-        : '${_grouped(bytes.length)} bytes';
+        : '${_grouped(bytes?.length ?? 0)} bytes';
     return _Titled(
       key: Key('form-field-$path'),
       schema: schema,
@@ -1043,14 +1144,17 @@ class _BytesControl extends StatelessWidget {
                 icon: const Icon(Icons.upload_file),
                 label: const Text('Choose'),
               ),
-            if (save != null && bytes != null)
+            if (save != null && present)
               TextButton.icon(
                 key: Key('form-save-$path'),
-                onPressed: () => save(path, bytes, schema),
+                onPressed: () {
+                  final now = form.model.read(path);
+                  if (now is Uint8List) save(path, now, schema);
+                },
                 icon: const Icon(Icons.download),
                 label: const Text('Save'),
               ),
-            if (bytes != null && editable)
+            if (present && editable)
               TextButton.icon(
                 key: Key('form-clear-$path'),
                 onPressed: () => form.model.remove(path),
@@ -1096,6 +1200,11 @@ class _ListOfValuesState extends State<_ListOfValues> {
   void _addText(String text) {
     final value = text.trim();
     if (value.isEmpty) return;
+    final unavailable = widget.form.choiceReason(widget.path, value);
+    if (unavailable != null) {
+      setState(() => _refused = unavailable);
+      return;
+    }
     final refused = widget.form.model.addTextToList(
       widget.path,
       value,
@@ -1152,13 +1261,16 @@ class _ListOfValuesState extends State<_ListOfValues> {
           children: [
             for (var at = 0; at < entries.length; at++)
               () {
-                final reason = form.choiceReason(path, entries[at]);
+                final reason =
+                    form.choiceReason(path, entries[at]) ??
+                    form.unavailable[entryPath(path, at)];
+                final lock = form.lockReason(entryPath(path, at));
                 return withReason(
                   InputChip(
                     key: Key('form-entry-$path-$at'),
                     label: Text(label(entries[at])),
-                    tooltip: reason,
-                    onDeleted: editable && reason == null
+                    tooltip: reason ?? lock,
+                    onDeleted: editable && reason == null && lock == null
                         ? () => model.removeFromList(path, at)
                         : null,
                     deleteButtonTooltipMessage: 'Remove ${label(entries[at])}',
@@ -1236,6 +1348,8 @@ class _ListOfGroups extends StatelessWidget {
           _Entry(
             key: ValueKey('form-entry-$path-#${ids[at]}'),
             title: '${schema.title} ${at + 1}',
+            reason: form.unavailable[entryPath(path, at)],
+            lock: form.lockReason(entryPath(path, at)),
             onRemove: editable ? () => model.removeFromList(path, at) : null,
             child: _Fields(
               form: form,
@@ -1264,12 +1378,20 @@ class _Entry extends StatelessWidget {
     required this.title,
     required this.child,
     this.onRemove,
+    this.reason,
+    this.lock,
     super.key,
   });
 
   final String title;
   final Widget child;
   final VoidCallback? onRemove;
+
+  /// Why this entry may not be changed, shown with it.
+  final String? reason;
+
+  /// Why it may not be taken out: it, or something in it, is unavailable.
+  final String? lock;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1289,12 +1411,20 @@ class _Entry extends StatelessWidget {
               children: [
                 Expanded(child: Text(title)),
                 IconButton(
-                  tooltip: 'Remove $title',
+                  tooltip: lock ?? 'Remove $title',
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: onRemove,
+                  onPressed: lock == null ? onRemove : null,
                 ),
               ],
             ),
+            if (reason != null)
+              Text(
+                reason!,
+                key: Key('form-entry-reason-$title'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).disabledColor,
+                ),
+              ),
             child,
           ],
         ),
@@ -1309,7 +1439,9 @@ class _NewKey extends StatefulWidget {
 
   final String path;
   final String label;
-  final ValueChanged<String>? onAdd;
+
+  /// Adds the key; answers why it was refused, or `null` once added.
+  final String? Function(String key)? onAdd;
 
   @override
   State<_NewKey> createState() => _NewKeyState();
@@ -1317,6 +1449,7 @@ class _NewKey extends StatefulWidget {
 
 class _NewKeyState extends State<_NewKey> {
   final _controller = TextEditingController();
+  String? _refused;
 
   @override
   void dispose() {
@@ -1327,8 +1460,9 @@ class _NewKeyState extends State<_NewKey> {
   void _add() {
     final key = _controller.text.trim();
     if (key.isEmpty) return;
-    widget.onAdd?.call(key);
-    _controller.clear();
+    final refused = widget.onAdd?.call(key);
+    setState(() => _refused = refused);
+    if (refused == null) _controller.clear();
   }
 
   @override
@@ -1339,6 +1473,7 @@ class _NewKeyState extends State<_NewKey> {
     decoration: InputDecoration(
       isDense: true,
       labelText: widget.label,
+      errorText: _refused,
       suffixIcon: IconButton(
         tooltip: 'Add',
         icon: const Icon(Icons.add),
@@ -1393,13 +1528,17 @@ class _MapOfValues extends StatelessWidget {
                     path: keyedPath(path, key),
                     name: key,
                     schema: values,
-                    editable: editable,
+                    editable:
+                        editable && form.canEdit(keyedPath(path, key), values),
+                    reason: form.unavailable[keyedPath(path, key)],
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove $key',
+                  tooltip:
+                      form.lockReason(keyedPath(path, key)) ?? 'Remove $key',
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: editable
+                  onPressed:
+                      editable && form.lockReason(keyedPath(path, key)) == null
                       ? () => model.removeFromMap(path, key)
                       : null,
                 ),
@@ -1425,6 +1564,7 @@ class _EntryText extends StatefulWidget {
     required this.name,
     required this.schema,
     required this.editable,
+    this.reason,
   });
 
   final _FormContext form;
@@ -1433,37 +1573,62 @@ class _EntryText extends StatefulWidget {
   final FieldSchema schema;
   final bool editable;
 
+  /// Why this entry may not be changed, shown under it.
+  final String? reason;
+
   @override
   State<_EntryText> createState() => _EntryTextState();
 }
 
 class _EntryTextState extends State<_EntryText> {
+  // A secret is never put back in a box: an empty one keeps what is held.
+  late final bool _secret = widget.schema.sensitive;
   late final _controller = TextEditingController(
-    text: widget.form.model.text(widget.path) ?? '',
+    text: _secret ? '' : widget.form.model.text(widget.path) ?? '',
   );
+  late final guatiao.Value? _stored = _secret
+      ? widget.form.model.copyOf(widget.path)
+      : null;
+  late final _sync = _TextSync(_controller, _controller.text);
 
   @override
   void dispose() {
     _controller.dispose();
+    _stored?.close();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => TextField(
-    key: Key('form-field-${widget.path}'),
-    controller: _controller,
-    enabled: widget.editable,
-    obscureText: widget.schema.sensitive,
-    decoration: InputDecoration(
-      isDense: true,
-      labelText: 'Value of ${widget.name}',
-      errorText: widget.form.problemAt(widget.path),
-    ),
-    // An emptied entry is still an entry: it keeps its key.
-    onChanged: (text) => text.isEmpty
-        ? widget.form.model.setValue(widget.path, _blank(widget.schema))
-        : widget.form.model.setText(widget.path, text, at: widget.schema),
-  );
+  Widget build(BuildContext context) {
+    final model = widget.form.model;
+    if (!_secret) _sync.sync(model.text(widget.path) ?? '');
+    return TextField(
+      key: Key('form-field-${widget.path}'),
+      controller: _controller,
+      enabled: widget.editable,
+      obscureText: _secret,
+      enableSuggestions: !_secret,
+      autocorrect: !_secret,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Value of ${widget.name}',
+        helperText: widget.reason,
+        hintText: _secret && _stored != null ? 'Set; type to replace it' : null,
+        errorText: widget.form.problemAt(widget.path),
+      ),
+      // An emptied entry is still an entry: it keeps its key.
+      onChanged: (text) {
+        _sync.typed();
+        if (text.isNotEmpty) {
+          model.setText(widget.path, text, at: widget.schema);
+        } else if (_stored case final stored?) {
+          model.setValue(widget.path, stored);
+        } else {
+          model.setValue(widget.path, _blank(widget.schema));
+        }
+      },
+    );
+  }
 }
 
 class _MapOfGroups extends StatelessWidget {
@@ -1487,6 +1652,8 @@ class _MapOfGroups extends StatelessWidget {
           _Entry(
             key: ValueKey('form-entry-$path-$key'),
             title: key,
+            reason: form.unavailable[keyedPath(path, key)],
+            lock: form.lockReason(keyedPath(path, key)),
             onRemove: editable ? () => model.removeFromMap(path, key) : null,
             child: _Fields(
               form: form,

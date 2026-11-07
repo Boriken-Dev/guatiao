@@ -86,9 +86,14 @@ class FormModel extends ChangeNotifier {
           'The form does not fit its schema: ${problem['message']}',
         );
       }
-      tree = value is guatiao.Ref
+      // A schema with a secret in it keeps the whole value in the wiping
+      // allocator, so what is freed is overwritten first.
+      final initial = value ?? const <String, Object?>{};
+      tree = _hasSecret(schema) || (value is guatiao.Ref && value.isSensitive)
+          ? guatiao.Value.sensitive(initial)
+          : value is guatiao.Ref
           ? value.clone()
-          : guatiao.Value.fromDart(value ?? const <String, Object?>{});
+          : guatiao.Value.fromDart(initial);
       if (tree.tag != guatiao.Tag.map) {
         tree.close();
         throw ArgumentError.value(value, 'value', 'not a map');
@@ -120,6 +125,17 @@ class FormModel extends ChangeNotifier {
       }
     }
     return FormModel(schema: schemaJson, form: form, value: value);
+  }
+
+  /// Whether any field the schema describes is `x-sensitive` or
+  /// `writeOnly`.
+  static bool _hasSecret(Object? node) {
+    if (node is Map) {
+      if (node['x-sensitive'] == true || node['writeOnly'] == true) return true;
+      return node.values.any(_hasSecret);
+    }
+    if (node is List) return node.any(_hasSecret);
+    return false;
   }
 
   static Map<String, Object?> _plainMap(Object source, String name) {
@@ -316,8 +332,15 @@ class FormModel extends ChangeNotifier {
     _changed();
   }
 
-  /// A copy of what is at [path], or `null`; the caller closes it.
-  guatiao.Value? copyOf(String path) => _at(path)?.clone();
+  /// A copy of what is at [path], or `null`; the caller closes it. A
+  /// secret's copy lives in the wiping allocator.
+  guatiao.Value? copyOf(String path) {
+    final at = _at(path);
+    if (at == null) return null;
+    return field(path)?.sensitive == true || tree.isSensitive
+        ? guatiao.Value.sensitive(at)
+        : at.clone();
+  }
 
   /// Clears what is at [path] and everything under it.
   void remove(String path) {
@@ -339,13 +362,19 @@ class FormModel extends ChangeNotifier {
       if (!RegExp(r'^[+-]?[0-9]+$').hasMatch(trimmed)) {
         return (const _Untaken('A whole number, please.'), null);
       }
-      final canonical = BigInt.parse(trimmed).toString();
-      return (_NumberText(canonical), _outOfBounds(at, num.parse(canonical)));
+      final whole = BigInt.parse(trimmed);
+      return (_NumberText(whole.toString()), _outOfBoundsWhole(at, whole));
     }
     if (at.isNumber) {
       final trimmed = text.trim();
       final json = RegExp(r'^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$');
-      final number = num.tryParse(trimmed);
+      // Decimal text only: `num.tryParse` also reads `0x1F`.
+      final decimal = RegExp(
+        r'^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$',
+      );
+      final number = decimal.hasMatch(trimmed)
+          ? double.tryParse(trimmed)
+          : null;
       if (number == null || !number.isFinite) {
         return (const _Untaken('A number, please.'), null);
       }
@@ -374,12 +403,39 @@ class FormModel extends ChangeNotifier {
     return (text, null);
   }
 
-  static String? _outOfBounds(FieldSchema at, num number) {
+  static String? _outOfBounds(FieldSchema at, double number) {
     final low = at.minimum;
     final high = at.maximum;
-    if (low != null && number < low) return 'At least $low.';
-    if (high != null && number > high) return 'At most $high.';
+    if (low != null && number < FieldSchema.boundToDouble(low)) {
+      return 'At least $low.';
+    }
+    if (high != null && number > FieldSchema.boundToDouble(high)) {
+      return 'At most $high.';
+    }
     return null;
+  }
+
+  /// [_outOfBounds] for an integer, compared exactly however large.
+  static String? _outOfBoundsWhole(FieldSchema at, BigInt number) {
+    final low = at.minimum;
+    final high = at.maximum;
+    final floor = low == null ? null : _whole(low, up: true);
+    final ceiling = high == null ? null : _whole(high, up: false);
+    if (floor != null && number < floor) return 'At least $low.';
+    if (ceiling != null && number > ceiling) return 'At most $high.';
+    return null;
+  }
+
+  /// A bound as the nearest whole number inside it, or `null` when it is
+  /// not finite.
+  static BigInt? _whole(Object bound, {required bool up}) {
+    if (bound is BigInt) return bound;
+    final number = bound as num;
+    if (!number.isFinite) return null;
+    if (number is int || number == number.truncateToDouble()) {
+      return BigInt.from(number);
+    }
+    return BigInt.from(up ? number.ceil() : number.floor());
   }
 
   static bool _isBase64(String text) {
@@ -478,7 +534,11 @@ class FormModel extends ChangeNotifier {
       final list = at.asList();
       if (last.position < list.length) list.removeAt(last.position);
     } else if (at.tag == guatiao.Tag.map) {
-      at.asMap().remove(_keyOf(last));
+      // Removing a key that is not there is an error for the map, and a
+      // no-op here.
+      final map = at.asMap();
+      final key = _keyOf(last);
+      if (map.containsKey(key)) map.remove(key);
     }
   }
 
@@ -489,6 +549,20 @@ class FormModel extends ChangeNotifier {
     }
     if (at.tag == guatiao.Tag.map) return at.asMap()[_keyOf(step)];
     return null;
+  }
+
+  /// Moves what [table] holds at or under [from] to [to].
+  void _rekey<T>(Map<String, T> table, String from, String to) {
+    final moved = {
+      for (final MapEntry(:key, :value) in table.entries)
+        if (isAtOrUnder(key, from)) key: value,
+    };
+    for (final key in moved.keys) {
+      table.remove(key);
+    }
+    for (final MapEntry(:key, :value) in moved.entries) {
+      table[to + key.substring(from.length)] = value;
+    }
   }
 
   void _forgetUnder(String path) {
@@ -546,9 +620,21 @@ class FormModel extends ChangeNotifier {
   /// stays, empty or not.
   void removeFromList(String path, int at) {
     final ids = entryIds(path);
-    _forgetUnder(path);
-    _remove(entryPath(path, at));
+    final removed = entryPath(path, at);
+    _forgetUnder(removed);
+    _remove(removed);
     if (at < ids.length) ids.removeAt(at);
+    // The entries after it move up one: what was typed or refused for
+    // them goes with them.
+    final length = lengthOf(path);
+    for (var next = at; next < length; next++) {
+      final from = entryPath(path, next + 1);
+      final to = entryPath(path, next);
+      for (final table in [_drafts, _issues]) {
+        _rekey(table, from, to);
+      }
+      _rekey(_ids, from, to);
+    }
     _ids[path] = ids;
     _changed();
   }
@@ -563,10 +649,15 @@ class FormModel extends ChangeNotifier {
 
   /// Adds an entry under [key] of the map at [path], holding [value]
   /// (empty text by default); the map is made when there is none.
-  void addToMap(String path, String key, [Object? value = '']) {
+  ///
+  /// A key the map holds already is refused, with nothing changed: the
+  /// answer says why. `null` once it is added.
+  String? addToMap(String path, String key, [Object? value = '']) {
+    if (mapKeys(path).contains(key)) return '$key is there already.';
     if (_at(path)?.tag != guatiao.Tag.map) _put(path, <String, Object?>{});
     _put(keyedPath(path, key), value);
     _changed();
+    return null;
   }
 
   /// Takes out the entry under [key] of the map at [path].
@@ -723,9 +814,20 @@ String _ownerOfEntry(String path) {
 
 /// A schema and a form held as guatiao values.
 class _Scope {
-  _Scope(Map<String, Object?> schemaJson, this.formJson)
-    : schema = guatiao.Value.fromDart(schemaJson),
-      form = guatiao.Value.fromDart(formJson);
+  _Scope._(this.formJson, this.schema, this.form);
+
+  factory _Scope(
+    Map<String, Object?> schemaJson,
+    Map<String, Object?> formJson,
+  ) {
+    final schema = guatiao.Value.fromDart(schemaJson);
+    try {
+      return _Scope._(formJson, schema, guatiao.Value.fromDart(formJson));
+    } catch (_) {
+      schema.close();
+      rethrow;
+    }
+  }
 
   /// [formJson], or the form guatiao_intake implies for [schemaJson].
   factory _Scope.of(
