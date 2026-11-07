@@ -472,7 +472,30 @@ void main() {
       expect(m.read('agents[0].name'), 'one');
     });
 
-    testWidgets('an entry with an unavailable field in it cannot be removed', (
+    testWidgets('a chip before a locked one cannot be taken out', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        obj({
+          'tags': {
+            'type': 'array',
+            'items': {'type': 'string'},
+          },
+        }),
+        value: {
+          'tags': ['a', 'b', 'c'],
+        },
+        unavailable: {'tags[1]': 'Pinned'},
+      );
+      Widget chip(int at) =>
+          find.byKey(Key('form-entry-tags-$at')).evaluate().single.widget;
+      expect((chip(0) as InputChip).onDeleted, isNull);
+      expect((chip(1) as InputChip).onDeleted, isNull);
+      expect((chip(2) as InputChip).onDeleted, isNotNull);
+    });
+
+    testWidgets('an unavailable field locks its entry and those before it', (
       tester,
     ) async {
       await show(
@@ -493,7 +516,8 @@ void main() {
         },
         unavailable: {'agents[1].name': 'Name is fixed'},
       );
-      expect(removeButton(tester, 0).onPressed, isNotNull);
+      // Taking [0] out would move the locked entry up to [0].
+      expect(removeButton(tester, 0).onPressed, isNull);
       expect(removeButton(tester, 1).onPressed, isNull);
     });
 
