@@ -1716,6 +1716,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Analyze and test guatiao_flutter
+        # The widgets' own suite on this platform's VM, against the library
+        # cargo builds (it carries the core too).
+        working-directory: bindings/dart/guatiao_flutter
+        run: |
+          cargo build -p guatiao-intake --manifest-path ../../../Cargo.toml
+          case "${{ matrix.desktop }}" in
+            linux) library=libguatiao_intake.so ;;
+            windows) library=guatiao_intake.dll ;;
+            macos) library=libguatiao_intake.dylib ;;
+          esac
+          flutter pub get
+          flutter analyze
+          GUATIAO_LIBRARY="$PWD/../../../target/debug/$library" flutter test
       - name: Build the desktop app
         run: flutter build ${{ matrix.desktop }} --release
       - name: Build it again, from the hooks' cache
