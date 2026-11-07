@@ -678,6 +678,8 @@ class _Picker extends StatelessWidget {
       key: Key('form-field-$path'),
       initialValue: TextEditingValue(text: stored ?? ''),
       optionsBuilder: (value) {
+        // Nothing is offered where nothing may be picked.
+        if (!editable || heldReason != null) return const <String>[];
         final text = value.text.toLowerCase();
         return choices.values.where(
           (choice) =>
@@ -688,7 +690,9 @@ class _Picker extends StatelessWidget {
         );
       },
       displayStringForOption: (value) => value,
-      onSelected: (value) => form.model.setText(path, value, at: schema),
+      onSelected: editable && heldReason == null
+          ? (value) => form.model.setText(path, value, at: schema)
+          : null,
       fieldViewBuilder: (context, controller, focus, onSubmitted) =>
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
@@ -698,7 +702,7 @@ class _Picker extends StatelessWidget {
                 controller: controller,
                 focusNode: focus,
                 enabled: form.enabled && form.unavailableReason(path) == null,
-                readOnly: schema.readOnly,
+                readOnly: schema.readOnly || heldReason != null,
                 decoration: _decoration(
                   form,
                   path,
