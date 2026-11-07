@@ -434,23 +434,11 @@ class FormModel extends ChangeNotifier {
   static String? _outOfBoundsWhole(FieldSchema at, BigInt number) {
     final low = at.minimum;
     final high = at.maximum;
-    final floor = low == null ? null : _whole(low, up: true);
-    final ceiling = high == null ? null : _whole(high, up: false);
+    final floor = at.minimumWhole;
+    final ceiling = at.maximumWhole;
     if (floor != null && number < floor) return 'At least $low.';
     if (ceiling != null && number > ceiling) return 'At most $high.';
     return null;
-  }
-
-  /// A bound as the nearest whole number inside it, or `null` when it is
-  /// not finite.
-  static BigInt? _whole(Object bound, {required bool up}) {
-    if (bound is BigInt) return bound;
-    final number = bound as num;
-    if (!number.isFinite) return null;
-    if (number is int || number == number.truncateToDouble()) {
-      return BigInt.from(number);
-    }
-    return BigInt.from(up ? number.ceil() : number.floor());
   }
 
   static bool _isBase64(String text) {

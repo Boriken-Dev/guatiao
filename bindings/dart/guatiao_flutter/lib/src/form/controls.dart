@@ -373,7 +373,7 @@ class _SliderControl extends StatelessWidget {
     final steps = high - low;
     final whole = schema.isInteger;
     final unit = hints.unit;
-    final words = whole ? shown.round().toString() : shown.toStringAsFixed(2);
+    final words = whole ? _wholeText(shown, schema) : shown.toStringAsFixed(2);
     final problem = form.problemAt(path);
     return _Titled(
       schema: schema,
@@ -392,7 +392,7 @@ class _SliderControl extends StatelessWidget {
                 onChanged: form.canEdit(path, schema)
                     ? (value) => form.model.setText(
                         path,
-                        whole ? value.round().toString() : '$value',
+                        whole ? _wholeText(value, schema) : '$value',
                         at: schema,
                       )
                     : null,
@@ -404,6 +404,18 @@ class _SliderControl extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A slider's position as the exact whole number it stands for, within the
+/// field's bounds: a double cannot name every integer past 2^53, and its
+/// `round()` is not exact past 2^63.
+String _wholeText(double value, FieldSchema schema) {
+  var whole = BigInt.from(value.roundToDouble());
+  final low = schema.minimumWhole;
+  final high = schema.maximumWhole;
+  if (low != null && whole < low) whole = low;
+  if (high != null && whole > high) whole = high;
+  return whole.toString();
 }
 
 class _Switch extends StatelessWidget {
