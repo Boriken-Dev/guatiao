@@ -509,7 +509,9 @@ Four workflows:
   three platforms and the floor SDK; `dart-web` runs them in Chrome under
   dart2js and dart2wasm against the application module and intake's, and
   `dart-armv7` on 32-bit ARM under qemu-user against the separate
-  libraries and the application's. Its `flutter` job builds
+  libraries and the application's. Its `flutter` job first analyzes and
+  tests `bindings/dart/guatiao_flutter` on the VM (`flutter analyze`,
+  `flutter test`) on each desktop platform, then builds
   `examples/flutter_app` on each platform for its desktop, twice (the
   second must run no hook) and runs it; the APK on Linux, checked for
   every library on every ABI; the iOS simulator app on macOS. Its `node` job installs the
@@ -613,7 +615,7 @@ name.
 **What the tag does**: gates (tests, strict docs build, one version), then
 packages everything (`cargo publish --workspace --dry-run`; `python -m
 build` + `twine check` of the three Python packages; `dart pub publish
---dry-run` of the three Dart packages; `npm pack --dry-run` then `npm
+--dry-run` of the four Dart packages; `npm pack --dry-run` then `npm
 pack` of the four Node packages; the three Go modules vetted, built
 and each built alone by a consumer outside the checkout; the
 Fortran package built as a dependency and with CMake; the three Julia
@@ -655,7 +657,8 @@ organisation, so each is published by a person and handed over:
   <crate>` on each, once it exists. A team owner may publish but not change
   owners, so one person stays an owner as well.
 - **pub.dev** calls an organisation a verified publisher. `guatiao`,
-  `guatiao_serde` and `guatiao_intake` belong to `boriken.dev`: after each
+  `guatiao_serde`, `guatiao_intake` and `guatiao_flutter` belong to
+  `boriken.dev`: after each
   one's first `dart pub publish`, its Admin tab transfers it there, and
   automated publishing is configured on the same tab.
 - **npm**: the three packages are published by the token's account first;
