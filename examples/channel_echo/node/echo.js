@@ -14,11 +14,13 @@ import { Provider } from 'guatiao/provide';
 
 import { ChannelEcho } from './channel_echo_kind.js';
 
-/** A count from the configuration, by the name it is spelt with. */
+/** A count from the configuration, by the name it is spelt with: a plain
+ *  object under QuickJS, a `MapRef` of `Ref`s under Node. */
 function count(config, name) {
   const camel = name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   const value = typeof config.get === 'function' ? config.get(name) : (config[name] ?? config[camel]);
-  return value === undefined || value === null ? undefined : Number(value);
+  if (value === undefined || value === null) return undefined;
+  return Number(typeof value.toJS === 'function' ? value.toJS() : value);
 }
 
 /** The channel `start` hands back: the sink it was given, until the stream ends. */

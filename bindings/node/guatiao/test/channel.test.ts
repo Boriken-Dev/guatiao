@@ -10,10 +10,14 @@
 // blocks the loop inside a synchronous `send` hears nothing until it
 // returns.
 
+import path from 'node:path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Gone, Registry, Value } from '../src/index.js';
 import { ChannelEcho } from '../../../../examples/channel_echo/node/channel_echo_kind.js';
+import { libraryOf } from '../src/provide.js';
+import { REPO } from './helpers.js';
 import { libraryDir } from './setup.js';
 
 const GONE = 12;
@@ -139,5 +143,63 @@ describe('a Node host receives on the echo thread', () => {
     expect(() => channel.send(bytes('3'))).toThrow(Gone);
     channel.destroy();
     expect(sink.received).toEqual(['1']);
+  });
+});
+
+// The JavaScript echo under Node serves the channel from Node itself: its
+// objects are called on Node's thread, so it answers inside `send`, as the
+// QuickJS source's does.
+describe('the JavaScript echo under Node', () => {
+  const ECHO = path.join(REPO, 'examples', 'channel_echo', 'node', 'echo.js');
+  let own: Registry;
+
+  beforeAll(async () => {
+    own = new Registry('node-own-echo', '0.1');
+    own.registerLibrary(await libraryOf(ECHO));
+  });
+
+  afterAll(() => {
+    own.close();
+  });
+
+  it('echoes in order, closes with each status, and lets the sink go', async () => {
+    const echo = own.bind('channel_echo_js_echo', ChannelEcho);
+    const sink = new Sink();
+    using config = new Value({ close_after: 3, close_status: 7 });
+    const channel = echo.start(config, sink);
+    for (const text of ['a', 'b', 'c']) channel.send(bytes(text));
+    expect(sink.received).toEqual(['a', 'b', 'c']);
+    expect(sink.closedWith).toBe(7);
+    expect(() => channel.send(bytes('d'))).toThrow(Gone);
+    channel.destroy();
+    expect(sink.destroyed).toBe(true);
+  });
+
+  it('closes with the host status, and dropping the channel is close(0)', async () => {
+    const echo = own.bind('channel_echo_js_echo', ChannelEcho);
+    using config = new Value({});
+    const first = new Sink();
+    const channel = echo.start(config, first);
+    channel.send(bytes('1'));
+    channel.close(5);
+    expect(first.closedWith).toBe(5);
+    expect(() => channel.send(bytes('2'))).toThrow(Gone);
+    channel.destroy();
+    const second = new Sink();
+    echo.start(config, second).destroy();
+    expect(second.closedWith).toBe(0);
+    expect(second.destroyed).toBe(true);
+  });
+
+  it('ends the stream with GONE when the sink refuses', async () => {
+    const echo = own.bind('channel_echo_js_echo', ChannelEcho);
+    using config = new Value({});
+    const sink = new Sink();
+    sink.away = true;
+    const channel = echo.start(config, sink);
+    channel.send(bytes('1'));
+    expect(sink.closedWith).toBe(GONE);
+    expect(() => channel.send(bytes('2'))).toThrow(Gone);
+    channel.destroy();
   });
 });
