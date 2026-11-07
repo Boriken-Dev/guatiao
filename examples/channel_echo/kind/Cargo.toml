@@ -1,0 +1,27 @@
+[package]
+name = "channel_echo_kind"
+description = "An example provider kind starting a guatiao channel: what a host and an echo library both compile against"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+guatiao = { path = "../../../crates/guatiao", features = ["provider"] }
+guatiao-channel = { path = "../../../crates/guatiao-channel" }
+
+[features]
+# Renders `include/channel_echo.h`, as greeter_kind renders its header.
+c-header = ["dep:cbindgen"]
+
+[build-dependencies]
+cbindgen = { version = "0.29", optional = true }
+
+[dev-dependencies]
+guatiao-serde = { path = "../../../crates/guatiao-serde", features = ["json"] }
+
+[lints]
+workspace = true

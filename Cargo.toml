@@ -18,6 +18,8 @@ members = [
     "examples/app_library",
     "examples/app_host",
     "examples/remote_pool",
+    "examples/channel_echo",
+    "examples/channel_echo/kind",
     "examples/wire_over_webtransport/server",
     "benchmarks",
     "benchmarks/remote",

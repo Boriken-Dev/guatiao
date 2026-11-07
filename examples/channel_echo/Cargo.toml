@@ -1,0 +1,23 @@
+[package]
+name = "channel_echo"
+description = "An example guatiao library serving a channel: every message comes back, in order, from a thread of its own"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider"] }
+channel_echo_kind = { path = "kind" }
+
+[dev-dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
+guatiao-channel = { path = "../../crates/guatiao-channel" }
+
+[lints]
+workspace = true

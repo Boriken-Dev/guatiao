@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    {
+      "name": "channel_echo",
+      "floor_hash": 1869559466,
+      "object": false,
+      "doc": "Starts a channel that sends back every message it is given.",
+      "slots": [
+        {
+          "name": "start",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "config",
+              "type": "map",
+              "pass": "borrowed"
+            },
+            {
+              "name": "sink",
+              "type": "object",
+              "kind": "channel_sink",
+              "pass": "taken"
+            }
+          ],
+          "answer": {
+            "type": "object",
+            "kind": "channel"
+          },
+          "doc": "A channel whose every message comes back through `sink`, in order,\nfrom a thread of the provider's own where it has one.\n\n`config` may say `close_after` (a count: after echoing that many\nmessages the provider closes the stream itself) and `close_status`\n(the status it closes with then; `0` when left out)."
+        }
+      ]
+    },
+    {
+      "name": "channel",
+      "floor_hash": 2843269355,
+      "object": true,
+      "doc": "What the host writes on, handed back by the provider that started it.\n\nThe provider implements it; the host holds `Object<dyn Channel>`,\nwhich may be shared between threads (`send` from several at once is\nallowed, each thread's messages kept in its own order). Dropping it\nis `close(OK)`.",
+      "slots": [
+        {
+          "name": "send",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "bytes",
+              "type": "bytes"
+            }
+          ],
+          "doc": "One message to the provider, lent for the call. Returns once the\nprovider has taken it, which may wait on the provider; answers\n`GUATIAO_ERR_GONE` once either side has closed."
+        },
+        {
+          "name": "close",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "status",
+              "type": "u32"
+            }
+          ],
+          "doc": "Ends the stream from the host's side, with a status the provider\nhands to [`ChannelSink::closed`] (`GUATIAO_OK`, `0`, for a plain\nend). Called once; `send` answers `GUATIAO_ERR_GONE` after it."
+        }
+      ]
+    },
+    {
+      "name": "channel_sink",
+      "floor_hash": 3528315804,
+      "object": true,
+      "doc": "What the provider writes back on, handed in by the host.\n\nThe host implements it and hands it over with the call that starts\nthe channel; the provider owns it from then on, calls it from one\nthread at a time, and destroys it when done.",
+      "slots": [
+        {
+          "name": "receive",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "bytes",
+              "type": "bytes"
+            }
+          ],
+          "doc": "One message to the host, lent for the call. Returns once the host\nhas taken it. `GUATIAO_ERR_GONE` says the host takes nothing\nmore; any error ends the stream, and the provider then calls\n[`closed`](Self::closed) with that status."
+        },
+        {
+          "name": "closed",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "status",
+              "type": "u32"
+            }
+          ],
+          "doc": "The stream has ended, from either side: the host's status from\n[`Channel::close`], or the provider's own. Called exactly once,\nand nothing but `destroy` follows it."
+        }
+      ]
+    }
+  ]
+}
