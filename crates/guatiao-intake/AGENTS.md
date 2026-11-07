@@ -362,7 +362,8 @@ distinct.
   `fields["port"].widget`), a condition holding both `equals` and `in`,
   neither, or an empty `in`, a condition naming any value the referenced
   field would never hold -- **every** value of an `in`, not just one --
-  a `unit` on anything but an integer or a real number, and a field whose
+  a `unit` on anything but an integer, a real number or a union with
+  exactly one numeric arm (the unit is that arm's), and a field whose
   conditions lead back to itself. A
   section a field names but the form does not declare is **not** an error.
   **No error quotes a value**: a condition's `equals` is something a field
