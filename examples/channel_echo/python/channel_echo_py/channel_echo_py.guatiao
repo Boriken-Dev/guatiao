@@ -1,0 +1,7 @@
+# What guatiao-source-py reads before importing anything: the module, the
+# kind its provider serves, and where it is. `paths` are relative to this
+# file; the kind's module is beside this directory.
+type = "python"
+module = "channel_echo_py"
+kinds = ["channel_echo"]
+paths = [".", ".."]

@@ -41,6 +41,9 @@ libc = "0.2"
 
 [dev-dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load", "provider"] }
+# The channel kinds and the rules every echo keeps.
+channel_echo_kind = { path = "../../examples/channel_echo/kind" }
+guatiao-channel = { path = "../guatiao-channel" }
 
 # A process per case: the interpreter and its environment are the process's.
 [[test]]
