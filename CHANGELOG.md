@@ -14,6 +14,7 @@ write now.
 
 ### Added
 
+- **`guatiao_flutter`, Flutter widgets for guatiao values**, at `bindings/dart/guatiao_flutter`: its first content is `IntakeFormView`, a form renderer over a schema and the guatiao_intake form it is shown with, with secrets masked, bytes through callbacks the app supplies, and fields or choices the person lacks greyed with a reason.
 - **A kind slot takes a list borrowed, as it takes a map.**
   `#[guatiao::kind]` accepts a `&List` argument, a `const guatiao_list *`
   the callee reads for the call (null refused), its floor hash spelling it

@@ -65,6 +65,7 @@ public surface); this file is about the repository.
 | `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/dart/guatiao/` | Dart bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`: `dart:ffi` natively, the WebAssembly module on the web (`lib/src/web/`, chosen by a conditional import on `dart.library.js_interop`, `lib/wasm.dart` its counterpart of `ffi.dart`); `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on; `lib/remote.dart` (`lib/src/remote/`) a client of the remote protocol over WebSocket in plain Dart, a page's way to a server's providers, its suites starting `guatiao-remote-server` (`GUATIAO_REMOTE_SERVER`, else `target/debug`, with `derived_greeter` beside it); `lib/kinds.dart` kinds and providers as classes, `bin/kind.dart` (`dart run guatiao:kind`) writing a kind description's Dart and a library identity, and reading kinds declared in Dart with `lib/describe.dart`'s marks into a description (`describe`), `lib/kind_glue.dart` what that code calls; `hook/build.dart` builds the core crate with cargo for the target a Dart or Flutter build names, through `lib/hook.dart`, which the other two packages' hooks use too; its own `pubspec.yaml` tells the hook to build nothing for its own suites |
+| `bindings/dart/guatiao_flutter/` | the Flutter package `guatiao_flutter`, every Flutter widget of guatiao in one place, each family in its own part of `lib/src/` and exported from the one library (`lib/src/form/`: `IntakeFormView` over a `FormModel` holding a guatiao value, drawn from the schema's keywords and the guatiao_intake form); depends on `guatiao` and `guatiao_intake` and on Flutter's SDK only; its suites (`flutter test`, on the VM against `GUATIAO_LIBRARY`, and `flutter test --platform chrome` against a module copied to `lib/web_module/module.wasm`) are in `test/`; `pubspec_overrides.yaml` takes the other two from the checkout and is not published |
 | `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on; `src/tape.ts` is the wire encoding read and written in plain JavaScript, importing nothing and naming nothing of Node, which guatiao-remote compiles in too (`src/documents.ts` adds this package's `Ref` and `BadValue`); `src/markers.ts` the types a kind written as an interface is spelled with and `src/describe.ts` (`guatiao/describe`) reads such interfaces through the TypeScript 7 compiler API into a description |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
@@ -104,6 +105,18 @@ rustup target add wasm32-unknown-unknown
 cargo check --target wasm32-unknown-unknown -p guatiao -p guatiao-serde -p guatiao-intake \
   --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
 cargo build -p guatiao --target wasm32-unknown-unknown --release
+```
+
+The Flutter package's widget tests, after `cargo build -p guatiao-intake`
+(the library carries the core; `GUATIAO_LIBRARY` names the file) and, for
+the browser, `cargo build -p myapp --target wasm32-unknown-unknown --release`
+with its module copied where `flutter test` serves it:
+
+```bash
+cd bindings/dart/guatiao_flutter
+GUATIAO_LIBRARY=$PWD/../../../target/debug/guatiao_intake.dll flutter test     # .so or .dylib elsewhere
+mkdir -p lib/web_module && cp ../../../target/wasm32-unknown-unknown/release/myapp.wasm lib/web_module/module.wasm
+flutter test --platform chrome
 ```
 
 The Dart suites in Chrome, under each web compiler, against a module
@@ -559,7 +572,7 @@ release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`; the `pubspec.yaml` of `bindings/dart/guatiao`,
-`guatiao_serde` and `guatiao_intake` (the last two with `guatiao: ^x.y.z`);
+`guatiao_serde`, `guatiao_intake` and `guatiao_flutter` (the last three with `guatiao: ^x.y.z`, and `guatiao_flutter` with `guatiao_intake: ^x.y.z` too);
 the same version the PEP 440 way in the `pyproject.toml` of
 `bindings/python/guatiao`, `guatiao-serde` and `guatiao-intake` and each one's
 `__version__` (`0.0.0-alpha.0` is `0.0.0a0`; the last two pin
@@ -590,7 +603,7 @@ module in `bindings/go/guatiao-serde/go.mod` and `guatiao-intake/go.mod`
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
 `CHANGELOG.md` (its body becomes the release notes) and in the
-`CHANGELOG.md` of `bindings/dart/guatiao`, `guatiao_serde` and `guatiao_intake` (pub
+`CHANGELOG.md` of `bindings/dart/guatiao`, `guatiao_serde`, `guatiao_intake` and `guatiao_flutter` (pub
 warns on a changelog that names no section for the version, which only a
 rehearsal lets pass). Rehearse with `gh workflow run release.yml`,
 then push the tag `vx.y.z` -- the tag is the release, and a registry never
@@ -626,7 +639,7 @@ and intake packages after it.
 | --- | --- | --- |
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge`, `guatiao-libffi` or `guatiao-source-remote` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
-| pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
+| pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev, then `flutter pub publish` in `bindings/dart/guatiao_flutter` once those two are (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde`, `guatiao-intake` and `guatiao-remote` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the four for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | a tag per module, `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z` and `bindings/go/guatiao-intake/vx.y.z`, pushed by `release.yml` with the workflow's own token, the core first; the job then asks proxy.golang.org for each, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r/guatiao"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r/guatiao.serde"`) and `guatiao.intake` (`"subdir": "bindings/r/guatiao.intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |
