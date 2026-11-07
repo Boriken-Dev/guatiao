@@ -9,6 +9,11 @@
 //! show a rule failing on a provider that breaks it as well as passing on
 //! one that keeps it. Included with `#[path]` by every test that drives an
 //! echo, in this workspace or another.
+//!
+//! A host of a channel never waits inside `receive` for its own `send` to
+//! return: a provider whose output depends on its input, an echo, would
+//! deadlock once its queue is full. Every sink here takes a message
+//! without sending one.
 
 #![allow(
     dead_code,
@@ -18,7 +23,7 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Instant;
@@ -31,21 +36,15 @@ use guatiao_channel::{Channel, ChannelSink};
 pub type Start<'a> =
     dyn Fn(&Map, Object<dyn ChannelSink>) -> Result<Object<dyn Channel>, ProviderError> + 'a;
 
-/// How long an awaited call may take, in milliseconds: generous, for an
-/// engine run under emulation or a peer across a link.
-static WAIT_MS: AtomicU64 = AtomicU64::new(30_000);
-
-/// Shortens how long a wait lasts, for a test expecting one to run out.
-pub fn wait_at_most(limit: Duration) {
-    WAIT_MS.store(
-        u64::try_from(limit.as_millis()).unwrap_or(u64::MAX),
-        Ordering::Relaxed,
-    );
-}
-/// How long to watch for a call that must not come.
-const GRACE: Duration = Duration::from_millis(300);
-/// How long a held sink keeps the provider waiting.
-const HOLD: Duration = Duration::from_millis(500);
+/// How long an awaited call may take: generous, for an engine run under
+/// emulation or a peer across a link.
+pub const PATIENCE: Duration = Duration::from_secs(30);
+/// How long to watch for a call that must not come, or for one that must
+/// come promptly.
+pub const GRACE: Duration = Duration::from_millis(300);
+/// How long a held sink keeps the provider waiting: longer than any
+/// timeout a provider might keep for itself.
+pub const HOLD: Duration = Duration::from_secs(3);
 
 const GONE: u32 = 12;
 
@@ -72,7 +71,8 @@ struct Log {
 struct Shared {
     log: Mutex<Log>,
     changed: Condvar,
-    in_receive: AtomicBool,
+    /// Some call on the sink is running: the next must wait for it.
+    in_call: AtomicBool,
 }
 
 impl Shared {
@@ -87,6 +87,7 @@ impl Shared {
 /// from the test.
 pub struct Probe {
     shared: Arc<Shared>,
+    patience: Duration,
 }
 
 struct Sink {
@@ -95,11 +96,11 @@ struct Sink {
 
 impl ChannelSink for Sink {
     fn receive(&mut self, bytes: &[u8]) -> Result<(), ProviderError> {
-        let overlapped = self.shared.in_receive.swap(true, Ordering::AcqRel);
+        let overlapped = self.shared.in_call.swap(true, Ordering::AcqRel);
         let mut log = self.shared.lock();
         if overlapped {
             log.broken
-                .push("receive was called while another receive was running".into());
+                .push("receive was called while another call on the sink was running".into());
         }
         if log.events.iter().any(|e| matches!(e, Event::Closed(_))) {
             log.broken.push(format!(
@@ -133,19 +134,26 @@ impl ChannelSink for Sink {
         drop(log);
         // Long enough for a second caller running alongside to be seen.
         std::thread::sleep(Duration::from_micros(200));
-        self.shared.in_receive.store(false, Ordering::Release);
+        self.shared.in_call.store(false, Ordering::Release);
         self.shared.changed.notify_all();
         answer
     }
 
     fn closed(&mut self, status: u32) {
+        let overlapped = self.shared.in_call.swap(true, Ordering::AcqRel);
         let mut log = self.shared.lock();
+        if overlapped {
+            log.broken
+                .push("closed was called while another call on the sink was running".into());
+        }
         if log.events.iter().any(|e| matches!(e, Event::Closed(_))) {
             log.broken
                 .push(format!("closed({status}) came a second time"));
         }
         log.events.push(Event::Closed(status));
         drop(log);
+        std::thread::sleep(Duration::from_micros(200));
+        self.shared.in_call.store(false, Ordering::Release);
         self.shared.changed.notify_all();
     }
 }
@@ -158,18 +166,19 @@ impl Drop for Sink {
 }
 
 impl Probe {
-    /// A probe, and the sink to hand over.
-    pub fn new() -> (Probe, Object<dyn ChannelSink>) {
+    /// A probe whose waits give up after `patience`, and the sink to hand
+    /// over.
+    pub fn new(patience: Duration) -> (Probe, Object<dyn ChannelSink>) {
         let shared = Arc::new(Shared {
             log: Mutex::new(Log::default()),
             changed: Condvar::new(),
-            in_receive: AtomicBool::new(false),
+            in_call: AtomicBool::new(false),
         });
         let sink = Sink {
             shared: Arc::clone(&shared),
         }
         .into_object();
-        (Probe { shared }, sink)
+        (Probe { shared, patience }, sink)
     }
 
     /// `receive` waits from now until [`release`](Self::release).
@@ -189,7 +198,7 @@ impl Probe {
 
     /// Waits until `done` holds of the log, or says what it saw instead.
     fn wait_for(&self, what: &str, done: impl Fn(&Log) -> bool) -> Result<(), String> {
-        let deadline = Instant::now() + Duration::from_millis(WAIT_MS.load(Ordering::Relaxed));
+        let deadline = Instant::now() + self.patience;
         let mut log = self.shared.lock();
         while !done(&log) {
             let left = deadline.saturating_duration_since(Instant::now());
@@ -232,12 +241,18 @@ impl Probe {
     }
 
     /// Everything the sink saw, after a grace period in which nothing
-    /// more may come, with every rule it saw broken.
+    /// more may come, with every rule it saw broken, and the sink let go
+    /// once `closed` has been called.
     pub fn settle(&self) -> Result<Vec<Event>, String> {
         std::thread::sleep(GRACE);
         let log = self.shared.lock();
         if let Some(broken) = log.broken.first() {
             return Err(broken.clone());
+        }
+        if closed(&log.events).is_some() && !log.destroyed {
+            return Err(format!(
+                "the sink was not destroyed within {GRACE:?} of closed"
+            ));
         }
         Ok(log.events.clone())
     }
@@ -291,8 +306,12 @@ fn config(pairs: &[(&str, u64)]) -> Map {
     map
 }
 
-fn started(start: &Start, config: &Map) -> Result<(Probe, Object<dyn Channel>), String> {
-    let (probe, sink) = Probe::new();
+fn started(
+    start: &Start,
+    patience: Duration,
+    config: &Map,
+) -> Result<(Probe, Object<dyn Channel>), String> {
+    let (probe, sink) = Probe::new(patience);
     let channel = start(config, sink).map_err(|e| format!("start was refused: {e}"))?;
     Ok((probe, channel))
 }
@@ -314,11 +333,23 @@ fn refused_gone(channel: &dyn Channel, text: &str) -> Result<(), String> {
     }
 }
 
+/// Polls `done` until it holds or `limit` passes.
+fn within(limit: Duration, done: impl Fn() -> bool) -> bool {
+    let deadline = Instant::now() + limit;
+    while !done() {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    true
+}
+
 /// Messages come back in the order they were sent, each sender's in its
 /// own order when two threads send at once, through one `receive` at a
 /// time.
-pub fn order_is_kept(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &Map::new())?;
+pub fn order_is_kept(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
     let expected: Vec<String> = (0..20).map(|i| format!("m{i}")).collect();
     for text in &expected {
         send(&*channel, text)?;
@@ -365,11 +396,11 @@ pub fn order_is_kept(start: &Start) -> Result<(), String> {
     probe.settle().map(drop)
 }
 
-/// A sink that takes its time makes the provider wait: nothing is
-/// refused, dropped or closed meanwhile, and everything arrives once it
-/// takes again.
-pub fn back_pressure_waits(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &Map::new())?;
+/// A sink that takes its time makes the provider wait for several
+/// seconds: nothing is refused, dropped or closed meanwhile, and
+/// everything arrives once it takes again.
+pub fn back_pressure_waits(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
     probe.hold();
     let expected: Vec<String> = (0..24).map(|i| format!("p{i}")).collect();
     let channel: &dyn Channel = &*channel;
@@ -405,8 +436,8 @@ pub fn back_pressure_waits(start: &Start) -> Result<(), String> {
 
 /// The host's `close`: `send` answers GONE, and `closed` comes once,
 /// with the host's status, after which the sink hears nothing more.
-pub fn host_close(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &Map::new())?;
+pub fn host_close(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
     for text in ["1", "2", "3"] {
         send(&*channel, text)?;
     }
@@ -427,8 +458,8 @@ pub fn host_close(start: &Start) -> Result<(), String> {
 }
 
 /// Dropping the channel is `close(OK)`.
-pub fn dropping_closes(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &Map::new())?;
+pub fn dropping_closes(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
     send(&*channel, "1")?;
     probe.received(1)?;
     drop(channel);
@@ -443,8 +474,12 @@ pub fn dropping_closes(start: &Start) -> Result<(), String> {
 
 /// The provider's own close: `closed` once, with its status, and `send`
 /// answers GONE from then on.
-pub fn provider_close(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &config(&[("close_after", 2), ("close_status", 7)]))?;
+pub fn provider_close(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(
+        start,
+        patience,
+        &config(&[("close_after", 2), ("close_status", 7)]),
+    )?;
     send(&*channel, "1")?;
     send(&*channel, "2")?;
     let status = probe.closed()?;
@@ -463,8 +498,8 @@ pub fn provider_close(start: &Start) -> Result<(), String> {
 
 /// A sink answering GONE ends the stream: `closed` with GONE, no
 /// `receive` after, and `send` answers GONE.
-pub fn gone_sink_ends_the_stream(start: &Start) -> Result<(), String> {
-    let (probe, channel) = started(start, &Map::new())?;
+pub fn gone_sink_ends_the_stream(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
     send(&*channel, "1")?;
     probe.received(1)?;
     probe.go_away();
@@ -481,23 +516,192 @@ pub fn gone_sink_ends_the_stream(start: &Start) -> Result<(), String> {
     probe.settle().map(drop)
 }
 
-/// Every rule, by name.
-pub type Rule = fn(&Start) -> Result<(), String>;
+/// Messages still queued when the sink answers GONE are not delivered:
+/// the provider calls `closed` and nothing else.
+pub fn gone_sink_leaves_the_queue_unsent(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
+    probe.hold();
+    for text in ["1", "2", "3"] {
+        send(&*channel, text)?;
+    }
+    probe.go_away();
+    std::thread::sleep(GRACE);
+    probe.release();
+    let status = probe.closed()?;
+    if status != GONE {
+        return Err(format!("closed({status}), not closed(GONE)"));
+    }
+    drop(channel);
+    // Any receive after the GONE answer is a break the sink noted.
+    probe.settle().map(drop)
+}
 
-pub const RULES: [(&str, Rule); 6] = [
+/// `close` and dropping the channel return at once, though the sink is
+/// in the middle of a `receive` that has not returned.
+pub fn close_does_not_wait_for_receive(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
+    probe.hold();
+    send(&*channel, "x")?;
+    // Long enough for the provider to be inside `receive`.
+    std::thread::sleep(GRACE);
+    let done = Arc::new(AtomicBool::new(false));
+    let ended = Arc::clone(&done);
+    let host = std::thread::spawn(move || {
+        channel.close(3);
+        drop(channel);
+        ended.store(true, Ordering::Release);
+    });
+    let returned = within(GRACE * 3, || done.load(Ordering::Acquire));
+    probe.release();
+    host.join()
+        .map_err(|_| "the closing thread panicked".to_string())?;
+    if !returned {
+        return Err(format!(
+            "close and drop were still waiting {:?} after the sink was left inside receive",
+            GRACE * 3
+        ));
+    }
+    let status = probe.closed()?;
+    if status != 3 {
+        return Err(format!("closed({status}), not the host's closed(3)"));
+    }
+    probe.settle().map(drop)
+}
+
+/// `close` wakes a `send` waiting for room, which answers GONE; no `send`
+/// is taken once `close` has returned.
+pub fn close_wakes_a_waiting_send(start: &Start, patience: Duration) -> Result<(), String> {
+    let (probe, channel) = started(start, patience, &Map::new())?;
+    probe.hold();
+    let after_close = Arc::new(AtomicBool::new(false));
+    let finished = Arc::new(AtomicBool::new(false));
+    let failure: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let progress = Arc::new(AtomicUsize::new(0));
+    let channel: Arc<Object<dyn Channel>> = Arc::new(channel);
+    let sender = {
+        let (channel, after_close, finished, failure, progress) = (
+            Arc::clone(&channel),
+            Arc::clone(&after_close),
+            Arc::clone(&finished),
+            Arc::clone(&failure),
+            Arc::clone(&progress),
+        );
+        std::thread::spawn(move || {
+            for i in 0..200 {
+                // Read before the call: a send that began once `close` had
+                // returned must not be taken.
+                let began_after_close = after_close.load(Ordering::Acquire);
+                match channel.send(format!("w{i}").as_bytes()) {
+                    Ok(()) if began_after_close => {
+                        *failure.lock().expect("unpoisoned") =
+                            Some(format!("send(w{i}) was taken after close returned"));
+                        break;
+                    }
+                    Ok(()) => {
+                        progress.fetch_add(1, Ordering::AcqRel);
+                    }
+                    Err(e) if u32::from(e.status) == GONE => break,
+                    Err(e) => {
+                        *failure.lock().expect("unpoisoned") =
+                            Some(format!("send(w{i}) answered {e}, not GUATIAO_ERR_GONE"));
+                        break;
+                    }
+                }
+            }
+            finished.store(true, Ordering::Release);
+        })
+    };
+    // Long enough for the sender to be waiting, if the provider makes it.
+    std::thread::sleep(GRACE / 2);
+    let before = progress.load(Ordering::Acquire);
+    std::thread::sleep(GRACE / 2);
+    // No send finished in half a grace period: one is waiting for room.
+    let waiting = progress.load(Ordering::Acquire) == before && !finished.load(Ordering::Acquire);
+    channel.close(4);
+    after_close.store(true, Ordering::Release);
+    let woke = within(GRACE * 3, || finished.load(Ordering::Acquire));
+    probe.release();
+    sender
+        .join()
+        .map_err(|_| "the sender panicked".to_string())?;
+    if let Some(why) = failure.lock().expect("unpoisoned").take() {
+        return Err(why);
+    }
+    if waiting && progress.load(Ordering::Acquire) != before {
+        return Err("a send that was waiting for room was taken once close woke it".into());
+    }
+    if !woke {
+        return Err(format!(
+            "a send was still waiting {:?} after close returned",
+            GRACE * 3
+        ));
+    }
+    let status = probe.closed()?;
+    if status != 4 {
+        return Err(format!("closed({status}), not the host's closed(4)"));
+    }
+    drop(channel);
+    probe.settle().map(drop)
+}
+
+pub type Rule = fn(&Start, Duration) -> Result<(), String>;
+
+/// Every rule, by name.
+pub const RULES: [(&str, Rule); 9] = [
     ("order_is_kept", order_is_kept),
     ("back_pressure_waits", back_pressure_waits),
     ("host_close", host_close),
     ("dropping_closes", dropping_closes),
     ("provider_close", provider_close),
     ("gone_sink_ends_the_stream", gone_sink_ends_the_stream),
+    (
+        "gone_sink_leaves_the_queue_unsent",
+        gone_sink_leaves_the_queue_unsent,
+    ),
+    (
+        "close_does_not_wait_for_receive",
+        close_does_not_wait_for_receive,
+    ),
+    ("close_wakes_a_waiting_send", close_wakes_a_waiting_send),
 ];
 
 /// Runs every rule against `start`, and panics naming each one broken.
 pub fn hold_every_rule(who: &str, start: &Start) {
     let broken: Vec<String> = RULES
         .iter()
-        .filter_map(|(name, rule)| rule(start).err().map(|why| format!("  {name}: {why}")))
+        .filter_map(|(name, rule)| {
+            rule(start, PATIENCE)
+                .err()
+                .map(|why| format!("  {name}: {why}"))
+        })
+        .collect();
+    assert!(
+        broken.is_empty(),
+        "{who} broke the channel rules:\n{}",
+        broken.join("\n")
+    );
+}
+
+/// The rules that need a provider thread of its own, which a language
+/// whose objects are called on one interpreter thread cannot give: its
+/// echo answers inside the `send` that took the message, so a sink left
+/// inside `receive` holds the only thread that could take a `close`.
+pub const NEEDS_A_THREAD: [&str; 3] = [
+    "gone_sink_leaves_the_queue_unsent",
+    "close_does_not_wait_for_receive",
+    "close_wakes_a_waiting_send",
+];
+
+/// Runs every rule an echo with no thread of its own can keep.
+pub fn hold_every_inline_rule(who: &str, start: &Start) {
+    let broken: Vec<String> = RULES
+        .iter()
+        .filter(|(name, _)| !NEEDS_A_THREAD.contains(name))
+        .filter_map(|(name, rule)| {
+            rule(start, PATIENCE)
+                .err()
+                .map(|why| format!("  {name}: {why}"))
+        })
         .collect();
     assert!(
         broken.is_empty(),

@@ -11,16 +11,18 @@ extern crate alloc;
 #[path = "rules/mod.rs"]
 mod rules;
 
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::time::Duration;
-use std::sync::Mutex;
-use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::thread::JoinHandle;
 
 use guatiao::library::{Object, ObjectRaw, ProviderError};
 use guatiao::value::types::Bytes;
 use guatiao::{Map, Status};
 use guatiao_channel::{Channel, ChannelSink, ChannelSinkVtable};
+
+const QUEUE: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Fault {
@@ -31,6 +33,8 @@ enum Fault {
     Overlap,
     /// Answers BUSY when the queue is full instead of waiting.
     Busy,
+    /// Gives up on a full queue after a second, answering BUSY.
+    SendTimesOut,
     /// Takes a send after the host closed.
     TakesAfterClose,
     /// Tells the sink 0 rather than the host's status.
@@ -45,17 +49,43 @@ enum Fault {
     TakesAfterOwnClose,
     /// Keeps calling `receive` after it answered GONE, and never closes.
     IgnoresGone,
+    /// Delivers what is queued after the sink answered GONE, and only
+    /// then calls `closed`.
+    DrainsAfterGone,
+    /// `close` calls `closed` on the host's thread, whatever the sink is
+    /// in the middle of.
+    ClosesOnHostThread,
+    /// Dropping the channel waits for its thread, which waits on the sink.
+    DropJoinsReader,
+    /// `close` leaves a `send` waiting for room asleep.
+    CloseLeavesSendBlocked,
 }
 
-struct State {
-    closed: AtomicBool,
-    host_status: AtomicU32,
+#[derive(Default)]
+struct Inner {
+    items: VecDeque<Vec<u8>>,
+    closed: bool,
+    host_status: Option<u32>,
+}
+
+#[derive(Default)]
+struct Queue {
+    inner: Mutex<Inner>,
+    space: Condvar,
+    arrived: Condvar,
+}
+
+impl Queue {
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 struct Faulty {
     fault: Fault,
-    queue: Mutex<Option<SyncSender<Vec<u8>>>>,
-    state: Arc<State>,
+    queue: Arc<Queue>,
+    reader: Mutex<Option<JoinHandle<()>>>,
+    raw: Option<Arc<RawSink>>,
 }
 
 fn gone() -> ProviderError {
@@ -68,54 +98,91 @@ impl Channel for Faulty {
             self.fault,
             Fault::TakesAfterClose | Fault::TakesAfterOwnClose
         );
-        if self.state.closed.load(Ordering::Acquire) {
-            return if lenient { Ok(()) } else { Err(gone()) };
+        let mut inner = self.queue.lock();
+        loop {
+            if inner.closed {
+                return if lenient { Ok(()) } else { Err(gone()) };
+            }
+            if inner.items.len() < QUEUE {
+                break;
+            }
+            match self.fault {
+                Fault::Busy => {
+                    return Err(ProviderError::new(Status::GUATIAO_ERR_BUSY, "full"));
+                }
+                Fault::SendTimesOut => {
+                    let (woken, timeout) = self
+                        .queue
+                        .space
+                        .wait_timeout(inner, Duration::from_secs(1))
+                        .unwrap_or_else(PoisonError::into_inner);
+                    inner = woken;
+                    if timeout.timed_out() && inner.items.len() >= QUEUE {
+                        return Err(ProviderError::new(Status::GUATIAO_ERR_BUSY, "timed out"));
+                    }
+                }
+                _ => {
+                    inner = self
+                        .queue
+                        .space
+                        .wait(inner)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+            }
         }
-        let queue = self.queue.lock().expect("unpoisoned").clone();
-        let Some(queue) = queue else {
-            return if lenient { Ok(()) } else { Err(gone()) };
-        };
-        if self.fault == Fault::Busy {
-            return queue.try_send(bytes.to_vec()).map_err(|e| match e {
-                TrySendError::Full(_) => ProviderError::new(Status::GUATIAO_ERR_BUSY, "full"),
-                TrySendError::Disconnected(_) => gone(),
-            });
-        }
-        match queue.send(bytes.to_vec()) {
-            Ok(()) => Ok(()),
-            Err(_) if lenient => Ok(()),
-            Err(_) => Err(gone()),
-        }
+        inner.items.push_back(bytes.to_vec());
+        drop(inner);
+        self.queue.arrived.notify_one();
+        Ok(())
     }
 
     fn close(&self, status: u32) {
-        if self.state.closed.swap(true, Ordering::AcqRel) {
+        let mut inner = self.queue.lock();
+        if inner.closed {
             return;
         }
-        self.state.host_status.store(status, Ordering::Release);
-        let sender = self.queue.lock().expect("unpoisoned").take();
-        if self.fault == Fault::DropKeepsGoing {
-            core::mem::forget(sender);
+        inner.closed = true;
+        inner.host_status = Some(status);
+        drop(inner);
+        if self.fault != Fault::CloseLeavesSendBlocked {
+            self.queue.space.notify_all();
+        }
+        self.queue.arrived.notify_all();
+        if let (Fault::ClosesOnHostThread, Some(raw)) = (self.fault, &self.raw) {
+            raw.closed(status);
         }
     }
 }
 
 impl Drop for Faulty {
     fn drop(&mut self) {
-        if self.fault == Fault::DropKeepsGoing && !self.state.closed.load(Ordering::Acquire) {
-            core::mem::forget(self.queue.lock().expect("unpoisoned").take());
+        if self.fault == Fault::DropKeepsGoing {
             return;
         }
         self.close(0);
+        if self.fault == Fault::DropJoinsReader {
+            let reader = self
+                .reader
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            if let Some(reader) = reader {
+                let _ = reader.join();
+            }
+        }
     }
 }
 
-/// The sink as its table, for the one fault that calls it from two
-/// threads at once, which `Object` rules out.
+/// The sink as its table, for the faults that call it from two threads at
+/// once, which `Object` rules out.
+///
+/// Those faults make two live `&mut` borrows of one sink, which is
+/// undefined behaviour by Rust's rules however well the sink in this
+/// test copes, so they are not run under Miri.
 struct RawSink(ObjectRaw);
 
-// SAFETY: the sink's kind is `Send`; only the overlap fault calls it from
-// two threads at once, which is the break this test plants.
+// SAFETY: the sink's kind is `Send`; the faults that share it between
+// threads are the break each test plants.
 unsafe impl Send for RawSink {}
 // SAFETY: as above.
 unsafe impl Sync for RawSink {}
@@ -125,87 +192,157 @@ impl RawSink {
         // SAFETY: the table of a live `channel_sink` object.
         unsafe { &*self.0.table.cast::<ChannelSinkVtable>() }
     }
-    fn receive(&self, bytes: &[u8]) {
-        // SAFETY: a live object's slot, given its own ctx.
+    fn receive(&self, bytes: &[u8]) -> Result<(), ProviderError> {
         let mut err = ProviderError::none();
         let receive = self.table().receive.expect("a served table has every slot");
-        let _ = unsafe { receive(self.0.ctx, Bytes::from(bytes), &mut err) };
+        // SAFETY: a live object's slot, given its own ctx.
+        let status = unsafe { receive(self.0.ctx, Bytes::from(bytes), &mut err) };
+        if status == Status::GUATIAO_OK {
+            Ok(())
+        } else {
+            Err(ProviderError::new(status, err.message()))
+        }
     }
-    fn finish(self, status: u32) {
-        // SAFETY: as above; `destroy` last, once.
-        unsafe {
-            let table = self.table();
-            let _ = table.closed.expect("a served table has every slot")(self.0.ctx, status);
-            table.destroy.expect("a served table has every slot")(self.0.ctx);
+    fn closed(&self, status: u32) {
+        let closed = self.table().closed.expect("a served table has every slot");
+        // SAFETY: a live object's slot, given its own ctx.
+        let _ = unsafe { closed(self.0.ctx, status) };
+    }
+}
+
+impl Drop for RawSink {
+    fn drop(&mut self) {
+        let destroy = self.table().destroy.expect("a served table has every slot");
+        // SAFETY: the last owner lets the object go, once.
+        unsafe { destroy(self.0.ctx) };
+    }
+}
+
+/// The sink as the reader holds it.
+enum Held {
+    Owned(Object<dyn ChannelSink>),
+    Raw(Arc<RawSink>),
+}
+
+impl Held {
+    fn closed(&mut self, status: u32) {
+        match self {
+            Held::Owned(sink) => sink.closed(status),
+            Held::Raw(raw) => raw.closed(status),
         }
     }
 }
 
 fn deliver(
     fault: Fault,
-    mut sink: Object<dyn ChannelSink>,
-    taken: Receiver<Vec<u8>>,
-    state: &State,
+    mut held: Held,
+    queue: &Queue,
     close_after: Option<u64>,
     close_status: u32,
 ) {
-    if fault == Fault::Overlap {
-        let raw = Arc::new(RawSink(sink.into_raw()));
-        std::thread::scope(|s| {
-            for message in &taken {
-                let raw = Arc::clone(&raw);
-                s.spawn(move || raw.receive(&message));
-            }
-        });
-        let raw = Arc::into_inner(raw).expect("every caller has finished");
-        raw.finish(state.host_status.load(Ordering::Acquire));
-        return;
-    }
     let mut echoed = 0u64;
     let mut held_back: Option<Vec<u8>> = None;
-    let mut answered_error = false;
-    let status = loop {
-        if close_after.is_some_and(|n| echoed >= n) {
-            state.closed.store(true, Ordering::Release);
-            break close_status;
-        }
-        let Ok(message) = taken.recv() else {
-            break if fault == Fault::WrongStatus {
-                0
-            } else {
-                state.host_status.load(Ordering::Acquire)
-            };
+    let mut refused: Option<u32> = None;
+    let status = std::thread::scope(|scope| {
+        let mut receive = |bytes: &[u8]| -> Result<(), ProviderError> {
+            match (&mut held, fault) {
+                (Held::Raw(raw), Fault::Overlap) => {
+                    let (raw, bytes) = (Arc::clone(raw), bytes.to_vec());
+                    scope.spawn(move || {
+                        let _ = raw.receive(&bytes);
+                    });
+                    Ok(())
+                }
+                (Held::Raw(raw), _) => raw.receive(bytes),
+                (Held::Owned(sink), _) => sink.receive(bytes),
+            }
         };
-        if fault == Fault::Reorder && echoed == 1 && held_back.is_none() {
-            held_back = Some(message);
-            continue;
-        }
-        let mut answer = sink.receive(&message);
-        if let Some(late) = held_back.take() {
-            answer = answer.and_then(|()| sink.receive(&late));
-            echoed += 1;
-        }
-        if let Err(e) = answer {
-            if fault == Fault::IgnoresGone {
-                answered_error = true;
+        loop {
+            let message = {
+                let mut inner = queue.lock();
+                loop {
+                    if close_after.is_some_and(|n| echoed >= n) {
+                        break None;
+                    }
+                    if let Some(message) = inner.items.pop_front() {
+                        queue.space.notify_all();
+                        break Some(message);
+                    }
+                    if inner.closed {
+                        break None;
+                    }
+                    inner = queue
+                        .arrived
+                        .wait(inner)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+            };
+            let Some(message) = message else {
+                let mut inner = queue.lock();
+                let host = inner.host_status;
+                inner.closed = true;
+                inner.items.clear();
+                drop(inner);
+                queue.space.notify_all();
+                break match (fault, host) {
+                    (Fault::WrongStatus, Some(_)) => 0,
+                    (_, Some(status)) => status,
+                    (_, None) => close_status,
+                };
+            };
+            if fault == Fault::Reorder && echoed == 1 && held_back.is_none() {
+                held_back = Some(message);
                 continue;
             }
-            state.closed.store(true, Ordering::Release);
-            break e.status.into();
+            let mut answer = receive(&message);
+            if let Some(late) = held_back.take() {
+                answer = answer.and_then(|()| receive(&late));
+                echoed += 1;
+            }
+            if let Err(e) = answer {
+                let status: u32 = e.status.into();
+                match fault {
+                    Fault::IgnoresGone => {
+                        refused = Some(status);
+                        continue;
+                    }
+                    Fault::DrainsAfterGone => {
+                        let rest: Vec<Vec<u8>> = queue.lock().items.drain(..).collect();
+                        for message in rest {
+                            let _ = receive(&message);
+                        }
+                    }
+                    _ => {}
+                }
+                let mut inner = queue.lock();
+                inner.closed = true;
+                inner.items.clear();
+                drop(inner);
+                queue.space.notify_all();
+                break status;
+            }
+            echoed += 1;
         }
-        echoed += 1;
-    };
-    if fault == Fault::IgnoresGone && answered_error {
+    });
+    if fault == Fault::IgnoresGone && refused.is_some() {
         // Ended by the host, after ignoring the sink: no `closed` at all.
         return;
     }
-    drop(taken);
-    sink.closed(status);
+    if fault == Fault::ClosesOnHostThread {
+        // `closed` was the host's thread's doing.
+        return;
+    }
+    held.closed(status);
     match fault {
-        Fault::ClosedTwice => sink.closed(status),
-        Fault::ReceivesAfterClosed => {
-            let _ = sink.receive(b"late");
-        }
+        Fault::ClosedTwice => held.closed(status),
+        Fault::ReceivesAfterClosed => match &mut held {
+            Held::Owned(sink) => {
+                let _ = sink.receive(b"late");
+            }
+            Held::Raw(raw) => {
+                let _ = raw.receive(b"late");
+            }
+        },
         _ => {}
     }
 }
@@ -218,28 +355,51 @@ fn start(
     let number = |key: &str| config.get(key).and_then(|v| u64::try_from(v).ok());
     let close_after = number("close_after");
     let close_status = number("close_status").map_or(0, |n| u32::try_from(n).unwrap_or(0));
-    let (queue, taken) = sync_channel(4);
-    let state = Arc::new(State {
-        closed: AtomicBool::new(false),
-        host_status: AtomicU32::new(0),
-    });
-    let shared = Arc::clone(&state);
-    std::thread::spawn(move || deliver(fault, sink, taken, &shared, close_after, close_status));
+    let queue = Arc::new(Queue::default());
+    let (held, raw) = if matches!(fault, Fault::Overlap | Fault::ClosesOnHostThread) {
+        let raw = Arc::new(RawSink(sink.into_raw()));
+        (Held::Raw(Arc::clone(&raw)), Some(raw))
+    } else {
+        (Held::Owned(sink), None)
+    };
+    let shared = Arc::clone(&queue);
+    let reader =
+        std::thread::spawn(move || deliver(fault, held, &shared, close_after, close_status));
     Ok(Faulty {
         fault,
-        queue: Mutex::new(Some(queue)),
-        state,
+        queue,
+        reader: Mutex::new(Some(reader)),
+        raw,
     }
     .into_object())
 }
 
 /// The rules a fault must break, and the ones it leaves standing.
 fn broken_by(fault: Fault) -> Vec<&'static str> {
+    // Patient enough for the sink's holds, short of a fault that never
+    // answers.
+    let patience = Duration::from_secs(8);
     rules::RULES
         .iter()
-        .filter(|(_, rule)| rule(&|c: &Map, s| start(fault, c, s)).is_err())
+        .filter(|(_, rule)| rule(&|c: &Map, s| start(fault, c, s), patience).is_err())
         .map(|(name, _)| *name)
         .collect()
+}
+
+fn each_breaks(faults: &[(Fault, &str)]) {
+    std::thread::scope(|scope| {
+        let runs: Vec<_> = faults
+            .iter()
+            .map(|(fault, rule)| scope.spawn(move || (*fault, *rule, broken_by(*fault))))
+            .collect();
+        for run in runs {
+            let (fault, rule, broken) = run.join().expect("a fault's run");
+            assert!(
+                broken.contains(&rule),
+                "{fault:?} should break {rule}; it broke {broken:?}"
+            );
+        }
+    });
 }
 
 #[test]
@@ -249,12 +409,10 @@ fn the_echo_without_a_fault_keeps_every_rule() {
 
 #[test]
 fn each_planted_fault_breaks_its_rule() {
-    // A fault that never closes would otherwise wait the full patience.
-    rules::wait_at_most(Duration::from_secs(3));
-    for (fault, rule) in [
+    each_breaks(&[
         (Fault::Reorder, "order_is_kept"),
-        (Fault::Overlap, "order_is_kept"),
         (Fault::Busy, "back_pressure_waits"),
+        (Fault::SendTimesOut, "back_pressure_waits"),
         (Fault::TakesAfterClose, "host_close"),
         (Fault::WrongStatus, "host_close"),
         (Fault::ClosedTwice, "host_close"),
@@ -262,11 +420,18 @@ fn each_planted_fault_breaks_its_rule() {
         (Fault::DropKeepsGoing, "dropping_closes"),
         (Fault::TakesAfterOwnClose, "provider_close"),
         (Fault::IgnoresGone, "gone_sink_ends_the_stream"),
-    ] {
-        let broken = broken_by(fault);
-        assert!(
-            broken.contains(&rule),
-            "{fault:?} should break {rule}; it broke {broken:?}"
-        );
-    }
+        (Fault::DrainsAfterGone, "gone_sink_leaves_the_queue_unsent"),
+        (Fault::DropJoinsReader, "close_does_not_wait_for_receive"),
+        (Fault::CloseLeavesSendBlocked, "close_wakes_a_waiting_send"),
+    ]);
+}
+
+/// These two call the sink from two threads at once through its table.
+#[test]
+#[cfg_attr(miri, ignore = "two live `&mut` borrows of one sink, on purpose")]
+fn each_planted_concurrent_fault_breaks_its_rule() {
+    each_breaks(&[
+        (Fault::Overlap, "order_is_kept"),
+        (Fault::ClosesOnHostThread, "close_does_not_wait_for_receive"),
+    ]);
 }

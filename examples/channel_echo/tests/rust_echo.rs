@@ -12,7 +12,8 @@ use std::path::PathBuf;
 
 use channel_echo_kind::ChannelEcho;
 use guatiao::Map;
-use guatiao::library::Registry;
+use guatiao::Status;
+use guatiao::library::{Registry, UnloadError};
 
 /// The library built beside this test binary.
 fn library() -> PathBuf {
@@ -55,7 +56,7 @@ fn the_rust_echo_lets_the_sink_go_once_closed() {
         .expect("as the trait")
         .shared()
         .expect("its one instance");
-    let (probe, sink) = rules::Probe::new();
+    let (probe, sink) = rules::Probe::new(rules::PATIENCE);
     let channel = echo.start(&Map::new(), sink).expect("started");
     channel.close(0);
     assert_eq!(probe.closed(), Ok(0));
@@ -73,7 +74,7 @@ fn a_configuration_that_is_not_a_count_is_refused() {
         .expect("as the trait")
         .shared()
         .expect("its one instance");
-    let (probe, sink) = rules::Probe::new();
+    let (probe, sink) = rules::Probe::new(rules::PATIENCE);
     let mut config = Map::new();
     config.set("close_after", "soon");
     let Err(refused) = echo.start(&config, sink) else {
@@ -84,4 +85,51 @@ fn a_configuration_that_is_not_a_count_is_refused() {
         probe.destroyed(),
         "a refused start still destroys the sink it was handed"
     );
+}
+
+#[test]
+fn the_library_refuses_to_unload_while_its_thread_is_inside_the_sink() {
+    let mut registry = Registry::new("channel-host", "1.0");
+    registry.load_file(&library()).expect("the echo loads");
+    let key = registry.loaded()[0].key.to_string();
+    let (probe, sink) = rules::Probe::new(rules::PATIENCE);
+    {
+        let echo = registry
+            .offer::<dyn ChannelEcho>("channel_echo_echo")
+            .expect("offered")
+            .expect("as the trait")
+            .shared()
+            .expect("its one instance");
+        probe.hold();
+        let channel = echo.start(&Map::new(), sink).expect("started");
+        channel.send(b"x").expect("taken");
+        std::thread::sleep(rules::GRACE);
+        // The channel and every handle on the library are gone; the
+        // thread is still inside the sink.
+        drop(channel);
+    }
+    match registry.unload(&key) {
+        Err(UnloadError::Refused { status, .. }) if status == Status::GUATIAO_ERR_BUSY => {}
+        other => panic!("a thread still inside the sink, and unload answered {other:?}"),
+    }
+    probe.release();
+    probe.closed().expect("closed once released");
+    // The thread ends just after `closed` returns; the library is one
+    // mapping for every test in this process, so the other tests' threads
+    // count too.
+    let mut last = None;
+    let deadline = std::time::Instant::now() + rules::PATIENCE;
+    while std::time::Instant::now() < deadline {
+        match registry.unload(&key) {
+            Ok(_) => return,
+            Err(UnloadError::Refused { status, .. }) if status == Status::GUATIAO_ERR_BUSY => {
+                std::thread::sleep(core::time::Duration::from_millis(20));
+            }
+            Err(e) => last = Some(e),
+        }
+        if last.is_some() {
+            break;
+        }
+    }
+    panic!("the library did not unload once its thread was done: {last:?}");
 }

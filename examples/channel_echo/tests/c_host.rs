@@ -26,16 +26,25 @@ fn shared_library(stem: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+/// A skip, unless `GUATIAO_REQUIRE_ALL` says every check must run.
+fn skip(why: &str) {
+    assert!(
+        std::env::var_os("GUATIAO_REQUIRE_ALL").is_none(),
+        "{why}, and GUATIAO_REQUIRE_ALL is set"
+    );
+    println!("skipped: {why}");
+}
+
 #[test]
 fn a_c_host_starts_a_channel_on_the_echo() {
     let Some(cc) = c_compiler::find() else {
-        println!("skipped: no C compiler found");
+        skip("no C compiler found");
         return;
     };
     let Some(core) = shared_library("guatiao") else {
-        println!(
-            "skipped: the guatiao shared library is not beside this test binary; \
-             run `cargo build --workspace --all-features` first"
+        skip(
+            "the guatiao shared library is not beside this test binary; \
+             run `cargo build --workspace --all-features` first",
         );
         return;
     };

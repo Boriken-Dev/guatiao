@@ -47,6 +47,7 @@ typedef struct seen {
   int closed;
   uint32_t status;
   int destroyed;
+  int away; /* receive answers GUATIAO_ERR_GONE, filling err */
   const char *broken;
 } seen;
 
@@ -58,7 +59,10 @@ static void sink_destroy(void *ctx) {
 }
 
 static guatiao_status sink_receive(void *ctx, guatiao_bytes bytes, guatiao_provider_error *err) {
-  (void)err;
+  if (((seen *)ctx)->away) {
+    err->status = GUATIAO_ERR_GONE;
+    return GUATIAO_ERR_GONE;
+  }
   seen *s = (seen *)ctx;
   lock(&s->lock);
   if (s->closed) {
@@ -200,6 +204,46 @@ int main(int argc, char **argv) {
   int ok = !s.broken && s.closed == 1 && s.status == 5 && s.count == 3;
   const char *broken = s.broken;
   unlock(&s.lock);
+  /* A host that has gone: its sink answers GONE, filling err. The echo
+   * closes with GONE and sends no more; send then answers GONE. */
+  seen g;
+  memset(&g, 0, sizeof(g));
+  lock_init(&g.lock);
+  g.away = 1;
+  guatiao_object gone_sink = {&SINK, sizeof(SINK), &g};
+  guatiao_value gone_config;
+  guatiao_value_map(&ALLOC, &gone_config);
+  guatiao_object gone_chan;
+  memset(&gone_chan, 0, sizeof(gone_chan));
+  memset(&err, 0, sizeof(err));
+  status = echo->start(echo_ctx, &gone_config.payload.map, gone_sink, &gone_chan, &err);
+  guatiao_value_free(&gone_config);
+  if (status != GUATIAO_OK) {
+    return fail("start with a sink that has gone");
+  }
+  const channel_vtable *gc = (const channel_vtable *)gone_chan.table;
+  if (gc->send(gone_chan.ctx, guatiao_bytes_from("x", 1), &err) != GUATIAO_OK) {
+    return fail("the echo takes a message its sink then refuses");
+  }
+  if (!wait_for(&g, &g.closed, 1)) {
+    return fail("closed after the sink answered GONE");
+  }
+  status = gc->send(gone_chan.ctx, guatiao_bytes_from("y", 1), &err);
+  free_error(&err);
+  if (status != GUATIAO_ERR_GONE) {
+    return fail("a send after the sink answered GONE answers GUATIAO_ERR_GONE");
+  }
+  gc->destroy(gone_chan.ctx);
+  if (!wait_for(&g, &g.destroyed, 1)) {
+    return fail("the gone sink destroyed");
+  }
+  lock(&g.lock);
+  int gone_ok = !g.broken && g.closed == 1 && g.status == GUATIAO_ERR_GONE && g.count == 0;
+  unlock(&g.lock);
+  if (!gone_ok) {
+    return fail("closed(GUATIAO_ERR_GONE) once, nothing received");
+  }
+  printf("a sink that answered GONE: closed(GONE) once, send answers GONE\n");
   guatiao_registry_free(reg);
   if (!ok) {
     return fail(broken ? broken : "closed once, with the host's status");
