@@ -383,9 +383,12 @@ body, which JavaScript cannot); a refusal throws the status's
 `GuatiaoError` with the provider's words; a slot that cannot fail and
 fails throws its status. Valid while the library is. `kind.bind(table,
 size, ctx)` makes one over any table. **An `ObjectHandle`** is a `Remote`
-whose `close()` (or `using`) calls `destroy` once; one dropped unclosed is
-destroyed when collected; handed to a slot that takes it, it is the
-callee's and `close()` does nothing.
+whose `destroy()` (or `using`, or `close()`) calls `destroy` once; one
+dropped unclosed is destroyed when collected; handed to a slot that takes
+it, it is the callee's and `destroy()` does nothing. A kind with a slot
+named `close` or `closed` (a channel's) has it shadow the handle's own
+`close()` and `closed`; `destroy()` and `using` still end the object.
+A slot named `destroy`, `has`, `kind`, `ctx`, `size` or `table` is refused.
 
 **A JavaScript object as an object of a kind**: any object with the
 required methods. Its table is built once per kind and set of methods it

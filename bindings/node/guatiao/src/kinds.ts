@@ -232,8 +232,8 @@ export type Remote<K> = K extends { readonly [remoteType]: infer R }
   ? R
   : RemoteBase<K> & (MethodsOf<K> extends infer M extends Methods ? { [N in keyof M]: CallMethod<M[N]> } : never);
 
-/** An object of an object kind this side owns: `close()` destroys it, once. */
-export type ObjectHandle<K> = Remote<K> & Disposable & { close(): void; readonly closed: boolean };
+/** An object of an object kind this side owns: `destroy()` ends it, once, and so does `close()` unless the kind has a slot of that name. */
+export type ObjectHandle<K> = Remote<K> & Disposable & { destroy(): void } & Omit<{ close(): void; readonly closed: boolean }, keyof Remote<K>>;
 
 /** What a slot answering a map may return. @guatiaoType answer_map */
 export type MapAnswer = MapRef | Value | { readonly [key: string]: unknown } | ReadonlyMap<string, unknown>;
@@ -990,7 +990,7 @@ class ObjectShape extends ShapeImpl {
   }
 
   override unused(received: unknown): void {
-    if (received instanceof RemoteImpl && received.isHandle) received.close();
+    if (received instanceof RemoteImpl && received.isHandle) received.destroy();
   }
 
   override write(out: bigint, result: unknown): void {
@@ -1132,8 +1132,8 @@ function protoOf(slot: ResolvedSlot): unknown {
   return proto;
 }
 
-/** Names a remote answers itself, so no method may be called them. */
-const RESERVED = new Set(['has', 'close', 'closed', 'kind', 'ctx', 'size', 'table', 'then', 'constructor']);
+/** Names a remote answers itself, so no method may be called them. `close` and `closed` are not: an object kind may have slots of those names, which then shadow the handle's own, and `destroy()` is always its end. */
+const RESERVED = new Set(['has', 'destroy', 'kind', 'ctx', 'size', 'table', 'then', 'constructor']);
 
 let kindIds = 0;
 
@@ -1738,15 +1738,20 @@ export class RemoteImpl {
   }
 
   /** Destroys an object this side owns; a second call does nothing. */
-  close(): void {
+  destroy(): void {
     if (!this.isHandle || !this.#open) return;
     this.#open = false;
     handles.unregister(this);
     destroyRaw({ table: this.table, size: this.size, ctx: this.ctx ?? 0n });
   }
 
+  /** `destroy()`, unless the kind has a slot named `close`, which then shadows this. */
+  close(): void {
+    this.destroy();
+  }
+
   [Symbol.dispose](): void {
-    this.close();
+    this.destroy();
   }
 
   toString(): string {
