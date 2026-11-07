@@ -821,6 +821,28 @@ void main() {
       expect(m.read('limit'), 3);
     });
 
+    testWidgets('an unavailable word typed into the box is refused', (
+      tester,
+    ) async {
+      final m = await show(
+        tester,
+        schema,
+        value: {'limit': 3},
+        unavailableChoices: {
+          'limit': {'unlimited': 'Not for you'},
+        },
+      );
+      await tester.enterText(textIn('limit'), 'unlimited');
+      await tester.pump();
+      expect(m.read('limit'), isA<guatiao.Absent>());
+      expect(m.issues['limit'], 'Not for you');
+      expect(find.text('Not for you'), findsWidgets);
+      await tester.enterText(textIn('limit'), '8');
+      await tester.pump();
+      expect(m.read('limit'), 8);
+      expect(m.issues, isEmpty);
+    });
+
     testWidgets('a held unavailable word is locked', (tester) async {
       await show(
         tester,

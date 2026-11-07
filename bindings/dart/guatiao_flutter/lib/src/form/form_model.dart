@@ -323,6 +323,21 @@ class FormModel extends ChangeNotifier {
     _changed();
   }
 
+  /// Refuses [text] typed into the field at [path] for [reason]: nothing is
+  /// held there, the text stays as typed, and [issues] names the reason,
+  /// as for text that does not read as its kind.
+  void refuse(String path, String text, String reason) {
+    _drafts[path] = text;
+    _issues[path] = reason;
+    // An entry of a list or map stays where it is, holding nothing.
+    if (path.endsWith(']')) {
+      _put(path, null);
+    } else {
+      _remove(path);
+    }
+    _changed();
+  }
+
   /// Sets the field at [path] to [value], plain Dart (`TypedData` for
   /// bytes) or a `guatiao.Ref`, copied.
   void setValue(String path, Object? value) {
