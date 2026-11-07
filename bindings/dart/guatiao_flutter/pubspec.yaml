@@ -1,0 +1,41 @@
+name: guatiao_flutter
+description: >-
+  Flutter widgets for guatiao values: a form renderer over a schema and the
+  guatiao_intake form it is shown with.
+version: 0.0.0-alpha.1
+repository: https://github.com/Boriken-Dev/guatiao
+issue_tracker: https://github.com/Boriken-Dev/guatiao/issues
+documentation: https://boriken-dev.github.io/guatiao/
+
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  web:
+  windows:
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Released together: the minimum is this package's own version (pub
+  # refuses a dependency on one version).
+  guatiao: ^0.0.0-alpha.1
+  guatiao_intake: ^0.0.0-alpha.1
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+# This package's own suites run against the libraries GUATIAO_LIBRARY
+# names, built by cargo beforehand: as the root package, the hooks build
+# nothing. An application depending on it is unaffected.
+hooks:
+  user_defines:
+    guatiao:
+      build: false

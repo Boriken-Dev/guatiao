@@ -1,0 +1,8 @@
+# Development inside the repository: the core and intake packages from
+# their checkouts. Not published (.pubignore); a consumer resolves them
+# from pub.dev.
+dependency_overrides:
+  guatiao:
+    path: ../guatiao
+  guatiao_intake:
+    path: ../guatiao_intake
