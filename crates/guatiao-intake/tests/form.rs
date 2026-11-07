@@ -617,6 +617,51 @@ fn a_unit_reads_back_on_an_integer_and_a_real_number() {
     );
 }
 
+/// A bound that may be lifted, a number or the word `none`, is counted in
+/// a unit as a number is: the unit belongs to its one numeric arm. Two
+/// numeric arms leave no arm the unit could name.
+#[test]
+fn a_unit_on_a_union_needs_exactly_one_numeric_arm() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "limit",
+            KindBuilder::union(vec![
+                KindBuilder::int(),
+                KindBuilder::enumeration(&[("none", "No limit")]),
+            ]),
+        ))
+        .field(FieldBuilder::new(
+            "either",
+            KindBuilder::union(vec![KindBuilder::int(), KindBuilder::float()]),
+        ))
+        .field(FieldBuilder::new(
+            "words",
+            KindBuilder::union(vec![KindBuilder::string(), KindBuilder::bool()]),
+        ))
+        .finish()
+        .unwrap();
+    let form = Form::new()
+        .field("limit", Hints::new().unit("bytes"))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    check(s, f).expect("one numeric arm takes the unit");
+    assert_eq!(f.hints("limit").unit(), "bytes");
+
+    for field in ["either", "words"] {
+        let form = Form::new()
+            .field(field, Hints::new().unit("bytes"))
+            .finish()
+            .unwrap();
+        let (s, f) = views(&schema, &form);
+        assert!(
+            matches!(check(s, f), Err(FormError::Malformed { at, .. })
+                if at == format!("fields[\"{field}\"].unit")),
+            "{field}"
+        );
+    }
+}
+
 /// A unit describes what a NUMBER is counted in; beside text, a flag or a
 /// list it would describe nothing that is there.
 #[test]

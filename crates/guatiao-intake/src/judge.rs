@@ -203,6 +203,18 @@ fn malformed(at: impl Into<String>, expected: &'static str) -> FormError {
     }
 }
 
+/// Whether a unit can describe what this kind holds: a number, or an
+/// untagged union whose one numeric arm the unit then belongs to (a bound
+/// that may be lifted, `64` or `"none"`). With two numeric arms a renderer
+/// could not tell which one the unit names.
+fn counted_in_a_unit(kind: Kind<'_>) -> bool {
+    let numeric = |k: &Kind<'_>| matches!(k, Kind::Int { .. } | Kind::Float { .. });
+    match kind {
+        Kind::Union(_) => kind.alternatives().filter(numeric).count() == 1,
+        other => numeric(&other),
+    }
+}
+
 fn is_map(v: &Value) -> bool {
     v.tag() == Ok(Tag::GUATIAO_MAP)
 }
@@ -295,12 +307,12 @@ fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), 
             // A unit says what a NUMBER is counted in; on text or a list
             // it would be shown beside something it cannot describe.
             if TryAsRef::<Map>::try_as_ref(hints).is_some_and(|m| m.contains_key(vocab::UNIT))
-                && !flat::resolve(schema, path)
-                    .is_some_and(|f| matches!(f.kind(), Kind::Int { .. } | Kind::Float { .. }))
+                && !flat::resolve(schema, path).is_some_and(|f| counted_in_a_unit(f.kind()))
             {
                 return Err(malformed(
                     format!("{at}.{}", vocab::UNIT),
-                    "a unit on a number field -- an integer or a real number",
+                    "a unit on a number field -- an integer, a real number, or a union with \
+                     exactly one numeric arm",
                 ));
             }
             if let Some(condition) =

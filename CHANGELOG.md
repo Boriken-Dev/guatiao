@@ -1568,6 +1568,11 @@ write now.
 
 ### Changed
 
+- **A form's `unit` is accepted on a union with exactly one numeric arm.**
+  A bound that may be lifted (`{"anyOf": [{"type": "integer"}, {"type":
+  "string", "enum": ["none"]}]}`) is counted in a unit as a number is, and
+  the unit belongs to that arm; `check` still refuses one on a union with
+  no numeric arm or with two.
 - **A JavaScript provider's `static available()` is asked each time a host
   asks, under guatiao-source-js as under Node.** A provider unavailable
   when its library opened was left out of the library; it is now listed,
