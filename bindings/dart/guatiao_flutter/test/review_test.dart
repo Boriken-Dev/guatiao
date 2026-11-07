@@ -71,18 +71,20 @@ void main() {
       expect(m.issues['n'], 'At most 18446744073709551615.');
     });
 
-    test('a bound just past 2^53 does not round', () {
-      final bound = BigInt.parse('9007199254740993');
+    test('a bound past 2^63 does not round', () {
+      // Past what a VM int holds, and one below a double's reach of it: a
+      // comparison through doubles cannot tell this bound from the next.
+      final bound = BigInt.parse('18446744073709551614');
       final m = plain(
         obj({
           'n': {'type': 'integer', 'maximum': bound},
         }),
       );
-      m.setText('n', '9007199254740993');
+      m.setText('n', '18446744073709551614');
       expect(m.issues, isEmpty);
-      expect(m.text('n'), '9007199254740993');
-      m.setText('n', '9007199254740994');
-      expect(m.issues['n'], 'At most 9007199254740993.');
+      expect(m.text('n'), '18446744073709551614');
+      m.setText('n', '18446744073709551615');
+      expect(m.issues['n'], 'At most 18446744073709551614.');
     });
 
     test('a 128-bit lower bound refuses what is below it', () {
