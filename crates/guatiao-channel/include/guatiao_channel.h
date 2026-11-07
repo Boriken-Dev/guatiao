@@ -17,15 +17,28 @@
  *
  * The rules both sides keep:
  *  - send and receive return once the other side has taken the message;
- *    neither answers GUATIAO_ERR_BUSY or times out.
- *  - messages keep their call order per direction; the provider calls
- *    receive from one thread at a time.
+ *    neither answers GUATIAO_ERR_BUSY or times out. A host never waits
+ *    inside receive for its own send to return: a provider whose output
+ *    depends on its input would deadlock on a full queue.
+ *  - messages keep their call order per direction. The provider makes
+ *    every call on the sink (receive and closed) from one thread at a
+ *    time, and none while another is running.
+ *  - the status in close(status) and closed(status) is a guatiao_status
+ *    value: GUATIAO_OK is the normal end, anything else an error status.
  *  - after close (or destroying the channel, close(GUATIAO_OK)), send
- *    answers GUATIAO_ERR_GONE and the provider calls closed with the
- *    host's status once, unless it already had, then never the sink again.
+ *    answers GUATIAO_ERR_GONE, also a send that was waiting for room, and
+ *    none is taken once close has returned. The provider calls closed
+ *    with the host's status once, unless it already had, then never the
+ *    sink again. close and destroy return without waiting for a receive
+ *    that is still running.
  *  - after closed from the provider, send answers GUATIAO_ERR_GONE.
  *  - a host that takes nothing more answers GUATIAO_ERR_GONE from receive;
- *    any error from receive ends the stream: closed with that status.
+ *    any error from receive ends the stream: closed with that status, and
+ *    no message still queued is delivered.
+ *  - a C provider's close and a C host's closed answer GUATIAO_OK: they cannot fail, and
+ *    any other answer is a bug the provider's proxy panics on.
+ *  - a provider's library refuses to unload (GUATIAO_ERR_BUSY) while a
+ *    thread of its own is still inside a call on the sink.
  */
 
 
