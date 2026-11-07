@@ -154,6 +154,36 @@ it; a library calling it from another thread ends the process, as Dart
 does for every isolate-local callback. In a Flutter app, import the
 generated file with a prefix: Flutter has a `Listener` of its own.
 
+## Widgets
+
+`package:guatiao_flutter` holds guatiao's Flutter widgets, depending on
+`guatiao`, `guatiao_intake` and Flutter's own SDK. Its first content is a
+form renderer: `IntakeFormView` draws a `FormModel`, a schema with the
+guatiao_intake form it is shown with and the value being filled in held as a
+guatiao value, choosing each control from what the schema says (`type`,
+`format`, `enum`, `readOnly`, `x-sensitive`, `contentEncoding`, ...).
+
+```dart
+final model = FormModel(
+  schema: {
+    'type': 'object',
+    'properties': {
+      'name': {'type': 'string', 'title': 'Name'},
+      'retries': {'type': 'integer', 'title': 'Retries', 'minimum': 0},
+    },
+  },
+  value: {'name': 'demo', 'retries': 3},
+);
+// In a build method, inside a scrollable:
+IntakeFormView(model: model, unavailable: {'retries': 'Needs the admin role'})
+```
+
+A sensitive field is a password field (a read-only one is masked, with a
+reveal toggle and a copy action); a bytes field is filled and saved through
+the `onPickBytes` and `onSaveBytes` callbacks the app supplies;
+`unavailable` and `unavailableChoices` grey a field or a choice out with its
+reason. The package's own `AGENTS.md` lists every parameter.
+
 ## The example
 
 `examples/flutter_app` in the repository is a Flutter app using the three

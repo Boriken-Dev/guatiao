@@ -101,6 +101,15 @@ jobs:
                   problems.append(f"Cargo says {cargo} and {where} says {own}")
               if not re.search(rf"^  guatiao: \^{re.escape(cargo)}$", text, re.M):
                   problems.append(f"{where} does not depend on guatiao ^{cargo}")
+          # guatiao_flutter moves with them too, and names both packages it draws on.
+          where = "bindings/dart/guatiao_flutter/pubspec.yaml"
+          text = pathlib.Path(where).read_text()
+          own = re.search(r"^version:\s*(\S+)", text, re.M).group(1)
+          if own != cargo:
+              problems.append(f"Cargo says {cargo} and {where} says {own}")
+          for dependency in ("guatiao", "guatiao_intake"):
+              if not re.search(rf"^  {dependency}: \^{re.escape(cargo)}$", text, re.M):
+                  problems.append(f"{where} does not depend on {dependency} ^{cargo}")
           # guatiao-source-py is a workspace of its own and is not published: its
           # version and its pins on the crates still move with them.
           bridge = tomllib.loads(pathlib.Path("crates/guatiao-source-py/Cargo.toml").read_text())
@@ -282,9 +291,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.ref }}
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: stable
       - name: Dry-run the pub.dev publish of each package
         # A rehearsal at a version the packages never had (one already
         # released, before the next is cut) leaves a new package's
@@ -301,10 +310,12 @@ jobs:
 
           rehearsal = os.environ["EVENT"] == "workflow_dispatch"
           failed = []
-          for package in ("guatiao", "guatiao_serde", "guatiao_intake"):
+          for package in ("guatiao", "guatiao_serde", "guatiao_intake", "guatiao_flutter"):
               where = f"bindings/dart/{package}"
-              subprocess.run(["dart", "pub", "get"], cwd=where, check=True)
-              run = subprocess.run(["dart", "pub", "publish", "--dry-run"], cwd=where, capture_output=True, text=True)
+              # A Flutter package needs the Flutter tool to resolve and check.
+              tool = "flutter" if package == "guatiao_flutter" else "dart"
+              subprocess.run([tool, "pub", "get"], cwd=where, check=True)
+              run = subprocess.run([tool, "pub", "publish", "--dry-run"], cwd=where, capture_output=True, text=True)
               out = run.stdout + run.stderr
               print(out)
               if run.returncode == 0:
@@ -848,8 +859,11 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
       - name: Publish each package, unless pub.dev has this version already
-        # guatiao first: the others depend on it.
+        # guatiao first: the others depend on it; guatiao_flutter after intake.
         shell: python
         run: |
           import json
@@ -859,7 +873,8 @@ jobs:
           import urllib.request
 
           for package, where in (("guatiao", "bindings/dart/guatiao"), ("guatiao_serde", "bindings/dart/guatiao_serde"),
-                                 ("guatiao_intake", "bindings/dart/guatiao_intake")):
+                                 ("guatiao_intake", "bindings/dart/guatiao_intake"),
+                                 ("guatiao_flutter", "bindings/dart/guatiao_flutter")):
               version = re.search(r"^version:\s*(\S+)", open(f"{where}/pubspec.yaml").read(), re.M).group(1)
               try:
                   with urllib.request.urlopen(f"https://pub.dev/api/packages/{package}") as r:
@@ -875,8 +890,9 @@ jobs:
               if version in have:
                   print(f"{package} {version} is already on pub.dev; skipped")
                   continue
-              subprocess.run(["dart", "pub", "get"], cwd=where, check=True)
-              subprocess.run(["dart", "pub", "publish", "--force"], cwd=where, check=True)
+              tool = "flutter" if package == "guatiao_flutter" else "dart"
+              subprocess.run([tool, "pub", "get"], cwd=where, check=True)
+              subprocess.run([tool, "pub", "publish", "--force"], cwd=where, check=True)
 
   publish-npm:
     name: Publish to npm
