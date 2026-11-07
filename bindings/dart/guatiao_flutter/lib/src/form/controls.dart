@@ -782,7 +782,14 @@ class _NumberOrWordState extends State<_NumberOrWord> {
           ),
           onChanged: (text) {
             _sync.typed();
-            model.setText(widget.path, text, at: schema);
+            // A word typed in is the choice it names: one the person lacks
+            // is not taken.
+            final reason = widget.form.choiceReason(widget.path, text.trim());
+            if (reason != null) {
+              model.refuse(widget.path, text, reason);
+            } else {
+              model.setText(widget.path, text, at: schema);
+            }
           },
         ),
         CheckboxListTile(
