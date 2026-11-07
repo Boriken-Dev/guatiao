@@ -13,12 +13,8 @@ import 'package:guatiao/guatiao.dart' as guatiao;
 /// Registers the library the suite loads; call once from `main`.
 Future<void> setUpGuatiao() async {
   final env = Platform.environment['GUATIAO_LIBRARY'];
-  if (env != null && env.isNotEmpty) {
-    guatiao.libraryDirectory = Directory(env).existsSync()
-        ? env
-        : File(env).parent.path;
-    return;
-  }
+  // The package itself reads the variable.
+  if (env != null && env.isNotEmpty) return;
   var dir = Directory.current.absolute;
   for (var i = 0; i < 6; i++) {
     if (Directory('${dir.path}/crates').existsSync() &&

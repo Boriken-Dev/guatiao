@@ -4,4 +4,4 @@ pubspec.lock
 /build/
 /doc/api/
 # The module the browser suites load, copied in by their runner
-/test/web_module/
+/lib/web_module/
