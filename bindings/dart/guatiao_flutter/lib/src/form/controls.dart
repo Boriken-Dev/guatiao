@@ -639,7 +639,9 @@ class _Picker extends StatelessWidget {
   Widget build(BuildContext context) {
     final stored = form.model.text(path);
     final editable = form.canEdit(path, schema);
-    final heldReason = stored == null ? null : form.choiceReason(path, stored);
+    // What is held, not what was typed and refused.
+    final held = form.model.read(path);
+    final heldReason = held is String ? form.choiceReason(path, held) : null;
     if (!choices.open) {
       final values = <String>[
         ...{...choices.values, ...?schema.suggestions, ?stored}..remove(''),
@@ -713,8 +715,11 @@ class _Picker extends StatelessWidget {
                 // one typed in is not taken.
                 onChanged: editable && heldReason == null
                     ? (text) {
-                        if (form.choiceReason(path, text) == null) {
+                        final reason = form.choiceReason(path, text);
+                        if (reason == null) {
                           form.model.setText(path, text, at: schema);
+                        } else {
+                          form.model.refuse(path, text, reason);
                         }
                       }
                     : null,

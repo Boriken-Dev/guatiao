@@ -978,6 +978,37 @@ void main() {
       expect(m.read('h'), 'good');
     });
 
+    testWidgets('typing an unavailable choice key by key leaves nothing held', (
+      tester,
+    ) async {
+      final m = await show(
+        tester,
+        obj({
+          'h': {'type': 'string', 'format': 'host'},
+        }),
+        choicesFor: (format) => FieldChoices(const ['good', 'bad'], open: true),
+        unavailableChoices: {
+          'h': {'bad': 'Not allowed'},
+        },
+      );
+      for (final typed in ['b', 'ba']) {
+        await tester.enterText(textIn('h'), typed);
+        await tester.pump();
+      }
+      expect(m.read('h'), 'ba');
+      await tester.enterText(textIn('h'), 'bad');
+      await tester.pump();
+      // The prefix is not kept under the refused text.
+      expect(m.read('h'), isA<guatiao.Absent>());
+      expect(m.issues['h'], 'Not allowed');
+      // The refusal does not lock the field: it holds nothing.
+      expect(textFieldIn(tester, 'h').readOnly, isFalse);
+      await tester.enterText(textIn('h'), 'good');
+      await tester.pump();
+      expect(m.read('h'), 'good');
+      expect(m.issues, isEmpty);
+    });
+
     testWidgets('a held unavailable choice locks an open picker', (
       tester,
     ) async {
