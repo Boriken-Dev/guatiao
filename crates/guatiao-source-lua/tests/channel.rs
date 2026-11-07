@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! The Lua echo, served by the source and called from a Rust host as the
-//! channel kind, keeps every rule of the channel.
+//! channel kind, keeps every rule that needs no thread of its own (the
+//! engine calls a provider only on its own thread).
 
 #![cfg(feature = "source")]
 
@@ -44,7 +45,12 @@ impl Source for Held {
 fn the_lua_echo_keeps_every_rule() {
     let mut config = Map::new();
     let mut dirs = List::new();
-    dirs.push(repo().join("examples/channel_echo/lua").display().to_string());
+    dirs.push(
+        repo()
+            .join("examples/channel_echo/lua")
+            .display()
+            .to_string(),
+    );
     config.set("dirs", dirs);
     let mut kinds = List::new();
     kinds.push(
@@ -69,5 +75,7 @@ fn the_lua_echo_keeps_every_rule() {
         .expect("as the trait")
         .shared()
         .expect("an instance");
-    rules::hold_every_inline_rule("the Lua echo", &|config: &Map, sink| echo.start(config, sink));
+    rules::hold_every_inline_rule("the Lua echo", &|config: &Map, sink| {
+        echo.start(config, sink)
+    });
 }

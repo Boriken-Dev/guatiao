@@ -1,0 +1,10 @@
+{
+  "name": "channel_echo_js",
+  "version": "1.0.0",
+  "description": "An echo serving a channel, run by Node or by the guatiao-source-js source",
+  "license": "MPL-2.0",
+  "author": "jose-pr",
+  "private": true,
+  "type": "module",
+  "exports": "./echo.js"
+}

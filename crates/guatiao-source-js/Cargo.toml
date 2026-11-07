@@ -37,6 +37,9 @@ rquickjs = { version = "0.14.0", default-features = false, features = ["loader",
 [dev-dependencies]
 # The kinds' traits, which a Rust host calls the JavaScript greeters through.
 greeter_kind = { path = "../../examples/greeter_kind" }
+# The channel kinds and the rules every echo keeps.
+channel_echo_kind = { path = "../../examples/channel_echo/kind" }
+guatiao-channel = { path = "../guatiao-channel" }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

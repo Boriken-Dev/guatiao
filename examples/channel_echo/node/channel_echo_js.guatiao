@@ -1,0 +1,7 @@
+# What guatiao-source-js reads before running the echo: the library's id
+# (the package's name), the kind its provider serves, and where its code
+# is. `paths` are relative to this file.
+type = "js"
+name = "channel_echo_js"
+kinds = ["channel_echo"]
+paths = ["."]
