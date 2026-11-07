@@ -973,6 +973,59 @@ void main() {
       expect(textFieldIn(tester, 'h').onChanged, isNull);
     });
 
+    testWidgets('an open picker holding an unavailable choice is read-only', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        obj({
+          'h': {'type': 'string', 'format': 'host'},
+        }),
+        value: {'h': 'bad'},
+        choicesFor: (format) => FieldChoices(const ['good', 'bad'], open: true),
+        unavailableChoices: {
+          'h': {'bad': 'Not allowed'},
+        },
+      );
+      expect(textFieldIn(tester, 'h').readOnly, isTrue);
+      expect(
+        tester.widget<Autocomplete<String>>(field('h')).onSelected,
+        isNull,
+      );
+    });
+
+    testWidgets('an open picker that is read-only picks nothing', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        obj({
+          'h': {'type': 'string', 'format': 'host', 'readOnly': true},
+        }),
+        value: {'h': 'good'},
+        choicesFor: (format) => FieldChoices(const ['good', 'bad'], open: true),
+      );
+      expect(
+        tester.widget<Autocomplete<String>>(field('h')).onSelected,
+        isNull,
+      );
+    });
+
+    testWidgets('an open picker over a free value picks', (tester) async {
+      await show(
+        tester,
+        obj({
+          'h': {'type': 'string', 'format': 'host'},
+        }),
+        value: {'h': 'good'},
+        choicesFor: (format) => FieldChoices(const ['good', 'bad'], open: true),
+      );
+      expect(
+        tester.widget<Autocomplete<String>>(field('h')).onSelected,
+        isNotNull,
+      );
+    });
+
     testWidgets('an unavailable choice cannot be added to a list by typing', (
       tester,
     ) async {
