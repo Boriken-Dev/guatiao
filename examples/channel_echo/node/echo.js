@@ -44,7 +44,7 @@ class Channel {
     try {
       sink.closed(status);
     } finally {
-      sink.close();
+      sink.destroy();
     }
   }
 

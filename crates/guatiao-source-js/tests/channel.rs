@@ -40,7 +40,7 @@ impl Source for Held {
 }
 
 #[test]
-fn the_js_echo_keeps_every_rule() {
+fn the_js_echo_keeps_every_inline_rule() {
     let mut config = Map::new();
     let mut dirs = List::new();
     dirs.push(
@@ -76,4 +76,107 @@ fn the_js_echo_keeps_every_rule() {
     rules::hold_every_inline_rule("the JavaScript echo", &|config: &Map, sink| {
         echo.start(config, sink)
     });
+}
+
+/// Takes a channel and closes it with a status, from a library in
+/// JavaScript: a kind's slot named `close` keeps its name on the handle.
+#[guatiao::kind]
+pub trait Closer: Send + Sync {
+    /// Calls `close(status)` on the channel it was handed.
+    fn finish(
+        &self,
+        channel: guatiao::library::Object<dyn guatiao_channel::Channel>,
+        status: u32,
+    ) -> Result<(), ProviderError>;
+}
+
+/// A channel that remembers what it was closed with, and that it was let go.
+struct Recording {
+    closed_with: Arc<std::sync::Mutex<Vec<u32>>>,
+    destroyed: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl guatiao_channel::Channel for Recording {
+    fn send(&self, _bytes: &[u8]) -> Result<(), ProviderError> {
+        Ok(())
+    }
+    fn close(&self, status: u32) {
+        self.closed_with.lock().unwrap().push(status);
+    }
+}
+
+impl Drop for Recording {
+    fn drop(&mut self) {
+        self.destroyed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn close_on_a_handle_reaches_the_provider_with_its_status() {
+    let dir = std::env::temp_dir().join(format!("guatiao-js-closer-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let document = format!(
+        "{{\"kinds\":[{},{},{}]}}",
+        CloserVtable::description(),
+        guatiao_channel::ChannelVtable::description(),
+        guatiao_channel::ChannelSinkVtable::description()
+    );
+    std::fs::write(dir.join("closer.kinds.json"), &document).unwrap();
+    std::fs::write(
+        dir.join("closer.guatiao"),
+        "type = \"js\"\nname = \"closer\"\nkinds = [\"closer\"]\npaths = [\".\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        "{\"name\":\"closer\",\"version\":\"1.0.0\",\"type\":\"module\",\"exports\":\"./closer.js\"}",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("closer.js"),
+        format!(
+            "import {{ kindsOf }} from 'guatiao/kinds';\n\
+             import {{ Provider }} from 'guatiao/provide';\n\
+             const described = kindsOf({document});\n\
+             export class Closer extends Provider {{\n\
+               static kinds = [described['closer']];\n\
+               finish(channel, status) {{ channel.close(status); channel.destroy(); }}\n\
+             }}\n"
+        ),
+    )
+    .unwrap();
+    let mut config = Map::new();
+    let mut dirs = List::new();
+    dirs.push(dir.display().to_string());
+    config.set("dirs", dirs);
+    let mut kinds = List::new();
+    kinds.push(dir.join("closer.kinds.json").display().to_string());
+    config.set("kinds", kinds);
+    let source = Arc::new(
+        BridgeSource::<JsEngine>::pinned(&config, "js-closer-test")
+            .expect("QuickJS starts")
+            .with_mechanism(Arc::new(Libffi)),
+    );
+    let mut registry = Registry::new("js-closer-host", "1.0");
+    registry.add_source("js", Held(source)).expect("added");
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let closer = registry
+        .offer::<dyn Closer>("closer_closer")
+        .expect("served")
+        .expect("as the trait")
+        .shared()
+        .expect("an instance");
+    let closed_with = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let destroyed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let channel = guatiao_channel::Channel::into_object(Recording {
+        closed_with: Arc::clone(&closed_with),
+        destroyed: Arc::clone(&destroyed),
+    });
+    closer.finish(channel, 5).expect("finished");
+    assert_eq!(*closed_with.lock().unwrap(), [5], "close(5) arrived as 5");
+    assert!(destroyed.load(std::sync::atomic::Ordering::SeqCst));
+    let _ = std::fs::remove_dir_all(&dir);
 }

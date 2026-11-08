@@ -1588,11 +1588,14 @@ write now.
   the unit belongs to that arm; `check` still refuses one on a union with
   no numeric arm or with two.
 
-- **A Node object handle ends with `destroy()`, so a kind may have slots
-  named `close` and `closed`.** The handle's own `close()` and `closed`
-  gave way to a slot of that name on that kind's handles; `destroy()` and
-  `using` always end the object, and `close()` still does where the kind
-  has no such slot. A slot named `destroy` is refused.
+- **An object handle ends with `destroy()`, so a kind may have slots named
+  `close` and `closed`.** In Node the handle's own `close()` and `closed`
+  gave way to a slot of that name on that kind's handles, and QuickJS
+  handles gained `destroy()` and the same rule (a channel's `close(status)`
+  reaches the provider with its status). `destroy()` and `using` always
+  end the object, and `close()` still does where the kind has no such
+  slot. A slot named `destroy` is now refused in Node, `destroy` being the
+  handle's own.
 
 - **A JavaScript provider's `static available()` is asked each time a host
   asks, under guatiao-source-js as under Node.** A provider unavailable

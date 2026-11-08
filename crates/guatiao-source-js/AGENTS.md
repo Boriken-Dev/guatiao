@@ -128,8 +128,9 @@ are listed below. Statics, all optional but `kinds`:
   else thrown is `GUATIAO_ERR_INTERNAL`, `Name: message` or `thrown: text`.
 - **A handle** is a host's object handed over or lent: a method per slot
   of its kind, taking the same shapes and answering as above, throwing a
-  `GuatiaoError` of the status when the host refuses. `close()` (also
-  `[Symbol.dispose]()`) destroys one that was handed over; one dropped is
+  `GuatiaoError` of the status when the host refuses. `destroy()` (also
+  `[Symbol.dispose]()`, and `close()` unless the kind has a slot named
+  `close`, which keeps its name) destroys one that was handed over; one dropped is
   destroyed when collected; a lent one answers `Gone` after the call.
   A handle can be passed on to a slot of its kind, or handed back as an
   answer; a script's own object cannot be passed to a host as an object.

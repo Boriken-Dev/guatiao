@@ -120,7 +120,9 @@ reg.bind("greeters_hello", Greeter).greet("ana")
 new or changed library in a context of its own; an old build closes once
 nothing holds it, so an edit to the module, to a file it imports or to
 its `package.json` is served at the next refresh while instances of the
-old build still answer. Two libraries share nothing but the runtime's
+old build still answer. An object a host hands in is a handle: a method per slot of its kind, and
+`destroy()` (or `using`) ends it; `close()` does too, unless the kind has a
+slot of that name, as a channel's has, which then keeps it. Two libraries share nothing but the runtime's
 thread and memory limit. The manifests, stamps and refresh are the
 [bridge's](language-bridges.md).
 
