@@ -42,7 +42,7 @@ impl Source for Held {
 }
 
 #[test]
-fn the_lua_echo_keeps_every_rule() {
+fn the_lua_echo_keeps_every_inline_rule() {
     let mut config = Map::new();
     let mut dirs = List::new();
     dirs.push(

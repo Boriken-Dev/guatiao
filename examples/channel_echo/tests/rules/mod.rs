@@ -694,6 +694,10 @@ pub const NEEDS_A_THREAD: [&str; 3] = [
 
 /// Runs every rule an echo with no thread of its own can keep.
 pub fn hold_every_inline_rule(who: &str, start: &Start) {
+    println!(
+        "{who}: skipping the rules that need a thread of its own: {}",
+        NEEDS_A_THREAD.join(", ")
+    );
     let broken: Vec<String> = RULES
         .iter()
         .filter(|(name, _)| !NEEDS_A_THREAD.contains(name))
