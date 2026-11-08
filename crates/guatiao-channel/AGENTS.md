@@ -65,9 +65,29 @@ the message: it keeps the rules that do not need a thread of its own
 
 ## Threads
 
-Whether a provider's own thread may call a host's sink, by language of
-the host:
+Whether a provider's own thread may call a host's sink, by the language
+the host's sink is written in (measured with the Rust echo, each in its
+own test):
 
 | host | from the provider's own thread |
 | --- | --- |
 | Rust, C | yes |
+| Python | yes: the GIL lets any thread call a Python object |
+| Node | yes, while the event loop is free: koffi queues the call to the loop and the provider's thread waits for the answer, so a host blocked inside a synchronous `send` hears nothing until it returns (send a few messages, then `await`) |
+| Lua | no: a Lua host's table is called on its interpreter's thread only, and a call from a provider's own thread is refused `GUATIAO_ERR_INTERNAL` |
+| Dart | not measured: a call into a Dart-served table from a thread Dart did not start ends the process |
+
+And by the language a provider is written in, whether it can push from a
+thread of its own:
+
+| provider | pushes from its own thread |
+| --- | --- |
+| Rust | yes (the echo) |
+| Python | yes (`threading.Thread`; the echo in `examples/channel_echo/python`) |
+| QuickJS, Node | no: objects are called on the engine's thread only, so the echo answers inside the `send` that took the message |
+| Lua | no: the same; the echo answers inside `send` |
+
+A provider with no thread of its own keeps every rule except the three
+listed in `NEEDS_A_THREAD` (queued messages left unsent when the sink says
+GONE, `close` while a `receive` is blocked, and a `send` woken by `close`),
+which need a second thread to be observable.

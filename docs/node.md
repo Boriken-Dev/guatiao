@@ -270,7 +270,9 @@ before anything in it runs. A slot the provider leaves out throws
 `Unsupported`, and `has(name)` asks first. A refusal throws the error its
 status names (`BadValue`, `NotFound`, ...) with the provider's own words.
 A tree answered is a `Value` the caller closes; an object answered is an
-`ObjectHandle` whose `close()` destroys it.
+`ObjectHandle` whose `destroy()` (or `close()`, or `using`) ends it; a kind
+with slots named `close` or `closed`, as a channel's, has those slots in
+their place, and `destroy()` ends the object.
 
 A settings screen lists every provider of every loaded library at once,
 none of them built, with `reg.catalog()` (plain objects, best first: what

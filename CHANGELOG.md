@@ -14,6 +14,20 @@ write now.
 
 ### Added
 
+- **`guatiao-channel`, a two-way stream of bytes as two object kinds.**
+  `channel` (`send`, `close`) is what a host writes on and `channel_sink`
+  (`receive`, `closed`) what the provider writes back on, handed in by the
+  host; a provider kind of one's own starts a channel from a sink. Messages
+  are bytes lent for the call. The rules are stated once, in the crate's
+  `AGENTS.md` and header: back-pressure blocks, order is kept per
+  direction, each side closes once with a `guatiao_status`, a `send` waiting
+  when the host closes answers `GUATIAO_ERR_GONE`, and a provider's library
+  stays mapped while a thread of its own is inside the sink. The header
+  and the kinds' description are committed;
+  `examples/channel_echo` is a provider keeping every rule, with the suite
+  that checks them (and faults planted to show each test fails when its
+  rule breaks), a C host, and echoes in Python, JavaScript (QuickJS and
+  Node) and Lua.
 - **`guatiao_flutter`, Flutter widgets for guatiao values**, at
   `bindings/dart/guatiao_flutter`: its first content is `IntakeFormView`,
   a form renderer over a schema and the guatiao_intake form it is shown
@@ -1573,6 +1587,13 @@ write now.
   "string", "enum": ["none"]}]}`) is counted in a unit as a number is, and
   the unit belongs to that arm; `check` still refuses one on a union with
   no numeric arm or with two.
+
+- **A Node object handle ends with `destroy()`, so a kind may have slots
+  named `close` and `closed`.** The handle's own `close()` and `closed`
+  gave way to a slot of that name on that kind's handles; `destroy()` and
+  `using` always end the object, and `close()` still does where the kind
+  has no such slot. A slot named `destroy` is refused.
+
 - **A JavaScript provider's `static available()` is asked each time a host
   asks, under guatiao-source-js as under Node.** A provider unavailable
   when its library opened was left out of the library; it is now listed,
