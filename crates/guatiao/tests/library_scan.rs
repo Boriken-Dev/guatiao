@@ -537,11 +537,25 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
 // --- a scan reads hostile and foreign files as data ---------------------
 
 /// A committed object file the scan reads as data, never maps.
+/// The object file `name`, written into a scratch directory from its
+/// `<name>.hex` beside the C it was compiled from: the repository keeps
+/// readable text, never an executable.
 fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
+    let hex = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(format!("{name}.hex")),
+    )
+    .expect("the fixture's hex");
+    let digits: Vec<u8> = hex.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    let bytes: Vec<u8> = digits
+        .chunks(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).expect("hex digits"))
+        .collect();
+    let path = scratch(&format!("fixture-{name}")).join(name);
+    std::fs::write(&path, bytes).unwrap();
+    path
 }
 
 /// An ELF that only IMPORTS the entry symbol names it in its dynamic
