@@ -14,7 +14,12 @@ the channel. It keeps every rule of `guatiao-channel`:
   and does not wait for the thread;
 - after `close_after` echoes the thread closes with `close_status`, and
   what was still queued is not delivered;
-- an error from `receive` ends the stream: `closed` with that status.
+- an error from `receive` ends the stream: `closed` with that status (a
+  Python exception without one is `GUATIAO_ERR_INTERNAL`, 100).
+
+The library may be unmapped while this module's thread runs only if the
+source lets it: guatiao-source-py keeps its interpreter and every module's
+code for the life of the process, so the thread never runs unmapped code.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from typing import Deque, Optional
 from channel_echo_kind import Channel, ChannelEcho, ChannelSink
 
 from guatiao import Map, provide
-from guatiao.errors import Gone, GuatiaoError
+from guatiao.errors import Gone
 
 __version__ = "1.0.0"
 __all__ = ["Echo"]
@@ -107,8 +112,8 @@ def _deliver(
                 break
         try:
             sink.receive(message)
-        except GuatiaoError as e:
-            status = e.status
+        except Exception as e:  # any refusal ends the stream, once
+            status = int(getattr(e, "status", 100))
             with q.cond:
                 q.closed = True
                 q.items.clear()
