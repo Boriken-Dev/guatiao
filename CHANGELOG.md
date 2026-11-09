@@ -14,6 +14,16 @@ write now.
 
 ### Added
 
+- **A value as one line of text, with no format library.** `value::Inline`
+  (`Display`) in Rust, `guatiao_value_inline_text` in C, `to_inline_text` in
+  Python and `toInlineText` in Dart write a value as compact JSON-form text for
+  a report or a log: bytes as a `data:;base64,` string, numbers as their own
+  text, a map in its order, no spaces. It is what `guatiao-serde`'s JSON writer
+  prints for the same value, which a test checks on the shared vectors in
+  `tests/vectors/inline.json`. Display only, never parsed: a node in the wiping
+  allocator prints `[sensitive]`, an absent node `absent`, an unknown tag
+  `<unknown tag N>`, and a node `GUATIAO_MAX_DEPTH` levels down `...`. The text
+  is in `docs/encodings.md`.
 - **`schema::differences`: where a value differs from its schema's
   defaults, or from a baseline.** A walk over a value with its schema (the
   one `redact` makes) lists the key paths whose value differs, with the

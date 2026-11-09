@@ -561,6 +561,15 @@ span.isZero; span.isNegative            // == unit by unit; hashable
   result outside the years 0000 to 9999. `Span(...)` throws `BadValue`
   for fields of both signs or nanoseconds of a second or more.
 
+## A value as one line
+
+`ref.toInlineText() -> String` (any `Ref`, VM and web) is the node as one line of
+JSON-form text for a report or a log: no spaces, a number as its text, bytes as a
+`"data:;base64,..."` string, a map in its order. Display only, never parsed. A
+node in the wiping allocator prints `[sensitive]`, an absent one `absent`, a node
+128 levels down `...`; none throws. The text is stated in `docs/encodings.md`
+and pinned by `tests/vectors/inline.json`.
+
 ## wire: values as bytes, and channels
 
 `ref.toWire() -> Uint8List` (any `Ref`) and `Value.fromWire(List<int>

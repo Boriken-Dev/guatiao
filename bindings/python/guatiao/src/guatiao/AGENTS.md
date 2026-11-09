@@ -478,6 +478,15 @@ span.add_to(date_or_naive_datetime)         # same type back
   a `date` or a result outside the years 1 to 9999; `ValueError` for an
   aware `datetime`.
 
+## A value as one line
+
+`ref.to_inline_text() -> str` (any `Ref`) is the node as one line of JSON-form
+text for a report or a log: no spaces, a number as its text, bytes as a
+`"data:;base64,..."` string, a map in its order. Display only, never parsed. A
+node in the wiping allocator prints `[sensitive]`, an absent one `absent`, a node
+128 levels down `...`; none raises. The text is stated in `docs/encodings.md`
+and pinned by `tests/vectors/inline.json`.
+
 ## wire: values as bytes, and channels
 
 `value.to_wire() -> bytes` (any `Ref`) and `Value.from_wire(data, *,

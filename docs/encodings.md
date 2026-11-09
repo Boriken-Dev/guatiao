@@ -443,7 +443,7 @@ in memory guatiao manages.
   is copied there whole. A kind's answer is the one exception: it moves
   into exactly the allocator its caller carried in.
 - **What shows a value hides one that lives there.** `guatiao_value_is_sensitive`
-  says whether any part of a tree does; Rust's `Dump`, Python's `repr`
+  says whether any part of a tree does; Rust's `Dump` and `Inline`, Python's `repr`
   and Dart's `toString` print `[sensitive]` in its place. **Within one
   copy of the library**: a library linking its own copy has a wiping
   allocator of its own, which wipes just the same but which the other
@@ -498,6 +498,45 @@ no default it stays absent, so an optional field that is set is
 reported. A secret is compared as it is and reported as the placeholder
 on each side that has a value, and a key the schema does not declare is
 reported the same way. Local `$ref`s are followed.
+
+## A value as one line
+
+`guatiao_value_inline_text` in C, `value::Inline` in Rust, `to_inline_text`
+in Python and `toInlineText` in Dart write a value as **one line of
+JSON-form text**, for a report or a log, with no format library in the
+build. It is **display only**: the text is written and never parsed, no
+reader of it exists, and it is not a wire format (that is the next
+section). The Rust writer is `Display`; the C function and the bindings
+return a string.
+
+The line is what a compact JSON writer prints for the tree, with bytes as
+a data URI and numbers as their own text; the shared vectors in
+`tests/vectors/inline.json` pin every case, and a Rust test compares each
+JSON-expressible vector with `guatiao-serde`'s JSON writer.
+
+- null, `true` and `false`; a number is its text unchanged (`1.10`,
+  `1e400`, a 200-digit integer).
+- text in double quotes with JSON's escapes: `\"`, `\`, `\b`, `\f`,
+  `\n`, `\r`, `\t`, any other character below U+0020 as `\u00xx` (lower
+  case hex). Everything else, `/`, U+007F and non-ASCII included, is
+  written as it is.
+- bytes as `"data:;base64,"` and standard padded base64.
+- a list as `[a,b]` and a map as `{"k":v}` in the order its keys were
+  set. No spaces anywhere.
+
+What JSON cannot say is shown as a placeholder that is not valid JSON, on
+purpose, and never fails:
+
+| node | printed |
+| --- | --- |
+| a node, or a map key, in the wiping allocator | `[sensitive]` (a container there without its contents) |
+| absent | `absent` |
+| an unknown tag | `<unknown tag N>` |
+| text or a number that is not UTF-8 | `"<not utf-8>"` |
+| a node nested 128 levels (`GUATIAO_MAX_DEPTH`) below the one printed | `...` |
+
+The bound keeps the line, and the stack, finite for a hostile tree: a
+list nested a thousand deep prints 128 `[`, then `...`, then 128 `]`.
 
 ## Values on the wire
 
