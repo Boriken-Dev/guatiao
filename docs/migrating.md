@@ -228,6 +228,11 @@ fn closed(&mut self, status: u32);             // before
 fn closed(&mut self, status: u32, reason: &str);  // now
 ```
 
+In the bindings it is the same argument: Python `close(self, status,
+reason)` and `closed(self, status, reason)`, JavaScript `close(status,
+reason)` and `closed(status, reason)`, Lua `Channel:close(status, reason)`
+and `sink:closed(status, reason)`.
+
 A host passes `""` for a plain end, as dropping the channel does. A C
 provider's `close` and a C host's `closed` gain a `guatiao_str reason`
 argument after the status. The floor hashes of `channel` and
