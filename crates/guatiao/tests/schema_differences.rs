@@ -172,7 +172,7 @@ fn a_reference_is_inlined_by_the_caller_or_hidden() {
 mod derived {
     use super::*;
     use guatiao::{Schema, ToValue};
-    use std::time::Duration;
+    use core::time::Duration;
 
     #[derive(Debug, PartialEq, Schema, ToValue)]
     struct Waiting {
