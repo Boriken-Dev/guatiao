@@ -3473,6 +3473,30 @@ bool guatiao_alloc_is_wiping(const struct guatiao_alloc *alloc);
 bool guatiao_value_is_sensitive(const struct guatiao_value *value);
 
 /*
+ Writes `value` as one line of JSON-form text, a string value built in
+ `alloc` and moved into `out`, which is written ABSENT first.
+
+ For a report or a log; the text is written and never read back. No
+ whitespace, a map in its order, a number as its own text, bytes as a
+ `"data:;base64,..."` string, text with JSON's escapes. A node in the
+ wiping allocator, and a key there, print `[sensitive]`; an absent node
+ prints `absent`, a node of an unknown tag `<unknown tag N>`, text or a
+ number that is not UTF-8 `"<not utf-8>"`, and a node nested
+ `GUATIAO_MAX_DEPTH` levels down `...`. None of these is an error. The
+ exact text is stated in `docs/encodings.md`.
+
+ `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says; `out` addresses
+ writable storage holding nothing the caller still owns.
+ */
+guatiao_status guatiao_value_inline_text(const struct guatiao_value *value,
+                                         const struct guatiao_alloc *alloc,
+                                         struct guatiao_value *out);
+
+/*
  Overwrites with zeros every byte `v`'s tree owns (its texts, numbers,
  bytes and map keys, at any depth, in whatever allocator each lives),
  then frees the tree and leaves `v` null-tagged: how a caller wipes a

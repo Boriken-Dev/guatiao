@@ -246,6 +246,7 @@ pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_bytes(*const guatiao::value::alloc::Allocator, guatiao::value::types::buffer::Bytes<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_clone(*const guatiao::value::alloc::Allocator, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_free(*mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_inline_text(*const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_is_sensitive(*const guatiao::value::value::Value) -> bool
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_list(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_make_local(*mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
@@ -4631,6 +4632,12 @@ pub fn guatiao::value::error::ValueError::fmt(&self, &mut core::fmt::Formatter<'
 impl core::marker::Copy for guatiao::value::error::ValueError
 impl core::marker::StructuralPartialEq for guatiao::value::error::ValueError
 pub const guatiao::value::error::MAX_DEPTH: u32
+pub mod guatiao::value::inline
+pub struct guatiao::value::inline::Inline<'a>(pub &'a guatiao::value::value::Value)
+impl core::fmt::Debug for guatiao::value::inline::Inline<'_>
+pub fn guatiao::value::inline::Inline<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::inline::Inline<'_>
+pub fn guatiao::value::inline::Inline<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao::value::merge
 #[non_exhaustive] pub enum guatiao::value::merge::MergeError
 pub guatiao::value::merge::MergeError::Build(guatiao::value::error::ValueError)
@@ -7905,6 +7912,11 @@ impl core::cmp::PartialEq for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::value::Inline<'a>(pub &'a guatiao::value::value::Value)
+impl core::fmt::Debug for guatiao::value::inline::Inline<'_>
+pub fn guatiao::value::inline::Inline<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::inline::Inline<'_>
+pub fn guatiao::value::inline::Inline<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct guatiao::value::List
 impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::alloc(&self) -> core::result::Result<guatiao::value::alloc::Alloc, guatiao::value::error::ValueError>

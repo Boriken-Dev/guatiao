@@ -1,0 +1,32 @@
+{
+ "about": "Shared vectors for a value as one line of text (docs/encodings.md, 'A value as one line'). Every implementation reads this file: the Rust code, the C function and each binding. A tree is [tag] for absent and null, [tag, x] for a bool, a number (its text), a string, bytes (hex), a list (its items) and a map (its [key, tree] pairs, in order), as in wire.json. 'text' is the whole line. A case with 'json': false holds a node JSON cannot say (absent); every other case is also what a JSON writer with bytes as a data URI and numbers as their own text prints for the tree, which the Rust tests compare.",
+ "cases": [
+  {"name": "null", "tree": ["null"], "text": "null"},
+  {"name": "true", "tree": ["bool", true], "text": "true"},
+  {"name": "false", "tree": ["bool", false], "text": "false"},
+  {"name": "a number keeps its text", "tree": ["number", "1.10"], "text": "1.10"},
+  {"name": "a negative exponent", "tree": ["number", "-2.5E-3"], "text": "-2.5E-3"},
+  {"name": "a 40-digit integer", "tree": ["number", "1234567890123456789012345678901234567890"], "text": "1234567890123456789012345678901234567890"},
+  {"name": "an exponent past any float", "tree": ["number", "1e400"], "text": "1e400"},
+  {"name": "an empty string", "tree": ["string", ""], "text": "\"\""},
+  {"name": "plain text", "tree": ["string", "hello"], "text": "\"hello\""},
+  {"name": "quote and backslash", "tree": ["string", "a\"b\\c"], "text": "\"a\\\"b\\\\c\""},
+  {"name": "the short escapes", "tree": ["string", "\b\f\n\r\t"], "text": "\"\\b\\f\\n\\r\\t\""},
+  {"name": "other control characters are u escapes", "tree": ["string", "\u0001\u001f"], "text": "\"\\u0001\\u001f\""},
+  {"name": "delete, slash and non-ASCII are written as they are", "tree": ["string", "\u007f/é中😀"], "text": "\"\u007f/é中😀\""},
+  {"name": "empty bytes", "tree": ["bytes", ""], "text": "\"data:;base64,\""},
+  {"name": "one byte is padded twice", "tree": ["bytes", "66"], "text": "\"data:;base64,Zg==\""},
+  {"name": "two bytes are padded once", "tree": ["bytes", "666f"], "text": "\"data:;base64,Zm8=\""},
+  {"name": "three bytes are not padded", "tree": ["bytes", "666f6f"], "text": "\"data:;base64,Zm9v\""},
+  {"name": "the plus and slash of the alphabet", "tree": ["bytes", "fbfffe"], "text": "\"data:;base64,+//+\""},
+  {"name": "an empty list", "tree": ["list", []], "text": "[]"},
+  {"name": "a list has no spaces", "tree": ["list", [["number", "1"], ["string", "two"], ["null"], ["bool", true]]], "text": "[1,\"two\",null,true]"},
+  {"name": "lists nest", "tree": ["list", [["list", [["list", []]]], ["list", []]]], "text": "[[[]],[]]"},
+  {"name": "an empty map", "tree": ["map", []], "text": "{}"},
+  {"name": "a map keeps its order", "tree": ["map", [["zebra", ["number", "1"]], ["aardvark", ["number", "2"]]]], "text": "{\"zebra\":1,\"aardvark\":2}"},
+  {"name": "a key is escaped as text is", "tree": ["map", [["a\"b\n", ["null"]], ["", ["bool", false]]]], "text": "{\"a\\\"b\\n\":null,\"\":false}"},
+  {"name": "maps and lists mix", "tree": ["map", [["items", ["list", [["map", [["id", ["number", "7"]], ["raw", ["bytes", "00ff"]]]], ["map", []]]]], ["ok", ["bool", true]]]], "text": "{\"items\":[{\"id\":7,\"raw\":\"data:;base64,AP8=\"},{}],\"ok\":true}"},
+  {"name": "an absent value", "json": false, "tree": ["absent"], "text": "absent"},
+  {"name": "absent inside a list", "json": false, "tree": ["list", [["number", "1"], ["absent"]]], "text": "[1,absent]"}
+ ]
+}

@@ -874,3 +874,104 @@ fn a_c_program_reads_every_differences_vector() {
     );
     println!("{}", stdout.trim());
 }
+
+/// `tests/vectors/inline.json` as C arrays, for `inline_consumer.c`: each
+/// tree as its wire bytes in hex, beside the line it prints.
+fn inline_vectors_header() -> String {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/inline.json");
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("the vector file is readable"))
+            .expect("the vector file is JSON");
+    let mut h = String::from(
+        "/* Generated from tests/vectors/inline.json by tests/c_exports.rs. */\n\
+         typedef struct { const char *name; const char *tree; const char *text; } inline_vector;\n\
+         static const inline_vector INLINE_VECTORS[] = {\n",
+    );
+    let cases = doc["cases"].as_array().expect("cases");
+    for case in cases {
+        h.push_str(&format!(
+            "  {{{}, {}, {}}},\n",
+            c_string(case["name"].as_str().expect("a name")),
+            c_string(&tree_hex(&case["tree"])),
+            c_string(case["text"].as_str().expect("a line")),
+        ));
+    }
+    h.push_str(&format!(
+        "}};\nstatic const size_t INLINE_COUNT = {};\n",
+        cases.len()
+    ));
+    h
+}
+
+/// A value as one line of text, from a C program through
+/// `guatiao_value_inline_text`: every shared vector, a secret and the
+/// refusals.
+#[test]
+fn a_c_program_prints_every_inline_vector() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = manifest.join("tests/c_consumer/inline_consumer.c");
+    let include = manifest.join("include");
+
+    let Some(cc) = c_compiler::find() else {
+        println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary; run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+
+    let generated = dir.join("guatiao_inline_vectors");
+    std::fs::create_dir_all(&generated).expect("a directory for the generated header");
+    std::fs::write(generated.join("inline_vectors.h"), inline_vectors_header())
+        .expect("the generated header is written");
+    let out = dir.join(if cfg!(windows) {
+        "guatiao_inline_consumer.exe"
+    } else {
+        "guatiao_inline_consumer"
+    });
+
+    let mut compile = c_compiler::command(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-I")
+        .arg(&generated)
+        .arg("-o")
+        .arg(&out)
+        .arg(&source);
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the C program did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("the program was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the C program failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the program exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}

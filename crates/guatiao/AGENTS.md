@@ -390,6 +390,18 @@ Structural comparison is `PartialEq` on both the node and the container.
 `Dump(&v)` is a bounded `Debug` tree for diagnostics; a node or key in
 `Alloc::wiping()` prints `[sensitive]`.
 
+`Inline(&v)` (`guatiao::value::Inline`, `Display`) is a value as one line of
+JSON-form text for a report or a log, with no format crate: `Inline(&v).to_string()`.
+It is what a compact JSON writer prints with bytes as a `data:;base64,` string and
+numbers as their text (`[1,"a"]`, `{"k":null}`, no spaces), pinned by
+`tests/vectors/inline.json` and compared with `guatiao-serde`'s JSON writer.
+Display only: nothing reads it back. A node or key in `Alloc::wiping()` prints
+`[sensitive]`, an absent node `absent`, an unknown tag `<unknown tag N>`, text or a
+number that is not UTF-8 `"<not utf-8>"`, and a node `MAX_DEPTH` (128) levels below
+the root `...`; none fails. C: `guatiao_value_inline_text(value, alloc, out)` writes
+a string value; `GUATIAO_ERR_ALLOC` for a null or unusable allocator. The text is in
+`docs/encodings.md`, "A value as one line".
+
 **Numbers are the exact text that declared them.** `1.10` reads back as
 `1.10`, a 200-digit integer survives, and `u64::MAX` crosses as itself.
 Nothing coerces between kinds.
