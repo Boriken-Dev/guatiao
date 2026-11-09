@@ -1,5 +1,5 @@
 {
- "about": "Shared vectors for a value as one line of text (docs/encodings.md, 'A value as one line'). Every implementation reads this file: the Rust code, the C function and each binding. A tree is [tag] for absent and null, [tag, x] for a bool, a number (its text), a string, bytes (hex), a list (its items) and a map (its [key, tree] pairs, in order), as in wire.json. 'text' is the whole line. A case with 'json': false holds a node JSON cannot say (absent); every other case is also what a JSON writer with bytes as a data URI and numbers as their own text prints for the tree, which the Rust tests compare.",
+ "about": "Shared vectors for a value as one line of text (docs/encodings.md, 'A value as one line'). Every implementation reads this file: the Rust code, the C function and each binding. A tree is [tag] for absent and null, [tag, x] for a bool, a number (its text), a string, bytes (hex), a list (its items) and a map (its [key, tree] pairs, in order), as in wire.json. 'text' is the whole line. A case with 'json': false holds a node JSON cannot say (absent); every other case is also what a JSON writer with bytes as a data URI and numbers as their own text prints for the tree, which the Rust tests compare. A placeholder is bare, never quoted, so a line is valid JSON exactly when none appears. 'unreadable' are nodes only a raw construction can make (Rust inside the crate and C), read by those two: 'kind' string or number is a node of that kind holding the bytes 'hex', and key is a map of two entries, ok with 1 and the key 'hex' with 2; 'text' is the whole line.",
  "cases": [
   {"name": "null", "tree": ["null"], "text": "null"},
   {"name": "true", "tree": ["bool", true], "text": "true"},
@@ -14,6 +14,7 @@
   {"name": "the short escapes", "tree": ["string", "\b\f\n\r\t"], "text": "\"\\b\\f\\n\\r\\t\""},
   {"name": "other control characters are u escapes", "tree": ["string", "\u0001\u001f"], "text": "\"\\u0001\\u001f\""},
   {"name": "delete, slash and non-ASCII are written as they are", "tree": ["string", "\u007f/é中😀"], "text": "\"\u007f/é中😀\""},
+  {"name": "the line separators and C1 controls are written raw", "tree": ["string", "\u0085\u2028\u2029"], "text": "\"\u0085\u2028\u2029\""},
   {"name": "empty bytes", "tree": ["bytes", ""], "text": "\"data:;base64,\""},
   {"name": "one byte is padded twice", "tree": ["bytes", "66"], "text": "\"data:;base64,Zg==\""},
   {"name": "two bytes are padded once", "tree": ["bytes", "666f"], "text": "\"data:;base64,Zm8=\""},
@@ -28,5 +29,14 @@
   {"name": "maps and lists mix", "tree": ["map", [["items", ["list", [["map", [["id", ["number", "7"]], ["raw", ["bytes", "00ff"]]]], ["map", []]]]], ["ok", ["bool", true]]]], "text": "{\"items\":[{\"id\":7,\"raw\":\"data:;base64,AP8=\"},{}],\"ok\":true}"},
   {"name": "an absent value", "json": false, "tree": ["absent"], "text": "absent"},
   {"name": "absent inside a list", "json": false, "tree": ["list", [["number", "1"], ["absent"]]], "text": "[1,absent]"}
+ ],
+ "unreadable": [
+  {"name": "text that is not UTF-8", "kind": "string", "hex": "fffe", "text": "<not utf-8>"},
+  {"name": "a number that is not UTF-8", "kind": "number", "hex": "31ff", "text": "<not utf-8>"},
+  {"name": "a number that is NaN", "kind": "number", "hex": "4e614e", "text": "<not a number>"},
+  {"name": "a number with a leading plus", "kind": "number", "hex": "2b31", "text": "<not a number>"},
+  {"name": "a number with an empty exponent", "kind": "number", "hex": "3165", "text": "<not a number>"},
+  {"name": "an empty number", "kind": "number", "hex": "", "text": "<not a number>"},
+  {"name": "one key that is not UTF-8 hides only itself", "kind": "key", "hex": "ff", "text": "{\"ok\":1,<not utf-8>:2}"}
  ]
 }

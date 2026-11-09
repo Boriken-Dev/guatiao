@@ -49,6 +49,8 @@
 
 // A `//` comment, never a `///`: see `value/mod.rs`.
 pub mod buffer;
+#[cfg(test)]
+mod inline_text;
 pub mod list;
 pub mod map;
 pub mod maybe_null;

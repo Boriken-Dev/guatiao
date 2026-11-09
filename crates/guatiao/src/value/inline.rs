@@ -4,22 +4,30 @@
 
 //! A value as one line of JSON-form text, for a report or a log.
 //!
-//! [`Inline`] writes what `serde_json` writes for the same tree with bytes
-//! as a `data:;base64,` string and numbers as their own text: no
-//! whitespace, `[1,"a"]` and `{"k":null}`, a map in the order its keys
-//! were set. It needs no format crate, which is why a crate that only
-//! shows a value does not take one.
+//! [`Inline`] writes what `guatiao-serde`'s JSON text
+//! (`guatiao_serde::text::json`) writes for the same tree, bytes as a
+//! `data:;base64,` string and numbers as their own text: no whitespace,
+//! `[1,"a"]` and `{"k":null}`, a map in the order its keys were set. It
+//! needs no format crate, which is why a crate that only shows a value
+//! does not take one. Like that text it escapes only `"`, `\\` and the
+//! characters below U+0020: U+007F, U+0085 (and the other C1 controls),
+//! U+2028 and U+2029 are written as they are.
 //!
 //! **Display only.** The text is written and never parsed: nothing here
 //! reads it back, and it is not a wire format (the wire encoding is in
 //! [`wire`](crate::value::wire)). Four things it shows that JSON cannot
-//! carry, all as placeholders that are not valid JSON on purpose:
+//! carry, all as bare placeholders, never quoted, so the line is valid
+//! JSON exactly when none appears:
 //!
 //! - a node in [`Alloc::wiping`](crate::Alloc::wiping), and a map key
-//!   there, print as `[sensitive]`, a container without its contents;
+//!   there, print as `[sensitive]`, a container without its contents; a
+//!   sensitive key leaves its value visible, since the key is the secret;
 //! - an absent node prints `absent`, and a node of an unknown tag
 //!   `<unknown tag N>`: neither faults;
-//! - text or a number that is not UTF-8 prints as `"<not utf-8>"`;
+//! - text, a number or a map key that is not UTF-8 prints as
+//!   `<not utf-8>` (a bad key alone, its entry's value still shown);
+//! - a number whose text is outside JSON's grammar (`NaN`, `+1`, `1e`)
+//!   prints as `<not a number>`;
 //! - a node nested [`MAX_DEPTH`] levels below the one printed prints
 //!   `...`, so a hostile tree costs a bounded line.
 
@@ -56,7 +64,10 @@ pub struct Inline<'a>(pub &'a Value);
 const SENSITIVE: &str = "[sensitive]";
 
 /// What is printed in place of text that is not UTF-8.
-const NOT_UTF8: &str = "\"<not utf-8>\"";
+const NOT_UTF8: &str = "<not utf-8>";
+
+/// What is printed in place of a number outside JSON's grammar.
+const NOT_A_NUMBER: &str = "<not a number>";
 
 impl fmt::Display for Inline<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -86,10 +97,13 @@ fn write_value(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result
         } else {
             "false"
         }),
-        Ok(Tag::GUATIAO_NUMBER) => match TryAsRef::<Number>::try_as_ref(v) {
-            Some(n) => f.write_str(AsRef::<str>::as_ref(n)),
-            None => f.write_str(NOT_UTF8),
-        },
+        Ok(Tag::GUATIAO_NUMBER) => {
+            match v.text_bytes(Tag::GUATIAO_NUMBER).map(core::str::from_utf8) {
+                Some(Ok(text)) if Number::is_number(text) => f.write_str(text),
+                Some(Ok(_)) => f.write_str(NOT_A_NUMBER),
+                _ => f.write_str(NOT_UTF8),
+            }
+        }
         Ok(Tag::GUATIAO_STRING) => match TryAsRef::<str>::try_as_ref(v) {
             Some(s) => write_quoted(f, s),
             None => f.write_str(NOT_UTF8),
@@ -117,18 +131,19 @@ fn write_value(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result
         Ok(Tag::GUATIAO_MAP) => {
             let empty = Map::new();
             f.write_char('{')?;
-            for (i, entry) in TryAsRef::<Map>::try_as_ref(v)
-                .unwrap_or(&empty)
-                .iter()
-                .enumerate()
-            {
+            // The keys are unchecked here: one that is not UTF-8 is shown
+            // as a placeholder, not allowed to hide the whole map.
+            for (i, entry) in v.map_arm().unwrap_or(&empty).iter().enumerate() {
                 if i > 0 {
                     f.write_char(',')?;
                 }
                 if entry.key.alloc().is_ok_and(|a| a.is_wiping()) {
                     f.write_str(SENSITIVE)?;
                 } else {
-                    write_quoted(f, entry.key())?;
+                    match core::str::from_utf8(entry.key_bytes()) {
+                        Ok(key) => write_quoted(f, key)?,
+                        Err(_) => f.write_str(NOT_UTF8)?,
+                    }
                 }
                 f.write_char(':')?;
                 write_value(f, entry.value(), depth + 1)?;
@@ -230,6 +245,19 @@ mod tests {
                 alloc::format!("\"data:;base64,{b64}\"")
             );
         }
+    }
+
+    #[test]
+    fn a_tree_of_maps_past_the_bound_prints_dots() {
+        let mut v = Value::null();
+        for _ in 0..MAX_DEPTH + 2 {
+            let mut map = Map::new();
+            map.set("k", v);
+            v = map.into();
+        }
+        let shown = text(v);
+        assert!(shown.contains("{\"k\":...}"), "{shown}");
+        assert_eq!(shown.matches('{').count(), MAX_DEPTH as usize);
     }
 
     #[test]

@@ -125,7 +125,7 @@ fn an_unknown_tag_and_text_that_is_not_utf8_never_fault() {
     list.push(bad);
     assert_eq!(
         Inline(&Value::from(list)).to_string(),
-        r#"[<unknown tag 99>,"<not utf-8>"]"#
+        r#"[<unknown tag 99>,<not utf-8>]"#
     );
 }
 
@@ -144,4 +144,20 @@ fn a_tree_deeper_than_the_bound_costs_a_bounded_line() {
         "]".repeat(MAX_DEPTH as usize)
     );
     assert_eq!(shown, expected);
+}
+
+#[test]
+fn a_tree_of_maps_deeper_than_the_bound_costs_a_bounded_line() {
+    let mut v = Value::null();
+    for _ in 0..MAX_DEPTH * 4 {
+        let mut map = Map::new();
+        map.set("k", v);
+        v = map.into();
+    }
+    let expected = format!(
+        "{}...{}",
+        "{\"k\":".repeat(MAX_DEPTH as usize),
+        "}".repeat(MAX_DEPTH as usize)
+    );
+    assert_eq!(Inline(&v).to_string(), expected);
 }
