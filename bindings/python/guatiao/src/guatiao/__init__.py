@@ -26,7 +26,7 @@ from .errors import (
 )
 from ._lib import LibraryNotFound, MissingSymbol, use_library
 from .registry import ImportSearch, Instance, Registry
-from .schema import redact
+from .schema import differences, redact
 from .value import ABSENT, List, Map, Ref, Value, wiping_alloc
 from . import wire
 
@@ -42,6 +42,7 @@ __all__ = [
     "Registry",
     "ImportSearch",
     "Instance",
+    "differences",
     "redact",
     "wiping_alloc",
     "wire",
