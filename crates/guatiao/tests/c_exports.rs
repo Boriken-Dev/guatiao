@@ -900,6 +900,31 @@ fn inline_vectors_header() -> String {
         "}};\nstatic const size_t INLINE_COUNT = {};\n",
         cases.len()
     ));
+    // Nodes only a hand-filled struct can be: kind 0 text, 1 a number, 2 a
+    // map whose second key is the bytes.
+    let unreadable = doc["unreadable"].as_array().expect("unreadable");
+    h.push_str(
+        "typedef struct { const char *name; int kind; const char *hex; const char *text; }\n\
+         \x20   inline_unreadable;\n\
+         static const inline_unreadable INLINE_UNREADABLE[] = {\n",
+    );
+    for case in unreadable {
+        let kind = match case["kind"].as_str().expect("a kind") {
+            "string" => 0,
+            "number" => 1,
+            _ => 2,
+        };
+        h.push_str(&format!(
+            "  {{{}, {kind}, {}, {}}},\n",
+            c_string(case["name"].as_str().expect("a name")),
+            c_string(case["hex"].as_str().expect("hex")),
+            c_string(case["text"].as_str().expect("a line")),
+        ));
+    }
+    h.push_str(&format!(
+        "}};\nstatic const size_t INLINE_UNREADABLE_COUNT = {};\n",
+        unreadable.len()
+    ));
     h
 }
 
