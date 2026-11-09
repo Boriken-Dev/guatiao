@@ -443,8 +443,8 @@ in memory guatiao manages.
   is copied there whole. A kind's answer is the one exception: it moves
   into exactly the allocator its caller carried in.
 - **What shows a value hides one that lives there.** `guatiao_value_is_sensitive`
-  says whether any part of a tree does; Rust's `Dump` and `Inline`, Python's `repr`
-  and Dart's `toString` print `[sensitive]` in its place. **Within one
+  says whether any part of a tree does; Rust's `Dump` and `Display`, Python's `repr`
+  and `str` and Dart's `toString` print `[sensitive]` in its place. **Within one
   copy of the library**: a library linking its own copy has a wiping
   allocator of its own, which wipes just the same but which the other
   copy cannot tell apart, so a library printing an argument the host
@@ -499,37 +499,23 @@ reported. A secret is compared as it is and reported as the placeholder
 on each side that has a value, and a key the schema does not declare is
 reported the same way. Local `$ref`s are followed.
 
-## A value as one line
+## A value's display text
 
-`guatiao_value_inline_text` in C, `value::Inline` in Rust, `to_inline_text`
-in Python and `toInlineText` in Dart write a value as **one line of
-JSON-form text**, for a report or a log, with no format library in the
-build. It is **display only**: the text is written and never parsed, no
-reader of it exists, and it is not a wire format (that is the next
-section). The Rust writer is `Display`; the C function and the bindings
+`guatiao_value_display` in C, `Display` for `Value` in Rust, `str(ref)` in
+Python and `ref.toString()` in Dart write a value as one line of text, for a
+report or a log, with no format library in the build. **It is not an
+encoding, and its form is not a contract**: it is written and never parsed,
+no reader of it exists, and it may change, so do not build on its shape.
+Today it is JSON form (a compact JSON writer's text, with bytes as a
+`data:;base64,` string and numbers as their own text); the shared vectors in
+`tests/vectors/display.json` pin that, and a Rust test compares each
+JSON-expressible vector with `guatiao-serde`'s JSON writer, so a change of
+form is a deliberate edit of that test. The C function and the bindings
 return a string.
 
-The line is what a compact JSON writer prints for the tree, with bytes as
-a data URI and numbers as their own text; the shared vectors in
-`tests/vectors/inline.json` pin every case, and a Rust test compares each
-JSON-expressible vector with `guatiao-serde`'s JSON writer.
-
-- null, `true` and `false`; a number is its text unchanged (`1.10`,
-  `1e400`, a 200-digit integer).
-- text in double quotes with JSON's escapes: `\"`, `\\`, `\b`, `\f`,
-  `\n`, `\r`, `\t`, any other character below U+0020 as `\u00xx` (lower
-  case hex). Nothing else is escaped, as in `guatiao-serde`'s JSON text:
-  `/`, U+007F, the C1 controls (U+0080 to U+009F, U+0085 included),
-  U+2028 and U+2029 and the rest of non-ASCII are written as they are, so
-  a string holding U+2028 or U+0085 puts that character in the line.
-- bytes as `"data:;base64,"` and standard padded base64.
-- a list as `[a,b]` and a map as `{"k":v}` in the order its keys were
-  set. No spaces anywhere.
-
-What JSON cannot say is shown as a **bare placeholder, never quoted**, and
-never fails. A real string with the text `<not utf-8>` is `"<not utf-8>"`,
-so a placeholder cannot be mistaken for it, and **the line is valid JSON
-exactly when no placeholder appears**:
+What JSON cannot say is shown today as a **bare placeholder, never quoted**,
+and never fails; a real string with the text `<not utf-8>` is
+`"<not utf-8>"`, so a placeholder cannot be mistaken for it:
 
 | node | printed |
 | --- | --- |

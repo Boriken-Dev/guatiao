@@ -14,13 +14,14 @@ write now.
 
 ### Added
 
-- **A value as one line of text, with no format library.** `value::Inline`
-  (`Display`) in Rust, `guatiao_value_inline_text` in C, `to_inline_text` in
-  Python and `toInlineText` in Dart write a value as compact JSON-form text for
-  a report or a log: bytes as a `data:;base64,` string, numbers as their own
+- **A value as one line of text, with no format library.** `Display` for
+  `Value` in Rust, `guatiao_value_display` in C, `str(ref)` in Python and
+  `ref.toString()` in Dart write a value as one line of text for a report or a
+  log. Its form is not a contract and may change; today it is compact JSON
+  form: bytes as a `data:;base64,` string, numbers as their own
   text, a map in its order, no spaces. It is what `guatiao-serde`'s JSON writer
   prints for the same value, which a test checks on the shared vectors in
-  `tests/vectors/inline.json`. Display only, never parsed: a node in the wiping
+  `tests/vectors/display.json`. Never parsed: a node in the wiping
   allocator prints `[sensitive]`, an absent node `absent`, an unknown tag
   `<unknown tag N>`, text, a number or a map key that is not UTF-8
   `<not utf-8>`, a number outside JSON's grammar `<not a number>`, and a node
