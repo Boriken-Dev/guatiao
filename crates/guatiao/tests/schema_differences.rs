@@ -171,8 +171,8 @@ fn a_reference_is_inlined_by_the_caller_or_hidden() {
 #[cfg(feature = "derive")]
 mod derived {
     use super::*;
-    use guatiao::{Schema, ToValue};
     use core::time::Duration;
+    use guatiao::{Schema, ToValue};
 
     #[derive(Debug, PartialEq, Schema, ToValue)]
     struct Waiting {
