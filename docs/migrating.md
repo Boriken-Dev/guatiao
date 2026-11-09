@@ -213,6 +213,27 @@ let token = Secret::new(String::from("t0ken"));
 let again = token.clone();
 ```
 
+## Channels
+
+### `close` and `closed` take a reason
+
+`guatiao-channel`'s `Channel::close` and `ChannelSink::closed` take the
+reason beside the status: UTF-8 text lent for the call, empty when there
+is none. It is for logs and messages; no one parses it.
+
+```text
+fn close(&self, status: u32);                  // before
+fn close(&self, status: u32, reason: &str);    // now
+fn closed(&mut self, status: u32);             // before
+fn closed(&mut self, status: u32, reason: &str);  // now
+```
+
+A host passes `""` for a plain end, as dropping the channel does. A C
+provider's `close` and a C host's `closed` gain a `guatiao_str reason`
+argument after the status. The floor hashes of `channel` and
+`channel_sink` moved, so rebuild every provider and host of a channel,
+and regenerate the Node and Python modules of kinds that name them.
+
 ## Schema and derives
 
 ### A typed field is checked as its type

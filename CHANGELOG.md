@@ -1593,6 +1593,17 @@ write now.
 
 ### Changed
 
+- **Breaking: a channel's `close` and `closed` carry a reason.**
+  `Channel::close(status, reason: &str)` and
+  `ChannelSink::closed(status, reason: &str)` (`guatiao_str` in C): UTF-8
+  text lent for the call, empty when there is none, for logs and messages
+  only. The host says why it gives up, a failing provider says what
+  failed, and a dropped channel or a sink that has gone says `OK` and an
+  empty reason. The floor hashes of `channel` and `channel_sink` move
+  (3787630980 and 4115266557; `channel_echo` keeps 1869559466), so every
+  provider and host of a channel is rebuilt against this release, and the
+  echoes in every language take `close_reason` in their configuration.
+
 - **A form's `unit` is accepted on a union with exactly one numeric arm.**
   A bound that may be lifted (`{"anyOf": [{"type": "integer"}, {"type":
   "string", "enum": ["none"]}]}`) is counted in a unit as a number is, and
@@ -2069,6 +2080,12 @@ write now.
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
 ### Fixed
+
+- **A Python slot that raises gives up every object it was handed.** A
+  `Taken[...]` object or tree is destroyed before the error is answered,
+  as it already was when the call failed before the method ran; one the
+  method kept past the raise answers `GUATIAO_ERR_GONE`. A provider that
+  refuses `start` no longer has to destroy the sink by hand.
 
 - **MATLAB and Octave let go of what a call handed over when the
   dispatcher fails before the method runs.** A slot whose provider could
