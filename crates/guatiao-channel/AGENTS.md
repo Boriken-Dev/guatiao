@@ -9,12 +9,12 @@ default) renders `include/guatiao_channel.h`.
 #[guatiao::kind(object)]
 pub trait Channel: Send + Sync {          // the provider implements, the host holds
     fn send(&self, bytes: &[u8]) -> Result<(), ProviderError>;
-    fn close(&self, status: u32);
+    fn close(&self, status: u32, reason: &str);
 }
 #[guatiao::kind(object)]
 pub trait ChannelSink: Send {             // the host implements, the provider owns
     fn receive(&mut self, bytes: &[u8]) -> Result<(), ProviderError>;
-    fn closed(&mut self, status: u32);
+    fn closed(&mut self, status: u32, reason: &str);
 }
 ```
 
@@ -33,17 +33,23 @@ refuses.
 - **Order** is kept per direction, in call order. The provider makes
   every call on the sink, `receive` and `closed` alike, from one thread
   at a time (possibly one of its own), and none while another runs.
-- **A status is a `guatiao_status` value.** In `close(status)` and
-  `closed(status)`, `GUATIAO_OK` (0) is the normal end and anything else
-  an error status.
-- **The host closes once.** After `close(status)` (or dropping the
-  channel, which is `close(GUATIAO_OK)`), `send` answers
+- **A status is a `guatiao_status` value.** In `close(status, reason)`
+  and `closed(status, reason)`, `GUATIAO_OK` (0) is the normal end and
+  anything else an error status.
+- **A reason is text for people.** UTF-8 (`guatiao_str` in C), lent for
+  the call, empty when there is none: the host's reason for giving up, the
+  provider's failure. For logs and messages only; no one parses it. A
+  sink that has gone (`GONE`) or a dropped channel says the same as `OK`
+  and an empty reason.
+- **The host closes once.** After `close(status, reason)` (or dropping the
+  channel, which is `close(GUATIAO_OK, "")`), `send` answers
   `GUATIAO_ERR_GONE`, a `send` waiting for room included, and none is
-  taken once `close` has returned. The provider calls `closed(status)`
-  exactly once, unless it already had, and never calls the sink again.
+  taken once `close` has returned. The provider calls
+  `closed(status, reason)` exactly once, unless it already had, and never
+  calls the sink again; it may pass the host's reason on or give its own.
   `close` and dropping the channel return without waiting for a `receive`
   still running.
-- **The provider closes once.** After `closed(status)`, `send` answers
+- **The provider closes once.** After `closed(status, reason)`, `send` answers
   `GUATIAO_ERR_GONE`.
 - **A sink that has gone** answers `GUATIAO_ERR_GONE` from `receive`; any
   error from `receive` ends the stream, and the provider calls `closed`

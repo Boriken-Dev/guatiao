@@ -14,13 +14,18 @@ import { Provider } from 'guatiao/provide';
 
 import { ChannelEcho } from './channel_echo_kind.js';
 
-/** A count from the configuration, by the name it is spelt with: a plain
+/** A setting from the configuration, by the name it is spelt with: a plain
  *  object under QuickJS, a `MapRef` of `Ref`s under Node. */
-function count(config, name) {
+function setting(config, name) {
   const camel = name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   const value = typeof config.get === 'function' ? config.get(name) : (config[name] ?? config[camel]);
   if (value === undefined || value === null) return undefined;
-  return Number(typeof value.toJS === 'function' ? value.toJS() : value);
+  return typeof value.toJS === 'function' ? value.toJS() : value;
+}
+
+function count(config, name) {
+  const value = setting(config, name);
+  return value === undefined ? undefined : Number(value);
 }
 
 /** The channel `start` hands back: the sink it was given, until the stream ends. */
@@ -29,20 +34,22 @@ class Channel {
   #echoed = 0;
   #closeAfter;
   #closeStatus;
+  #closeReason;
 
-  constructor(sink, closeAfter, closeStatus) {
+  constructor(sink, closeAfter, closeStatus, closeReason) {
     this.#sink = sink;
     this.#closeAfter = closeAfter;
     this.#closeStatus = closeStatus;
+    this.#closeReason = closeReason;
   }
 
-  /** Ends the stream once: the sink hears `closed(status)`, then is let go. */
-  #finish(status) {
+  /** Ends the stream once: the sink hears `closed(status, reason)`, then is let go. */
+  #finish(status, reason) {
     const sink = this.#sink;
     if (sink === null) return;
     this.#sink = null;
     try {
-      sink.closed(status);
+      sink.closed(status, reason);
     } finally {
       sink.destroy();
     }
@@ -55,23 +62,26 @@ class Channel {
       this.#sink.receive(bytes);
     } catch (e) {
       // Any refusal ends the stream; the message was taken all the same.
-      this.#finish(Number(e.status ?? 0));
+      this.#finish(Number(e.status ?? 0), '');
       return;
     }
     this.#echoed += 1;
     if (this.#closeAfter !== undefined && this.#echoed >= this.#closeAfter) {
-      this.#finish(this.#closeStatus);
+      this.#finish(this.#closeStatus, this.#closeReason);
     }
   }
 
-  /** @param {number} status */
-  close(status) {
-    this.#finish(status);
+  /**
+   * @param {number} status
+   * @param {string} reason
+   */
+  close(status, reason) {
+    this.#finish(status, reason);
   }
 
-  // Dropping the channel is `close(0)`.
+  // Dropping the channel is `close(0, '')`.
   [Symbol.dispose]() {
-    this.#finish(0);
+    this.#finish(0, '');
   }
 }
 
@@ -80,6 +90,11 @@ export class Echo extends Provider {
   static displayName = 'Echo, in JavaScript';
 
   start(config, sink) {
-    return new Channel(sink, count(config, 'close_after'), count(config, 'close_status') ?? 0);
+    return new Channel(
+      sink,
+      count(config, 'close_after'),
+      count(config, 'close_status') ?? 0,
+      String(setting(config, 'close_reason') ?? ''),
+    );
   }
 }

@@ -10,12 +10,13 @@ the channel. It keeps every rule of `guatiao-channel`:
   `send` that is waiting, which answers GONE;
 - one thread calls the sink, in the order the messages were queued;
 - `close` lets the queue drain, then the thread calls `closed` with the
-  host's status and lets the sink go; dropping the channel is `close(0)`
-  and does not wait for the thread;
-- after `close_after` echoes the thread closes with `close_status`, and
-  what was still queued is not delivered;
-- an error from `receive` ends the stream: `closed` with that status (a
-  Python exception without one is `GUATIAO_ERR_INTERNAL`, 100).
+  host's status and reason and lets the sink go; dropping the channel is
+  `close(0, "")` and does not wait for the thread;
+- after `close_after` echoes the thread closes with `close_status` and
+  `close_reason`, and what was still queued is not delivered;
+- an error from `receive` ends the stream: `closed` with that status and
+  no reason (a Python exception without a status is
+  `GUATIAO_ERR_INTERNAL`, 100).
 
 The library may be unmapped while this module's thread runs only if the
 source lets it: guatiao-source-py keeps its interpreter and every module's
@@ -26,7 +27,7 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from typing import Deque, Optional
+from typing import Deque, Optional, Tuple
 
 from channel_echo_kind import Channel, ChannelEcho, ChannelSink
 
@@ -48,8 +49,8 @@ class _Queue:
         self.items: Deque[bytes] = deque()
         #: Either side has ended the stream: `send` answers GONE.
         self.closed = False
-        #: The status the host closed with, when it was the host.
-        self.host_status: Optional[int] = None
+        #: The status and reason the host closed with, when it was the host.
+        self.host_close: Optional[Tuple[int, str]] = None
 
 
 class Echoing(Channel):
@@ -71,21 +72,24 @@ class Echoing(Channel):
             q.items.append(bytes)
             q.cond.notify_all()
 
-    def close(self, status: int) -> None:
+    def close(self, status: int, reason: str) -> None:
         q = self._queue
         with q.cond:
             if q.closed:
                 return
             q.closed = True
-            q.host_status = status
+            q.host_close = (status, reason)
             q.cond.notify_all()
 
     def __del__(self) -> None:
-        self.close(0)
+        self.close(0, "")
 
 
 def _deliver(
-    sink: ChannelSink, q: _Queue, close_after: Optional[int], close_status: int
+    sink: ChannelSink,
+    q: _Queue,
+    close_after: Optional[int],
+    own_close: Tuple[int, str],
 ) -> None:
     """The channel's thread: the only caller of the sink."""
     echoed = 0
@@ -104,7 +108,7 @@ def _deliver(
                     break
                 q.cond.wait()
             if message is None:
-                status = q.host_status if q.host_status is not None else close_status
+                status, reason = q.host_close if q.host_close is not None else own_close
                 # What was queued and not delivered goes with the stream.
                 q.closed = True
                 q.items.clear()
@@ -113,7 +117,7 @@ def _deliver(
         try:
             sink.receive(message)
         except Exception as e:  # any refusal ends the stream, once
-            status = int(getattr(e, "status", 100))
+            status, reason = int(getattr(e, "status", 100)), ""
             with q.cond:
                 q.closed = True
                 q.items.clear()
@@ -121,7 +125,7 @@ def _deliver(
             break
         echoed += 1
     try:
-        sink.closed(status)
+        sink.closed(status, reason)
     finally:
         sink.destroy()
 
@@ -132,6 +136,7 @@ class Echo(provide.Provider, ChannelEcho, display_name="Echo, in Python"):
     def start(self, config: Map, sink: ChannelSink) -> Channel:
         close_after = config.get("close_after")
         close_status = config.get("close_status", 0)
+        close_reason = config.get("close_reason", "")
         q = _Queue()
         threading.Thread(
             target=_deliver,
@@ -139,7 +144,7 @@ class Echo(provide.Provider, ChannelEcho, display_name="Echo, in Python"):
                 sink,
                 q,
                 None if close_after is None else int(close_after),
-                int(close_status),
+                (int(close_status), str(close_reason)),
             ),
             name="channel_echo",
             daemon=True,

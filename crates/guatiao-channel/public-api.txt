@@ -1,18 +1,18 @@
 pub mod guatiao_channel
 pub use guatiao_channel::guatiao
 pub trait guatiao_channel::Channel: core::marker::Send + core::marker::Sync
-pub fn guatiao_channel::Channel::close(&self, u32)
+pub fn guatiao_channel::Channel::close(&self, u32, &str)
 pub fn guatiao_channel::Channel::into_object(self) -> guatiao::library::kind::object::Object<dyn guatiao_channel::Channel> where Self: core::marker::Sized + core::marker::Send + 'static
 pub fn guatiao_channel::Channel::send(&self, &[u8]) -> core::result::Result<(), guatiao::library::kind::ProviderError>
 impl guatiao_channel::Channel for guatiao::library::kind::proxy::Remote<dyn guatiao_channel::Channel>
-pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::Channel>::close(&self, u32)
+pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::Channel>::close(&self, u32, &str)
 pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::Channel>::into_object(self) -> guatiao::library::kind::object::Object<dyn guatiao_channel::Channel> where Self: core::marker::Sized + core::marker::Send + 'static
 pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::Channel>::send(&self, &[u8]) -> core::result::Result<(), guatiao::library::kind::ProviderError>
 pub trait guatiao_channel::ChannelSink: core::marker::Send
-pub fn guatiao_channel::ChannelSink::closed(&mut self, u32)
+pub fn guatiao_channel::ChannelSink::closed(&mut self, u32, &str)
 pub fn guatiao_channel::ChannelSink::into_object(self) -> guatiao::library::kind::object::Object<dyn guatiao_channel::ChannelSink> where Self: core::marker::Sized + core::marker::Send + 'static
 pub fn guatiao_channel::ChannelSink::receive(&mut self, &[u8]) -> core::result::Result<(), guatiao::library::kind::ProviderError>
 impl guatiao_channel::ChannelSink for guatiao::library::kind::proxy::Remote<dyn guatiao_channel::ChannelSink>
-pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::ChannelSink>::closed(&mut self, u32)
+pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::ChannelSink>::closed(&mut self, u32, &str)
 pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::ChannelSink>::into_object(self) -> guatiao::library::kind::object::Object<dyn guatiao_channel::ChannelSink> where Self: core::marker::Sized + core::marker::Send + 'static
 pub fn guatiao::library::kind::proxy::Remote<dyn guatiao_channel::ChannelSink>::receive(&mut self, &[u8]) -> core::result::Result<(), guatiao::library::kind::ProviderError>

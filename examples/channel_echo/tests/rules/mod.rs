@@ -52,7 +52,7 @@ const GONE: u32 = 12;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Received(Vec<u8>),
-    Closed(u32),
+    Closed(u32, String),
 }
 
 #[derive(Default)]
@@ -102,7 +102,7 @@ impl ChannelSink for Sink {
             log.broken
                 .push("receive was called while another call on the sink was running".into());
         }
-        if log.events.iter().any(|e| matches!(e, Event::Closed(_))) {
+        if log.events.iter().any(|e| matches!(e, Event::Closed(..))) {
             log.broken.push(format!(
                 "receive({:?}) came after closed",
                 String::from_utf8_lossy(bytes)
@@ -139,18 +139,18 @@ impl ChannelSink for Sink {
         answer
     }
 
-    fn closed(&mut self, status: u32) {
+    fn closed(&mut self, status: u32, reason: &str) {
         let overlapped = self.shared.in_call.swap(true, Ordering::AcqRel);
         let mut log = self.shared.lock();
         if overlapped {
             log.broken
                 .push("closed was called while another call on the sink was running".into());
         }
-        if log.events.iter().any(|e| matches!(e, Event::Closed(_))) {
+        if log.events.iter().any(|e| matches!(e, Event::Closed(..))) {
             log.broken
                 .push(format!("closed({status}) came a second time"));
         }
-        log.events.push(Event::Closed(status));
+        log.events.push(Event::Closed(status, reason.to_owned()));
         drop(log);
         std::thread::sleep(Duration::from_micros(200));
         self.shared.in_call.store(false, Ordering::Release);
@@ -234,10 +234,15 @@ impl Probe {
         Ok(got)
     }
 
-    /// The status `closed` was called with.
-    pub fn closed(&self) -> Result<u32, String> {
+    /// The status and reason `closed` was called with.
+    pub fn closed_with(&self) -> Result<(u32, String), String> {
         self.wait_for("closed", |log| closed(&log.events).is_some())?;
         Ok(closed(&self.shared.lock().events).expect("waited for"))
+    }
+
+    /// The status `closed` was called with.
+    pub fn closed(&self) -> Result<u32, String> {
+        self.closed_with().map(|(status, _)| status)
     }
 
     /// Everything the sink saw, after a grace period in which nothing
@@ -268,14 +273,14 @@ fn messages(events: &[Event]) -> Vec<Vec<u8>> {
         .iter()
         .filter_map(|e| match e {
             Event::Received(b) => Some(b.clone()),
-            Event::Closed(_) => None,
+            Event::Closed(..) => None,
         })
         .collect()
 }
 
-fn closed(events: &[Event]) -> Option<u32> {
+fn closed(events: &[Event]) -> Option<(u32, String)> {
     events.iter().find_map(|e| match e {
-        Event::Closed(s) => Some(*s),
+        Event::Closed(s, r) => Some((*s, r.clone())),
         Event::Received(_) => None,
     })
 }
@@ -285,7 +290,7 @@ fn describe(events: &[Event]) -> String {
         .iter()
         .map(|e| match e {
             Event::Received(b) => format!("{:?}", String::from_utf8_lossy(b)),
-            Event::Closed(s) => format!("closed({s})"),
+            Event::Closed(s, r) => format!("closed({s}, {r:?})"),
         })
         .collect();
     format!("[{}]", shown.join(", "))
@@ -304,6 +309,17 @@ fn config(pairs: &[(&str, u64)]) -> Map {
         map.set(key, *value);
     }
     map
+}
+
+/// `closed` came with the status and reason the rule expects.
+fn closed_as(probe: &Probe, status: u32, reason: &str) -> Result<(), String> {
+    let (got, why) = probe.closed_with()?;
+    if got != status || why != reason {
+        return Err(format!(
+            "closed({got}, {why:?}), not closed({status}, {reason:?})"
+        ));
+    }
+    Ok(())
 }
 
 fn started(
@@ -391,7 +407,7 @@ pub fn order_is_kept(start: &Start, patience: Duration) -> Result<(), String> {
             return Err(format!("{who}'s messages arrived as {theirs:?}"));
         }
     }
-    channel.close(0);
+    channel.close(0, "");
     probe.closed()?;
     probe.settle().map(drop)
 }
@@ -418,7 +434,7 @@ pub fn back_pressure_waits(start: &Start, patience: Duration) -> Result<(), Stri
         probe.release();
         if let Some(status) = closed_meanwhile {
             return Err(format!(
-                "the provider closed ({status}) while the sink was taking its time"
+                "the provider closed ({status:?}) while the sink was taking its time"
             ));
         }
         sender
@@ -429,24 +445,22 @@ pub fn back_pressure_waits(start: &Start, patience: Duration) -> Result<(), Stri
     if got != expected {
         return Err(format!("sent {expected:?}, received {got:?}"));
     }
-    channel.close(0);
+    channel.close(0, "");
     probe.closed()?;
     probe.settle().map(drop)
 }
 
 /// The host's `close`: `send` answers GONE, and `closed` comes once,
-/// with the host's status, after which the sink hears nothing more.
+/// with the host's status and reason, after which the sink hears nothing
+/// more.
 pub fn host_close(start: &Start, patience: Duration) -> Result<(), String> {
     let (probe, channel) = started(start, patience, &Map::new())?;
     for text in ["1", "2", "3"] {
         send(&*channel, text)?;
     }
-    channel.close(5);
+    channel.close(5, "the host gave up");
     refused_gone(&*channel, "4")?;
-    let status = probe.closed()?;
-    if status != 5 {
-        return Err(format!("closed({status}), not the host's closed(5)"));
-    }
+    closed_as(&probe, 5, "the host gave up")?;
     drop(channel);
     let events = probe.settle()?;
     let got = texts(&messages(&events));
@@ -457,35 +471,30 @@ pub fn host_close(start: &Start, patience: Duration) -> Result<(), String> {
     Ok(())
 }
 
-/// Dropping the channel is `close(OK)`.
+/// Dropping the channel is `close(OK, "")`.
 pub fn dropping_closes(start: &Start, patience: Duration) -> Result<(), String> {
     let (probe, channel) = started(start, patience, &Map::new())?;
     send(&*channel, "1")?;
     probe.received(1)?;
     drop(channel);
-    let status = probe.closed()?;
-    if status != 0 {
+    let (status, reason) = probe.closed_with()?;
+    if status != 0 || !reason.is_empty() {
         return Err(format!(
-            "dropping the channel closed it with {status}, not 0"
+            "dropping the channel closed it with ({status}, {reason:?}), not (0, \"\")"
         ));
     }
     probe.settle().map(drop)
 }
 
-/// The provider's own close: `closed` once, with its status, and `send`
-/// answers GONE from then on.
+/// The provider's own close: `closed` once, with its status and reason,
+/// and `send` answers GONE from then on.
 pub fn provider_close(start: &Start, patience: Duration) -> Result<(), String> {
-    let (probe, channel) = started(
-        start,
-        patience,
-        &config(&[("close_after", 2), ("close_status", 7)]),
-    )?;
+    let mut settings = config(&[("close_after", 2), ("close_status", 7)]);
+    settings.set("close_reason", "the provider failed");
+    let (probe, channel) = started(start, patience, &settings)?;
     send(&*channel, "1")?;
     send(&*channel, "2")?;
-    let status = probe.closed()?;
-    if status != 7 {
-        return Err(format!("closed({status}), not the provider's closed(7)"));
-    }
+    closed_as(&probe, 7, "the provider failed")?;
     refused_gone(&*channel, "3")?;
     drop(channel);
     let events = probe.settle()?;
@@ -547,7 +556,7 @@ pub fn close_does_not_wait_for_receive(start: &Start, patience: Duration) -> Res
     let done = Arc::new(AtomicBool::new(false));
     let ended = Arc::clone(&done);
     let host = std::thread::spawn(move || {
-        channel.close(3);
+        channel.close(3, "closing while a receive runs");
         drop(channel);
         ended.store(true, Ordering::Release);
     });
@@ -561,10 +570,7 @@ pub fn close_does_not_wait_for_receive(start: &Start, patience: Duration) -> Res
             GRACE * 3
         ));
     }
-    let status = probe.closed()?;
-    if status != 3 {
-        return Err(format!("closed({status}), not the host's closed(3)"));
-    }
+    closed_as(&probe, 3, "closing while a receive runs")?;
     probe.settle().map(drop)
 }
 
@@ -617,7 +623,7 @@ pub fn close_wakes_a_waiting_send(start: &Start, patience: Duration) -> Result<(
     std::thread::sleep(GRACE / 2);
     // No send finished in half a grace period: one is waiting for room.
     let waiting = progress.load(Ordering::Acquire) == before && !finished.load(Ordering::Acquire);
-    channel.close(4);
+    channel.close(4, "closing a waiting send");
     after_close.store(true, Ordering::Release);
     let woke = within(GRACE * 3, || finished.load(Ordering::Acquire));
     probe.release();
@@ -636,10 +642,7 @@ pub fn close_wakes_a_waiting_send(start: &Start, patience: Duration) -> Result<(
             GRACE * 3
         ));
     }
-    let status = probe.closed()?;
-    if status != 4 {
-        return Err(format!("closed({status}), not the host's closed(4)"));
-    }
+    closed_as(&probe, 4, "closing a waiting send")?;
     drop(channel);
     probe.settle().map(drop)
 }

@@ -9,9 +9,9 @@ A two-way stream of bytes between a host and a provider, as two
 
 > **Status: alpha.** Released in lockstep with `guatiao`.
 
-- **`channel`**, what the host writes on: `send(bytes)` and `close(status)`.
+- **`channel`**, what the host writes on: `send(bytes)` and `close(status, reason)`.
 - **`channel_sink`**, what the provider writes back on, handed in by the
-  host: `receive(bytes)` and `closed(status)`.
+  host: `receive(bytes)` and `closed(status, reason)`.
 
 A provider kind of one's own starts a channel,
 `start(config, sink) -> channel`, and the host and the provider can be

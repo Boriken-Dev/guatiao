@@ -46,6 +46,7 @@ typedef struct seen {
   int count;
   int closed;
   uint32_t status;
+  char reason[32];
   int destroyed;
   int away; /* receive answers GUATIAO_ERR_GONE, filling err */
   const char *broken;
@@ -78,7 +79,7 @@ static guatiao_status sink_receive(void *ctx, guatiao_bytes bytes, guatiao_provi
   return GUATIAO_OK;
 }
 
-static guatiao_status sink_closed(void *ctx, uint32_t status) {
+static guatiao_status sink_closed(void *ctx, uint32_t status, guatiao_str reason) {
   seen *s = (seen *)ctx;
   lock(&s->lock);
   if (s->closed) {
@@ -86,6 +87,12 @@ static guatiao_status sink_closed(void *ctx, uint32_t status) {
   }
   s->closed++;
   s->status = status;
+  if (reason.len < sizeof(s->reason)) {
+    memcpy(s->reason, reason.ptr, reason.len);
+    s->reason[reason.len] = '\0';
+  } else {
+    s->broken = "a reason longer than the host sent";
+  }
   unlock(&s->lock);
   return GUATIAO_OK;
 }
@@ -186,7 +193,7 @@ int main(int argc, char **argv) {
   }
   printf("echoed: %s %s %s\n", s.received[0], s.received[1], s.received[2]);
 
-  ch->close(chan.ctx, 5);
+  ch->close(chan.ctx, 5, guatiao_cstr("the host gave up"));
   status = ch->send(chan.ctx, guatiao_bytes_from("late", 4), &err);
   free_error(&err);
   if (status != GUATIAO_ERR_GONE) {
@@ -201,7 +208,8 @@ int main(int argc, char **argv) {
   }
   pause_ms(200);
   lock(&s.lock);
-  int ok = !s.broken && s.closed == 1 && s.status == 5 && s.count == 3;
+  int ok = !s.broken && s.closed == 1 && s.status == 5 && s.count == 3 &&
+           strcmp(s.reason, "the host gave up") == 0;
   const char *broken = s.broken;
   unlock(&s.lock);
   /* A host that has gone: its sink answers GONE, filling err. The echo
@@ -238,7 +246,8 @@ int main(int argc, char **argv) {
     return fail("the gone sink destroyed");
   }
   lock(&g.lock);
-  int gone_ok = !g.broken && g.closed == 1 && g.status == GUATIAO_ERR_GONE && g.count == 0;
+  int gone_ok = !g.broken && g.closed == 1 && g.status == GUATIAO_ERR_GONE && g.count == 0 &&
+                g.reason[0] == '\0';
   unlock(&g.lock);
   if (!gone_ok) {
     return fail("closed(GUATIAO_ERR_GONE) once, nothing received");
@@ -246,9 +255,9 @@ int main(int argc, char **argv) {
   printf("a sink that answered GONE: closed(GONE) once, send answers GONE\n");
   guatiao_registry_free(reg);
   if (!ok) {
-    return fail(broken ? broken : "closed once, with the host's status");
+    return fail(broken ? broken : "closed once, with the host's status and reason");
   }
-  printf("closed(%u) once, then destroyed\n", 5u);
+  printf("closed(%u, \"%s\") once, then destroyed\n", 5u, s.reason);
   printf("all checks passed\n");
   return 0;
 }

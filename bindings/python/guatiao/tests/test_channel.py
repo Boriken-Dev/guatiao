@@ -45,6 +45,7 @@ class Sink(ChannelSink):
         self.cond = threading.Condition()
         self.received: List[bytes] = []
         self.closed_with: Optional[int] = None
+        self.closed_reason: Optional[str] = None
         self.broken: List[str] = []
         self.in_call = False
         self.held = False
@@ -71,12 +72,13 @@ class Sink(ChannelSink):
             self.in_call = False
             self.cond.notify_all()
 
-    def closed(self, status: int) -> None:
+    def closed(self, status: int, reason: str) -> None:
         with self.cond:
             self._enter()
             if self.closed_with is not None:
                 self.broken.append("closed twice")
             self.closed_with = status
+            self.closed_reason = reason
             self.in_call = False
             self.cond.notify_all()
 
@@ -107,7 +109,7 @@ def test_messages_come_back_in_order_on_the_echos_own_thread(echo):
         assert sink.wait_for(lambda: len(sink.received) == 20)
         assert sink.received == sent
         assert threading.get_ident() not in sink.threads, "called on the echo's thread"
-        channel.close(0)
+        channel.close(0, "")
         assert sink.wait_for(lambda: sink.closed_with is not None)
     assert sink.closed_with == 0
     assert not sink.broken
@@ -136,20 +138,21 @@ def test_a_sink_that_takes_its_time_makes_the_sender_wait(echo):
     thread.join(WAIT)
     assert sink.wait_for(lambda: len(sink.received) == 24)
     assert sink.received == sent
-    channel.close(0)
+    channel.close(0, "")
     assert sink.wait_for(lambda: sink.closed_with is not None)
 
 
-def test_the_hosts_close_ends_sends_and_closes_once_with_its_status(echo):
+def test_the_hosts_close_ends_sends_and_closes_once_with_its_status_and_reason(echo):
     sink = Sink()
     channel = echo.start({}, sink)
     for text in (b"1", b"2", b"3"):
         channel.send(text)
-    channel.close(5)
+    channel.close(5, "the host gave up")
     with pytest.raises(Gone):
         channel.send(b"4")
     assert sink.wait_for(lambda: sink.closed_with is not None)
     assert sink.closed_with == 5
+    assert sink.closed_reason == "the host gave up"
     channel.destroy()
     time.sleep(GRACE)
     assert not sink.broken
@@ -165,19 +168,23 @@ def test_dropping_the_channel_is_close_with_ok_and_lets_the_sink_go(echo):
     channel.destroy()
     assert sink.wait_for(lambda: sink.closed_with is not None)
     assert sink.closed_with == 0
+    assert sink.closed_reason == ""
     deadline = time.monotonic() + WAIT
     while kinds.live_objects() != before and time.monotonic() < deadline:
         time.sleep(0.01)
     assert kinds.live_objects() == before, "the echo destroyed the sink"
 
 
-def test_the_provider_closes_with_its_own_status(echo):
+def test_the_provider_closes_with_its_own_status_and_reason(echo):
     sink = Sink()
-    channel = echo.start({"close_after": 2, "close_status": 7}, sink)
+    channel = echo.start(
+        {"close_after": 2, "close_status": 7, "close_reason": "the provider failed"}, sink
+    )
     channel.send(b"1")
     channel.send(b"2")
     assert sink.wait_for(lambda: sink.closed_with is not None)
     assert sink.closed_with == 7
+    assert sink.closed_reason == "the provider failed"
     with pytest.raises(Gone):
         channel.send(b"3")
     channel.destroy()
@@ -206,7 +213,7 @@ def test_close_and_drop_do_not_wait_for_a_receive_still_running(echo):
     channel.send(b"x")
     time.sleep(GRACE)
     started = time.monotonic()
-    channel.close(3)
+    channel.close(3, "closing while a receive runs")
     channel.destroy()
     took = time.monotonic() - started
     with sink.cond:

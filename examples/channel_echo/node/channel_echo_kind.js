@@ -36,7 +36,7 @@ const described = kindsOf({
     },
     {
       "name": "channel",
-      "floor_hash": 2843269355,
+      "floor_hash": 3787630980,
       "object": true,
       "slots": [
         {
@@ -58,6 +58,10 @@ const described = kindsOf({
             {
               "name": "status",
               "type": "u32"
+            },
+            {
+              "name": "reason",
+              "type": "str"
             }
           ]
         }
@@ -65,7 +69,7 @@ const described = kindsOf({
     },
     {
       "name": "channel_sink",
-      "floor_hash": 3528315804,
+      "floor_hash": 4115266557,
       "object": true,
       "slots": [
         {
@@ -87,6 +91,10 @@ const described = kindsOf({
             {
               "name": "status",
               "type": "u32"
+            },
+            {
+              "name": "reason",
+              "type": "str"
             }
           ]
         }

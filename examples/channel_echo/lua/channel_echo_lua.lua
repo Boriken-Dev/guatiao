@@ -14,14 +14,14 @@ local M = { _VERSION = "1.0.0" }
 local Channel = {}
 Channel.__index = Channel
 
--- Ends the stream once: the sink hears `closed(status)`, then nothing.
-function Channel:finish(status)
+-- Ends the stream once: the sink hears `closed(status, reason)`, then nothing.
+function Channel:finish(status, reason)
   if self.sink == nil then
     return
   end
   local sink = self.sink
   self.sink = nil
-  sink:closed(status)
+  sink:closed(status, reason)
   -- The handle is released when it is collected: let the sink go now.
   sink = nil
   collectgarbage()
@@ -34,23 +34,23 @@ function Channel:send(bytes)
   local _, err = self.sink:receive(bytes)
   if err ~= nil then
     -- Any refusal ends the stream; the message was taken all the same.
-    self:finish(err.code)
+    self:finish(err.code, "")
     return
   end
   self.echoed = self.echoed + 1
   if self.close_after ~= nil and self.echoed >= self.close_after then
-    self:finish(self.close_status)
+    self:finish(self.close_status, self.close_reason)
   end
 end
 
-function Channel:close(status)
-  self:finish(status)
+function Channel:close(status, reason)
+  self:finish(status, reason)
 end
 
--- Dropping the channel is `close(0)`: its table is collected when the
+-- Dropping the channel is `close(0, "")`: its table is collected when the
 -- host destroys it.
 Channel.__gc = function(self)
-  pcall(self.finish, self, 0)
+  pcall(self.finish, self, 0, "")
 end
 
 local Echo = { name = "Echo, in Lua", kinds = { "channel_echo" } }
@@ -61,6 +61,7 @@ function Echo:start(config, sink)
     echoed = 0,
     close_after = config.close_after,
     close_status = config.close_status or 0,
+    close_reason = config.close_reason or "",
   }, Channel)
 end
 

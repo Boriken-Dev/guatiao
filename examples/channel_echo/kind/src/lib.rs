@@ -20,7 +20,10 @@ pub trait ChannelEcho: Send + Sync {
     ///
     /// `config` may say `close_after` (a count: after echoing that many
     /// messages the provider closes the stream itself) and `close_status`
-    /// (the status it closes with then; `0` when left out).
+    /// (the status it closes with then; `0` when left out) and
+    /// `close_reason` (the text it closes with then; empty when left out).
+    /// When the host closes, the echo passes the host's status and reason
+    /// on to the sink.
     fn start(
         &self,
         config: &Map,

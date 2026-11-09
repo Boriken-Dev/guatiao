@@ -11,11 +11,13 @@
 //!   `send` that is waiting, which then answers `GUATIAO_ERR_GONE`;
 //! - one thread calls the sink, in the order the messages were queued;
 //! - `close` lets the queue drain, then the thread calls `closed` with
-//!   the host's status and lets the sink go; dropping the channel is
-//!   `close(0)` and does not wait for the thread;
+//!   the host's status and reason and lets the sink go; dropping the
+//!   channel is `close(0, "")` and does not wait for the thread;
 //! - after `close_after` echoes (the configuration's), the thread closes
-//!   with `close_status`, and what was still queued is not delivered;
-//! - an error from `receive` ends the stream: `closed` with that status.
+//!   with `close_status` and `close_reason`, and what was still queued is
+//!   not delivered;
+//! - an error from `receive` ends the stream: `closed` with that status
+//!   and no reason.
 //!
 //! The library refuses to be unloaded while a thread of its own still
 //! runs, which is while a sink is still inside a call, and joins them
@@ -81,11 +83,30 @@ impl ChannelEcho for Echo {
             )
         })?;
 
+        let close_reason = match config.get("close_reason") {
+            None => String::new(),
+            Some(v) => <&str>::try_from(v)
+                .map_err(|_| {
+                    ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "`close_reason` is not text")
+                })?
+                .to_owned(),
+        };
+
         let queue = Arc::new(Queue::default());
         let thread_queue = Arc::clone(&queue);
         let thread = std::thread::Builder::new()
             .name("channel_echo".into())
-            .spawn(move || deliver(sink, &thread_queue, close_after, close_status))
+            .spawn(move || {
+                deliver(
+                    sink,
+                    &thread_queue,
+                    close_after,
+                    Closing {
+                        status: close_status,
+                        reason: close_reason,
+                    },
+                );
+            })
             .map_err(|_| {
                 ProviderError::new(Status::GUATIAO_ERR_INTERNAL, "no thread to echo on")
             })?;
@@ -107,8 +128,14 @@ struct Inner {
     items: VecDeque<Vec<u8>>,
     /// Either side has ended the stream: `send` answers GONE from here on.
     closed: bool,
-    /// The status the host closed with, when it was the host.
-    host_status: Option<u32>,
+    /// The status and reason the host closed with, when it was the host.
+    host_close: Option<Closing>,
+}
+
+/// How a stream ends: the status and the reason `closed` is called with.
+struct Closing {
+    status: u32,
+    reason: String,
 }
 
 /// What the channel and its thread share.
@@ -158,13 +185,16 @@ impl Channel for Echoing {
         Ok(())
     }
 
-    fn close(&self, status: u32) {
+    fn close(&self, status: u32, reason: &str) {
         let mut inner = self.queue.lock();
         if inner.closed {
             return;
         }
         inner.closed = true;
-        inner.host_status = Some(status);
+        inner.host_close = Some(Closing {
+            status,
+            reason: reason.to_owned(),
+        });
         drop(inner);
         // Wakes a `send` waiting for room, and the thread to drain.
         self.queue.space.notify_all();
@@ -174,7 +204,7 @@ impl Channel for Echoing {
 
 impl Drop for Echoing {
     fn drop(&mut self) {
-        self.close(Status::GUATIAO_OK.into());
+        self.close(Status::GUATIAO_OK.into(), "");
     }
 }
 
@@ -183,10 +213,10 @@ fn deliver(
     mut sink: Object<dyn ChannelSink>,
     queue: &Queue,
     close_after: Option<u64>,
-    close_status: u32,
+    own_close: Closing,
 ) {
     let mut echoed = 0u64;
-    let status = loop {
+    let closing = loop {
         let message = {
             let mut inner = queue.lock();
             loop {
@@ -208,13 +238,13 @@ fn deliver(
         };
         let Some(message) = message else {
             let mut inner = queue.lock();
-            let status = inner.host_status.unwrap_or(close_status);
+            let closing = inner.host_close.take().unwrap_or(own_close);
             // What was queued and not delivered goes with the stream.
             inner.closed = true;
             inner.items.clear();
             drop(inner);
             queue.space.notify_all();
-            break status;
+            break closing;
         };
         if let Err(e) = sink.receive(&message) {
             let mut inner = queue.lock();
@@ -222,11 +252,14 @@ fn deliver(
             inner.items.clear();
             drop(inner);
             queue.space.notify_all();
-            break e.status.into();
+            break Closing {
+                status: e.status.into(),
+                reason: String::new(),
+            };
         }
         echoed += 1;
     };
-    sink.closed(status);
+    sink.closed(closing.status, &closing.reason);
 }
 
 guatiao::providers!(

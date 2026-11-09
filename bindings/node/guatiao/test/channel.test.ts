@@ -25,6 +25,7 @@ const GONE = 12;
 class Sink {
   readonly received: string[] = [];
   closedWith: number | null = null;
+  closedReason: string | null = null;
   away = false;
   destroyed = false;
   receive(bytes: Uint8Array): void {
@@ -33,8 +34,9 @@ class Sink {
     }
     this.received.push(new TextDecoder().decode(bytes));
   }
-  closed(status: number): void {
+  closed(status: number, reason: string): void {
     this.closedWith = status;
+    this.closedReason = reason;
   }
   [Symbol.dispose](): void {
     this.destroyed = true;
@@ -83,7 +85,7 @@ describe('a Node host receives on the echo thread', () => {
     }
     expect(await until(() => sink.received.length === 20)).toBe(true);
     expect(sink.received).toEqual(sent);
-    channel.close(0);
+    channel.close(0, '');
     expect(await until(() => sink.closedWith !== null)).toBe(true);
     channel.destroy();
   });
@@ -94,10 +96,11 @@ describe('a Node host receives on the echo thread', () => {
     using config = new Value({});
     const channel = echo.start(config, sink);
     for (const text of ['1', '2', '3']) channel.send(bytes(text));
-    channel.close(5);
+    channel.close(5, 'the host gave up');
     expect(() => channel.send(bytes('4'))).toThrow(Gone);
     expect(await until(() => sink.closedWith !== null)).toBe(true);
     expect(sink.closedWith).toBe(5);
+    expect(sink.closedReason).toBe('the host gave up');
     channel.destroy();
     expect(await until(() => sink.destroyed)).toBe(true);
   });
@@ -112,18 +115,20 @@ describe('a Node host receives on the echo thread', () => {
     channel.destroy();
     expect(await until(() => sink.closedWith !== null)).toBe(true);
     expect(sink.closedWith).toBe(0);
+    expect(sink.closedReason).toBe('');
     expect(await until(() => sink.destroyed)).toBe(true);
   });
 
-  it('hears the provider close with its own status', async () => {
+  it('hears the provider close with its own status and reason', async () => {
     const echo = reg.bind('channel_echo_echo', ChannelEcho);
     const sink = new Sink();
-    using config = new Value({ close_after: 2, close_status: 7 });
+    using config = new Value({ close_after: 2, close_status: 7, close_reason: 'the provider failed' });
     const channel = echo.start(config, sink);
     channel.send(bytes('1'));
     channel.send(bytes('2'));
     expect(await until(() => sink.closedWith !== null)).toBe(true);
     expect(sink.closedWith).toBe(7);
+    expect(sink.closedReason).toBe('the provider failed');
     expect(() => channel.send(bytes('3'))).toThrow(Gone);
     channel.destroy();
     expect(sink.received).toEqual(['1', '2']);
@@ -165,11 +170,12 @@ describe('the JavaScript echo under Node', () => {
   it('echoes in order, closes with each status, and lets the sink go', async () => {
     const echo = own.bind('channel_echo_js_echo', ChannelEcho);
     const sink = new Sink();
-    using config = new Value({ close_after: 3, close_status: 7 });
+    using config = new Value({ close_after: 3, close_status: 7, close_reason: 'the provider failed' });
     const channel = echo.start(config, sink);
     for (const text of ['a', 'b', 'c']) channel.send(bytes(text));
     expect(sink.received).toEqual(['a', 'b', 'c']);
     expect(sink.closedWith).toBe(7);
+    expect(sink.closedReason).toBe('the provider failed');
     expect(() => channel.send(bytes('d'))).toThrow(Gone);
     channel.destroy();
     expect(sink.destroyed).toBe(true);
@@ -181,8 +187,9 @@ describe('the JavaScript echo under Node', () => {
     const first = new Sink();
     const channel = echo.start(config, first);
     channel.send(bytes('1'));
-    channel.close(5);
+    channel.close(5, 'the host gave up');
     expect(first.closedWith).toBe(5);
+    expect(first.closedReason).toBe('the host gave up');
     expect(() => channel.send(bytes('2'))).toThrow(Gone);
     channel.destroy();
     const second = new Sink();

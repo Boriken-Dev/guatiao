@@ -16,7 +16,10 @@ export interface ChannelEcho {
    *
    * `config` may say `close_after` (a count: after echoing that many
    * messages the provider closes the stream itself) and `close_status`
-   * (the status it closes with then; `0` when left out).
+   * (the status it closes with then; `0` when left out) and
+   * `close_reason` (the text it closes with then; empty when left out).
+   * When the host closes, the echo passes the host's status and reason
+   * on to the sink.
    */
   start(config: g.MapRef, sink: k.ObjectHandle<typeof ChannelSink>): Channel | k.ObjectHandle<typeof Channel>;
 }
@@ -29,7 +32,10 @@ export interface ChannelEchoRemote extends k.RemoteBase<typeof ChannelEcho> {
    *
    * `config` may say `close_after` (a count: after echoing that many
    * messages the provider closes the stream itself) and `close_status`
-   * (the status it closes with then; `0` when left out).
+   * (the status it closes with then; `0` when left out) and
+   * `close_reason` (the text it closes with then; empty when left out).
+   * When the host closes, the echo passes the host's status and reason
+   * on to the sink.
    */
   start(config: g.Ref | k.MapAnswer, sink: ChannelSink | k.ObjectHandle<typeof ChannelSink>): k.ObjectHandle<typeof Channel>;
 }
@@ -58,11 +64,12 @@ export interface Channel {
   /**
    * Ends the stream from the host's side, with a `guatiao_status` the
    * provider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain
-   * end, an error status otherwise. Called once, and returns without
-   * waiting for a `receive` still running; `send` answers
-   * `GUATIAO_ERR_GONE` after it. Cannot fail.
+   * end, an error status otherwise. `reason` is UTF-8 text for people,
+   * lent for the call and empty when there is none: why the host gives
+   * up. Called once, and returns without waiting for a `receive` still
+   * running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
    */
-  close(status: number): void;
+  close(status: number, reason: string): void;
 }
 
 /** A caller's handle on a `channel` table or object: a method per slot. */
@@ -77,11 +84,12 @@ export interface ChannelRemote extends k.RemoteBase<typeof Channel> {
   /**
    * Ends the stream from the host's side, with a `guatiao_status` the
    * provider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain
-   * end, an error status otherwise. Called once, and returns without
-   * waiting for a `receive` still running; `send` answers
-   * `GUATIAO_ERR_GONE` after it. Cannot fail.
+   * end, an error status otherwise. `reason` is UTF-8 text for people,
+   * lent for the call and empty when there is none: why the host gives
+   * up. Called once, and returns without waiting for a `receive` still
+   * running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
    */
-  close(status: number): void;
+  close(status: number, reason: string): void;
 }
 
 /**
@@ -115,10 +123,12 @@ export interface ChannelSink {
   /**
    * The stream has ended, from either side: with the host's status from
    * the channel's `close`, or the provider's own, a `guatiao_status`
-   * (`GUATIAO_OK` is the normal end). Called exactly once, and nothing
-   * but `destroy` follows it. Cannot fail.
+   * (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
+   * people, lent for the call and empty when there is none: the
+   * provider's failure, or the host's reason passed on. Called exactly
+   * once, and nothing but `destroy` follows it. Cannot fail.
    */
-  closed(status: number): void;
+  closed(status: number, reason: string): void;
 }
 
 /** A caller's handle on a `channel_sink` table or object: a method per slot. */
@@ -134,10 +144,12 @@ export interface ChannelSinkRemote extends k.RemoteBase<typeof ChannelSink> {
   /**
    * The stream has ended, from either side: with the host's status from
    * the channel's `close`, or the provider's own, a `guatiao_status`
-   * (`GUATIAO_OK` is the normal end). Called exactly once, and nothing
-   * but `destroy` follows it. Cannot fail.
+   * (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
+   * people, lent for the call and empty when there is none: the
+   * provider's failure, or the host's reason passed on. Called exactly
+   * once, and nothing but `destroy` follows it. Cannot fail.
    */
-  closed(status: number): void;
+  closed(status: number, reason: string): void;
 }
 
 /**

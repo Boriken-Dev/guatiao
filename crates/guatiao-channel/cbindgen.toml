@@ -33,9 +33,14 @@ header = """
  *  - messages keep their call order per direction. The provider makes
  *    every call on the sink (receive and closed) from one thread at a
  *    time, and none while another is running.
- *  - the status in close(status) and closed(status) is a guatiao_status
- *    value: GUATIAO_OK is the normal end, anything else an error status.
- *  - after close (or destroying the channel, close(GUATIAO_OK)), send
+ *  - the status in close(status, reason) and closed(status, reason) is a
+ *    guatiao_status value: GUATIAO_OK is the normal end, anything else an
+ *    error status.
+ *  - the reason is UTF-8 text for people, lent for the call and empty
+ *    when there is none: the host's reason for giving up, the provider's
+ *    failure. Logs only; no one parses it. A gone sink or a destroyed
+ *    channel says the same as GUATIAO_OK and an empty reason.
+ *  - after close (or destroying the channel, close(GUATIAO_OK, "")), send
  *    answers GUATIAO_ERR_GONE, also a send that was waiting for room, and
  *    none is taken once close has returned. The provider calls closed
  *    with the host's status once, unless it already had, then never the

@@ -82,17 +82,18 @@ fn the_js_echo_keeps_every_inline_rule() {
 /// JavaScript: a kind's slot named `close` keeps its name on the handle.
 #[guatiao::kind]
 pub trait Closer: Send + Sync {
-    /// Calls `close(status)` on the channel it was handed.
+    /// Calls `close(status, reason)` on the channel it was handed.
     fn finish(
         &self,
         channel: guatiao::library::Object<dyn guatiao_channel::Channel>,
         status: u32,
+        reason: &str,
     ) -> Result<(), ProviderError>;
 }
 
 /// A channel that remembers what it was closed with, and that it was let go.
 struct Recording {
-    closed_with: Arc<std::sync::Mutex<Vec<u32>>>,
+    closed_with: Arc<std::sync::Mutex<Vec<(u32, String)>>>,
     destroyed: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -100,8 +101,11 @@ impl guatiao_channel::Channel for Recording {
     fn send(&self, _bytes: &[u8]) -> Result<(), ProviderError> {
         Ok(())
     }
-    fn close(&self, status: u32) {
-        self.closed_with.lock().unwrap().push(status);
+    fn close(&self, status: u32, reason: &str) {
+        self.closed_with
+            .lock()
+            .unwrap()
+            .push((status, reason.to_owned()));
     }
 }
 
@@ -113,7 +117,7 @@ impl Drop for Recording {
 }
 
 #[test]
-fn close_on_a_handle_reaches_the_provider_with_its_status() {
+fn close_on_a_handle_reaches_the_provider_with_its_status_and_reason() {
     let dir = std::env::temp_dir().join(format!("guatiao-js-closer-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -142,7 +146,7 @@ fn close_on_a_handle_reaches_the_provider_with_its_status() {
              const described = kindsOf({document});\n\
              export class Closer extends Provider {{\n\
                static kinds = [described['closer']];\n\
-               finish(channel, status) {{ channel.close(status); channel.destroy(); }}\n\
+               finish(channel, status, reason) {{ channel.close(status, reason); channel.destroy(); }}\n\
              }}\n"
         ),
     )
@@ -175,8 +179,14 @@ fn close_on_a_handle_reaches_the_provider_with_its_status() {
         closed_with: Arc::clone(&closed_with),
         destroyed: Arc::clone(&destroyed),
     });
-    closer.finish(channel, 5).expect("finished");
-    assert_eq!(*closed_with.lock().unwrap(), [5], "close(5) arrived as 5");
+    closer
+        .finish(channel, 5, "the host gave up")
+        .expect("finished");
+    assert_eq!(
+        *closed_with.lock().unwrap(),
+        [(5, "the host gave up".to_owned())],
+        "close(5, reason) arrived whole"
+    );
     assert!(destroyed.load(std::sync::atomic::Ordering::SeqCst));
     let _ = std::fs::remove_dir_all(&dir);
 }

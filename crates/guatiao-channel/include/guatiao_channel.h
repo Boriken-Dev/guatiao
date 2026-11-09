@@ -23,9 +23,14 @@
  *  - messages keep their call order per direction. The provider makes
  *    every call on the sink (receive and closed) from one thread at a
  *    time, and none while another is running.
- *  - the status in close(status) and closed(status) is a guatiao_status
- *    value: GUATIAO_OK is the normal end, anything else an error status.
- *  - after close (or destroying the channel, close(GUATIAO_OK)), send
+ *  - the status in close(status, reason) and closed(status, reason) is a
+ *    guatiao_status value: GUATIAO_OK is the normal end, anything else an
+ *    error status.
+ *  - the reason is UTF-8 text for people, lent for the call and empty
+ *    when there is none: the host's reason for giving up, the provider's
+ *    failure. Logs only; no one parses it. A gone sink or a destroyed
+ *    channel says the same as GUATIAO_OK and an empty reason.
+ *  - after close (or destroying the channel, close(GUATIAO_OK, "")), send
  *    answers GUATIAO_ERR_GONE, also a send that was waiting for room, and
  *    none is taken once close has returned. The provider calls closed
  *    with the host's status once, unless it already had, then never the
@@ -60,14 +65,14 @@ typedef struct channel_vtable {
   guatiao_kind_header header;
   void (*destroy)(void *ctx);
   guatiao_status (*send)(void *ctx, guatiao_bytes bytes, guatiao_provider_error *err);
-  guatiao_status (*close)(void *ctx, uint32_t status);
+  guatiao_status (*close)(void *ctx, uint32_t status, guatiao_str reason);
 } channel_vtable;
 /*
  FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
-#define channel_vtable_FLOOR_HASH 2843269355
+#define channel_vtable_FLOOR_HASH 3787630980
 
 /*
  The kind's function table: a header, then one slot per method,
@@ -77,13 +82,13 @@ typedef struct channel_sink_vtable {
   guatiao_kind_header header;
   void (*destroy)(void *ctx);
   guatiao_status (*receive)(void *ctx, guatiao_bytes bytes, guatiao_provider_error *err);
-  guatiao_status (*closed)(void *ctx, uint32_t status);
+  guatiao_status (*closed)(void *ctx, uint32_t status, guatiao_str reason);
 } channel_sink_vtable;
 /*
  FNV-1a over the shape and every slot's signature, as a
  literal, so a C header generator can render it: what a C
  implementation writes into the table's header.
  */
-#define channel_sink_vtable_FLOOR_HASH 3528315804
+#define channel_sink_vtable_FLOOR_HASH 4115266557
 
 #endif  /* GUATIAO_CHANNEL_H */

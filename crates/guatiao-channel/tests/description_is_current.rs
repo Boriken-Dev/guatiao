@@ -76,5 +76,5 @@ fn each_kind_keeps_its_name_and_floor_hash() {
     );
 }
 
-const PINNED_CHANNEL: u32 = 2843269355;
-const PINNED_SINK: u32 = 3528315804;
+const PINNED_CHANNEL: u32 = 3787630980;
+const PINNED_SINK: u32 = 4115266557;

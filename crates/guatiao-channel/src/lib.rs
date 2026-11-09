@@ -35,15 +35,23 @@
 //!   calls were made. The provider makes every call on the sink, `receive`
 //!   and `closed` alike, from one thread at a time, and none while
 //!   another is running.
-//! - **A status is a `guatiao_status` value.** In `close(status)` and
-//!   `closed(status)`, `GUATIAO_OK` (`0`) is the normal end and anything
-//!   else an error status, which an error from `receive` passes on.
+//! - **A status is a `guatiao_status` value.** In `close(status, reason)`
+//!   and `closed(status, reason)`, `GUATIAO_OK` (`0`) is the normal end
+//!   and anything else an error status, which an error from `receive`
+//!   passes on.
+//! - **A reason is text for people.** Both calls carry UTF-8 text, lent
+//!   for the call and empty when there is none: the host's reason for
+//!   giving up, the provider's failure. It is for logs and messages; no
+//!   one parses it, and no behaviour depends on it. A sink that has gone
+//!   (`GUATIAO_ERR_GONE`) or a channel that was dropped says the same as
+//!   `OK` and an empty reason.
 //! - **The host closes once.** After [`Channel::close`] (or dropping the
-//!   channel, which is `close(GUATIAO_OK)`), `send` answers
+//!   channel, which is `close(GUATIAO_OK, "")`), `send` answers
 //!   `GUATIAO_ERR_GONE`, a `send` that was waiting for room included, and
 //!   none is taken once `close` has returned. The provider calls
 //!   [`ChannelSink::closed`] with the host's status exactly once, unless
-//!   it already had, and never calls the sink again. What it took before
+//!   it already had, and never calls the sink again; it may pass the
+//!   host's reason on or give its own. What it took before
 //!   the close it may still deliver first. `close` and dropping the
 //!   channel return without waiting for a `receive` still running.
 //! - **The provider closes once.** [`ChannelSink::closed`] ends the
@@ -89,10 +97,11 @@ pub trait Channel: Send + Sync {
 
     /// Ends the stream from the host's side, with a `guatiao_status` the
     /// provider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain
-    /// end, an error status otherwise. Called once, and returns without
-    /// waiting for a `receive` still running; `send` answers
-    /// `GUATIAO_ERR_GONE` after it. Cannot fail.
-    fn close(&self, status: u32);
+    /// end, an error status otherwise. `reason` is UTF-8 text for people,
+    /// lent for the call and empty when there is none: why the host gives
+    /// up. Called once, and returns without waiting for a `receive` still
+    /// running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
+    fn close(&self, status: u32, reason: &str);
 }
 
 /// What the provider writes back on, handed in by the host.
@@ -111,7 +120,9 @@ pub trait ChannelSink: Send {
 
     /// The stream has ended, from either side: with the host's status from
     /// the channel's `close`, or the provider's own, a `guatiao_status`
-    /// (`GUATIAO_OK` is the normal end). Called exactly once, and nothing
-    /// but `destroy` follows it. Cannot fail.
-    fn closed(&mut self, status: u32);
+    /// (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
+    /// people, lent for the call and empty when there is none: the
+    /// provider's failure, or the host's reason passed on. Called exactly
+    /// once, and nothing but `destroy` follows it. Cannot fail.
+    fn closed(&mut self, status: u32, reason: &str);
 }

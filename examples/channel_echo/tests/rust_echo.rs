@@ -58,8 +58,8 @@ fn the_rust_echo_lets_the_sink_go_once_closed() {
         .expect("its one instance");
     let (probe, sink) = rules::Probe::new(rules::PATIENCE);
     let channel = echo.start(&Map::new(), sink).expect("started");
-    channel.close(0);
-    assert_eq!(probe.closed(), Ok(0));
+    channel.close(0, "");
+    assert_eq!(probe.closed_with(), Ok((0, String::new())));
     probe.settle().expect("nothing after closed");
     assert!(probe.destroyed(), "the sink was destroyed after closed");
 }

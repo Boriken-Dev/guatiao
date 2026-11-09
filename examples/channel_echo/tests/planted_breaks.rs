@@ -18,7 +18,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use guatiao::library::{Object, ObjectRaw, ProviderError};
-use guatiao::value::types::Bytes;
+use guatiao::value::types::{Bytes, Str};
 use guatiao::{Map, Status};
 use guatiao_channel::{Channel, ChannelSink, ChannelSinkVtable};
 
@@ -39,6 +39,8 @@ enum Fault {
     TakesAfterClose,
     /// Tells the sink 0 rather than the host's status.
     WrongStatus,
+    /// Tells the sink an empty reason rather than the host's.
+    DropsReason,
     /// Calls `closed` twice.
     ClosedTwice,
     /// Calls `receive` once more after `closed`.
@@ -65,7 +67,7 @@ enum Fault {
 struct Inner {
     items: VecDeque<Vec<u8>>,
     closed: bool,
-    host_status: Option<u32>,
+    host_close: Option<(u32, String)>,
 }
 
 #[derive(Default)]
@@ -136,20 +138,20 @@ impl Channel for Faulty {
         Ok(())
     }
 
-    fn close(&self, status: u32) {
+    fn close(&self, status: u32, reason: &str) {
         let mut inner = self.queue.lock();
         if inner.closed {
             return;
         }
         inner.closed = true;
-        inner.host_status = Some(status);
+        inner.host_close = Some((status, reason.to_owned()));
         drop(inner);
         if self.fault != Fault::CloseLeavesSendBlocked {
             self.queue.space.notify_all();
         }
         self.queue.arrived.notify_all();
         if let (Fault::ClosesOnHostThread, Some(raw)) = (self.fault, &self.raw) {
-            raw.closed(status);
+            raw.closed(status, reason);
         }
     }
 }
@@ -159,7 +161,7 @@ impl Drop for Faulty {
         if self.fault == Fault::DropKeepsGoing {
             return;
         }
-        self.close(0);
+        self.close(0, "");
         if self.fault == Fault::DropJoinsReader {
             let reader = self
                 .reader
@@ -203,10 +205,10 @@ impl RawSink {
             Err(ProviderError::new(status, err.message()))
         }
     }
-    fn closed(&self, status: u32) {
+    fn closed(&self, status: u32, reason: &str) {
         let closed = self.table().closed.expect("a served table has every slot");
         // SAFETY: a live object's slot, given its own ctx.
-        let _ = unsafe { closed(self.0.ctx, status) };
+        let _ = unsafe { closed(self.0.ctx, status, Str::from(reason)) };
     }
 }
 
@@ -225,10 +227,10 @@ enum Held {
 }
 
 impl Held {
-    fn closed(&mut self, status: u32) {
+    fn closed(&mut self, status: u32, reason: &str) {
         match self {
-            Held::Owned(sink) => sink.closed(status),
-            Held::Raw(raw) => raw.closed(status),
+            Held::Owned(sink) => sink.closed(status, reason),
+            Held::Raw(raw) => raw.closed(status, reason),
         }
     }
 }
@@ -239,11 +241,12 @@ fn deliver(
     queue: &Queue,
     close_after: Option<u64>,
     close_status: u32,
+    close_reason: String,
 ) {
     let mut echoed = 0u64;
     let mut held_back: Option<Vec<u8>> = None;
     let mut refused: Option<u32> = None;
-    let status = std::thread::scope(|scope| {
+    let (status, reason) = std::thread::scope(|scope| {
         let mut receive = |bytes: &[u8]| -> Result<(), ProviderError> {
             match (&mut held, fault) {
                 (Held::Raw(raw), Fault::Overlap) => {
@@ -279,15 +282,16 @@ fn deliver(
             };
             let Some(message) = message else {
                 let mut inner = queue.lock();
-                let host = inner.host_status;
+                let host = inner.host_close.take();
                 inner.closed = true;
                 inner.items.clear();
                 drop(inner);
                 queue.space.notify_all();
                 break match (fault, host) {
-                    (Fault::WrongStatus, Some(_)) => 0,
-                    (_, Some(status)) => status,
-                    (_, None) => close_status,
+                    (Fault::WrongStatus, Some((_, reason))) => (0, reason),
+                    (Fault::DropsReason, Some((status, _))) => (status, String::new()),
+                    (_, Some(closing)) => closing,
+                    (_, None) => (close_status, close_reason.clone()),
                 };
             };
             if fault == Fault::Reorder && echoed == 1 && held_back.is_none() {
@@ -319,7 +323,7 @@ fn deliver(
                 inner.items.clear();
                 drop(inner);
                 queue.space.notify_all();
-                break status;
+                break (status, String::new());
             }
             echoed += 1;
         }
@@ -332,9 +336,9 @@ fn deliver(
         // `closed` was the host's thread's doing.
         return;
     }
-    held.closed(status);
+    held.closed(status, &reason);
     match fault {
-        Fault::ClosedTwice => held.closed(status),
+        Fault::ClosedTwice => held.closed(status, &reason),
         Fault::ReceivesAfterClosed => match &mut held {
             Held::Owned(sink) => {
                 let _ = sink.receive(b"late");
@@ -355,6 +359,11 @@ fn start(
     let number = |key: &str| config.get(key).and_then(|v| u64::try_from(v).ok());
     let close_after = number("close_after");
     let close_status = number("close_status").map_or(0, |n| u32::try_from(n).unwrap_or(0));
+    let close_reason = config
+        .get("close_reason")
+        .and_then(|v| <&str>::try_from(v).ok())
+        .unwrap_or_default()
+        .to_owned();
     let queue = Arc::new(Queue::default());
     let (held, raw) = if matches!(fault, Fault::Overlap | Fault::ClosesOnHostThread) {
         let raw = Arc::new(RawSink(sink.into_raw()));
@@ -363,8 +372,16 @@ fn start(
         (Held::Owned(sink), None)
     };
     let shared = Arc::clone(&queue);
-    let reader =
-        std::thread::spawn(move || deliver(fault, held, &shared, close_after, close_status));
+    let reader = std::thread::spawn(move || {
+        deliver(
+            fault,
+            held,
+            &shared,
+            close_after,
+            close_status,
+            close_reason,
+        );
+    });
     Ok(Faulty {
         fault,
         queue,
@@ -415,6 +432,7 @@ fn each_planted_fault_breaks_its_rule() {
         (Fault::SendTimesOut, "back_pressure_waits"),
         (Fault::TakesAfterClose, "host_close"),
         (Fault::WrongStatus, "host_close"),
+        (Fault::DropsReason, "host_close"),
         (Fault::ClosedTwice, "host_close"),
         (Fault::ReceivesAfterClosed, "host_close"),
         (Fault::DropKeepsGoing, "dropping_closes"),

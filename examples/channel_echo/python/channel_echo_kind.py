@@ -11,7 +11,7 @@ from guatiao import Map
 from guatiao.kinds import U32, KindProtocol, Taken, fallible, required
 
 
-class ChannelSink(KindProtocol, Protocol, kind="channel_sink", floor_hash=3528315804, is_object=True):
+class ChannelSink(KindProtocol, Protocol, kind="channel_sink", floor_hash=4115266557, is_object=True):
     """What the provider writes back on, handed in by the host.
 
     The host implements it and hands it over with the call that starts
@@ -31,16 +31,18 @@ class ChannelSink(KindProtocol, Protocol, kind="channel_sink", floor_hash=352831
         ...
 
     @required
-    def closed(self, status: U32) -> None:
+    def closed(self, status: U32, reason: str) -> None:
         """The stream has ended, from either side: with the host's status from
         the channel's `close`, or the provider's own, a `guatiao_status`
-        (`GUATIAO_OK` is the normal end). Called exactly once, and nothing
-        but `destroy` follows it. Cannot fail.
+        (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
+        people, lent for the call and empty when there is none: the
+        provider's failure, or the host's reason passed on. Called exactly
+        once, and nothing but `destroy` follows it. Cannot fail.
         """
         ...
 
 
-class Channel(KindProtocol, Protocol, kind="channel", floor_hash=2843269355, is_object=True):
+class Channel(KindProtocol, Protocol, kind="channel", floor_hash=3787630980, is_object=True):
     """What the host writes on, handed back by the provider that started it.
 
     The provider implements it and the host holds the channel object,
@@ -60,12 +62,13 @@ class Channel(KindProtocol, Protocol, kind="channel", floor_hash=2843269355, is_
         ...
 
     @required
-    def close(self, status: U32) -> None:
+    def close(self, status: U32, reason: str) -> None:
         """Ends the stream from the host's side, with a `guatiao_status` the
         provider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain
-        end, an error status otherwise. Called once, and returns without
-        waiting for a `receive` still running; `send` answers
-        `GUATIAO_ERR_GONE` after it. Cannot fail.
+        end, an error status otherwise. `reason` is UTF-8 text for people,
+        lent for the call and empty when there is none: why the host gives
+        up. Called once, and returns without waiting for a `receive` still
+        running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
         """
         ...
 
@@ -81,7 +84,10 @@ class ChannelEcho(KindProtocol, Protocol, kind="channel_echo", floor_hash=186955
 
         `config` may say `close_after` (a count: after echoing that many
         messages the provider closes the stream itself) and `close_status`
-        (the status it closes with then; `0` when left out).
+        (the status it closes with then; `0` when left out) and
+        `close_reason` (the text it closes with then; empty when left out).
+        When the host closes, the echo passes the host's status and reason
+        on to the sink.
         """
         ...
 

@@ -2,7 +2,7 @@
   "kinds": [
     {
       "name": "channel",
-      "floor_hash": 2843269355,
+      "floor_hash": 3787630980,
       "object": true,
       "doc": "What the host writes on, handed back by the provider that started it.\n\nThe provider implements it and the host holds the channel object,\nwhich may be shared between threads: `send` may be called from several\nat once, each thread's messages kept in its own order. Dropping the\nchannel is `close(GUATIAO_OK)`.",
       "slots": [
@@ -26,15 +26,19 @@
             {
               "name": "status",
               "type": "u32"
+            },
+            {
+              "name": "reason",
+              "type": "str"
             }
           ],
-          "doc": "Ends the stream from the host's side, with a `guatiao_status` the\nprovider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain\nend, an error status otherwise. Called once, and returns without\nwaiting for a `receive` still running; `send` answers\n`GUATIAO_ERR_GONE` after it. Cannot fail."
+          "doc": "Ends the stream from the host's side, with a `guatiao_status` the\nprovider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain\nend, an error status otherwise. `reason` is UTF-8 text for people,\nlent for the call and empty when there is none: why the host gives\nup. Called once, and returns without waiting for a `receive` still\nrunning; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail."
         }
       ]
     },
     {
       "name": "channel_sink",
-      "floor_hash": 3528315804,
+      "floor_hash": 4115266557,
       "object": true,
       "doc": "What the provider writes back on, handed in by the host.\n\nThe host implements it and hands it over with the call that starts\nthe channel; the provider owns it from then on, makes every call on it\nfrom one thread at a time, and destroys it when done.",
       "slots": [
@@ -58,9 +62,13 @@
             {
               "name": "status",
               "type": "u32"
+            },
+            {
+              "name": "reason",
+              "type": "str"
             }
           ],
-          "doc": "The stream has ended, from either side: with the host's status from\nthe channel's `close`, or the provider's own, a `guatiao_status`\n(`GUATIAO_OK` is the normal end). Called exactly once, and nothing\nbut `destroy` follows it. Cannot fail."
+          "doc": "The stream has ended, from either side: with the host's status from\nthe channel's `close`, or the provider's own, a `guatiao_status`\n(`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for\npeople, lent for the call and empty when there is none: the\nprovider's failure, or the host's reason passed on. Called exactly\nonce, and nothing but `destroy` follows it. Cannot fail."
         }
       ]
     }
