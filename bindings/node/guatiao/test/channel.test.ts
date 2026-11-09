@@ -105,7 +105,7 @@ describe('a Node host receives on the echo thread', () => {
     expect(await until(() => sink.destroyed)).toBe(true);
   });
 
-  it('treats dropping the channel as close(0)', async () => {
+  it('treats dropping the channel as close(0, "")', async () => {
     const echo = reg.bind('channel_echo_echo', ChannelEcho);
     const sink = new Sink();
     using config = new Value({});
@@ -181,7 +181,7 @@ describe('the JavaScript echo under Node', () => {
     expect(sink.destroyed).toBe(true);
   });
 
-  it('closes with the host status, and dropping the channel is close(0)', async () => {
+  it('closes with the host status, and dropping the channel is close(0, "")', async () => {
     const echo = own.bind('channel_echo_js_echo', ChannelEcho);
     using config = new Value({});
     const first = new Sink();

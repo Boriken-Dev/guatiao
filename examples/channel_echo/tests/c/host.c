@@ -88,7 +88,9 @@ static guatiao_status sink_closed(void *ctx, uint32_t status, guatiao_str reason
   s->closed++;
   s->status = status;
   if (reason.len < sizeof(s->reason)) {
-    memcpy(s->reason, reason.ptr, reason.len);
+    if (reason.len) {
+      memcpy(s->reason, reason.ptr, reason.len);
+    }
     s->reason[reason.len] = '\0';
   } else {
     s->broken = "a reason longer than the host sent";
