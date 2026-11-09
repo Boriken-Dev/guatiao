@@ -1649,6 +1649,49 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_schema_differences(
+    ffi.Pointer<guatiao_value> schema,
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_value> baseline,
+    guatiao_str placeholder,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_schema_differences(
+      schema,
+      value,
+      baseline,
+      placeholder,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_schema_differencesPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_schema_differences');
+  late final _guatiao_schema_differences = _guatiao_schema_differencesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_schema_redact(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> value,

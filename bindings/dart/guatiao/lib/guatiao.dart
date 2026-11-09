@@ -40,7 +40,7 @@ export 'src/registry.dart'
     show Instance, ProviderTable, Registry;
 export 'src/schema.dart'
     if (dart.library.js_interop) 'src/web/schema_web.dart'
-    show redact;
+    show differences, redact;
 export 'src/status.dart'
     show
         AllocFailed,

@@ -726,6 +726,17 @@ schema marks (`x-sensitive` or `writeOnly`) is replaced at any depth, and
 whatever the schema does not describe is hidden too. Local `$ref`s are
 followed. `WrongKind` for a schema that is not a map.
 
+**Where a value differs**: `differences(schema, value, {baseline,
+placeholder = '***'})` lists where `value` departs from `baseline`, or from
+the schema's defaults when there is none. A new `Value` to close: a list of
+maps `{path: [segments], key: 'tls.ca', value: .., default: ..}`, `value`
+and `default` left out where that side has nothing. Declared fields, an open
+map's keys and a variant's fields (the same arm on both sides) are places of
+their own; a list, a tuple (a duration), an enumeration and a variant that
+changed arm are one place each, compared whole. A field a side leaves out
+reads as its schema default; a secret that differs is listed as the
+placeholder on each side. The same on the VM and the web.
+
 **Where a secret lives**: the library's wiping allocator overwrites every
 block with zeros before releasing it, the one a growing string or list
 leaves included. The same on the VM and the web.

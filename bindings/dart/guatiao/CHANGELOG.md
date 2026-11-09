@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Where a value differs from its schema's defaults or from a baseline**:
+  `differences(schema, value, baseline: ..)` answers a list of maps
+  `{path, key, value, default}`, on the VM and the web, run against the
+  shared vectors.
 - **Every provider listed for a settings screen, none built**:
   `Registry.catalog()` answers each provider of every loaded library with
   its availability and reason, configuration schema, `meta`, library key

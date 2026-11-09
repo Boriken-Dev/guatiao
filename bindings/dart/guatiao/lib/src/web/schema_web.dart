@@ -49,3 +49,50 @@ Value redact(
   }
   return Value.adopt(out, alloc: allocator);
 }
+
+/// Where [value] differs from [baseline], or from the schema's defaults;
+/// see the VM's `differences`, which this matches.
+Value differences(
+  Object? schema,
+  Object? value, {
+  Object? baseline,
+  String placeholder = '***',
+  Address? alloc,
+}) {
+  final m = WasmModule.current;
+  final allocator = alloc ?? m.defaultAlloc;
+  final built = <Value>[];
+  Address nodeOf(Object? item) {
+    if (item is Ref) return item.requireNode();
+    final v = Value.fromDart(item);
+    built.add(v);
+    return v.pointer;
+  }
+
+  final out = m.alloc(valueSize);
+  try {
+    final schemaNode = nodeOf(schema);
+    final valueNode = nodeOf(value);
+    final baselineNode = baseline == null ? Address.none : nodeOf(baseline);
+    withScratch(
+      (s) => checkStatus(
+        m.call('guatiao_schema_differences', [
+          schemaNode,
+          valueNode,
+          baselineNode,
+          s.str(placeholder),
+          allocator,
+          out,
+        ]),
+      ),
+    );
+  } catch (_) {
+    freeRoot(out);
+    rethrow;
+  } finally {
+    for (final v in built) {
+      v.close();
+    }
+  }
+  return Value.adopt(out, alloc: allocator);
+}

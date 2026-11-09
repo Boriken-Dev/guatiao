@@ -136,6 +136,8 @@ files:
         name: guatiao_registry_watch_dir
       c:@F@guatiao_registry_why_not:
         name: guatiao_registry_why_not
+      c:@F@guatiao_schema_differences:
+        name: guatiao_schema_differences
       c:@F@guatiao_schema_redact:
         name: guatiao_schema_redact
       c:@F@guatiao_schema_validate:
