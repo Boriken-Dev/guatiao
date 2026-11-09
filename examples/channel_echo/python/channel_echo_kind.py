@@ -37,7 +37,10 @@ class ChannelSink(KindProtocol, Protocol, kind="channel_sink", floor_hash=411526
         (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
         people, lent for the call and empty when there is none: the
         provider's failure, or the host's reason passed on. Called exactly
-        once, and nothing but `destroy` follows it. Cannot fail.
+        once, and nothing but `destroy` follows it. Cannot fail, bar a
+        `reason` that is not UTF-8, which is refused with
+        `GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as
+        it was.
         """
         ...
 
@@ -48,7 +51,7 @@ class Channel(KindProtocol, Protocol, kind="channel", floor_hash=3787630980, is_
     The provider implements it and the host holds the channel object,
     which may be shared between threads: `send` may be called from several
     at once, each thread's messages kept in its own order. Dropping the
-    channel is `close(GUATIAO_OK)`.
+    channel is `close(GUATIAO_OK, "")`.
     """
 
     @required
@@ -68,7 +71,10 @@ class Channel(KindProtocol, Protocol, kind="channel", floor_hash=3787630980, is_
         end, an error status otherwise. `reason` is UTF-8 text for people,
         lent for the call and empty when there is none: why the host gives
         up. Called once, and returns without waiting for a `receive` still
-        running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
+        running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail,
+        bar a `reason` that is not UTF-8, which is refused with
+        `GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as
+        it was.
         """
         ...
 

@@ -4,7 +4,7 @@
       "name": "channel",
       "floor_hash": 3787630980,
       "object": true,
-      "doc": "What the host writes on, handed back by the provider that started it.\n\nThe provider implements it and the host holds the channel object,\nwhich may be shared between threads: `send` may be called from several\nat once, each thread's messages kept in its own order. Dropping the\nchannel is `close(GUATIAO_OK)`.",
+      "doc": "What the host writes on, handed back by the provider that started it.\n\nThe provider implements it and the host holds the channel object,\nwhich may be shared between threads: `send` may be called from several\nat once, each thread's messages kept in its own order. Dropping the\nchannel is `close(GUATIAO_OK, \"\")`.",
       "slots": [
         {
           "name": "send",
@@ -32,7 +32,7 @@
               "type": "str"
             }
           ],
-          "doc": "Ends the stream from the host's side, with a `guatiao_status` the\nprovider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain\nend, an error status otherwise. `reason` is UTF-8 text for people,\nlent for the call and empty when there is none: why the host gives\nup. Called once, and returns without waiting for a `receive` still\nrunning; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail."
+          "doc": "Ends the stream from the host's side, with a `guatiao_status` the\nprovider hands to the sink's `closed`: `GUATIAO_OK` (0) for a plain\nend, an error status otherwise. `reason` is UTF-8 text for people,\nlent for the call and empty when there is none: why the host gives\nup. Called once, and returns without waiting for a `receive` still\nrunning; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail,\nbar a `reason` that is not UTF-8, which is refused with\n`GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as\nit was."
         }
       ]
     },
@@ -68,7 +68,7 @@
               "type": "str"
             }
           ],
-          "doc": "The stream has ended, from either side: with the host's status from\nthe channel's `close`, or the provider's own, a `guatiao_status`\n(`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for\npeople, lent for the call and empty when there is none: the\nprovider's failure, or the host's reason passed on. Called exactly\nonce, and nothing but `destroy` follows it. Cannot fail."
+          "doc": "The stream has ended, from either side: with the host's status from\nthe channel's `close`, or the provider's own, a `guatiao_status`\n(`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for\npeople, lent for the call and empty when there is none: the\nprovider's failure, or the host's reason passed on. Called exactly\nonce, and nothing but `destroy` follows it. Cannot fail, bar a\n`reason` that is not UTF-8, which is refused with\n`GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as\nit was."
         }
       ]
     }

@@ -112,7 +112,7 @@ export const ChannelEcho = described["channel_echo"];
  * The provider implements it and the host holds the channel object,
  * which may be shared between threads: `send` may be called from several
  * at once, each thread's messages kept in its own order. Dropping the
- * channel is `close(GUATIAO_OK)`.
+ * channel is `close(GUATIAO_OK, "")`.
  */
 export const Channel = described["channel"];
 

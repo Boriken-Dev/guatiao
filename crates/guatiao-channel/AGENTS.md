@@ -60,7 +60,9 @@ refuses.
   is.
 - **`close` and `closed` cannot fail.** A C provider's `close` and a C
   host's `closed` answer `GUATIAO_OK`; any other answer panics the
-  caller's proxy.
+  caller's proxy. The one refusal is a reason that is not UTF-8: the
+  receiving side answers `GUATIAO_ERR_BAD_VALUE` before the method runs,
+  and the stream is as it was.
 
 `examples/channel_echo` is a provider keeping every rule and the suite
 that checks them (`tests/rules/`), with planted faults showing each test

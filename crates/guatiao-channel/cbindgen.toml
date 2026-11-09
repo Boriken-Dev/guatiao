@@ -51,7 +51,10 @@ header = """
  *    any error from receive ends the stream: closed with that status, and
  *    no message still queued is delivered.
  *  - a C provider's close and a C host's closed answer GUATIAO_OK: they cannot fail, and
- *    any other answer is a bug the provider's proxy panics on.
+ *    any other answer is a bug the provider's proxy panics on. The one
+ *    refusal is a reason that is not UTF-8: the receiving side answers
+ *    GUATIAO_ERR_BAD_VALUE before the method runs, and the stream is as
+ *    it was.
  *  - a provider's library refuses to unload (GUATIAO_ERR_BUSY) while a
  *    thread of its own is still inside a call on the sink.
  */

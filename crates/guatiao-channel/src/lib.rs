@@ -66,7 +66,9 @@
 //!   still inside a call on the sink.
 //! - **`close` and `closed` cannot fail.** A C provider's `close` and a C
 //!   host's `closed` answer `GUATIAO_OK`; any other answer is a bug the
-//!   caller's proxy panics on.
+//!   caller's proxy panics on. The one refusal is a reason that is not
+//!   UTF-8: the receiving side answers `GUATIAO_ERR_BAD_VALUE` before the
+//!   method runs, and the stream is as it was.
 //!
 //! The kinds are `channel` and `channel_sink` in every language;
 //! `include/guatiao_channel.kinds.json` describes them as data and
@@ -86,7 +88,7 @@ use guatiao::library::ProviderError;
 /// The provider implements it and the host holds the channel object,
 /// which may be shared between threads: `send` may be called from several
 /// at once, each thread's messages kept in its own order. Dropping the
-/// channel is `close(GUATIAO_OK)`.
+/// channel is `close(GUATIAO_OK, "")`.
 #[guatiao::kind(object)]
 pub trait Channel: Send + Sync {
     /// One message to the provider, lent for the call. Returns once the
@@ -100,7 +102,10 @@ pub trait Channel: Send + Sync {
     /// end, an error status otherwise. `reason` is UTF-8 text for people,
     /// lent for the call and empty when there is none: why the host gives
     /// up. Called once, and returns without waiting for a `receive` still
-    /// running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail.
+    /// running; `send` answers `GUATIAO_ERR_GONE` after it. Cannot fail,
+    /// bar a `reason` that is not UTF-8, which is refused with
+    /// `GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as
+    /// it was.
     fn close(&self, status: u32, reason: &str);
 }
 
@@ -123,6 +128,9 @@ pub trait ChannelSink: Send {
     /// (`GUATIAO_OK` is the normal end). `reason` is UTF-8 text for
     /// people, lent for the call and empty when there is none: the
     /// provider's failure, or the host's reason passed on. Called exactly
-    /// once, and nothing but `destroy` follows it. Cannot fail.
+    /// once, and nothing but `destroy` follows it. Cannot fail, bar a
+    /// `reason` that is not UTF-8, which is refused with
+    /// `GUATIAO_ERR_BAD_VALUE` before this runs and leaves the stream as
+    /// it was.
     fn closed(&mut self, status: u32, reason: &str);
 }
