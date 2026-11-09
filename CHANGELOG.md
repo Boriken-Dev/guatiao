@@ -22,8 +22,11 @@ write now.
   prints for the same value, which a test checks on the shared vectors in
   `tests/vectors/inline.json`. Display only, never parsed: a node in the wiping
   allocator prints `[sensitive]`, an absent node `absent`, an unknown tag
-  `<unknown tag N>`, and a node `GUATIAO_MAX_DEPTH` levels down `...`. The text
-  is in `docs/encodings.md`.
+  `<unknown tag N>`, text, a number or a map key that is not UTF-8
+  `<not utf-8>`, a number outside JSON's grammar `<not a number>`, and a node
+  `GUATIAO_MAX_DEPTH` levels down `...`, all bare and never quoted, so the line is
+  valid JSON exactly when no placeholder appears. The text is in
+  `docs/encodings.md`.
 - **`schema::differences`: where a value differs from its schema's
   defaults, or from a baseline.** A walk over a value with its schema (the
   one `redact` makes) lists the key paths whose value differs, with the

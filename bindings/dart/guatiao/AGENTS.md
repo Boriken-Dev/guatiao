@@ -567,7 +567,7 @@ span.isZero; span.isNegative            // == unit by unit; hashable
 JSON-form text for a report or a log: no spaces, a number as its text, bytes as a
 `"data:;base64,..."` string, a map in its order. Display only, never parsed. A
 node in the wiping allocator prints `[sensitive]`, an absent one `absent`, a node
-128 levels down `...`; none throws. The text is stated in `docs/encodings.md`
+128 levels down `...`; none throws. Placeholders are bare, never quoted, so the line is valid JSON exactly when none appears. The text is stated in `docs/encodings.md`
 and pinned by `tests/vectors/inline.json`.
 
 ## wire: values as bytes, and channels

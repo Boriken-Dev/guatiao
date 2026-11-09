@@ -396,11 +396,16 @@ It is what a compact JSON writer prints with bytes as a `data:;base64,` string a
 numbers as their text (`[1,"a"]`, `{"k":null}`, no spaces), pinned by
 `tests/vectors/inline.json` and compared with `guatiao-serde`'s JSON writer.
 Display only: nothing reads it back. A node or key in `Alloc::wiping()` prints
-`[sensitive]`, an absent node `absent`, an unknown tag `<unknown tag N>`, text or a
-number that is not UTF-8 `"<not utf-8>"`, and a node `MAX_DEPTH` (128) levels below
-the root `...`; none fails. C: `guatiao_value_inline_text(value, alloc, out)` writes
-a string value; `GUATIAO_ERR_ALLOC` for a null or unusable allocator. The text is in
-`docs/encodings.md`, "A value as one line".
+`[sensitive]` (a sensitive key leaves its value visible), an absent node `absent`, an
+unknown tag `<unknown tag N>`, text, a number or a map key that is not UTF-8
+`<not utf-8>` (a bad key hides only itself), a number outside JSON's grammar
+`<not a number>`, and a node `MAX_DEPTH` (128) levels below the root `...`; none
+fails. Placeholders are bare, never quoted, so the line is valid JSON exactly when
+none appears. Only `"`, backslash and characters below U+0020 are escaped: U+2028,
+U+2029 and the C1 controls are written raw. C: `guatiao_value_inline_text(value,
+alloc, out)` writes a string value; `GUATIAO_ERR_NULL` for a null `value` or `out`,
+`GUATIAO_ERR_ALLOC` for a null or unusable allocator or when it refuses the
+string. The text is in `docs/encodings.md`, "A value as one line".
 
 **Numbers are the exact text that declared them.** `1.10` reads back as
 `1.10`, a 200-digit integer survives, and `u64::MAX` crosses as itself.

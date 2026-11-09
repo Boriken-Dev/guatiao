@@ -3478,14 +3478,23 @@ bool guatiao_value_is_sensitive(const struct guatiao_value *value);
 
  For a report or a log; the text is written and never read back. No
  whitespace, a map in its order, a number as its own text, bytes as a
- `"data:;base64,..."` string, text with JSON's escapes. A node in the
- wiping allocator, and a key there, print `[sensitive]`; an absent node
- prints `absent`, a node of an unknown tag `<unknown tag N>`, text or a
- number that is not UTF-8 `"<not utf-8>"`, and a node nested
- `GUATIAO_MAX_DEPTH` levels down `...`. None of these is an error. The
- exact text is stated in `docs/encodings.md`.
+ `"data:;base64,..."` string, text with JSON's escapes (only `"`, `\\`
+ and the characters below U+0020 are escaped: U+007F, U+0085 and the
+ other C1 controls, U+2028 and U+2029 are written as they are).
 
- `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
+ What JSON cannot say prints as a bare placeholder, never quoted, so the
+ line is valid JSON exactly when none appears: `[sensitive]` for a node
+ or a map key in the wiping allocator (a sensitive key leaves its value
+ visible, since the key is the secret), `absent`, `<unknown tag N>`,
+ `<not utf-8>` for text, a number or a map key that is not UTF-8 (a bad
+ key hides only itself), `<not a number>` for a number whose text is
+ outside JSON's grammar, and `...` for a node nested
+ `GUATIAO_MAX_DEPTH` levels down. None of these is an error. The exact
+ text is stated in `docs/encodings.md`.
+
+ `GUATIAO_ERR_NULL` for a null `value` or `out`. `GUATIAO_ERR_ALLOC` for
+ a null or unusable allocator, and when `alloc` refuses to build the
+ string.
 
  # Safety
 

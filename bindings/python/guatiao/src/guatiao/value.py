@@ -659,7 +659,9 @@ class Ref:
         as a `"data:;base64,..."` string. Display only: nothing reads it
         back. A node in the wiping allocator prints `[sensitive]`, an
         absent one `absent`, and a tree nested past `MAX_DEPTH` prints
-        `...` there; none of these is an error."""
+        `...` there; none of these is an error. A placeholder is bare,
+        never quoted, so the line is valid JSON exactly when none
+        appears."""
         node = self._require_node()
         lib = _lib.core()
         out = _abi.Value()

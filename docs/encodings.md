@@ -516,23 +516,28 @@ JSON-expressible vector with `guatiao-serde`'s JSON writer.
 
 - null, `true` and `false`; a number is its text unchanged (`1.10`,
   `1e400`, a 200-digit integer).
-- text in double quotes with JSON's escapes: `\"`, `\`, `\b`, `\f`,
+- text in double quotes with JSON's escapes: `\"`, `\\`, `\b`, `\f`,
   `\n`, `\r`, `\t`, any other character below U+0020 as `\u00xx` (lower
-  case hex). Everything else, `/`, U+007F and non-ASCII included, is
-  written as it is.
+  case hex). Nothing else is escaped, as in `guatiao-serde`'s JSON text:
+  `/`, U+007F, the C1 controls (U+0080 to U+009F, U+0085 included),
+  U+2028 and U+2029 and the rest of non-ASCII are written as they are, so
+  a string holding U+2028 or U+0085 puts that character in the line.
 - bytes as `"data:;base64,"` and standard padded base64.
 - a list as `[a,b]` and a map as `{"k":v}` in the order its keys were
   set. No spaces anywhere.
 
-What JSON cannot say is shown as a placeholder that is not valid JSON, on
-purpose, and never fails:
+What JSON cannot say is shown as a **bare placeholder, never quoted**, and
+never fails. A real string with the text `<not utf-8>` is `"<not utf-8>"`,
+so a placeholder cannot be mistaken for it, and **the line is valid JSON
+exactly when no placeholder appears**:
 
 | node | printed |
 | --- | --- |
-| a node, or a map key, in the wiping allocator | `[sensitive]` (a container there without its contents) |
+| a node, or a map key, in the wiping allocator | `[sensitive]` (a container there without its contents). A sensitive key leaves its value visible, as in `{[sensitive]:"x"}`: the key is the secret and the value need not be |
 | absent | `absent` |
 | an unknown tag | `<unknown tag N>` |
-| text or a number that is not UTF-8 | `"<not utf-8>"` |
+| text, a number or a map key that is not UTF-8 | `<not utf-8>` (a bad key hides only itself: `{"ok":1,<not utf-8>:2}`) |
+| a number whose text is outside JSON's grammar (`NaN`, `+1`, `1e`, empty) | `<not a number>` |
 | a node nested 128 levels (`GUATIAO_MAX_DEPTH`) below the one printed | `...` |
 
 The bound keeps the line, and the stack, finite for a hostile tree: a

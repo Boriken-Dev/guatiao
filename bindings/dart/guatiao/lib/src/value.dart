@@ -563,7 +563,8 @@ class Ref {
   /// a `"data:;base64,..."` string. Display only: nothing reads it back. A
   /// node in the wiping allocator prints `[sensitive]`, an absent one
   /// `absent`, and a node nested 128 levels below this one prints `...`;
-  /// none of these is an error.
+  /// none of these is an error. A placeholder is bare, never quoted, so
+  /// the line is valid JSON exactly when none appears.
   String toInlineText() {
     final source = requireNode();
     final core = native.core();
