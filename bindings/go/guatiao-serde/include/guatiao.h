@@ -2761,6 +2761,46 @@ guatiao_status guatiao_schema_redact(const struct guatiao_value *schema,
                                      struct guatiao_value *out);
 
 /*
+ Where `value` differs from `baseline`, or from the schema's defaults
+ when `baseline` is null, written to `out` as a list through `alloc`.
+
+ Each element is a map `{path: [text...], key: text, value: .., default:
+ ..}`: `path` the key segments from the root, `key` the same as one line
+ in the path grammar of `guatiao-intake` (`tls.ca`, `peers[0].name`,
+ `["a.b"]`), `value` what `value` holds there and `default` what the
+ baseline holds. Either is left out where that side has nothing. The
+ list is in the order of the path segments, compared as text.
+
+ A differing object field, open-map key or field of a variant that kept
+ its arm is a place of its own. Everything else is **one place, compared
+ whole**: a number, text, a list, a tuple (a duration), an enumeration,
+ an untagged union, a variant that changed arm, and a container one side
+ does not have. A field absent from a side reads as its schema default
+ when it has one.
+
+ A secret (a field the schema marks `x-sensitive` or `writeOnly`, or a
+ key it does not declare) is compared as it is and reported as
+ `placeholder` on each side that has a value, so a changed secret is
+ listed and never shown. Local `$ref`s are followed first.
+
+ `GUATIAO_ERR_WRONG_KIND` for a schema that is not a map,
+ `GUATIAO_ERR_BAD_VALUE` for a placeholder that is not UTF-8 or a tree
+ nested past `GUATIAO_MAX_DEPTH`, `GUATIAO_ERR_ALLOC` for a null or
+ unusable allocator. `out` is written ABSENT first.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says, the view's bytes
+ are readable, and `out` addresses writable storage for one value.
+ */
+guatiao_status guatiao_schema_differences(const struct guatiao_value *schema,
+                                          const struct guatiao_value *value,
+                                          const struct guatiao_value *baseline,
+                                          struct guatiao_str placeholder,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
  Reads a span into `out`: an ISO 8601 duration (`P1Y2M3W4DT5H6M7.5S`,
  `-P1D`, designators in either case, a fraction on the seconds only) or
  the friendly form (`1y 2mo 3w 4d 5h 6m 7s 500ms 1us 1ns`, lowercase,

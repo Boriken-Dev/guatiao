@@ -1,0 +1,304 @@
+{
+  "placeholder": "***",
+  "cases": [
+    {
+      "name": "a nested object reports the one field that moved",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "default": "a"},
+          "waiting": {
+            "type": "object",
+            "default": {"per_source": 1, "max": 4},
+            "properties": {
+              "per_source": {"type": "integer", "default": 1},
+              "max": {"type": "integer", "default": 4}
+            }
+          }
+        }
+      },
+      "value": {"name": "a", "waiting": {"per_source": 2, "max": 4}},
+      "expected": [
+        {"path": ["waiting", "per_source"], "key": "waiting.per_source", "value": 2, "default": 1}
+      ]
+    },
+    {
+      "name": "a field left out equals its default and is no difference",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "default": "a"},
+          "waiting": {
+            "type": "object",
+            "default": {"per_source": 1, "max": 4},
+            "properties": {
+              "per_source": {"type": "integer", "default": 1},
+              "max": {"type": "integer", "default": 4}
+            }
+          }
+        }
+      },
+      "value": {"waiting": {"per_source": 1}},
+      "expected": []
+    },
+    {
+      "name": "a list is reported whole, never per element",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "cipher_suites": {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": ["aes", "chacha"]
+          }
+        }
+      },
+      "value": {"cipher_suites": ["chacha", "aes"]},
+      "expected": [
+        {
+          "path": ["cipher_suites"],
+          "key": "cipher_suites",
+          "value": ["chacha", "aes"],
+          "default": ["aes", "chacha"]
+        }
+      ]
+    },
+    {
+      "name": "a duration tuple is one key",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "integer"}],
+            "items": false,
+            "minItems": 2,
+            "default": [5, 0]
+          }
+        }
+      },
+      "value": {"timeout": [10, 500]},
+      "expected": [
+        {"path": ["timeout"], "key": "timeout", "value": [10, 500], "default": [5, 0]}
+      ]
+    },
+    {
+      "name": "an open map key added and one removed",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "env": {"type": "object", "additionalProperties": {"type": "string"}}
+        }
+      },
+      "value": {"env": {"A": "1", "B": "2"}},
+      "baseline": {"env": {"B": "2", "C": "3"}},
+      "expected": [
+        {"path": ["env", "A"], "key": "env.A", "value": "1"},
+        {"path": ["env", "C"], "key": "env.C", "default": "3"}
+      ]
+    },
+    {
+      "name": "a map key holding a dot is one segment",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "env": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}}
+        }
+      },
+      "value": {"env": {"a.b": "1"}},
+      "expected": [
+        {"path": ["env", "a.b"], "key": "env[\"a.b\"]", "value": "1"}
+      ]
+    },
+    {
+      "name": "a variant that switched arm is one key",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "type": "object",
+            "x-variant-tag": "kind",
+            "default": {"kind": "none"},
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {"kind": {"const": "none"}},
+                "required": ["kind"]
+              },
+              {
+                "type": "object",
+                "properties": {"kind": {"const": "pw"}, "user": {"type": "string"}},
+                "required": ["kind"]
+              }
+            ]
+          }
+        }
+      },
+      "value": {"auth": {"kind": "pw", "user": "ana"}},
+      "expected": [
+        {
+          "path": ["auth"],
+          "key": "auth",
+          "value": {"kind": "pw", "user": "ana"},
+          "default": {"kind": "none"}
+        }
+      ]
+    },
+    {
+      "name": "a variant that kept its arm is walked",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "type": "object",
+            "x-variant-tag": "kind",
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {"const": "pw"},
+                  "user": {"type": "string"},
+                  "retries": {"type": "integer", "default": 3}
+                },
+                "required": ["kind"]
+              }
+            ]
+          }
+        }
+      },
+      "value": {"auth": {"kind": "pw", "user": "ana", "retries": 3}},
+      "baseline": {"auth": {"kind": "pw", "user": "bo"}},
+      "expected": [
+        {"path": ["auth", "user"], "key": "auth.user", "value": "ana", "default": "bo"}
+      ]
+    },
+    {
+      "name": "an optional field that is set has no default to match",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "nickname": {"type": ["string", "null"]},
+          "name": {"type": "string", "default": "a"}
+        }
+      },
+      "value": {"nickname": "bo", "name": "a"},
+      "expected": [
+        {"path": ["nickname"], "key": "nickname", "value": "bo"}
+      ]
+    },
+    {
+      "name": "a secret that changed is reported and never shown",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "user": {"type": "string", "default": "root"},
+          "password": {"type": "string", "x-sensitive": true, "default": ""}
+        }
+      },
+      "value": {"user": "ana", "password": "hunter2"},
+      "expected": [
+        {"path": ["password"], "key": "password", "value": "***", "default": "***"},
+        {"path": ["user"], "key": "user", "value": "ana", "default": "root"}
+      ]
+    },
+    {
+      "name": "a secret that did not change is not listed",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "password": {"type": "string", "x-sensitive": true, "default": ""}
+        }
+      },
+      "value": {"password": ""},
+      "expected": []
+    },
+    {
+      "name": "a secret set with no default shows only the placeholder",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "token": {"type": ["string", "null"], "x-sensitive": true}
+        }
+      },
+      "value": {"token": "abc"},
+      "expected": [
+        {"path": ["token"], "key": "token", "value": "***"}
+      ]
+    },
+    {
+      "name": "a secret inside a list that is reported whole stays hidden",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "peers": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {"type": "string"},
+                "key": {"type": "string", "x-sensitive": true}
+              }
+            }
+          }
+        }
+      },
+      "value": {"peers": [{"host": "h", "key": "k"}]},
+      "expected": [
+        {
+          "path": ["peers"],
+          "key": "peers",
+          "value": [{"host": "h", "key": "***"}],
+          "default": []
+        }
+      ]
+    },
+    {
+      "name": "a key the schema does not declare is reported hidden",
+      "schema": {
+        "type": "object",
+        "properties": {"name": {"type": "string", "default": "a"}}
+      },
+      "value": {"name": "a", "extra": "s3cret"},
+      "expected": [
+        {"path": ["extra"], "key": "extra", "value": "***"}
+      ]
+    },
+    {
+      "name": "a baseline that leaves a field out falls back to the default",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "waiting": {
+            "type": "object",
+            "properties": {
+              "per_source": {"type": "integer", "default": 1},
+              "max": {"type": "integer", "default": 4}
+            }
+          }
+        }
+      },
+      "value": {"waiting": {"per_source": 1, "max": 9}},
+      "baseline": {"waiting": {"max": 4}},
+      "expected": [
+        {"path": ["waiting", "max"], "key": "waiting.max", "value": 9, "default": 4}
+      ]
+    },
+    {
+      "name": "a container present on one side only is one key",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "tls": {
+            "type": "object",
+            "properties": {"ca": {"type": "string"}}
+          }
+        }
+      },
+      "value": {"tls": {"ca": "x.pem"}},
+      "expected": [
+        {"path": ["tls"], "key": "tls", "value": {"ca": "x.pem"}}
+      ]
+    }
+  ]
+}

@@ -732,3 +732,145 @@ fn a_c_program_announces_sends_closes_and_receives() {
     );
     println!("{}", stdout.trim());
 }
+
+/// A JSON tree of `differences.json` as its wire bytes, in hex.
+fn json_hex(tree: &serde_json::Value) -> String {
+    guatiao::value::wire::to_bytes(&vectors::to_value(tree))
+        .expect("a vector's tree encodes")
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// `tests/vectors/differences.json` as C arrays, for
+/// `differences_consumer.c`.
+fn differences_vectors_header() -> String {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/vectors/differences.json"
+    );
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("the vector file is readable"))
+            .expect("the vector file is JSON");
+    let cases = doc["cases"].as_array().expect("cases");
+    let mut h = String::from(
+        "/* Generated from tests/vectors/differences.json by tests/c_exports.rs. */\n\
+         typedef struct { const char *name; const char *schema; const char *value;\n\
+         \x20                const char *baseline; size_t count; const char *keys[16];\n\
+         \x20                int sides[16]; } diff_vector;\n\
+         static const diff_vector DIFF_VECTORS[] = {\n",
+    );
+    for case in cases {
+        let expected = case["expected"].as_array().expect("expected");
+        assert!(expected.len() <= 16, "a case lists at most 16 differences");
+        let baseline = case
+            .get("baseline")
+            .map_or("NULL".to_string(), |b| c_string(&json_hex(b)));
+        let mut keys: Vec<String> = expected
+            .iter()
+            .map(|e| c_string(e["key"].as_str().expect("a key")))
+            .collect();
+        let mut sides: Vec<String> = expected
+            .iter()
+            .map(|e| {
+                let value = i32::from(e.get("value").is_some());
+                let base = i32::from(e.get("default").is_some());
+                (value | base << 1).to_string()
+            })
+            .collect();
+        // An empty initialiser is not C11.
+        if keys.is_empty() {
+            keys.push("NULL".into());
+            sides.push("0".into());
+        }
+        h.push_str(&format!(
+            "  {{{}, {}, {}, {baseline}, {}, {{{}}}, {{{}}}}},\n",
+            c_string(case["name"].as_str().expect("a name")),
+            c_string(&json_hex(&case["schema"])),
+            c_string(&json_hex(&case["value"])),
+            expected.len(),
+            keys.join(", "),
+            sides.join(", "),
+        ));
+    }
+    h.push_str(&format!(
+        "}};\nstatic const size_t DIFF_COUNT = {};\n",
+        cases.len()
+    ));
+    h
+}
+
+/// Every case of the differences vectors, run by a C program through
+/// `guatiao_schema_differences`: the vectors Rust and both bindings read.
+#[test]
+fn a_c_program_reads_every_differences_vector() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = manifest.join("tests/c_consumer/differences_consumer.c");
+    let include = manifest.join("include");
+
+    let Some(cc) = c_compiler::find() else {
+        println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary; run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+
+    let generated = dir.join("guatiao_differences_vectors");
+    std::fs::create_dir_all(&generated).expect("a directory for the generated header");
+    std::fs::write(
+        generated.join("differences_vectors.h"),
+        differences_vectors_header(),
+    )
+    .expect("the generated header is written");
+    let out = dir.join(if cfg!(windows) {
+        "guatiao_differences_consumer.exe"
+    } else {
+        "guatiao_differences_consumer"
+    });
+
+    let mut compile = c_compiler::command(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-I")
+        .arg(&generated)
+        .arg("-o")
+        .arg(&out)
+        .arg(&source);
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the C program did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("the program was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the C program failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the program exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}

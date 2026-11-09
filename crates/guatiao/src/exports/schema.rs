@@ -187,6 +187,79 @@ pub unsafe extern "C" fn guatiao_schema_redact(
     })
 }
 
+/// Where `value` differs from `baseline`, or from the schema's defaults
+/// when `baseline` is null, written to `out` as a list through `alloc`.
+///
+/// Each element is a map `{path: [text...], key: text, value: .., default:
+/// ..}`: `path` the key segments from the root, `key` the same as one line
+/// in the path grammar of `guatiao-intake` (`tls.ca`, `peers[0].name`,
+/// `["a.b"]`), `value` what `value` holds there and `default` what the
+/// baseline holds. Either is left out where that side has nothing. The
+/// list is in the order of the path segments, compared as text.
+///
+/// A differing object field, open-map key or field of a variant that kept
+/// its arm is a place of its own. Everything else is **one place, compared
+/// whole**: a number, text, a list, a tuple (a duration), an enumeration,
+/// an untagged union, a variant that changed arm, and a container one side
+/// does not have. A field absent from a side reads as its schema default
+/// when it has one.
+///
+/// A secret (a field the schema marks `x-sensitive` or `writeOnly`, or a
+/// key it does not declare) is compared as it is and reported as
+/// `placeholder` on each side that has a value, so a changed secret is
+/// listed and never shown. Local `$ref`s are followed first.
+///
+/// `GUATIAO_ERR_WRONG_KIND` for a schema that is not a map,
+/// `GUATIAO_ERR_BAD_VALUE` for a placeholder that is not UTF-8 or a tree
+/// nested past `GUATIAO_MAX_DEPTH`, `GUATIAO_ERR_ALLOC` for a null or
+/// unusable allocator. `out` is written ABSENT first.
+///
+/// # Safety
+///
+/// Every non-null pointer addresses what its type says, the view's bytes
+/// are readable, and `out` addresses writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_differences(
+    schema: *const Value,
+    value: *const Value,
+    baseline: *const Value,
+    placeholder: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(schema, value, out => {
+        // SAFETY: the caller's contract.
+        let (schema, value) = unsafe { (&*schema, &*value) };
+        // SAFETY: the caller's contract; null means no baseline.
+        let baseline = unsafe { baseline.as_ref() };
+        // SAFETY: the caller's contract on `alloc`.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        let placeholder = match core::str::from_utf8(placeholder.into()) {
+            Ok(text) => text,
+            Err(e) => return e.into(),
+        };
+        if SchemaRef::new(schema).is_none() {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        let inlined = match crate::schema::inline_refs(schema) {
+            Ok(inlined) => inlined,
+            Err(e) => return e.into(),
+        };
+        let Some(schema) = SchemaRef::new(&inlined) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        match crate::schema::differences_value_in(schema, value, baseline, placeholder, alloc) {
+            // SAFETY: `out` is writable by contract and holds ABSENT; the
+            // tree, built through `alloc`, moves into it.
+            Ok(found) => { unsafe { ptr::write(out, found) }; Status::GUATIAO_OK }
+            Err(e) => e.into(),
+        }
+    })
+}
+
 // --- exporting a type's own schema --------------------------------------
 
 /// The body every arm of [`export_schema`](crate::export_schema) expands

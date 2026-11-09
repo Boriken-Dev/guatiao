@@ -103,7 +103,7 @@ fn is_secret(schema: &Value) -> bool {
 /// Whether a schema marks its value as a secret: by itself, on any member
 /// of an `allOf` (every member describes the whole value), or on what an
 /// optional or a lone `allOf` wraps. Past the depth bound, assumed so.
-fn marks_secret(schema: &Value, depth: u32) -> bool {
+pub(super) fn marks_secret(schema: &Value, depth: u32) -> bool {
     if depth >= MAX_DEPTH {
         return true;
     }
@@ -133,7 +133,7 @@ fn is_container(value: &Value) -> bool {
 
 /// The schema an object gives a key it does not declare: its
 /// `additionalProperties`, when that is a schema.
-fn undeclared(owner: &Value) -> Option<&Value> {
+pub(super) fn undeclared(owner: &Value) -> Option<&Value> {
     TryAsRef::<Map>::try_as_ref(owner)
         .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
         .filter(|v| TryAsRef::<Map>::try_as_ref(*v).is_some())
@@ -297,4 +297,20 @@ impl Redactor<'_> {
         }
         Ok(out.into())
     }
+}
+
+/// `value` as the schema node `schema` describes it, secrets replaced:
+/// [`redact_in`] for a node inside a larger schema.
+pub(super) fn redact_node(
+    schema: &Value,
+    value: &Value,
+    placeholder: &str,
+    alloc: Alloc,
+) -> Result<Value, ValueError> {
+    Redactor { placeholder, alloc }.node(schema, value, 0)
+}
+
+/// The placeholder as a value.
+pub(super) fn placeholder_value(placeholder: &str, alloc: Alloc) -> Result<Value, ValueError> {
+    Redactor { placeholder, alloc }.mask()
 }

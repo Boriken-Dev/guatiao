@@ -101,6 +101,7 @@ pub mod describe;
 // layers: the `x-merge` annotation. Here rather than under the merge
 // because the merge touches values only — it is this side that
 // knows both halves. A `//` comment, never a `///`.
+mod differences;
 pub mod merge;
 mod pattern;
 pub mod read;
@@ -111,6 +112,9 @@ pub mod vocab;
 
 pub use build::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
+pub use differences::{
+    Difference, differences, differences_in, differences_value, differences_value_in,
+};
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
 pub use redact::{redact, redact_in};
 pub use refs::{inline_refs, inline_refs_in};

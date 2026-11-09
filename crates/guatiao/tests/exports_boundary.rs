@@ -972,6 +972,24 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
                 )
             });
         }),
+        ("guatiao_schema_differences", || {
+            let (schema, value) = (Value::from(Map::new()), Value::from(Map::new()));
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent(
+                "schema_differences",
+                Status::GUATIAO_ERR_ALLOC,
+                |out| unsafe {
+                    guatiao::exports::schema::guatiao_schema_differences(
+                        &schema,
+                        &value,
+                        core::ptr::null(),
+                        Str::new("*"),
+                        core::ptr::null(),
+                        out,
+                    )
+                },
+            );
+        }),
     ];
     cases.extend(time_cases());
     #[cfg(feature = "load")]

@@ -92,6 +92,7 @@ pub const guatiao::exports::merge::GUATIAO_MERGE_SIMPLE: u32
 pub const guatiao::exports::merge::GUATIAO_MERGE_SUBSTITUTE: u32
 #[no_mangle] pub unsafe c fn guatiao::exports::merge::guatiao_merge(u32, *const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, u32, *const guatiao::exports::merge::MergeOverride<'_>, usize, *mut guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::schema
+#[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_differences(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_redact(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_validate(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub unsafe fn guatiao::exports::schema::schema_export<T: guatiao::schema::describe::Schema>(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -3287,6 +3288,19 @@ pub fn guatiao::schema::read::ChoiceRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::ChoiceRef<'a>
 pub fn guatiao::schema::read::ChoiceRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::schema::read::ChoiceRef<'a>
+pub struct guatiao::schema::Difference
+pub guatiao::schema::Difference::baseline: core::option::Option<guatiao::value::value::Value>
+pub guatiao::schema::Difference::path: alloc::vec::Vec<alloc::string::String>
+pub guatiao::schema::Difference::value: core::option::Option<guatiao::value::value::Value>
+impl guatiao::schema::Difference
+pub fn guatiao::schema::Difference::key(&self) -> alloc::string::String
+impl core::clone::Clone for guatiao::schema::Difference
+pub fn guatiao::schema::Difference::clone(&self) -> Self
+impl core::cmp::PartialEq for guatiao::schema::Difference
+pub fn guatiao::schema::Difference::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::schema::Difference
+pub fn guatiao::schema::Difference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::schema::Difference
 pub struct guatiao::schema::FieldBuilder
 impl guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default(self, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
@@ -3750,6 +3764,10 @@ impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::differences(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, core::option::Option<&guatiao::value::value::Value>, &str) -> core::result::Result<alloc::vec::Vec<guatiao::schema::Difference>, guatiao::value::error::ValueError>
+pub fn guatiao::schema::differences_in(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, core::option::Option<&guatiao::value::value::Value>, &str, guatiao::value::alloc::Alloc) -> core::result::Result<alloc::vec::Vec<guatiao::schema::Difference>, guatiao::value::error::ValueError>
+pub fn guatiao::schema::differences_value(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, core::option::Option<&guatiao::value::value::Value>, &str) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::differences_value_in(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, core::option::Option<&guatiao::value::value::Value>, &str, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::inline_refs(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::inline_refs_in(&guatiao::value::value::Value, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::redact(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, &str) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
