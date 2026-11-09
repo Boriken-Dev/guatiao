@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from typing import Any, Protocol
 
 import pytest
@@ -32,7 +33,7 @@ sys.path.insert(0, str(native.GREETER_KIND_PY))
 
 from greeter_kind import Conversation, Counter, Greeter, Listener, Wide  # noqa: E402
 
-from guatiao import ABSENT, BadValue, Internal, List, Unsupported, Value, _abi, kinds  # noqa: E402
+from guatiao import ABSENT, BadValue, Gone, Internal, List, Unsupported, Value, _abi, kinds  # noqa: E402
 from guatiao.kinds import FloorMismatch, Kind, KindProtocol, Lent, Method, kind_of  # noqa: E402
 from guatiao.kinds.shapes import (  # noqa: E402
     BOOL,
@@ -392,7 +393,7 @@ def test_objects_cross_both_ways_and_are_let_go(reg):
     assert ear.heard_so_far == ["hi", "again"]
     assert kinds.live_objects() == before, "destroying the conversation let the listener go"
     conversation.close()
-    with pytest.raises(ValueError):
+    with pytest.raises(Gone):
         conversation.turns()
 
     lent_ear = Ear()
@@ -415,53 +416,93 @@ def test_a_listener_that_raises_fails_the_call_that_reached_it(reg, caplog):
     assert any("cannot fail and raised" in r.getMessage() for r in caplog.records)
 
 
-
 class _Refuser(Greeter):  # type: ignore[misc]
-    """A greeter whose `start` raises after taking the listener."""
+    """A greeter whose `start` keeps the listener it took and raises."""
 
-    def __init__(self, keep: bool) -> None:
-        self.keep = keep
-        self.kept: "Any" = None
+    def __init__(self) -> None:
+        self.kept: Any = None
 
     def greet(self, name: str) -> Any:
         return {"greeting": name}
 
     def start(self, listener: Any) -> Any:
-        if self.keep:
-            self.kept = listener
+        self.kept = listener
         raise BadValue("not today")
 
 
-def _serve_refuser(keep: bool):
-    target = _Refuser(keep)
+def test_a_slot_that_raises_gives_up_the_object_it_kept():
+    target = _Refuser()
     raw = _serve.serve(Greeter.kind, target)
-    return target, raw, Greeter.kind.bind(raw.table, raw.size, raw.ctx)
-
-
-def test_a_slot_that_raises_gives_up_the_object_it_took():
-    target, raw, remote = _serve_refuser(keep=False)
+    remote = Greeter.kind.bind(raw.table, raw.size, raw.ctx)
     try:
         before = kinds.live_objects()
         with pytest.raises(BadValue):
             remote.start(Ear())
         assert kinds.live_objects() == before, "the listener was destroyed before the call returned"
-    finally:
-        _serve.release(raw.ctx)
-
-
-def test_an_object_kept_past_the_raise_answers_gone():
-    target, raw, remote = _serve_refuser(keep=True)
-    try:
-        before = kinds.live_objects()
-        with pytest.raises(BadValue):
-            remote.start(Ear())
-        assert kinds.live_objects() == before
-        with pytest.raises(ValueError):
+        with pytest.raises(Gone) as gone:
             target.kept.heard("late")
+        assert gone.value.status == int(_abi.Status.ERR_GONE)
         target.kept.destroy()
         assert kinds.live_objects() == before
     finally:
         _serve.release(raw.ctx)
+
+
+class _Spawner(Greeter):  # type: ignore[misc]
+    """A greeter whose `start` hands the listener to a thread that is
+    inside a call on it when `start` raises."""
+
+    def __init__(self, inside: threading.Event) -> None:
+        self.inside = inside
+        self.thread: "threading.Thread | None" = None
+        self.later: "list[BaseException]" = []
+
+    def greet(self, name: str) -> Any:
+        return {"greeting": name}
+
+    def start(self, listener: Any) -> Any:
+        def run() -> None:
+            listener.heard("first")
+            try:
+                listener.heard("second")
+            except BaseException as e:
+                self.later.append(e)
+
+        self.thread = threading.Thread(target=run)
+        self.thread.start()
+        assert self.inside.wait(30)
+        raise BadValue("not today")
+
+
+def test_a_raise_does_not_destroy_an_object_while_a_thread_is_inside_a_call_on_it():
+    inside, release = threading.Event(), threading.Event()
+
+    class Blocking(Ear):
+        def heard(self, what: str) -> None:
+            super().heard(what)
+            inside.set()
+            assert release.wait(30)
+
+    target = _Spawner(inside)
+    raw = _serve.serve(Greeter.kind, target)
+    remote = Greeter.kind.bind(raw.table, raw.size, raw.ctx)
+    ear = Blocking()
+    try:
+        before = kinds.live_objects()
+        with pytest.raises(BadValue):
+            remote.start(ear)
+        assert kinds.live_objects() == before + 1, "destroy waits for the call still running"
+        release.set()
+        assert target.thread is not None
+        target.thread.join(30)
+        assert not target.thread.is_alive()
+        assert kinds.live_objects() == before, "the last call to return destroyed it"
+        assert ear.heard_so_far == ["first"]
+        assert len(target.later) == 1 and isinstance(target.later[0], Gone)
+    finally:
+        release.set()
+        _serve.release(raw.ctx)
+
 
 def test_a_table_that_is_not_the_kinds_is_refused(reg):
     with pytest.raises(FloorMismatch):
@@ -925,7 +966,7 @@ def test_a_slot_named_close_is_written_served_and_called_with_no_rename():
         session.send("still here")
         session.destroy()
         assert kinds.live_objects() == before
-        with pytest.raises(ValueError):
+        with pytest.raises(Gone):
             session.send("gone")
         # Leaving a `with` block destroys it, slot or no slot.
         with opener.open() as again:

@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import threading
 from typing import Any, Sequence
 
 from .. import _abi
-from ..errors import Unsupported, check, raise_for_status
+from ..errors import Gone, Unsupported, check, raise_for_status
 from . import _serve
 from ._shapes import BYTES_MUT, Scope, Shape, _ObjectShape, answer_shape, sensitive_answer
 from ._table import FloorMismatch
@@ -327,13 +328,24 @@ class Object(Remote):
     `destroy()` calls its `destroy` slot, once, as leaving a `with` block
     and the collector do. `close()` is `destroy()` too, unless the kind has
     a slot named `close`, which it then calls. Handed to a slot that takes
-    it, it is the callee's, and destroying it here does nothing."""
+    it, it is the callee's, and destroying it here does nothing.
+
+    A call after `destroy()` or the hand-over raises `Gone`. A `destroy()`
+    while another thread is inside a call does not wait for it (that call
+    may be waiting on this very thread): the object is closed to new calls
+    at once and the last call running calls the `destroy` slot as it
+    returns."""
 
     def __init__(self, kind: Kind, raw: "_abi.Object") -> None:
         if not kind.is_object:
             raise TypeError(f"{kind.name} is not an object kind")
         self._raw = _abi.Object.from_buffer_copy(raw)
         self._open = False
+        self._lock = threading.Lock()
+        #: Calls running now; the slot `destroy` waits for the last.
+        self._busy = 0
+        #: `destroy()` came while calls were running.
+        self._doomed = False
         # A table that is not the kind's is refused and the object left
         # alone: its slot after the header need not be a `destroy`.
         super().__init__(kind, raw.table, raw.size, raw.ctx)
@@ -344,23 +356,51 @@ class Object(Remote):
 
     def _check(self) -> None:
         if not self._open:
-            raise ValueError("this object is closed, or was handed over")
+            raise Gone(
+                int(_abi.Status.ERR_GONE), "this object is destroyed, or was handed over"
+            )
 
     def _raw_view(self) -> "_abi.Object":
-        self._check()
-        return self._raw
+        with self._lock:
+            self._check()
+            return self._raw
 
     def _release(self) -> "_abi.Object":
-        self._check()
-        self._open = False
-        return self._raw
+        with self._lock:
+            self._check()
+            self._open = False
+            return self._raw
+
+    def _call(self, method: Method, *args: Any) -> Any:
+        with self._lock:
+            self._check()
+            self._busy += 1
+        try:
+            return super()._call(method, *args)
+        finally:
+            with self._lock:
+                self._busy -= 1
+                last = self._doomed and self._busy == 0
+                if last:
+                    self._doomed = False
+            if last:
+                destroy_raw(self._raw)
 
     def destroy(self) -> None:
         """Calls the object's `destroy` slot, once; nothing after that, or
-        after the object was handed over."""
-        if getattr(self, "_open", False):
+        after the object was handed over. With a call running on another
+        thread, the last such call to return does it."""
+        lock = self.__dict__.get("_lock")
+        if lock is None:
+            return
+        with lock:
+            if not self.__dict__.get("_open", False):
+                return
             self._open = False
-            destroy_raw(self._raw)
+            if self._busy:
+                self._doomed = True
+                return
+        destroy_raw(self._raw)
 
     def close(self) -> None:
         """`destroy()`, for an object whose kind has no `close` slot."""
