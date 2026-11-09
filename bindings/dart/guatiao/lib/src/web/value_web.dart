@@ -415,6 +415,22 @@ class Ref {
     }
   }
 
+  /// This node as one line of JSON-form text; see the VM's `toInlineText`,
+  /// which this matches.
+  String toInlineText() {
+    final source = requireNode();
+    final m = _m;
+    final out = m.alloc(valueSize);
+    try {
+      checkStatus(
+        m.call('guatiao_value_inline_text', [source, m.defaultAlloc, out]),
+      );
+      return utf8.decode(_payloadBytes(out));
+    } finally {
+      freeRoot(out);
+    }
+  }
+
   /// A deep, independent copy of this node, as its own [Value].
   Value clone() {
     final source = requireNode();

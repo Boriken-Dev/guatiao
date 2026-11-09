@@ -652,6 +652,24 @@ class Ref:
             _free(out)
 
     @_reads
+    def to_inline_text(self) -> str:
+        """This node as one line of JSON-form text, for a report or a log.
+
+        No whitespace, a map in its order, a number as its own text, bytes
+        as a `"data:;base64,..."` string. Display only: nothing reads it
+        back. A node in the wiping allocator prints `[sensitive]`, an
+        absent one `absent`, and a tree nested past `MAX_DEPTH` prints
+        `...` there; none of these is an error."""
+        node = self._require_node()
+        lib = _lib.core()
+        out = _abi.Value()
+        check(lib.guatiao_value_inline_text(ctypes.byref(node), ctypes.byref(lib.alloc), ctypes.byref(out)))
+        try:
+            return _str_or(out, "")
+        finally:
+            _free(out)
+
+    @_reads
     def clone(self) -> "Value":
         """A deep, independent copy of this node, as its own `Value`."""
         node = self._require_node()

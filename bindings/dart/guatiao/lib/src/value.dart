@@ -557,6 +557,28 @@ class Ref {
     }
   }
 
+  /// This node as one line of JSON-form text, for a report or a log.
+  ///
+  /// No whitespace, a map in its order, a number as its own text, bytes as
+  /// a `"data:;base64,..."` string. Display only: nothing reads it back. A
+  /// node in the wiping allocator prints `[sensitive]`, an absent one
+  /// `absent`, and a node nested 128 levels below this one prints `...`;
+  /// none of these is an error.
+  String toInlineText() {
+    final source = requireNode();
+    final core = native.core();
+    final out = calloc<guatiao_value>();
+    try {
+      checkStatus(
+        core.bindings.guatiao_value_inline_text(source, core.alloc, out),
+      );
+      return utf8.decode(_stringBytes(out.ref.payload.text));
+    } finally {
+      core.bindings.guatiao_value_free(out);
+      calloc.free(out);
+    }
+  }
+
   /// A deep, independent copy of this node, as its own [Value].
   Value clone() {
     final source = requireNode();

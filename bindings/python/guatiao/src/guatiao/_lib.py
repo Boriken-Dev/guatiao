@@ -352,6 +352,11 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         None,
     ),
+    "guatiao_value_inline_text": (
+        [_P(Value), _P(Alloc), _P(Value)],
+        c_uint32,
+        None,
+    ),
     "guatiao_date_add_span": (
         [_P(_abi.DateFields), _P(_abi.SpanFields), _P(_abi.DateFields)],
         c_uint32,
