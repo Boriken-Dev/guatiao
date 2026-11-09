@@ -875,17 +875,17 @@ fn a_c_program_reads_every_differences_vector() {
     println!("{}", stdout.trim());
 }
 
-/// `tests/vectors/inline.json` as C arrays, for `inline_consumer.c`: each
+/// `tests/vectors/display.json` as C arrays, for `display_consumer.c`: each
 /// tree as its wire bytes in hex, beside the line it prints.
-fn inline_vectors_header() -> String {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/inline.json");
+fn display_vectors_header() -> String {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/display.json");
     let doc: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).expect("the vector file is readable"))
             .expect("the vector file is JSON");
     let mut h = String::from(
-        "/* Generated from tests/vectors/inline.json by tests/c_exports.rs. */\n\
-         typedef struct { const char *name; const char *tree; const char *text; } inline_vector;\n\
-         static const inline_vector INLINE_VECTORS[] = {\n",
+        "/* Generated from tests/vectors/display.json by tests/c_exports.rs. */\n\
+         typedef struct { const char *name; const char *tree; const char *text; } display_vector;\n\
+         static const display_vector DISPLAY_VECTORS[] = {\n",
     );
     let cases = doc["cases"].as_array().expect("cases");
     for case in cases {
@@ -897,7 +897,7 @@ fn inline_vectors_header() -> String {
         ));
     }
     h.push_str(&format!(
-        "}};\nstatic const size_t INLINE_COUNT = {};\n",
+        "}};\nstatic const size_t DISPLAY_COUNT = {};\n",
         cases.len()
     ));
     // Nodes only a hand-filled struct can be: kind 0 text, 1 a number, 2 a
@@ -905,8 +905,8 @@ fn inline_vectors_header() -> String {
     let unreadable = doc["unreadable"].as_array().expect("unreadable");
     h.push_str(
         "typedef struct { const char *name; int kind; const char *hex; const char *text; }\n\
-         \x20   inline_unreadable;\n\
-         static const inline_unreadable INLINE_UNREADABLE[] = {\n",
+         \x20   display_unreadable;\n\
+         static const display_unreadable DISPLAY_UNREADABLE[] = {\n",
     );
     for case in unreadable {
         let kind = match case["kind"].as_str().expect("a kind") {
@@ -922,19 +922,19 @@ fn inline_vectors_header() -> String {
         ));
     }
     h.push_str(&format!(
-        "}};\nstatic const size_t INLINE_UNREADABLE_COUNT = {};\n",
+        "}};\nstatic const size_t DISPLAY_UNREADABLE_COUNT = {};\n",
         unreadable.len()
     ));
     h
 }
 
 /// A value as one line of text, from a C program through
-/// `guatiao_value_inline_text`: every shared vector, a secret and the
+/// `guatiao_value_display`: every shared vector, a secret and the
 /// refusals.
 #[test]
-fn a_c_program_prints_every_inline_vector() {
+fn a_c_program_prints_every_display_vector() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = manifest.join("tests/c_consumer/inline_consumer.c");
+    let source = manifest.join("tests/c_consumer/display_consumer.c");
     let include = manifest.join("include");
 
     let Some(cc) = c_compiler::find() else {
@@ -949,14 +949,17 @@ fn a_c_program_prints_every_inline_vector() {
         return;
     };
 
-    let generated = dir.join("guatiao_inline_vectors");
+    let generated = dir.join("guatiao_display_vectors");
     std::fs::create_dir_all(&generated).expect("a directory for the generated header");
-    std::fs::write(generated.join("inline_vectors.h"), inline_vectors_header())
-        .expect("the generated header is written");
+    std::fs::write(
+        generated.join("display_vectors.h"),
+        display_vectors_header(),
+    )
+    .expect("the generated header is written");
     let out = dir.join(if cfg!(windows) {
-        "guatiao_inline_consumer.exe"
+        "guatiao_display_consumer.exe"
     } else {
-        "guatiao_inline_consumer"
+        "guatiao_display_consumer"
     });
 
     let mut compile = c_compiler::command(&cc);

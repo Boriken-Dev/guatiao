@@ -16,8 +16,8 @@ pub mod alloc;
 // with that module's own `//!` header, resolves its links in THIS scope,
 // and reports the dead ones with no file or line to find them by.
 pub mod convert;
+mod display;
 pub mod error;
-pub mod inline;
 pub mod merge;
 mod raw;
 pub mod read;
@@ -39,7 +39,6 @@ pub mod value;
 pub use alloc::{Alloc, AllocError, Allocator, rust_alloc, wiping_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 pub use error::{MAX_DEPTH, ValueError};
-pub use inline::Inline;
 pub use read::{Dump, bool_or, bytes_or, float_or, int_or, str_or};
 pub use secret::Secret;
 pub use span::Span;

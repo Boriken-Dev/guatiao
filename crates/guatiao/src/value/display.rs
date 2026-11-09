@@ -2,22 +2,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! A value as one line of JSON-form text, for a report or a log.
+//! `Display` for [`Value`]: a value as one line of text, for a report or a log.
 //!
-//! [`Inline`] writes what `guatiao-serde`'s JSON text
-//! (`guatiao_serde::text::json`) writes for the same tree, bytes as a
-//! `data:;base64,` string and numbers as their own text: no whitespace,
+//! **The form is not a contract.** Today the text is JSON form, and it may
+//! change: nothing may parse it, and it is not an encoding (the wire
+//! encoding is in [`wire`](crate::value::wire)). It writes what
+//! `guatiao-serde`'s JSON text (`guatiao_serde::text::json`) writes for
+//! the same tree, bytes as a `data:;base64,` string and numbers as their
+//! own text: no whitespace,
 //! `[1,"a"]` and `{"k":null}`, a map in the order its keys were set. It
 //! needs no format crate, which is why a crate that only shows a value
 //! does not take one. Like that text it escapes only `"`, `\\` and the
 //! characters below U+0020: U+007F, U+0085 (and the other C1 controls),
 //! U+2028 and U+2029 are written as they are.
 //!
-//! **Display only.** The text is written and never parsed: nothing here
-//! reads it back, and it is not a wire format (the wire encoding is in
-//! [`wire`](crate::value::wire)). Four things it shows that JSON cannot
-//! carry, all as bare placeholders, never quoted, so the line is valid
-//! JSON exactly when none appears:
+//! What JSON cannot carry prints as a bare placeholder, never quoted, so
+//! the line is valid JSON exactly when none appears:
 //!
 //! - a node in [`Alloc::wiping`](crate::Alloc::wiping), and a map key
 //!   there, print as `[sensitive]`, a container without its contents; a
@@ -39,11 +39,11 @@ use super::convert::TryAsRef;
 use super::error::MAX_DEPTH;
 use super::types::{List, Map, Number, Tag, Value};
 
-/// A value as one line of JSON-form text, through [`Display`](fmt::Display).
+/// A value as one line of text: JSON form today, and not a contract, so
+/// nothing may parse it. `Debug` stays tag-only.
 ///
 /// ```
 /// use guatiao::{List, Map, Value};
-/// use guatiao::value::Inline;
 ///
 /// let mut list = List::new();
 /// list.push(1);
@@ -52,13 +52,17 @@ use super::types::{List, Map, Number, Tag, Value};
 /// map.set("items", list);
 /// map.set("none", Value::null());
 /// assert_eq!(
-///     Inline(&Value::from(map)).to_string(),
+///     Value::from(map).to_string(),
 ///     r#"{"items":[1,"a\"b"],"none":null}"#,
 /// );
 /// ```
 ///
 /// See the module for what is shown in place of what JSON cannot say.
-pub struct Inline<'a>(pub &'a Value);
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_value(f, self, 0)
+    }
+}
 
 /// What is printed in place of a node or key in the wiping allocator.
 const SENSITIVE: &str = "[sensitive]";
@@ -68,18 +72,6 @@ const NOT_UTF8: &str = "<not utf-8>";
 
 /// What is printed in place of a number outside JSON's grammar.
 const NOT_A_NUMBER: &str = "<not a number>";
-
-impl fmt::Display for Inline<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_value(f, self.0, 0)
-    }
-}
-
-impl fmt::Debug for Inline<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
 
 fn write_value(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result {
     if depth >= MAX_DEPTH {
@@ -210,7 +202,7 @@ mod tests {
     use super::*;
 
     fn text(v: Value) -> alloc::string::String {
-        Inline(&v).to_string()
+        v.to_string()
     }
 
     #[test]

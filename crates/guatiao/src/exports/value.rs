@@ -811,10 +811,12 @@ pub unsafe extern "C" fn guatiao_value_is_sensitive(value: *const Value) -> bool
     unsafe { value.as_ref() }.is_some_and(Value::is_sensitive)
 }
 
-/// Writes `value` as one line of JSON-form text, a string value built in
-/// `alloc` and moved into `out`, which is written ABSENT first.
+/// Writes `value`'s display text, a string value built in `alloc` and moved
+/// into `out`, which is written ABSENT first.
 ///
-/// For a report or a log; the text is written and never read back. No
+/// For a report or a log; the text is written and never read back. Its form
+/// is JSON-like today and is not a contract: it may change, so nothing may
+/// parse it. Today it is one line, with no
 /// whitespace, a map in its order, a number as its own text, bytes as a
 /// `"data:;base64,..."` string, text with JSON's escapes (only `"`, `\\`
 /// and the characters below U+0020 are escaped: U+007F, U+0085 and the
@@ -839,7 +841,7 @@ pub unsafe extern "C" fn guatiao_value_is_sensitive(value: *const Value) -> bool
 /// Every non-null pointer addresses what its type says; `out` addresses
 /// writable storage holding nothing the caller still owns.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn guatiao_value_inline_text(
+pub unsafe extern "C" fn guatiao_value_display(
     value: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
@@ -851,7 +853,7 @@ pub unsafe extern "C" fn guatiao_value_inline_text(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: checked non-null and well-formed by contract.
-        let shown = crate::value::Inline(unsafe { &*value }).to_string();
+        let shown = unsafe { &*value }.to_string();
         match Text::new_in(a, &shown) {
             // SAFETY: `out` is writable and holds no value the caller owns.
             Ok(text) => { unsafe { ptr::write(out, Value::from(text)) }; Status::GUATIAO_OK }

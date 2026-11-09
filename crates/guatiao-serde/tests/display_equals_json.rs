@@ -2,13 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! `guatiao::value::Inline` prints, for every value JSON can say, the
-//! text this crate's JSON writer prints with its default presentation:
-//! the line a report can show without a format crate in the build.
+//! `Display for Value` prints, for every value JSON can say, the text this
+//! crate's JSON writer prints with its default presentation. That is its
+//! form today and not a contract: a change of form is a deliberate edit of
+//! this test.
 
 #![cfg(feature = "json")]
 
-use guatiao::value::Inline;
 use guatiao_serde::Presentation;
 use guatiao_serde::text::json;
 
@@ -16,10 +16,10 @@ use guatiao_serde::text::json;
 mod vectors;
 
 #[test]
-fn inline_text_is_what_the_json_writer_prints() {
+fn display_is_what_the_json_writer_prints() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../guatiao/tests/vectors/inline.json"
+        "/../guatiao/tests/vectors/display.json"
     );
     let doc: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).expect("the vector file is readable"))
@@ -37,7 +37,7 @@ fn inline_text_is_what_the_json_writer_prints() {
             continue;
         }
         assert_eq!(
-            Inline(&value).to_string(),
+            value.to_string(),
             json::to_string(&value, Presentation::new()).expect("JSON can say it"),
             "{name}"
         );

@@ -3473,10 +3473,12 @@ bool guatiao_alloc_is_wiping(const struct guatiao_alloc *alloc);
 bool guatiao_value_is_sensitive(const struct guatiao_value *value);
 
 /*
- Writes `value` as one line of JSON-form text, a string value built in
- `alloc` and moved into `out`, which is written ABSENT first.
+ Writes `value`'s display text, a string value built in `alloc` and moved
+ into `out`, which is written ABSENT first.
 
- For a report or a log; the text is written and never read back. No
+ For a report or a log; the text is written and never read back. Its form
+ is JSON-like today and is not a contract: it may change, so nothing may
+ parse it. Today it is one line, with no
  whitespace, a map in its order, a number as its own text, bytes as a
  `"data:;base64,..."` string, text with JSON's escapes (only `"`, `\\`
  and the characters below U+0020 are escaped: U+007F, U+0085 and the
@@ -3501,9 +3503,9 @@ bool guatiao_value_is_sensitive(const struct guatiao_value *value);
  Every non-null pointer addresses what its type says; `out` addresses
  writable storage holding nothing the caller still owns.
  */
-guatiao_status guatiao_value_inline_text(const struct guatiao_value *value,
-                                         const struct guatiao_alloc *alloc,
-                                         struct guatiao_value *out);
+guatiao_status guatiao_value_display(const struct guatiao_value *value,
+                                     const struct guatiao_alloc *alloc,
+                                     struct guatiao_value *out);
 
 /*
  Overwrites with zeros every byte `v`'s tree owns (its texts, numbers,

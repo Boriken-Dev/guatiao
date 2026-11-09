@@ -802,20 +802,12 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
                 guatiao_wire_encode(core::ptr::null(), &value, out)
             });
         }),
-        ("guatiao_value_inline_text", || {
+        ("guatiao_value_display", || {
             let value = Value::null();
             // SAFETY: a null allocator is the failure under test.
-            leaves_absent(
-                "value_inline_text",
-                Status::GUATIAO_ERR_ALLOC,
-                |out| unsafe {
-                    guatiao::exports::value::guatiao_value_inline_text(
-                        &value,
-                        core::ptr::null(),
-                        out,
-                    )
-                },
-            );
+            leaves_absent("value_display", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao::exports::value::guatiao_value_display(&value, core::ptr::null(), out)
+            });
         }),
         ("guatiao_wire_decode", || {
             let alloc = Alloc::rust();

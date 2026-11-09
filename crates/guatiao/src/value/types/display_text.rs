@@ -2,17 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The one-line text of nodes a checked builder refuses (`Inline`), built
+//! The one-line text of nodes a checked builder refuses (`Display for Value`), built
 //! over borrowed bytes: here because that takes `unsafe`, which the writer's
 //! own module forbids.
 
 use alloc::string::ToString;
 
-use crate::value::inline::Inline;
 use crate::value::types::{Map, Number, Payload, Tag, Text, Value};
 
 fn text(v: Value) -> alloc::string::String {
-    Inline(&v).to_string()
+    v.to_string()
 }
 
 fn borrowed(bytes: &[u8]) -> Text {
@@ -26,7 +25,7 @@ fn borrowed(bytes: &[u8]) -> Text {
 #[test]
 fn the_unreadable_vectors_print_their_placeholders() {
     let doc: serde_json::Value =
-        serde_json::from_str(include_str!("../../../tests/vectors/inline.json")).unwrap();
+        serde_json::from_str(include_str!("../../../tests/vectors/display.json")).unwrap();
     let cases = doc["unreadable"].as_array().unwrap();
     assert!(cases.len() >= 7);
     for case in cases {
