@@ -557,22 +557,12 @@ class Ref {
     }
   }
 
-  /// This node as one line of JSON-form text, for a report or a log.
-  ///
-  /// No whitespace, a map in its order, a number as its own text, bytes as
-  /// a `"data:;base64,..."` string. Display only: nothing reads it back. A
-  /// node in the wiping allocator prints `[sensitive]`, an absent one
-  /// `absent`, and a node nested 128 levels below this one prints `...`;
-  /// none of these is an error. A placeholder is bare, never quoted, so
-  /// the line is valid JSON exactly when none appears.
-  String toInlineText() {
+  String _displayText() {
     final source = requireNode();
     final core = native.core();
     final out = calloc<guatiao_value>();
     try {
-      checkStatus(
-        core.bindings.guatiao_value_inline_text(source, core.alloc, out),
-      );
+      checkStatus(core.bindings.guatiao_value_display(source, core.alloc, out));
       return utf8.decode(_stringBytes(out.ref.payload.text));
     } finally {
       core.bindings.guatiao_value_free(out);
@@ -592,8 +582,20 @@ class Ref {
     );
   }
 
+  /// This node as one line of text, for a report or a log. Its form is
+  /// JSON-like today and is not a contract: it may change, so do not parse
+  /// it. A node in the wiping allocator prints `[sensitive]`, an absent one
+  /// `absent`, and a node nested 128 levels below this one prints `...`;
+  /// none of these is an error. A path that no longer leads to a node gives
+  /// `Ref($path)`.
   @override
-  String toString() => 'Ref($path)';
+  String toString() {
+    try {
+      return _displayText();
+    } on StateError {
+      return '$runtimeType($path)';
+    }
+  }
 }
 
 /// A [Ref] whose node is a map: the map protocol over it.
@@ -688,9 +690,6 @@ class MapRef extends Ref {
       ),
     );
   }
-
-  @override
-  String toString() => 'MapRef($path)';
 }
 
 /// A [Ref] whose node is a list: the list protocol over it.
@@ -847,9 +846,6 @@ class ListRef extends Ref {
       calloc.free(tmp);
     }
   }
-
-  @override
-  String toString() => 'ListRef($path)';
 }
 
 /// Owns a root `guatiao_value` and the tree under it.
@@ -1043,10 +1039,7 @@ class Value extends Ref implements ValueOwner, Finalizable {
     calloc.free(_raw);
   }
 
+  /// The display text of [Ref.toString], or `Value(closed)` once closed.
   @override
-  String toString() => _closed
-      ? 'Value(closed)'
-      : isSensitive
-      ? 'Value([sensitive])'
-      : 'Value(${toDart()})';
+  String toString() => _closed ? 'Value(closed)' : super.toString();
 }

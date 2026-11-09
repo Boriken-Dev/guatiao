@@ -352,7 +352,7 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         None,
     ),
-    "guatiao_value_inline_text": (
+    "guatiao_value_display": (
         [_P(Value), _P(Alloc), _P(Value)],
         c_uint32,
         None,

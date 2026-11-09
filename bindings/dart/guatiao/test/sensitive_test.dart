@@ -128,7 +128,7 @@ void main() {
     addTearDown(secret.close);
     expect(secret.isSensitive, isTrue);
     expect(_livesInWiping(secret.pointer), isTrue);
-    expect(secret.toString(), 'Value([sensitive])');
+    expect(secret.toString(), '[sensitive]');
     expect(secret.toString(), isNot(contains('hunter2')));
     final copy = Value.fromDart(secret);
     addTearDown(copy.close);

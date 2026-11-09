@@ -478,14 +478,15 @@ span.add_to(date_or_naive_datetime)         # same type back
   a `date` or a result outside the years 1 to 9999; `ValueError` for an
   aware `datetime`.
 
-## A value as one line
+## A value's display text
 
-`ref.to_inline_text() -> str` (any `Ref`) is the node as one line of JSON-form
-text for a report or a log: no spaces, a number as its text, bytes as a
-`"data:;base64,..."` string, a map in its order. Display only, never parsed. A
-node in the wiping allocator prints `[sensitive]`, an absent one `absent`, a node
-128 levels down `...`; none raises. Placeholders are bare, never quoted, so the line is valid JSON exactly when none appears. The text is stated in `docs/encodings.md`
-and pinned by `tests/vectors/inline.json`.
+`str(ref)` (any `Ref`) is the node as one line of text for a report or a log.
+**Its form is not a contract and may change**; today it is JSON form: no
+spaces, a number as its text, bytes as a `"data:;base64,..."` string, a map in
+its order. Never parse it. A node in the wiping allocator prints `[sensitive]`,
+an absent one `absent`, a node 128 levels down `...`; none raises. A closed
+value gives its `repr`. The text is in `docs/encodings.md` and pinned by
+`tests/vectors/display.json`; `repr` is unchanged.
 
 ## wire: values as bytes, and channels
 

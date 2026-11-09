@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   releasing it; `Ref.isSensitive`, `Ref.reveal` (`RevealedBytes` over the
   tree's own bytes, readable during the callback only, the value refusing
   to change or be freed meanwhile) and `Value.wipe()`; `toString` shows
-  `Value([sensitive])` for a value holding anything there. A slot a kind
+  `[sensitive]` for a value holding anything there. A slot a kind
   marks sensitive (`@sensitive` in `describe.dart`, `"sensitive": true` in
   a description, `KindSlot.sensitive`) answers a `Value` kept in the
   wiping allocator, a text answer included.

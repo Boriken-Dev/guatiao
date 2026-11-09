@@ -652,24 +652,27 @@ class Ref:
             _free(out)
 
     @_reads
-    def to_inline_text(self) -> str:
-        """This node as one line of JSON-form text, for a report or a log.
-
-        No whitespace, a map in its order, a number as its own text, bytes
-        as a `"data:;base64,..."` string. Display only: nothing reads it
-        back. A node in the wiping allocator prints `[sensitive]`, an
-        absent one `absent`, and a tree nested past `MAX_DEPTH` prints
-        `...` there; none of these is an error. A placeholder is bare,
-        never quoted, so the line is valid JSON exactly when none
-        appears."""
+    def _display(self) -> str:
         node = self._require_node()
         lib = _lib.core()
         out = _abi.Value()
-        check(lib.guatiao_value_inline_text(ctypes.byref(node), ctypes.byref(lib.alloc), ctypes.byref(out)))
+        check(lib.guatiao_value_display(ctypes.byref(node), ctypes.byref(lib.alloc), ctypes.byref(out)))
         try:
             return _str_or(out, "")
         finally:
             _free(out)
+
+    def __str__(self) -> str:
+        """This node as one line of text, for a report or a log. Its form
+        is JSON-like today and is not a contract: it may change, so do not
+        parse it. A node in the wiping allocator prints `[sensitive]`, an
+        absent one `absent`, and a tree nested past `MAX_DEPTH` prints
+        `...` there. A closed value, or a path that no longer leads to a
+        node, gives its `repr`."""
+        try:
+            return self._display()
+        except (ValueError, LookupError):
+            return repr(self)
 
     @_reads
     def clone(self) -> "Value":

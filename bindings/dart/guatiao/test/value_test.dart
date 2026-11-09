@@ -18,7 +18,7 @@ void main() {
   test('a secret lives in the wiping allocator and is never shown', () {
     final secret = Value.sensitive({'user': 'alice', 'token': 'hunter2'});
     expect(secret.isSensitive, isTrue);
-    expect(secret.toString(), 'Value([sensitive])');
+    expect(secret.toString(), '[sensitive]');
     final token = secret.asMap()['token']!;
     expect(token.isSensitive, isTrue);
     expect(token.reveal((bytes) => String.fromCharCodes(bytes)), 'hunter2');

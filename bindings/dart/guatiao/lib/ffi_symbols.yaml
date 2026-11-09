@@ -170,12 +170,12 @@ files:
         name: guatiao_value_bytes
       c:@F@guatiao_value_clone:
         name: guatiao_value_clone
+      c:@F@guatiao_value_display:
+        name: guatiao_value_display
       c:@F@guatiao_value_free:
         name: guatiao_value_free
       c:@F@guatiao_value_from_walker:
         name: guatiao_value_from_walker
-      c:@F@guatiao_value_inline_text:
-        name: guatiao_value_inline_text
       c:@F@guatiao_value_is_sensitive:
         name: guatiao_value_is_sensitive
       c:@F@guatiao_value_list:

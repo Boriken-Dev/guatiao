@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""`Ref.to_inline_text` against the shared vectors every implementation
+"""`Ref.__str__` against the shared vectors every implementation
 reads."""
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ _CASES = json.loads(
         / "guatiao"
         / "tests"
         / "vectors"
-        / "inline.json"
+        / "display.json"
     ).read_text(encoding="utf-8")
 )["cases"]
 
@@ -61,20 +61,26 @@ def test_the_vectors_are_read():
 @pytest.mark.parametrize("case", _CASES, ids=[c["name"] for c in _CASES])
 def test_every_vector(case):
     with build(case["tree"]) as value:
-        assert value.to_inline_text() == case["text"]
+        assert str(value) == case["text"]
 
 
 def test_a_child_prints_alone():
     with Value({"outer": {"inner": [1, "two"]}}) as value:
-        assert value.as_map()["outer"].to_inline_text() == '{"inner":[1,"two"]}'
+        assert str(value.as_map()["outer"]) == '{"inner":[1,"two"]}'
 
 
 def test_a_secret_is_not_shown():
     with Value("hunter2", alloc=wiping_alloc()) as secret:
-        assert secret.to_inline_text() == "[sensitive]"
+        assert str(secret) == "[sensitive]"
     with Value({"user": "alice"}) as value:
         with Value("hunter2", alloc=wiping_alloc()) as secret:
             value.as_map()["password"] = secret
-        shown = value.to_inline_text()
+        shown = str(value)
         assert "hunter2" not in shown
         assert shown == '{"user":"alice","password":[sensitive]}'
+
+
+def test_a_closed_value_gives_its_repr():
+    value = Value({"a": 1})
+    value.close()
+    assert str(value) == repr(value) == "<guatiao.Value closed>"

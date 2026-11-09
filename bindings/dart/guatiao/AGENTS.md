@@ -561,14 +561,16 @@ span.isZero; span.isNegative            // == unit by unit; hashable
   result outside the years 0000 to 9999. `Span(...)` throws `BadValue`
   for fields of both signs or nanoseconds of a second or more.
 
-## A value as one line
+## A value's display text
 
-`ref.toInlineText() -> String` (any `Ref`, VM and web) is the node as one line of
-JSON-form text for a report or a log: no spaces, a number as its text, bytes as a
-`"data:;base64,..."` string, a map in its order. Display only, never parsed. A
-node in the wiping allocator prints `[sensitive]`, an absent one `absent`, a node
-128 levels down `...`; none throws. Placeholders are bare, never quoted, so the line is valid JSON exactly when none appears. The text is stated in `docs/encodings.md`
-and pinned by `tests/vectors/inline.json`.
+`ref.toString()` (any `Ref`, VM and web) is the node as one line of text for a
+report or a log. **Its form is not a contract and may change**; today it is JSON
+form: no spaces, a number as its text, bytes as a `"data:;base64,..."` string, a
+map in its order. Never parse it. A node in the wiping allocator prints
+`[sensitive]`, an absent one `absent`, a node 128 levels down `...`; none
+throws. A closed `Value` gives `Value(closed)`, a path that no longer leads to a
+node `Ref(path)`. The text is in `docs/encodings.md` and pinned by
+`tests/vectors/display.json`.
 
 ## wire: values as bytes, and channels
 
@@ -753,7 +755,7 @@ leaves included. The same on the VM and the web.
 ```dart
 final secret = Value.sensitive({'token': 't0ken'});   // built in the wiping allocator
 secret.isSensitive;                                    // true
-secret.toString();                                     // 'Value([sensitive])'
+secret.toString();                                     // '[sensitive]'
 secret.asMap()['token']!.reveal((bytes) => use(bytes)); // RevealedBytes: the tree's own bytes
 secret.close();                                        // overwritten, then freed
 other.wipe();                                          // any Value: overwritten, freed, left null
@@ -776,7 +778,7 @@ other.wipe();                                          // any Value: overwritten
   as `v`. One isolate runs one call at a
   time, so two `close()`s cannot interleave: nothing more is needed there. `StateError` for any other node.
 - `Ref.isSensitive`; `toString` of a `Value` holding anything in the
-  wiping allocator is `Value([sensitive])`. `Value.wipe()` overwrites
+  wiping allocator is `[sensitive]`. `Value.wipe()` overwrites
   every byte a tree holds, in any allocator, and frees it.
 - **A slot marked sensitive** (`@sensitive` in `describe.dart`;
   `"sensitive": true` in a description; not part of the floor hash): the

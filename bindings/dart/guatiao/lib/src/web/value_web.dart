@@ -415,15 +415,13 @@ class Ref {
     }
   }
 
-  /// This node as one line of JSON-form text; see the VM's `toInlineText`,
-  /// which this matches.
-  String toInlineText() {
+  String _displayText() {
     final source = requireNode();
     final m = _m;
     final out = m.alloc(valueSize);
     try {
       checkStatus(
-        m.call('guatiao_value_inline_text', [source, m.defaultAlloc, out]),
+        m.call('guatiao_value_display', [source, m.defaultAlloc, out]),
       );
       return utf8.decode(_payloadBytes(out));
     } finally {
@@ -441,8 +439,16 @@ class Ref {
     );
   }
 
+  /// This node as one line of text; see the VM's `toString`, which this
+  /// matches.
   @override
-  String toString() => 'Ref($path)';
+  String toString() {
+    try {
+      return _displayText();
+    } on StateError {
+      return '$runtimeType($path)';
+    }
+  }
 }
 
 /// A [Ref] whose node is a map: the map protocol over it.
@@ -519,9 +525,6 @@ class MapRef extends Ref {
       ]),
     );
   }
-
-  @override
-  String toString() => 'MapRef($path)';
 }
 
 /// A [Ref] whose node is a list: the list protocol over it. [operator []=]
@@ -668,9 +671,6 @@ class ListRef extends Ref {
       freeRoot(tmp);
     }
   }
-
-  @override
-  String toString() => 'ListRef($path)';
 }
 
 /// Frees a dropped value's tree and its root block, in that order.
@@ -844,11 +844,7 @@ class Value extends Ref implements ValueOwner {
   }
 
   @override
-  String toString() => _closed
-      ? 'Value(closed)'
-      : isSensitive
-      ? 'Value([sensitive])'
-      : 'Value(${toDart()})';
+  String toString() => _closed ? 'Value(closed)' : super.toString();
 }
 
 class _Unset {

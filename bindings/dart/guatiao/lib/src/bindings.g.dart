@@ -2121,6 +2121,33 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_value_display(
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_value_display(value, alloc, out);
+  }
+
+  late final _guatiao_value_displayPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_display');
+  late final _guatiao_value_display = _guatiao_value_displayPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_value_free(ffi.Pointer<guatiao_value> v) {
     return _guatiao_value_free(v);
   }
@@ -2155,33 +2182,6 @@ class GuatiaoBindings {
         int Function(
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_walker>,
-          ffi.Pointer<guatiao_value>,
-        )
-      >();
-
-  int guatiao_value_inline_text(
-    ffi.Pointer<guatiao_value> value,
-    ffi.Pointer<guatiao_alloc> alloc,
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_value_inline_text(value, alloc, out);
-  }
-
-  late final _guatiao_value_inline_textPtr =
-      _lookup<
-        ffi.NativeFunction<
-          guatiao_status Function(
-            ffi.Pointer<guatiao_value>,
-            ffi.Pointer<guatiao_alloc>,
-            ffi.Pointer<guatiao_value>,
-          )
-        >
-      >('guatiao_value_inline_text');
-  late final _guatiao_value_inline_text = _guatiao_value_inline_textPtr
-      .asFunction<
-        int Function(
-          ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
         )
       >();

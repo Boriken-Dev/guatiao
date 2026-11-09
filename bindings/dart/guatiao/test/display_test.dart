@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// `toInlineText` against the shared vectors every implementation reads.
+/// `toString` against the shared vectors every implementation reads.
 library;
 
 import 'dart:convert';
@@ -63,7 +63,7 @@ void main() {
                 'guatiao',
                 'tests',
                 'vectors',
-                'inline.json',
+                'display.json',
               ]),
             )
             as Map<String, Object?>;
@@ -75,7 +75,7 @@ void main() {
     for (final c in cases) {
       final value = _build(c['tree']! as List<Object?>);
       try {
-        expect(value.toInlineText(), c['text'], reason: '${c['name']}');
+        expect(value.toString(), c['text'], reason: '${c['name']}');
       } finally {
         value.close();
       }
@@ -89,15 +89,21 @@ void main() {
       },
     });
     addTearDown(value.close);
-    expect(value.asMap()['outer']!.toInlineText(), '{"inner":[1,"two"]}');
+    expect(value.asMap()['outer']!.toString(), '{"inner":[1,"two"]}');
   });
 
   test('a secret is not shown', () {
     final secret = Value.sensitive('hunter2');
     addTearDown(secret.close);
-    expect(secret.toInlineText(), '[sensitive]');
+    expect(secret.toString(), '[sensitive]');
     final outer = Value.sensitive({'user': 'alice', 'password': 'hunter2'});
     addTearDown(outer.close);
-    expect(outer.toInlineText(), '[sensitive]');
+    expect(outer.toString(), '[sensitive]');
+  });
+
+  test('a closed value gives its own name', () {
+    final value = Value.fromDart({'a': 1});
+    value.close();
+    expect(value.toString(), 'Value(closed)');
   });
 }
