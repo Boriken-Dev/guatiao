@@ -14,6 +14,17 @@ write now.
 
 ### Added
 
+- **`schema::differences`: where a value differs from its schema's
+  defaults, or from a baseline.** A walk over a value with its schema (the
+  one `redact` makes) lists the key paths whose value differs, with the
+  value and the default there: `waiting.per_source`. A list, a tuple (a
+  duration) and a variant that changed arm are each one place, never
+  `x[0]`; a field left out reads as its default; a changed secret is
+  listed and shown only as the placeholder. `differences_value` answers it
+  as a list of maps `{path, key, value, default}`, which is what
+  `guatiao_schema_differences` in C, `guatiao.differences` in Python and
+  `differences` in Dart return, run against the shared vectors in
+  `tests/vectors/differences.json`. The shape is in `docs/encodings.md`.
 - **`guatiao-channel`, a two-way stream of bytes as two object kinds.**
   `channel` (`send`, `close`) is what a host writes on and `channel_sink`
   (`receive`, `closed`) what the provider writes back on, handed in by the

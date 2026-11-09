@@ -462,6 +462,43 @@ in memory guatiao manages.
   page for what it can and cannot wipe. What a provider keeps of its own
   is the provider's.
 
+## Where a value differs
+
+`guatiao_schema_differences` in C, `schema::differences_value` in Rust
+and `guatiao.differences` in Python and Dart walk a value with its
+schema and list where it departs from the schema's defaults, or from a
+second value (the baseline). The answer is a **list of maps**, one per
+place, in the order of the path segments compared as text:
+
+```json
+[{"path": ["waiting", "per_source"], "key": "waiting.per_source",
+  "value": 2, "default": 1}]
+```
+
+- `path`: the key segments from the root, a list of strings. A map key
+  is one segment whatever it holds, so `env` with the key `a.b` is
+  `["env", "a.b"]`.
+- `key`: the same path as one line in the path grammar of
+  `guatiao-intake` (`tls.ca`, `peers[0].name`, `["a.b"]`), which parses
+  back to `path`.
+- `value`: what the value holds there. Left out when it holds nothing.
+- `default`: what the baseline holds there (the schema's `default` when
+  no baseline is given). Left out when it holds nothing.
+
+**What is one place.** An object's declared fields, an open map's keys
+and a variant's fields (when both sides name the same arm) are walked.
+Everything else is one place, compared whole: a scalar, a **list**
+(reported whole, never as `x[0]`), a tuple (an exact length is one), an
+enumeration, an untagged union, a variant that changed arm, and a
+container that only one side has.
+
+A field a side leaves out reads as its schema `default`, so a field
+equal to its default is no difference whether it is written or not; with
+no default it stays absent, so an optional field that is set is
+reported. A secret is compared as it is and reported as the placeholder
+on each side that has a value, and a key the schema does not declare is
+reported the same way. Local `$ref`s are followed.
+
 ## Values on the wire
 
 The forms above are trees of the eight kinds. To carry a tree as bytes,

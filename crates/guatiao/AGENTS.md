@@ -1109,6 +1109,10 @@ validate_value(field, &value)  -> Result<(), ValidationError>
 validate_text(field, text)     // one text against one field's kind
 schema::validate::{bool_is_true, text_of, BOOL_WORDS}   // the text grammar
 schema::redact(schema, &value, "***") -> Result<Value, ValueError>
+schema::differences(schema, &value, baseline: Option<&Value>, "***") -> Result<Vec<Difference>, ValueError>
+schema::differences_value(schema, &value, baseline, "***") -> Result<Value, ValueError>  // the list below, as a value
+// each has an `_in` form naming the allocator
+Difference { path: Vec<String>, value: Option<Value>, baseline: Option<Value> };  difference.key() -> String
 ```
 
 **A typed value is the type its kind names.** `validate_value` requires a
@@ -1150,6 +1154,36 @@ From C, `guatiao_schema_redact(schema, value, placeholder, alloc, out)`
 does the same and follows local `$ref`s itself; `GUATIAO_ERR_WRONG_KIND`
 for a schema that is not a map, `GUATIAO_ERR_BAD_VALUE` for a placeholder
 that is not UTF-8.
+
+**`differences` lists where a value departs from the schema's defaults**,
+or from `baseline` when one is given: one `Difference` per place, with the
+value there and the baseline's (`None` where a side has none). The walk is
+`redact`'s, so **run `inline_refs` first** (a place under a `$ref` left in
+is compared whole and shown as the placeholder).
+
+- **What is one place (the leaf rule).** An object's declared fields, an
+  open map's keys and a variant's fields (when both sides name the same
+  arm) are walked. Everything else is one place, compared whole with `==`:
+  a scalar, a **list** (never `x[0]`), a **tuple** (a `Duration` is one),
+  an enum, an untagged union, a variant that changed arm, and a container
+  that one side lacks. Order: by path segments, compared as text.
+- **Defaults.** A field a side leaves out reads as its schema default, so
+  an absent field equal to the other side is no difference; with no
+  default it stays `None` (an `Option` that is set is reported). Under a
+  baseline value, a field it leaves out falls back to the schema default.
+- **Secrets.** Compared as they are (an unchanged secret is not listed),
+  then reported as the placeholder on each side that has a value. A key
+  the schema does not declare is reported the same way.
+- **`key()`** is the path in `guatiao-intake`'s grammar (`tls.ca`,
+  `peers[0].name`, `["a.b"]`), so a key holding `.` stays one segment.
+
+As a value (`differences_value`, and from C `guatiao_schema_differences(
+schema, value, baseline /* nullable */, placeholder, alloc, out)`, which
+follows local `$ref`s itself and has `redact`'s statuses): a list of maps
+`{path: [text], key: text, value: .., default: ..}`, `value` and `default`
+absent where that side has none. Python `guatiao.differences(schema, value,
+baseline=None, placeholder="***")` and Dart `differences(...)` return it.
+`tests/vectors/differences.json` is the shared vector file.
 
 **`Secret<T: Wipe>`** (`guatiao::Secret`) holds a value nobody prints,
 and wipes it when dropped. It crosses as `T` (same value, same reader);
