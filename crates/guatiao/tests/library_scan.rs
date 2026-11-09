@@ -551,7 +551,9 @@ fn fixture(name: &str) -> PathBuf {
     let digits: Vec<u8> = hex.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     let bytes: Vec<u8> = digits
         .chunks(2)
-        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).expect("hex digits"))
+        .map(|pair| {
+            u8::from_str_radix(core::str::from_utf8(pair).unwrap(), 16).expect("hex digits")
+        })
         .collect();
     let path = scratch(&format!("fixture-{name}")).join(name);
     std::fs::write(&path, bytes).unwrap();
