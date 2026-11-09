@@ -116,7 +116,6 @@ def _shim(kind: Any, method: Any) -> Any:
         err = rest[-1] if method.fallible else None
         status = int(_abi.Status.OK)
         received: "list[Any]" = []
-        ran = False
         try:
             values: "list[Any]" = [None] * n
             # What was handed over is taken first, every argument of it
@@ -138,21 +137,21 @@ def _shim(kind: Any, method: Any) -> Any:
             for i, shape in enumerate(shapes):
                 if not shape.takes:
                     values[i] = shape.receive(rest[i], scope)
-            ran = True
             result = getattr(target, method.name)(*values)
             if answer is not None:
                 answer.write(rest[n], result)
         except BaseException as exc:  # nothing may cross back into C
-            if not ran:
-                # Let go now, not when the collector runs: an object goes
-                # back to its caller's library, which may not outlive that.
-                for got in received:
-                    owner: Any = got.owner if isinstance(got, Ref) else got
-                    if hasattr(owner, "destroy"):
-                        # A taken object: its kind may have a `close` slot.
-                        owner.destroy()
-                    else:
-                        owner.close()
+            # Let go now, not when the collector runs: an object goes back
+            # to its caller's library, which may not outlive that. This
+            # holds when the method itself raised: it gives up everything
+            # it was handed, and one it kept answers GONE.
+            for got in received:
+                owner: Any = got.owner if isinstance(got, Ref) else got
+                if hasattr(owner, "destroy"):
+                    # A taken object: its kind may have a `close` slot.
+                    owner.destroy()
+                else:
+                    owner.close()
             status = _refuse(exc, err, where)
         try:
             scope.close()

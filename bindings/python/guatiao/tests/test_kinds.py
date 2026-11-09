@@ -14,7 +14,7 @@ import logging
 import os
 import re
 import sys
-from typing import Protocol
+from typing import Any, Protocol
 
 import pytest
 
@@ -414,6 +414,54 @@ def test_a_listener_that_raises_fails_the_call_that_reached_it(reg, caplog):
                 conversation.say("hi")
     assert any("cannot fail and raised" in r.getMessage() for r in caplog.records)
 
+
+
+class _Refuser(Greeter):  # type: ignore[misc]
+    """A greeter whose `start` raises after taking the listener."""
+
+    def __init__(self, keep: bool) -> None:
+        self.keep = keep
+        self.kept: "Any" = None
+
+    def greet(self, name: str) -> Any:
+        return {"greeting": name}
+
+    def start(self, listener: Any) -> Any:
+        if self.keep:
+            self.kept = listener
+        raise BadValue("not today")
+
+
+def _serve_refuser(keep: bool):
+    target = _Refuser(keep)
+    raw = _serve.serve(Greeter.kind, target)
+    return target, raw, Greeter.kind.bind(raw.table, raw.size, raw.ctx)
+
+
+def test_a_slot_that_raises_gives_up_the_object_it_took():
+    target, raw, remote = _serve_refuser(keep=False)
+    try:
+        before = kinds.live_objects()
+        with pytest.raises(BadValue):
+            remote.start(Ear())
+        assert kinds.live_objects() == before, "the listener was destroyed before the call returned"
+    finally:
+        _serve.release(raw.ctx)
+
+
+def test_an_object_kept_past_the_raise_answers_gone():
+    target, raw, remote = _serve_refuser(keep=True)
+    try:
+        before = kinds.live_objects()
+        with pytest.raises(BadValue):
+            remote.start(Ear())
+        assert kinds.live_objects() == before
+        with pytest.raises(ValueError):
+            target.kept.heard("late")
+        target.kept.destroy()
+        assert kinds.live_objects() == before
+    finally:
+        _serve.release(raw.ctx)
 
 def test_a_table_that_is_not_the_kinds_is_refused(reg):
     with pytest.raises(FloorMismatch):

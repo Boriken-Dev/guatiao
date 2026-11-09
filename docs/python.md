@@ -52,7 +52,9 @@ class Counter(KindProtocol, Protocol, kind="counter", floor_hash=1227528937):
 - An integer says its width (`I8` to `I64`, `U8` to `U64`, `USIZE`,
   `ISIZE`), as C does; a bare `int` is a `TypeError`.
 - `Lent[...]` is a tree or object lent for the call and changed where it
-  stands; `Taken[...]` one handed over; `MapAnswer` a tree answered.
+  stands; `Taken[...]` one handed over (a method that raises gives up
+  every one it was handed, and one kept past the raise answers GONE);
+  `MapAnswer` a tree answered.
 - A mistake is a `TypeError` when the class is created, naming the
   method; mypy and pyright check the code that calls or implements it.
 

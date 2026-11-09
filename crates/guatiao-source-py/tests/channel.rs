@@ -90,3 +90,47 @@ fn the_python_echo_keeps_every_rule() {
         echo.start(config, sink)
     });
 }
+
+#[test]
+fn a_python_start_that_raises_gives_up_the_sink_it_took() {
+    let Some(bridge) = bridge() else {
+        assert!(
+            std::env::var_os("GUATIAO_REQUIRE_ALL").is_none(),
+            "the bridge is not built beside this test, and GUATIAO_REQUIRE_ALL is set"
+        );
+        println!("skipped: the bridge is not built beside this test; `cargo build` first");
+        return;
+    };
+    let mut config = Map::new();
+    config.set(
+        "dirs",
+        text_list(&[repo().join("crates/guatiao-source-py/tests/python/channel_refuser")]),
+    );
+    config.set(
+        "paths",
+        text_list(&[repo().join("bindings/python/guatiao/src")]),
+    );
+    if cfg!(windows) {
+        let home =
+            python_home().expect("a Python installation on PATH, as the bridge built against");
+        config.set("import_dirs", text_list(&[home]));
+    }
+    let mut registry = Registry::new("python-refuser-host", "1.0");
+    registry
+        .add_source_file(&bridge, &config)
+        .unwrap_or_else(|e| panic!("the bridge was refused: {e}"));
+    let changed = registry.refresh();
+    assert!(changed.refused.is_empty(), "{changed:?}");
+    let refuser = registry
+        .offer::<dyn ChannelEcho>("channel_refuser_refuser")
+        .expect("the refuser is served")
+        .expect("as the trait")
+        .shared()
+        .expect("an instance");
+    let (probe, sink) = rules::Probe::new(rules::PATIENCE);
+    assert!(refuser.start(&Map::new(), sink).is_err(), "start raised");
+    assert!(
+        probe.destroyed(),
+        "the sink was destroyed before start returned"
+    );
+}

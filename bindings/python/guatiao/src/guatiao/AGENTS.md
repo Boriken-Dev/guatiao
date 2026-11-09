@@ -282,7 +282,7 @@ What crosses, each way:
 | `Lent[..]` tree | a `Value` or `Ref`, changed where it stands; what a callee built elsewhere, or wrote over it, is moved, once the call returns, into the allocator the tree recorded when it was lent, and a refused move is the call's error (the slot's own refusal first), and so is a key the callee wrote into a lent map that is not UTF-8, removed and freed (bad value) | a writable `Map`/`List`/`Ref`, valid for the call; what it adds is built in the allocator the tree records |
 | tree answer | a `Value` the caller closes | a `Value` or a view of a whole one (moved), another `Ref`, or plain data, built in the allocator the carrier names |
 | text answer | `str` | `str` |
-| `Taken[K]` | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |
+| `Taken[K]` | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns; a method that raises gives up every object and tree it was handed, so one kept past the raise answers GONE |
 | `Lent[K]` | a Python object, or a `kinds.Object` | a `kinds.Remote`, valid for the call |
 | `K` answer | a `kinds.Object`; `destroy()` (or `close()`, when `K` has no `close` slot, or leaving a `with` block) calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
 

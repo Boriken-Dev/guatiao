@@ -1,0 +1,6 @@
+# The module, the kind its provider serves, and where they are: the
+# kind's module is the channel echo's.
+type = "python"
+module = "channel_refuser"
+kinds = ["channel_echo"]
+paths = [".", "../../../../../examples/channel_echo/python"]
