@@ -14,6 +14,18 @@ write now.
 
 ### Added
 
+- **`KindBuilder::nullable` and `KindBuilder::sensitive`.** A kind built by hand
+  can accept null as well, as an `Option` does, and can be marked a secret
+  (`writeOnly` and `x-sensitive`) when it is not a field's own: a list's items,
+  a map's values, a type that is a secret by itself.
+- **`guatiao-builder`, guatiao's side of coqui-builder.** A schema, a value, a
+  filled `Partial` and a checked profile made from the description of a struct
+  built field by field: `schema`, `kind_in`, `to_value`, `from_value`,
+  `ValueSource` and `ValueView` for coqui-builder's `Source` and `Inspect`,
+  `form_source` for a form's flat store, `Described<T>` and `with_module!` to hold
+  such a type as a guatiao value, schema and field. A duration is a number of
+  seconds or its text, and an untagged enum's text side is a string. Not
+  published until coqui-builder is.
 - **`#[map(default = <expr>, none = "text")]` and `#[map(as_text)]` per item.**
   An `Option<T>` field can write its `None` as a text (`"never"`) that reads
   back as `None`, with any other value read as `T`'s: the schema is `anyOf` the

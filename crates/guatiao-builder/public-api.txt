@@ -1,0 +1,68 @@
+pub mod guatiao_builder
+pub mod guatiao_builder::text
+pub fn guatiao_builder::text::from_value(&guatiao::value::value::Value, &str) -> core::result::Result<core::option::Option<alloc::string::String>, coqui_builder::source::SourceError>
+pub fn guatiao_builder::text::to_value_in(&str, &str, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub macro guatiao_builder::with_module!
+#[non_exhaustive] pub enum guatiao_builder::FromError
+pub guatiao_builder::FromError::Fill(coqui_builder::fill::FillError)
+pub guatiao_builder::FromError::Missing(coqui_builder::partial::Missing)
+impl core::convert::From<coqui_builder::fill::FillError> for guatiao_builder::FromError
+pub fn guatiao_builder::FromError::from(coqui_builder::fill::FillError) -> guatiao_builder::FromError
+impl core::convert::From<coqui_builder::partial::Missing> for guatiao_builder::FromError
+pub fn guatiao_builder::FromError::from(coqui_builder::partial::Missing) -> guatiao_builder::FromError
+impl core::error::Error for guatiao_builder::FromError
+pub fn guatiao_builder::FromError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for guatiao_builder::FromError
+pub fn guatiao_builder::FromError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_builder::FromError
+pub fn guatiao_builder::FromError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_builder::Described<T>(pub T)
+impl<T: coqui_builder::describe::Describe + coqui_builder::inspect::Inspect> guatiao::value::convert::ToValue for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: coqui_builder::describe::Describe> guatiao::schema::describe::Schema for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+impl<T: coqui_builder::describe::Describe> guatiao::value::convert::FromValue for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_builder::Described<T>, guatiao::value::convert::MapError>
+impl<T: core::clone::Clone> core::clone::Clone for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::clone(&self) -> Self
+impl<T: core::cmp::Eq> core::cmp::Eq for guatiao_builder::Described<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::eq(&self, &Self) -> bool
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for guatiao_builder::Described<T>
+impl<T: core::default::Default> core::default::Default for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::default() -> Self
+impl<T: core::fmt::Debug> core::fmt::Debug for guatiao_builder::Described<T>
+pub fn guatiao_builder::Described<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_builder::ValueSource<'a>
+impl<'a> guatiao_builder::ValueSource<'a>
+pub fn guatiao_builder::ValueSource<'a>::new(&'a guatiao::value::value::Value) -> guatiao_builder::ValueSource<'a>
+impl coqui_builder::source::Source for guatiao_builder::ValueSource<'_>
+pub fn guatiao_builder::ValueSource<'_>::entries(&mut self, &coqui_builder::path::KeyPath) -> core::result::Result<core::option::Option<coqui_builder::inspect::Entries>, coqui_builder::source::SourceError>
+pub fn guatiao_builder::ValueSource<'_>::unknown(&mut self, &dyn core::ops::function::Fn(&coqui_builder::path::KeyPath) -> bool) -> alloc::vec::Vec<coqui_builder::path::KeyPath>
+pub fn guatiao_builder::ValueSource<'_>::value(&mut self, &coqui_builder::path::KeyPath, &coqui_builder::describe::kind::LeafInfo) -> core::result::Result<core::option::Option<alloc::string::String>, coqui_builder::source::SourceError>
+impl<'a> core::clone::Clone for guatiao_builder::ValueSource<'a>
+pub fn guatiao_builder::ValueSource<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_builder::ValueSource<'a>
+pub fn guatiao_builder::ValueSource<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_builder::ValueSource<'a>
+pub struct guatiao_builder::ValueView<'a>
+impl<'a> guatiao_builder::ValueView<'a>
+pub fn guatiao_builder::ValueView<'a>::new(&'a coqui_builder::describe::Description, &'a guatiao::value::value::Value) -> guatiao_builder::ValueView<'a>
+impl coqui_builder::inspect::Inspect for guatiao_builder::ValueView<'_>
+pub fn guatiao_builder::ValueView<'_>::at(&self, &[coqui_builder::path::Segment]) -> core::option::Option<coqui_builder::datum::Datum>
+pub fn guatiao_builder::ValueView<'_>::entries(&self, &[coqui_builder::path::Segment]) -> core::option::Option<coqui_builder::inspect::Entries>
+impl<'a> core::clone::Clone for guatiao_builder::ValueView<'a>
+pub fn guatiao_builder::ValueView<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_builder::ValueView<'a>
+pub fn guatiao_builder::ValueView<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_builder::ValueView<'a>
+pub const guatiao_builder::DURATION_PATTERN: &str
+pub fn guatiao_builder::form_source(&coqui_builder::describe::Description, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_builder::from_value<T: coqui_builder::describe::Describe>(&guatiao::value::value::Value) -> core::result::Result<T, guatiao_builder::FromError>
+pub fn guatiao_builder::from_value_over<T: coqui_builder::describe::Describe>(T, &guatiao::value::value::Value) -> core::result::Result<T, guatiao_builder::FromError>
+pub fn guatiao_builder::kind_in(&coqui_builder::describe::Description, guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao_builder::partial<T: coqui_builder::describe::Describe>(&guatiao::value::value::Value) -> core::result::Result<coqui_builder::partial::Partial<T>, coqui_builder::fill::FillError>
+pub fn guatiao_builder::schema(&coqui_builder::describe::Description) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_builder::schema_in(&coqui_builder::describe::Description, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_builder::to_value<T: coqui_builder::describe::Describe + coqui_builder::inspect::Inspect>(&T) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_builder::to_value_in<T: coqui_builder::describe::Describe + coqui_builder::inspect::Inspect>(&T, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>

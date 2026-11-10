@@ -2638,10 +2638,12 @@ pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::sc
 pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::null() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::null_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::nullable(self) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::open_enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::open_enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::property_names(self, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::sensitive(self) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::title(self, &str) -> guatiao::schema::build::KindBuilder
@@ -3380,10 +3382,12 @@ pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::sc
 pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::null() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::null_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::nullable(self) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::open_enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::open_enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::property_names(self, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::sensitive(self) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::title(self, &str) -> guatiao::schema::build::KindBuilder

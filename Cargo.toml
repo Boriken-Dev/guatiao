@@ -5,6 +5,7 @@ members = [
     "crates/guatiao-derive",
     "crates/guatiao-serde",
     "crates/guatiao-intake",
+    "crates/guatiao-builder",
     "crates/guatiao-bridge",
     "crates/guatiao-libffi",
     "crates/guatiao-source-remote",

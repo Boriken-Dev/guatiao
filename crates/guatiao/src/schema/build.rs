@@ -1146,6 +1146,14 @@ impl KindBuilder {
         self
     }
 
+    /// The same kind marked as a secret: `writeOnly: true` and `x-sensitive: true`, the two
+    /// marks [`FieldBuilder::sensitive`] writes on a field, for a kind that is not a field's
+    /// own -- a list's items, a map's values, a type that is a secret by itself.
+    pub fn sensitive(self) -> KindBuilder {
+        self.keyword(vocab::WRITE_ONLY, Ok(Value::from(true)))
+            .keyword(vocab::X_SENSITIVE, Ok(Value::from(true)))
+    }
+
     /// The same kind, accepting null as well: what an `Option` describes.
     ///
     /// A kind whose `type` alone says what it accepts gains `"null"` in a
@@ -1153,7 +1161,7 @@ impl KindBuilder {
     /// sits beside the type it constrains. Any other -- an enumeration, a
     /// union, a variant, whose members or arms would refuse null -- is
     /// wrapped as `anyOf: [kind, {"type": "null"}]`.
-    pub(crate) fn nullable(self) -> KindBuilder {
+    pub fn nullable(self) -> KindBuilder {
         let alloc = self.alloc;
         let Ok(mut kind) = self.state else {
             return self;
