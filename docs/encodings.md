@@ -249,6 +249,80 @@ A reader **also accepts**, and the schema does not declare:
 
 Anything else is refused.
 
+## A setting as text
+
+A type described by coqui-builder holds each setting as one text, read by the setting's own
+parser, and `guatiao-builder` moves between that text and a value by these rules, so a reader in
+any language can do the same. A value's own display text is never used.
+
+| a value | its text |
+| --- | --- |
+| a string | as it is |
+| a boolean | `true` or `false` |
+| a number, for an integer type or a duration | its plain decimal expansion, exactly: `1e3` is `1000`, `2.0` is `2`, `-0` is `0` |
+| a number, for any other type | as written (`1.10` stays `1.10`) |
+| null | no text: the key is not given |
+| a list or a map | refused, where one text is expected |
+
+A text becomes a value by the setting's type: a boolean when the type is `bool` and the text
+`true` or `false`, a number when the type is an integer or a float and the text is a number, and
+otherwise a string as written. The text that writes a `None` (see "An optional with a written
+`None`") is a string whatever the type.
+
+## A length of time as text
+
+A type described by coqui-builder holds a duration as one text, which its own
+parser reads, and `guatiao-builder` carries it as a string beside the number of
+seconds above. The text is a decimal number and an optional unit, one of `ns`,
+`us`, `ms`, `s`, `m` or `h`; with no unit it is seconds. There is no sign, no
+space and no compound form (`1m30s`):
+
+```json
+"30s"
+"250ms"
+"1.5h"
+"0.25"
+```
+
+The number is read exactly from its decimal text. A negative number, a fraction
+finer than a nanosecond, an overflow, an empty number and an unknown unit are
+refused. It is written in one form: whole seconds as `30s`, else whole
+milliseconds as `250ms`, else microseconds, else nanoseconds. The schema of a
+field of that type admits either spelling:
+
+```json
+{
+  "anyOf": [
+    {"type": "number", "minimum": 0},
+    {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h)?$"}
+  ]
+}
+```
+
+A `[seconds, nanoseconds]` pair is not read there: it is guatiao's own
+encoding of a `Duration`, above, and is refused. guatiao never interprets the text:
+a reader in another language passes the string through to the described type's parser, and
+only the schema's pattern checks its spelling.
+
+## An enum of texts and one table, as text
+
+A type described by coqui-builder can be an untagged enum whose arms are names or
+single values (`true`, `"auto"`, `30`) and at most one table. The names and single
+values are one **string**, whose meaning the type's parser decides, and the table is
+the structured arm; a reader tells them apart by the kind of the value, as in
+"Variants told apart by kind" above. A boolean or a number written there is read as its
+text (`true`, `30`), so the schema does not map a boolean to a boolean arm:
+
+```json
+{"anyOf": [
+  {"type": "string"},
+  {"type": "object", "properties": {"size": {"type": "integer"}}, "additionalProperties": false}
+]}
+```
+
+A text-side value is the text its arm writes (`"false"`); an empty table still chooses the
+structured arm, with its defaults.
+
 ## A calendar length: span
 
 A length in **calendar units**: years, months, weeks, days, hours,
@@ -408,8 +482,10 @@ the one text and the inner kind, and its `default` is the inner value
 ```
 
 The inner type must not read a string, since the text could then be one of
-its values; the derive checks this where the kinds are known. A stored null
-still reads as `None`.
+its values; guatiao's derive checks this where the kinds are known (a type
+described by coqui-builder checks it by trying the text on the inner parser). A stored
+null still reads as `None` there; a described type reads null as a key not given,
+so the default applies.
 
 ## A list of texts
 

@@ -13,6 +13,7 @@ public surface); this file is about the repository.
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-intake`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
+| `crates/guatiao-builder/` | guatiao's side of coqui-builder, a description of any struct built field by field: the schema made from it (`schema`, `kind_in`), a value as a `Source` (`ValueSource`, `partial`, `from_value`) and as an `Inspect` (`ValueView`), a described value as a value (`to_value`), a form's flat store (`form_source`), `Described<T>` and `with_module!` to hold such a type as a guatiao value, schema and field; `#![forbid(unsafe_code)]`, `publish = false` until coqui-builder is released (it is a git dependency); `tests/` derive both libraries' macros on one fixture and hold the two to the same schema, value, differences, merge and paths, and the vector files current with coqui-builder's (`tests/vectors_current.rs`); `crates/guatiao-derive/tests/vectors/attributes.json` is the spellings the two derives share, rendered into `crates/guatiao/tests/derive_meaning.rs` (`GUATIAO_WRITE_MEANING=1`) |
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions by the mechanism a source is given (`with_mechanism`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
 | `crates/guatiao-libffi/` | `Libffi`, libffi as the `Mechanism` core's run-time kind tables are built on (`library/kind/runtime.rs`): a call interface per slot signature, a closure per served slot, `ffi_call` per call; builds libffi from C, not on wasm32; published; `tests/described_kinds.rs` (with the C caller `tests/c_consumer/described_caller.c`) and `tests/closures.rs` run the tables through it natively, while core's own tests run them under Miri through a mechanism with no foreign code |
@@ -208,7 +209,7 @@ Each crate commits its public surface. A change to it regenerates the
 snapshot in the same commit; CI fails on any difference:
 
 ```bash
-for c in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi guatiao-source-remote guatiao-channel; do
+for c in guatiao guatiao-serde guatiao-intake guatiao-builder guatiao-bridge guatiao-libffi guatiao-source-remote guatiao-channel; do
   cargo public-api -p $c --all-features -ss > crates/$c/public-api.txt
 done
 ```

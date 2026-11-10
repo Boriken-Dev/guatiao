@@ -1172,6 +1172,57 @@ fn the_configuration_page_s_serde_fields_convert() -> Result<(), Box<dyn core::e
 }
 
 #[test]
+fn the_configuration_page_s_described_type_makes_a_schema_a_form_and_a_value()
+-> Result<(), Box<dyn core::error::Error>> {
+    // CONFIG-DESCRIBED-BEGIN
+    use coqui_builder::Describe;
+    use guatiao::schema::SchemaRef;
+    use guatiao::{Alloc, Map, Value};
+    use guatiao_builder::{from_value_over, schema};
+
+    #[derive(Describe, Debug, PartialEq)]
+    struct Listener {
+        host: String,
+        #[map(default = 8080)]
+        port: u16,
+    }
+
+    let document = schema(&Listener::description())?;
+    let form = guatiao_intake::for_schema(
+        SchemaRef::new(&document).ok_or("not a schema")?,
+        Alloc::rust(),
+    )?;
+
+    let mut value = Map::new();
+    value.set("port", 9000u16);
+    let listener = from_value_over(
+        Listener {
+            host: "h".into(),
+            port: 1,
+        },
+        &Value::from(value),
+    )?;
+    // CONFIG-DESCRIBED-END
+    assert_eq!(
+        listener,
+        Listener {
+            host: "h".into(),
+            port: 9000
+        }
+    );
+    assert!(
+        guatiao_intake::check(
+            SchemaRef::new(&document).ok_or("not a schema")?,
+            guatiao_intake::FormRef::new(&form).ok_or("not a form")?,
+        )
+        .is_ok()
+    );
+
+    assert_eq!(rust_block(CONFIGURATION, 6), marked("CONFIG-DESCRIBED"));
+    Ok(())
+}
+
+#[test]
 fn the_bridges_page_writes_lines_from_any_walk() -> Result<(), Box<dyn core::error::Error>> {
     // BRIDGE-WRITE-BEGIN
     use guatiao::value::visit::{Flat, Sink};

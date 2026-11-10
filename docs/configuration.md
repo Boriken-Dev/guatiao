@@ -234,3 +234,44 @@ mod plugin_settings {
     }
 }
 ```
+
+## A type described by coqui-builder
+
+A struct built field by field can derive coqui-builder's `Describe` instead, and
+`guatiao-builder` makes everything guatiao does with a type from that description: the
+schema (`schema`, which `form_for` and `for_schema` then show), the value (`to_value`), and
+the type back from a value (`from_value`, `from_value_over` to lay a value over a base). A
+duration is a number of seconds or its text, and the value of an untagged enum's text side
+is a string; both are stated in the encodings page. `Described<T>` holds such a type as a
+guatiao value, a schema and a field, and `with_module!` writes the `with` module for a
+field of one inside a struct guatiao derives.
+
+```rust
+use coqui_builder::Describe;
+use guatiao::schema::SchemaRef;
+use guatiao::{Alloc, Map, Value};
+use guatiao_builder::{from_value_over, schema};
+
+#[derive(Describe, Debug, PartialEq)]
+struct Listener {
+    host: String,
+    #[map(default = 8080)]
+    port: u16,
+}
+
+let document = schema(&Listener::description())?;
+let form = guatiao_intake::for_schema(
+    SchemaRef::new(&document).ok_or("not a schema")?,
+    Alloc::rust(),
+)?;
+
+let mut value = Map::new();
+value.set("port", 9000u16);
+let listener = from_value_over(
+    Listener {
+        host: "h".into(),
+        port: 1,
+    },
+    &Value::from(value),
+)?;
+```
