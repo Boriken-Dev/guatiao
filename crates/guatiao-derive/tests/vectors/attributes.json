@@ -1,5 +1,5 @@
 {
-  "about": "The spellings of #[map(..)], #[schema(..)] and #[builder(..)] and what they mean, for coqui-builder's derive and guatiao's. Each case names an item (every {derive} is replaced by the derive under test) and what each derive does with it: \"accept\", {\"refuse\": \"a stem of the message\"} or \"pending\" (a spelling guatiao's derive has not learned yet). An accepted case may state `expect` (coqui-builder reads `coqui_expect` and `coqui_item` where a case has them, for its leaf descriptions and its text converters): kind, keys in order, required, defaults as JSON, descriptions, sensitive keys, choice names, tag and arms. `guatiao_item` replaces `item` for guatiao where a `with` module has to follow its contract.",
+  "about": "The spellings of #[map(..)], #[schema(..)] and #[builder(..)] and what they mean, for coqui-builder's derive and guatiao's. Each case names an item (every {derive} is replaced by the derive under test) and what each derive does with it: \"accept\", {\"refuse\": \"a stem of the message\"} or \"pending\" (a spelling guatiao's derive has not learned yet). An accepted case may state `expect` (coqui-builder reads `coqui_expect` and `coqui_item` where a case has them, for its leaf descriptions and its text converters): kind, keys in order, required, defaults as JSON, descriptions, sensitive keys, choice names, tag and arms. `guatiao_item` replaces `item` for guatiao where a `with` module has to follow its contract. `compiles_alone: false` keeps a case out of coqui-builder's rendered meaning tests when its expansion names a type the case does not define.",
   "cases": [
     {
       "name": "fields keep their names",
@@ -262,6 +262,19 @@
       "guatiao": "accept",
       "coqui_builder": "accept",
       "expect": {"kind": "variant", "tag": "kind", "arms": ["Pw", "None"]}
+    },
+    {
+      "name": "setters_on names a builder that gets the setters as inherent methods",
+      "item": "{derive} #[builder(setters_on = XBuilder)] struct S { a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "compiles_alone": false
+    },
+    {
+      "name": "setters_on takes a type",
+      "item": "{derive} #[builder(setters_on = \"XBuilder\")] struct S { a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "takes the type of a builder"}
     },
     {
       "name": "a reserved setter name is refused",
