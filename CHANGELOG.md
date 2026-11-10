@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **`#[map(default = <expr>, none = "text")]` and `#[map(as_text)]` per item.**
+  An `Option<T>` field can write its `None` as a text (`"never"`) that reads
+  back as `None`, with any other value read as `T`'s: the schema is `anyOf` the
+  text and `T`'s kind, and `default` is the inner value. `#[map(as_text)]` on a
+  `Vec<T>` or `Option<Vec<T>>` is a list of `Display` texts read with `FromStr`,
+  a refusal naming the item's index. Both are new spellings; nothing written
+  before changes. `crates/guatiao-derive/tests/vectors/attributes.json` holds
+  the spellings and their meaning, and `tests/derive_meaning.rs` is rendered
+  from it.
 - **A value as one line of text, with no format library.** `Display` for
   `Value` in Rust, `guatiao_value_display` in C, `str(ref)` in Python and
   `ref.toString()` in Dart write a value as one line of text for a report or a

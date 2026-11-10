@@ -38,7 +38,8 @@ cannot describe a value it refuses.
 | `default = <expr>` | the same, with an expression of the field's type |
 | `flatten` | the field's own map is written beside the other keys and read from the whole map; its schema's fields join this one's. Stands alone (no `rename`, `skip`, `default`, `with`); not on an `Option` |
 | `with = path` (or `"path"`) | a module with `to_value_in(&T, Alloc) -> Result<Value, ValueError>`, `from_value(&Value) -> Result<T, MapError>` and `kind(Alloc) -> KindBuilder` converts the field, and writes its default into the schema, in place of `T`'s impls; not on an `Option` |
-| `as_text` | the field crosses as its `Display` text and is read with `FromStr`, a refusal being `MapError::BadValue` under the key with the parse error's words (`T::Err: Display`); described as a string, to which `#[schema(format, pattern, ..)]` add. On `T` or `Option<T>`; a default is written as its text. Not beside `with` or `flatten`, nor on a transparent struct's field |
+| `as_text` | the field crosses as its `Display` text and is read with `FromStr`, a refusal being `MapError::BadValue` under the key with the parse error's words (`T::Err: Display`); described as a string, to which `#[schema(format, pattern, ..)]` add. On `T` or `Option<T>`; a default is written as its text. On a `Vec<T>` or `Option<Vec<T>>` it is per item: a list of strings, each the item's `Display` and read with `FromStr`, a refusal naming the item's index (`Option<Vec<T>>`: `None` omits the key, a null reads `None`); the streaming impls go through the tree. Not beside `with` or `flatten`, nor on a transparent struct's field |
+| `none = "text"` | on an `Option<T>` with `default = <expr>`: `None` is written as the text (the key is always written), the text reads as `None`, any other value as `T`'s; an absent key is the default. The schema is `anyOf` [string `enum` of the text, `T`'s kind] with the default written as `T` writes it (the text for `None`). Refused: without `default = <expr>`, on a type that is not an `Option`, beside `flatten`, `with` or `as_text`, an empty text, and a `T` whose `FromValue::KINDS` holds a string (the text could be one of its values: a `const` check where the kinds are known). The streaming impls go through the tree |
 | `skip_serializing_if = path` (or `"path"`) | the key is not written when `path(&field)` is true; needs `default` (or an `Option` field) so an absent key reads back |
 
 **`with` is the escape hatch for any other shape**, a field described
@@ -380,7 +381,7 @@ writes the whole library.
 - **A defaulted field is always written**, and read as its default only
   when the key is absent: a stored null or a value of another kind is
   refused under the key, as for any field. Refused at compile time:
-  `default` with `skip`, `default` on an `Option<T>` (an absent key is
+  `default` with `skip`, `default` on an `Option<T>` without `none` (an absent key is
   already `None`, and `None` is written as an absent key), and
   `#[map(default)]` beside `#[schema(default = ..)]`.
 - **A key may contain a NUL.** Keys are pointer and length, so the derive

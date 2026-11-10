@@ -111,7 +111,7 @@ pub(crate) fn for_struct(
             for field in &named.named {
                 plan.push(FieldPlan::read(derive, field, container.rename_all)?);
             }
-            if plan.iter().any(|f| f.flatten) {
+            if plan.iter().any(FieldPlan::goes_through_tree) {
                 return Ok(through_tree(derive, name, generics));
             }
             Ok(match derive {

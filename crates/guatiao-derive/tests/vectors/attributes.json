@@ -1,0 +1,491 @@
+{
+  "about": "The spellings of #[map(..)], #[schema(..)] and #[builder(..)] and what they mean, for coqui-builder's derive and guatiao's. Each case names an item (every {derive} is replaced by the derive under test) and what each derive does with it: \"accept\", {\"refuse\": \"a stem of the message\"} or \"pending\" (a spelling guatiao's derive has not learned yet). An accepted case may state `expect` (coqui-builder reads `coqui_expect` and `coqui_item` where a case has them, for its leaf descriptions and its text converters): kind, keys in order, required, defaults as JSON, descriptions, sensitive keys, choice names, tag and arms. `guatiao_item` replaces `item` for guatiao where a `with` module has to follow its contract.",
+  "cases": [
+    {
+      "name": "fields keep their names",
+      "item": "{derive} struct S { host: String, port: u16 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["host", "port"], "required": ["host", "port"]}
+    },
+    {
+      "name": "rename_all kebab-case",
+      "item": "{derive} #[map(rename_all = \"kebab-case\")] struct S { view_only: bool, max_len: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["view-only", "max-len"]}
+    },
+    {
+      "name": "rename_all SCREAMING_SNAKE_CASE",
+      "item": "{derive} #[map(rename_all = \"SCREAMING_SNAKE_CASE\")] struct S { view_only: bool }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["VIEW_ONLY"]}
+    },
+    {
+      "name": "rename_all lowercase",
+      "item": "{derive} #[map(rename_all = \"lowercase\")] struct S { view_only: bool }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["view_only"]}
+    },
+    {
+      "name": "rename_all snake_case",
+      "item": "{derive} #[map(rename_all = \"snake_case\")] struct S { view_only: bool }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["view_only"]}
+    },
+    {
+      "name": "a field's own rename wins over rename_all",
+      "item": "{derive} #[map(rename_all = \"kebab-case\")] struct S { #[map(rename = \"Host\")] host_name: String, max_len: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["Host", "max-len"]}
+    },
+    {
+      "name": "a skipped field is not a key",
+      "item": "{derive} struct S { a: u8, #[map(skip)] b: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["a"], "required": ["a"]}
+    },
+    {
+      "name": "a default makes a key optional",
+      "item": "{derive} struct S { #[map(default)] n: u32, #[map(default = 5)] m: u32, #[schema(default = 7)] k: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["n", "m", "k"], "required": ["k"], "defaults": {"n": 0, "m": 5, "k": 7}},
+      "coqui_expect": {"kind": "group", "keys": ["n", "m", "k"], "required": [], "defaults": {"n": "0", "m": "5", "k": "7"}}
+    },
+    {
+      "name": "an Option is not required",
+      "item": "{derive} struct S { a: String, b: Option<String> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["a", "b"], "required": ["a"]}
+    },
+    {
+      "name": "a doc comment is the description",
+      "item": "{derive} struct S { /// The host name.\n    /// Written in DNS form.\n    host: String }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["host"], "descriptions": {"host": "The host name. Written in DNS form."}}
+    },
+    {
+      "name": "schema description wins over the doc comment",
+      "item": "{derive} struct S { /// Ignored.\n    #[schema(description = \"Stated.\", title = \"Host\")] host: String }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["host"], "descriptions": {"host": "Stated."}, "titles": {"host": "Host"}}
+    },
+    {
+      "name": "a sensitive field",
+      "item": "{derive} struct S { user: String, #[schema(sensitive)] token: String }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["user", "token"], "sensitive": ["token"]}
+    },
+    {
+      "name": "section order advanced read_only deprecated and bounds",
+      "item": "{derive} struct S { #[schema(section = \"Network\", order = 2, advanced, read_only, deprecated, min_length = 1, max_length = 8, pattern = \"^a\", format = \"hostname\")] name: String, #[schema(multiple_of = 5, min_items = 1, max_items = 2, examples(\"a\".to_string()))] other: String }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["name", "other"]}
+    },
+    {
+      "name": "a flattened struct's keys sit beside the others",
+      "item": "{derive} struct Inner { x: u8 } {derive} struct S { a: u8, #[map(flatten)] inner: Inner }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["a", "x"], "required": ["a", "x"]}
+    },
+    {
+      "name": "deny_unknown_fields",
+      "item": "{derive} #[map(deny_unknown_fields)] struct S { a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["a"], "deny_unknown_fields": true}
+    },
+    {
+      "name": "a transparent struct is its field",
+      "item": "{derive} #[map(transparent)] struct S { value: u16 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "int"},
+      "coqui_expect": {"kind": "leaf", "type": "u16"}
+    },
+    {
+      "name": "a newtype is its field",
+      "item": "{derive} struct S(u16);",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "int"},
+      "coqui_expect": {"kind": "leaf", "type": "u16"}
+    },
+    {
+      "name": "a generic struct",
+      "item": "{derive} struct S<T> { value: T }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["value"], "required": ["value"]}
+    },
+    {
+      "name": "unit variants are a choice",
+      "item": "{derive} enum E { Fast, SlowDown }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "choice", "names": ["Fast", "SlowDown"]},
+      "coqui_expect": {"kind": "leaf", "type": "E", "choices": ["Fast", "SlowDown"]}
+    },
+    {
+      "name": "rename_all on unit variants",
+      "item": "{derive} #[map(rename_all = \"kebab-case\")] enum E { Fast, SlowDown, H264 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "choice", "names": ["fast", "slow-down", "h264"]},
+      "coqui_expect": {"kind": "leaf", "type": "E", "choices": ["fast", "slow-down", "h264"]}
+    },
+    {
+      "name": "a variant's own rename and label",
+      "item": "{derive} enum E { #[map(rename = \"quick\")] #[schema(label = \"Quick\")] Fast, Slow }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "choice", "names": ["quick", "Slow"]},
+      "coqui_expect": {"kind": "leaf", "type": "E", "choices": ["quick", "Slow"]}
+    },
+    {
+      "name": "other keeps a name no variant has",
+      "item": "{derive} enum E { Fast, #[map(other)] Other(String) }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "text", "names": ["Fast"]},
+      "coqui_expect": {"kind": "leaf", "type": "E", "choices": ["Fast"]}
+    },
+    {
+      "name": "a tagged enum has arms",
+      "item": "{derive} #[map(tag = \"kind\")] enum E { Password { user: String, #[schema(sensitive)] password: String }, KeyFile { path: String }, Token { #[schema(sensitive)] token: String }, Anonymous }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "variant", "tag": "kind", "arms": ["Password", "KeyFile", "Token", "Anonymous"]}
+    },
+    {
+      "name": "rename_all names the arms",
+      "item": "{derive} #[map(tag = \"kind\", rename_all = \"snake_case\")] enum E { KeyFile { path: String }, NoAuth }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "variant", "tag": "kind", "arms": ["key_file", "no_auth"]}
+    },
+    {
+      "name": "a newtype arm holds a type whose keys sit beside the tag",
+      "item": "{derive} struct Pw { user: String } {derive} #[map(tag = \"kind\")] enum E { Pw(Pw), None }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "variant", "tag": "kind", "arms": ["Pw", "None"]}
+    },
+    {
+      "name": "an untagged enum is told apart by the kind of value",
+      "item": "{derive} #[map(untagged)] enum E { Auto, Number(u16) }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "union"},
+      "coqui_expect": {"kind": "leaf", "type": "E"}
+    },
+    {
+      "name": "as_text writes with Display and reads with FromStr",
+      "item": "{derive} struct S { #[map(as_text)] addr: std::net::Ipv4Addr }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["addr"], "required": ["addr"], "field_kinds": {"addr": "text"}},
+      "coqui_expect": {"kind": "group", "keys": ["addr"], "required": ["addr"], "field_kinds": {"addr": "leaf"}}
+    },
+    {
+      "name": "as_text on a list is per item",
+      "item": "{derive} struct S { #[map(default, as_text)] addrs: Vec<std::net::Ipv4Addr> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["addrs"], "required": [], "field_kinds": {"addrs": "list"}}
+    },
+    {
+      "name": "as_text on an optional list is per item",
+      "item": "{derive} struct S { #[map(as_text)] addrs: Option<Vec<std::net::Ipv4Addr>> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["addrs"], "required": [], "field_kinds": {"addrs": "list"}}
+    },
+    {
+      "name": "with names a module that converts the field (a list of protocol names)",
+      "item": "mod alpn_list { use coqui_builder::describe::LeafError; pub const TYPE: &str = \"AlpnList\"; pub fn to_text(items: &[String]) -> String { items.join(\",\") } pub fn from_text(text: &str) -> Result<Vec<String>, LeafError> { Ok(text.split(\",\").filter(|s| !s.is_empty()).map(String::from).collect()) } } {derive} struct S { #[map(default, with = alpn_list)] alpn: Vec<String> }",
+      "coqui_item": "mod alpn_list { use coqui_builder::describe::LeafError; pub const TYPE: &str = \"AlpnList\"; pub fn to_text(items: &[String]) -> String { items.join(\",\") } pub fn from_text(text: &str) -> Result<Vec<String>, LeafError> { Ok(text.split(\",\").filter(|s| !s.is_empty()).map(String::from).collect()) } } {derive} struct S { #[map(default, with = alpn_list)] alpn: Vec<String> }",
+      "guatiao_item": "mod alpn_list { use guatiao::{Alloc, FromValue, MapError, Schema, ToValue, Value, ValueError}; use guatiao::schema::KindBuilder; pub fn to_value_in(items: &[String], alloc: Alloc) -> Result<Value, ValueError> { items.to_value_in(alloc) } pub fn from_value(value: &Value) -> Result<Vec<String>, MapError> { Vec::<String>::from_value(value) } pub fn kind(alloc: Alloc) -> KindBuilder { KindBuilder::list_in(alloc, String::kind(alloc)) } } {derive} struct S { #[map(default, with = alpn_list)] alpn: Vec<String> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["alpn"], "required": [], "field_kinds": {"alpn": "list"}},
+      "coqui_expect": {"kind": "group", "keys": ["alpn"], "required": [], "field_kinds": {"alpn": "leaf"}}
+    },
+    {
+      "name": "with names a module that converts bytes held as text (a protocol name)",
+      "item": "mod alpn_text { use coqui_builder::describe::LeafError; pub const TYPE: &str = \"Alpn\"; pub fn to_text(alpn: &[u8]) -> String { String::from_utf8_lossy(alpn).into_owned() } pub fn from_text(text: &str) -> Result<Vec<u8>, LeafError> { Ok(text.as_bytes().to_vec()) } } {derive} struct S { #[map(default, with = alpn_text)] alpn: Vec<u8> }",
+      "coqui_item": "mod alpn_text { use coqui_builder::describe::LeafError; pub const TYPE: &str = \"Alpn\"; pub fn to_text(alpn: &[u8]) -> String { String::from_utf8_lossy(alpn).into_owned() } pub fn from_text(text: &str) -> Result<Vec<u8>, LeafError> { Ok(text.as_bytes().to_vec()) } } {derive} struct S { #[map(default, with = alpn_text)] alpn: Vec<u8> }",
+      "guatiao_item": "mod alpn_text { use guatiao::{Alloc, FromValue, MapError, Schema, ToValue, Value, ValueError}; use guatiao::schema::KindBuilder; pub fn to_value_in(alpn: &[u8], alloc: Alloc) -> Result<Value, ValueError> { String::from_utf8(alpn.to_vec()).map_err(|_| ValueError::Unrepresentable)?.to_value_in(alloc) } pub fn from_value(value: &Value) -> Result<Vec<u8>, MapError> { Ok(String::from_value(value)?.into_bytes()) } pub fn kind(alloc: Alloc) -> KindBuilder { String::kind(alloc) } } {derive} struct S { #[map(default, with = alpn_text)] alpn: Vec<u8> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["alpn"], "required": [], "field_kinds": {"alpn": "text"}},
+      "coqui_expect": {"kind": "group", "keys": ["alpn"], "required": [], "field_kinds": {"alpn": "leaf"}}
+    },
+    {
+      "name": "an Option with a written None",
+      "item": "{derive} struct S { #[map(default = Some(std::time::Duration::from_secs(30)), none = \"never\")] read_timeout: Option<std::time::Duration> }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["read_timeout"], "required": [], "defaults": {"read_timeout": [30, 0]}, "none": {"read_timeout": "never"}},
+      "coqui_expect": {"kind": "group", "keys": ["read_timeout"], "required": [], "defaults": {"read_timeout": "30s"}, "none": {"read_timeout": "never"}}
+    },
+    {
+      "name": "crate names where the derive's library is re-exported",
+      "item": "{derive} #[map(crate = guatiao)] #[builder(crate = coqui_builder)] struct S { a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["a"]}
+    },
+    {
+      "name": "crate on an enum",
+      "item": "{derive} #[map(crate = guatiao)] enum E { A, B }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "choice", "names": ["A", "B"]},
+      "coqui_expect": {"kind": "leaf", "type": "E", "choices": ["A", "B"]}
+    },
+    {
+      "name": "arm title and description",
+      "item": "{derive} #[map(tag = \"kind\")] enum E { #[schema(title = \"Password\", description = \"A user and a password.\")] Pw { user: String }, None }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "variant", "tag": "kind", "arms": ["Pw", "None"]}
+    },
+    {
+      "name": "a reserved setter name is refused",
+      "item": "{derive} struct S { fill: bool }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "is a method every builder has"}
+    },
+    {
+      "name": "a reserved setter name is renamed, and the key stays",
+      "item": "{derive} struct S { #[builder(setter = \"fill_level\")] fill: bool }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["fill"], "required": ["fill"]}
+    },
+    {
+      "name": "input belongs to a parts struct, not a settings type",
+      "item": "{derive} struct S { #[builder(input)] identity: String }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "`input` belongs to a parts struct"}
+    },
+    {
+      "name": "stricter says which way a setting gets stricter",
+      "item": "{derive} struct S { #[builder(stricter = \"lower\")] timeout: u32, #[builder(stricter = \"higher\")] attempts: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": "accept",
+      "expect": {"kind": "group", "keys": ["timeout", "attempts"], "stricter": {"timeout": "lower", "attempts": "higher"}}
+    },
+    {
+      "name": "stricter takes higher or lower",
+      "item": "{derive} struct S { #[builder(stricter = \"upper\")] timeout: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "takes \"higher\" or \"lower\""}
+    },
+    {
+      "name": "an unknown builder key on a field",
+      "item": "{derive} struct S { #[builder(shape = \"x\")] timeout: u32 }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "unrecognised `#[builder(...)]` option on a field"}
+    },
+    {
+      "name": "a tuple struct of two fields",
+      "item": "{derive} struct S(u8, u8);",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "refuses a tuple struct of two or more fields"}
+    },
+    {
+      "name": "a unit struct",
+      "item": "{derive} struct S;",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "refuses a unit struct"}
+    },
+    {
+      "name": "a union",
+      "item": "{derive} union S { a: u8, b: u8 }",
+      "guatiao": {"refuse": "A union has no readable field"},
+      "coqui_builder": {"refuse": "A union has no readable field"}
+    },
+    {
+      "name": "tag on a struct",
+      "item": "{derive} #[map(tag = \"kind\")] struct S { a: u8 }",
+      "guatiao": {"refuse": "`tag` names the key a VARIANT's name is stored under"},
+      "coqui_builder": {"refuse": "`tag` names the key a VARIANT's name is stored under"}
+    },
+    {
+      "name": "skip and rename together",
+      "item": "{derive} struct S { #[map(skip, rename = \"x\")] a: u8 }",
+      "guatiao": {"refuse": "`skip` and `rename` together say nothing"},
+      "coqui_builder": {"refuse": "`skip` and `rename` together say nothing"}
+    },
+    {
+      "name": "skip and default together",
+      "item": "{derive} struct S { #[map(skip, default)] a: u8 }",
+      "guatiao": {"refuse": "`skip` and `default` together say nothing"},
+      "coqui_builder": {"refuse": "`skip` and `default` together say nothing"}
+    },
+    {
+      "name": "flatten stands alone",
+      "item": "{derive} struct Inner { x: u8 } {derive} struct S { #[map(flatten, rename = \"i\")] inner: Inner }",
+      "guatiao": {"refuse": "`flatten` stands alone"},
+      "coqui_builder": {"refuse": "`flatten` stands alone"}
+    },
+    {
+      "name": "flatten beside deny_unknown_fields",
+      "item": "{derive} struct Inner { x: u8 } {derive} #[map(deny_unknown_fields)] struct S { #[map(flatten)] inner: Inner }",
+      "guatiao": {"refuse": "beside a `#[map(flatten)]` field"},
+      "coqui_builder": {"refuse": "beside a `#[map(flatten)]` field"}
+    },
+    {
+      "name": "as_text and with together",
+      "item": "{derive} struct S { #[map(as_text, with = m)] a: u8 }",
+      "guatiao": {"refuse": "`as_text` and `with` both say how the field converts"},
+      "coqui_builder": {"refuse": "`as_text` and `with` both say how the field converts"}
+    },
+    {
+      "name": "with on an Option",
+      "item": "{derive} struct S { #[map(with = m)] a: Option<u8> }",
+      "guatiao": {"refuse": "`with` converts a whole field"},
+      "coqui_builder": {"refuse": "`with` converts a whole field"}
+    },
+    {
+      "name": "an alias is not a key",
+      "item": "{derive} struct S { #[map(alias = \"x\")] a: u8 }",
+      "guatiao": {"refuse": "unrecognised `#[map(...)]` option"},
+      "coqui_builder": {"refuse": "unrecognised `#[map(...)]` option"}
+    },
+    {
+      "name": "an unknown schema key",
+      "item": "{derive} struct S { #[schema(colour = \"red\")] a: u8 }",
+      "guatiao": {"refuse": "unrecognised `#[schema(...)]` option"},
+      "coqui_builder": {"refuse": "unrecognised `#[schema(...)]` option"}
+    },
+    {
+      "name": "an unknown key on a struct",
+      "item": "{derive} #[map(colour = \"red\")] struct S { a: u8 }",
+      "guatiao": {"refuse": "unrecognised `#[map(...)]` option on a struct"},
+      "coqui_builder": {"refuse": "unrecognised `#[map(...)]` option on a struct"}
+    },
+    {
+      "name": "an unknown key on an enum",
+      "item": "{derive} #[map(colour = \"red\")] enum E { A, B }",
+      "guatiao": {"refuse": "unrecognised `#[map(...)]` option on an enum"},
+      "coqui_builder": {"refuse": "unrecognised `#[map(...)]` option on an enum"}
+    },
+    {
+      "name": "an unknown key on a variant",
+      "item": "{derive} enum E { #[map(skip)] A, B }",
+      "guatiao": {"refuse": "unrecognised `#[map(...)]` option on a variant"},
+      "coqui_builder": {"refuse": "unrecognised `#[map(...)]` option on a variant"}
+    },
+    {
+      "name": "two fields on one key",
+      "item": "{derive} struct S { a: u8, #[map(rename = \"a\")] b: u8 }",
+      "guatiao": {"refuse": "two fields map to the key"},
+      "coqui_builder": {"refuse": "two fields map to the key"}
+    },
+    {
+      "name": "two variants on one name",
+      "item": "{derive} enum E { A, #[map(rename = \"A\")] B }",
+      "guatiao": {"refuse": "two variants are stored as"},
+      "coqui_builder": {"refuse": "two variants are stored as"}
+    },
+    {
+      "name": "variants that carry fields need a tag",
+      "item": "{derive} enum E { A { x: u8 }, B }",
+      "guatiao": {"refuse": "needs `#[map(tag"},
+      "coqui_builder": {"refuse": "needs `#[map(tag"}
+    },
+    {
+      "name": "other on a tagged enum",
+      "item": "{derive} #[map(tag = \"k\")] enum E { A, #[map(other)] Other(String) }",
+      "guatiao": {"refuse": "`other` is for an enum of unit variants"},
+      "coqui_builder": {"refuse": "`other` is for an enum of unit variants"}
+    },
+    {
+      "name": "a rename_all spelling serde does not have",
+      "item": "{derive} #[map(rename_all = \"camelCase\")] struct S { a: u8 }",
+      "guatiao": {"refuse": "as serde spells them"},
+      "coqui_builder": {"refuse": "as serde spells them"}
+    },
+    {
+      "name": "a default on an Option",
+      "item": "{derive} struct S { #[map(default)] a: Option<u8> }",
+      "guatiao": {"refuse": "already optional"},
+      "coqui_builder": {"refuse": "already optional"}
+    },
+    {
+      "name": "map default beside schema default",
+      "item": "{derive} struct S { #[map(default = 1)] #[schema(default = 2)] a: u8 }",
+      "guatiao": {"refuse": "both name this field's default"},
+      "coqui_builder": {"refuse": "both name this field's default"}
+    },
+    {
+      "name": "none needs a default",
+      "item": "{derive} struct S { #[map(none = \"never\")] a: Option<u8> }",
+      "guatiao": {"refuse": "`none` needs `default = <expr>`"},
+      "coqui_builder": {"refuse": "`none` needs `default = <expr>`"}
+    },
+    {
+      "name": "none is for an Option",
+      "item": "{derive} struct S { #[map(default = 1, none = \"never\")] a: u8 }",
+      "guatiao": {"refuse": "this field is not an `Option`"},
+      "coqui_builder": {"refuse": "this field is not an `Option`"}
+    },
+    {
+      "name": "none beside as_text",
+      "item": "{derive} struct S { #[map(default = None, none = \"never\", as_text)] a: Option<std::net::Ipv4Addr> }",
+      "guatiao": {"refuse": "`none` cannot be combined with `with` or `as_text`"},
+      "coqui_builder": {"refuse": "`none` cannot be combined with `with` or `as_text`"}
+    },
+    {
+      "name": "skip_serializing_if writes nothing here",
+      "item": "{derive} struct S { #[map(default, skip_serializing_if = Option::is_none)] a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "`skip_serializing_if` has no meaning here"}
+    },
+    {
+      "name": "a field that holds its own type",
+      "item": "{derive} struct Tree { children: Vec<Tree> }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "holds itself through this field"}
+    },
+    {
+      "name": "a field in an untagged enum arm",
+      "item": "{derive} #[map(untagged)] enum E { A { x: u8 }, B }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "cannot describe an untagged variant with named fields"}
+    },
+    {
+      "name": "a generic enum",
+      "item": "{derive} enum E<T> { A(T) }",
+      "guatiao": {"refuse": "needs `#[map(tag"},
+      "coqui_builder": {"refuse": "supports a generic struct, not a generic enum"}
+    },
+    {
+      "name": "a lifetime parameter",
+      "item": "{derive} struct S<'a> { a: &'a str }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "settings that own their data"}
+    },
+    {
+      "name": "a schema attribute on a struct",
+      "item": "{derive} #[schema(title = \"x\")] struct S { a: u8 }",
+      "guatiao": "accept",
+      "coqui_builder": {"refuse": "`#[schema(..)]` describes a field or a variant"}
+    }
+  ]
+}

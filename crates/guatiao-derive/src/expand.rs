@@ -297,6 +297,12 @@ pub(crate) struct FieldPlan {
     /// `#[map(as_text)]`: written with `Display`, read with `FromStr`,
     /// described as a string.
     pub(crate) as_text: bool,
+    /// `#[map(as_text)]` on a `Vec<T>` or `Option<Vec<T>>`: per item. The
+    /// item type, when it is.
+    pub(crate) items: Option<Type>,
+    /// `#[map(none = "..")]` on an `Option<T>` with a default: the text
+    /// that writes `None`.
+    pub(crate) none: Option<String>,
 }
 
 /// `#[map(default)]` or `#[map(default = <expr>)]`.
@@ -332,9 +338,21 @@ impl FieldPlan {
             with: attrs.with,
             skip_if: attrs.skip_if,
             as_text: attrs.as_text,
+            items: if attrs.as_text {
+                vec_item(&field.ty).cloned()
+            } else {
+                None
+            },
+            none: attrs.none.map(|(text, _)| text),
             ty: field.ty.clone(),
             ident,
         })
+    }
+
+    /// Whether the value crosses by a path of its own, so the streaming
+    /// impls go through the tree.
+    pub(crate) fn goes_through_tree(&self) -> bool {
+        self.flatten || self.none.is_some() || self.items.is_some()
     }
 
     pub(crate) fn optional(&self) -> bool {
@@ -367,6 +385,7 @@ pub(crate) struct FieldAttrs {
     with: Option<syn::Path>,
     skip_if: Option<syn::Path>,
     as_text: bool,
+    none: Option<(String, LitStr)>,
     /// Everything only the schema reads. Collected for every derive, so a
     /// misspelled `#[schema(...)]` is reported by whichever one the user
     /// wrote rather than silently ignored by two of the three.
@@ -449,6 +468,10 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("as_text") {
                     out.as_text = true;
                     Ok(())
+                } else if meta.path.is_ident("none") {
+                    let literal: LitStr = meta.value()?.parse()?;
+                    out.none = Some((literal.value(), literal));
+                    Ok(())
                 } else if meta.path.is_ident("default") {
                     if out.default.is_some() {
                         return Err(meta.error("`default` is given twice. Keep one."));
@@ -464,7 +487,7 @@ impl FieldAttrs {
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option. {label} knows `rename = \"...\"`, \
                          `skip`, `default` or `default = <expr>`, `flatten`, `with = path`, \
-                         `as_text` and `skip_serializing_if = path`. Not `alias`: a schema refuses \
+                         `as_text`, `none = \"...\"` and `skip_serializing_if = path`. Not `alias`: a schema refuses \
                          every key it does not declare, so an alias would read a value \
                          its own schema refuses."
                     )))
@@ -478,6 +501,7 @@ impl FieldAttrs {
                 || default_span.is_some()
                 || out.with.is_some()
                 || out.as_text
+                || out.none.is_some()
                 || out.skip_if.is_some())
         {
             return Err(syn::Error::new_spanned(
@@ -493,6 +517,43 @@ impl FieldAttrs {
                 "`flatten` takes a type that writes a map, and an `Option` writes a null \
                  when it is `None`, which has no keys to write beside the others.",
             ));
+        }
+        if let Some((text, literal)) = &out.none {
+            if out.with.is_some() || out.as_text {
+                return Err(syn::Error::new_spanned(
+                    literal,
+                    "`none` cannot be combined with `with` or `as_text`: it names the text \
+                     that writes the `None` of an `Option` of a type that does not read \
+                     that text.",
+                ));
+            }
+            if out.skip_if.is_some() {
+                return Err(syn::Error::new_spanned(
+                    literal,
+                    "`none` cannot be combined with `skip_serializing_if`: a `None` is \
+                     written as its text, so there is no key to leave out.",
+                ));
+            }
+            if option_inner(&field.ty).is_none() {
+                return Err(syn::Error::new_spanned(
+                    literal,
+                    "`none` names the text that writes the `None` of an `Option` field: \
+                     this field is not an `Option`.",
+                ));
+            }
+            if !matches!(out.default, Some(MapDefault::Expr(_))) {
+                return Err(syn::Error::new_spanned(
+                    literal,
+                    "`none` needs `default = <expr>` beside it: the text is one more way to \
+                     write a value, and the default says what an absent key means.",
+                ));
+            }
+            if text.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    literal,
+                    "`none` names a text, not nothing.",
+                ));
+            }
         }
         if out.as_text && out.with.is_some() {
             return Err(syn::Error::new_spanned(
@@ -538,13 +599,14 @@ impl FieldAttrs {
                      stored always reads as its `Default`. Remove one.",
                 ));
             }
-            if option_inner(&field.ty).is_some() {
+            if option_inner(&field.ty).is_some() && out.none.is_none() {
                 return Err(syn::Error::new_spanned(
                     span,
                     "an `Option` field is already optional: an absent key reads as \
                      `None`, and `None` is written as an absent key, so a default \
                      could never be written back. Make the field a plain `T` to \
-                     give it a default.",
+                     give it a default, or write the `None` as text with \
+                     `none = \"...\"`.",
                 ));
             }
             if out.schema.default.is_some() {
@@ -702,6 +764,31 @@ fn reject_duplicate_keys(plan: &[FieldPlan]) -> syn::Result<()> {
     Ok(())
 }
 
+/// The item type of a syntactic `Vec<T>` or `Option<Vec<T>>`.
+fn vec_item(ty: &Type) -> Option<&Type> {
+    let ty = option_inner(ty).unwrap_or(ty);
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Vec" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    match args.args.first()? {
+        GenericArgument::Type(item) => Some(item),
+        _ => None,
+    }
+}
+
 /// The inner type of a syntactic `Option<T>`.
 ///
 /// Matches on the **last path segment** only, so `Option<T>`,
@@ -770,6 +857,39 @@ fn set_value(field: &FieldPlan, access: &TokenStream) -> TokenStream {
             ::guatiao::Map::set_in(&mut __map, #key, #with::to_value_in(#access, __alloc)?, __alloc)?;
         };
     }
+    if let Some(none) = &field.none {
+        return quote! {
+            ::guatiao::Map::set_in(
+                &mut __map,
+                #key,
+                ::guatiao::__private::none_to_value(#access, #none, __alloc)?,
+                __alloc,
+            )?;
+        };
+    }
+    if field.as_text && field.items.is_some() {
+        // Each item's `Display` text; `None` omits the key.
+        let set = |value: TokenStream| {
+            quote! {
+                ::guatiao::Map::set_in(
+                    &mut __map,
+                    #key,
+                    ::guatiao::__private::texts_of(#value, __alloc)?,
+                    __alloc,
+                )?;
+            }
+        };
+        return if field.optional() {
+            let set = set(quote! { __value });
+            quote! {
+                if let ::core::option::Option::Some(__value) = #access {
+                    #set
+                }
+            }
+        } else {
+            set(access.clone())
+        };
+    }
     if field.as_text {
         // Its `Display` text; `None` omits the key, as for any `Option`.
         let set = |value: TokenStream| {
@@ -833,7 +953,6 @@ fn set_value(field: &FieldPlan, access: &TokenStream) -> TokenStream {
 pub(crate) fn read_field(field: &FieldPlan) -> TokenStream {
     let ident = &field.ident;
     let ty = &field.ty;
-    let key = &field.key;
     if field.skip {
         // Nothing here can invent a value, so `Default` is required -- and
         // requiring it at the use site is what makes the error name the
@@ -846,43 +965,96 @@ pub(crate) fn read_field(field: &FieldPlan) -> TokenStream {
     }
     let read = match &field.with {
         Some(with) => quote! { #with::from_value },
+        None if field.none.is_some() => {
+            let none = field.none.as_deref().unwrap_or_default();
+            let inner = field
+                .inner
+                .as_ref()
+                .expect("`none` is refused on a field that is not an Option");
+            quote! {
+                (|__v: &::guatiao::Value| {
+                    ::guatiao::__private::none_from_value::<#inner>(__v, #none)
+                })
+            }
+        }
+        None if field.items.is_some() => {
+            let item = field.items.as_ref().expect("checked");
+            quote! { ::guatiao::__private::from_texts::<#item> }
+        }
         None if field.as_text => quote! { ::guatiao::__private::from_text },
         None => quote! { <#ty as ::guatiao::FromValue>::from_value },
     };
+    // The text that writes `None` must not also be a value of the inner
+    // type, which would make it two things. Checked where the kinds are
+    // known, as an untagged enum's arms are.
+    if let (Some(none), Some(inner)) = (&field.none, &field.inner) {
+        // `panic!` reads its message as a format string, so a brace in the text is doubled.
+        let message = format!(
+            "`none = \"{none}\"` on `{ident}`: the inner type also reads text, so that \
+             text could be a value of it. Use a type that reads no string, or drop `none`."
+        )
+        .replace('{', "{{")
+        .replace('}', "}}");
+        let rest = read_keyed(field, &read);
+        return quote! {
+            #ident: {
+                const {
+                    if ::guatiao::Kinds::intersects(
+                        <#inner as ::guatiao::FromValue>::KINDS,
+                        ::guatiao::Kinds::STRING,
+                    ) {
+                        ::core::panic!(#message);
+                    }
+                }
+                #rest
+            },
+        };
+    }
+    let rest = read_keyed(field, &read);
+    quote! { #ident: #rest, }
+}
+
+/// The expression reading a keyed field, given the function that reads its
+/// value.
+fn read_keyed(field: &FieldPlan, read: &TokenStream) -> TokenStream {
+    let ty = &field.ty;
+    let key = &field.key;
     // `under` is what turns a leaf error into a dotted path: the value
     // being read does not know its own key, so the reader that knows it
     // adds it here, on the way out.
     if let Some(default) = field.default_expr() {
         return quote! {
-            #ident: match __map.get(#key) {
+            match __map.get(#key) {
                 ::core::option::Option::Some(__field) =>
                     #read(__field)
                         .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
                 ::core::option::Option::None => #default,
-            },
+            }
         };
     }
     if field.optional() {
-        let read = if field.as_text {
+        let read = if let Some(item) = &field.items {
+            quote! { ::guatiao::__private::from_texts_or_null::<#item> }
+        } else if field.as_text {
             quote! { ::guatiao::__private::from_text_or_null }
         } else {
             quote! { <#ty as ::guatiao::FromValue>::from_value }
         };
         quote! {
-            #ident: match __map.get(#key) {
+            match __map.get(#key) {
                 ::core::option::Option::Some(__field) =>
                     #read(__field)
                         .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
                 // Absent reads as `None`, exactly as a stored null does.
                 // See `guatiao`'s `convert` module.
                 ::core::option::Option::None => ::core::option::Option::None,
-            },
+            }
         }
     } else {
         quote! {
-            #ident: #read(
+            #read(
                 ::guatiao::Map::required(__map, #key)?,
-            ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
+            ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?
         }
     }
 }
@@ -900,6 +1072,15 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     // Inherent methods, called by path for the same reason as below.
     let mut kind = match &field.with {
         Some(with) => quote! { #with::kind(__alloc) },
+        None if field.none.is_some() => {
+            let none = field.none.as_deref().unwrap_or_default();
+            let inner = field.inner.as_ref().expect("an Option");
+            quote! { ::guatiao::__private::none_kind::<#inner>(__alloc, #none) }
+        }
+        None if field.items.is_some() => {
+            let nullable = field.optional();
+            quote! { ::guatiao::__private::texts_kind(__alloc, #nullable) }
+        }
         None if field.as_text => {
             let nullable = field.optional();
             quote! { ::guatiao::__private::text_kind(__alloc, #nullable) }
@@ -1029,6 +1210,12 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     // such a type offers.
     let write = if let Some(with) = &field.with {
         quote! { #with::to_value_in }
+    } else if let Some(none) = &field.none {
+        quote! {
+            (|__d, __a| ::guatiao::__private::none_to_value(__d, #none, __a))
+        }
+    } else if field.items.is_some() {
+        quote! { ::guatiao::__private::texts_of }
     } else if field.as_text {
         quote! { ::guatiao::__private::text_of }
     } else {
@@ -2746,5 +2933,137 @@ mod tests {
             generic.contains("where T : :: guatiao :: ToValue"),
             "{generic}"
         );
+    }
+    /// The text a `none` writes must not be one the inner type reads: the
+    /// reader asserts it in a `const`, where the kinds are known.
+    #[test]
+    fn a_none_text_is_checked_against_the_inner_kinds() {
+        let read = from(quote! {
+            struct S { #[map(default = Some(1u8), none = "off")] a: Option<u8> }
+        });
+        assert!(read.contains("none_from_value"), "{read}");
+        assert!(read.contains("also reads text"), "{read}");
+        assert!(read.contains("Kinds :: STRING"), "{read}");
+        // Written and described without it: the check is the reader's.
+        let written = to(quote! {
+            struct S { #[map(default = Some(1u8), none = "off")] a: Option<u8> }
+        });
+        assert!(written.contains("none_to_value"), "{written}");
+        assert!(!written.contains("also reads text"), "{written}");
+        let empty = to(quote! {
+            struct S { #[map(default = Some(1u8), none = "")] a: Option<u8> }
+        });
+        assert!(empty.contains("not nothing"), "{empty}");
+        let skipped = to(quote! {
+            struct S { #[map(default = Some(1u8), none = "off", skip_serializing_if = Option::is_none)] a: Option<u8> }
+        });
+        assert!(skipped.contains("skip_serializing_if"), "{skipped}");
+        // A brace in the text is escaped in the generated panic, and the check is emitted.
+        let braced = from(quote! {
+            struct S { #[map(default = Some(1u8), none = "{x}")] a: Option<u8> }
+        });
+        assert!(braced.contains("{{x}}"), "{braced}");
+        assert!(!braced.contains("compile_error"), "{braced}");
+    }
+
+    // --- the attribute vectors, shared with the other derive ---------------
+
+    /// `tests/vectors/attributes.json`: each spelling and what it means, held
+    /// by this derive and by the sibling one that reads the same attributes.
+    fn vectors() -> serde_json::Value {
+        serde_json::from_str(include_str!("../tests/vectors/attributes.json"))
+            .expect("the vectors are JSON")
+    }
+
+    /// The item a case declares for this derive, after the last `{derive}`.
+    fn item_of(case: &serde_json::Value) -> TokenStream {
+        let text = case
+            .get("guatiao_item")
+            .or_else(|| case.get("item"))
+            .and_then(|v| v.as_str())
+            .expect("an item");
+        let piece = text.rsplit("{derive}").next().expect("a piece");
+        piece.parse().expect("the item is Rust")
+    }
+
+    #[test]
+    fn the_vectors_accept_and_refuse_what_they_say() {
+        let doc = vectors();
+        let cases = doc["cases"].as_array().expect("cases");
+        assert!(cases.len() >= 70, "{} cases", cases.len());
+        for case in cases {
+            let name = case["name"].as_str().expect("a name");
+            let item = item_of(case);
+            let outputs: Vec<String> = [Derive::ToValue, Derive::FromValue, Derive::Schema]
+                .into_iter()
+                .map(|derive| rendered(derive, item.clone()))
+                .collect();
+            match &case["guatiao"] {
+                v if v == "accept" => {
+                    for out in &outputs {
+                        assert!(!out.contains("compile_error"), "{name}: {out}");
+                    }
+                }
+                v if v.get("refuse").is_some() => {
+                    let stem = v["refuse"].as_str().expect("a stem");
+                    assert!(
+                        outputs.iter().any(|out| out.contains("compile_error")
+                            && out.contains(&stem.replace('"', "\\\""))),
+                        "{name}: no derive refused with {stem:?}: {outputs:?}"
+                    );
+                }
+                other => panic!("{name}: guatiao is {other}"),
+            }
+        }
+    }
+
+    /// Every key the field readers dispatch on is spelled by some vector, so
+    /// a new spelling cannot land without its meaning being written down.
+    #[test]
+    fn every_key_a_field_reader_takes_is_in_the_vectors() {
+        let source = include_str!("expand.rs");
+        let doc = vectors();
+        let items: String = doc["cases"]
+            .as_array()
+            .expect("cases")
+            .iter()
+            .filter_map(|case| case["item"].as_str())
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+        let readers = [
+            ("pub(crate) fn read(derive: Derive, field: &Field)", "map"),
+            (
+                "fn read(&mut self, label: &str, attr: &syn::Attribute)",
+                "schema",
+            ),
+        ];
+        for (marker, attribute) in readers {
+            let start = source.find(marker).expect("the reader");
+            let end = source[start..]
+                .find("Ok(out)")
+                .map_or(source.len(), |e| start + e);
+            let body = &source[start..source.len().min(end.max(start + 6000))];
+            let mut rest = body;
+            let mut seen = 0;
+            while let Some(at) = rest.find("path.is_ident(\"") {
+                rest = &rest[at + "path.is_ident(\"".len()..];
+                let key = &rest[..rest.find('"').expect("a key")];
+                seen += 1;
+                if key == "doc" || key == "schema" || key == "map" {
+                    continue;
+                }
+                assert!(
+                    items.contains(&format!("{key} ="))
+                        || items.contains(&format!("{key},"))
+                        || items.contains(&format!("{key})"))
+                        || items.contains(&format!("{key}(")),
+                    "`{attribute}` key `{key}` is in no vector"
+                );
+            }
+            assert!(seen > 3, "{attribute}: {seen} keys found");
+        }
     }
 }

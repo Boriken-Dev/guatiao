@@ -73,7 +73,8 @@
 //! | `#[map(default)]`, `#[map(default = <expr>)]` | an absent key reads as `Default::default()` or the expression; the schema does not require the field and carries that value as `default` |
 //! | `#[map(flatten)]` | the field's map is written beside the other keys, and read from the whole map |
 //! | `#[map(with = path)]` | `path::{to_value_in, from_value, kind}` convert the field |
-//! | `#[map(as_text)]` | the field crosses as its `Display` text, read with `FromStr`, described as a string |
+//! | `#[map(as_text)]` | the field crosses as its `Display` text, read with `FromStr`, described as a string; on a `Vec<T>` or `Option<Vec<T>>`, per item |
+//! | `#[map(default = <expr>, none = "text")]` | on an `Option<T>`: `None` is written as the text, which reads back as `None`; the schema is `anyOf` the text and `T`'s kind |
 //! | `#[map(skip_serializing_if = path)]` | the key is left out when `path(&field)` is true; needs `default` |
 //!
 //! On a struct, `#[map(transparent)]` and `#[map(deny_unknown_fields)]`.

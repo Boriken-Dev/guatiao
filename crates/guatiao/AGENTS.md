@@ -690,7 +690,13 @@ hand-written impl reports a missing key, and where in the tree an error
 happened, the same way.
 
 An `Option<T>` field is omitted when `None` rather than written as null,
-and both spellings read back as `None`. Its schema is `T`'s accepting
+and both spellings read back as `None`. `#[map(default = <expr>, none =
+"text")]` writes the `None` as that text instead (the inner type must read
+no string), reads the text as `None` and any other value as the inner
+one, and describes the field as `anyOf` the text and the inner kind with
+the inner value as `default`. `#[map(as_text)]` on a `Vec<T>` or
+`Option<Vec<T>>` is per item: a list of `Display` texts, each read with
+`FromStr`, a refusal naming the index. Its schema is `T`'s accepting
 null as well (`type: [T, "null"]`, or `anyOf: [T, {"type": "null"}]` for
 an enum or a variant), so validation accepts a null wherever `FromValue`
 reads one: the field, a `Vec<Option<T>>` element, a map's value. An

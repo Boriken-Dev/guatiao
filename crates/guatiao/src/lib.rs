@@ -224,6 +224,91 @@ pub mod __private {
         if nullable { kind.nullable() } else { kind }
     }
 
+    /// A `#[map(as_text)]` list written: each item's `Display` text.
+    pub fn texts_of<'a, T: core::fmt::Display + 'a>(
+        items: impl IntoIterator<Item = &'a T>,
+        alloc: Alloc,
+    ) -> Result<Value, ValueError> {
+        let mut list = crate::List::new_in(alloc);
+        for item in items {
+            list.push_in(text_of(item, alloc)?, alloc)?;
+        }
+        Ok(list.into())
+    }
+
+    /// A `#[map(as_text)]` list read: each item through its `FromStr`; a
+    /// refusal names the item's index.
+    pub fn from_texts<T>(value: &Value) -> Result<alloc::vec::Vec<T>, crate::MapError>
+    where
+        T: core::str::FromStr,
+        T::Err: core::fmt::Display,
+    {
+        let list = <&crate::List>::try_from(value)?;
+        list.iter()
+            .enumerate()
+            .map(|(index, item)| from_text(item).map_err(|e| e.at(index)))
+            .collect()
+    }
+
+    /// An `Option<Vec<T>>` `#[map(as_text)]` field read: a stored null is
+    /// `None`.
+    pub fn from_texts_or_null<T>(
+        value: &Value,
+    ) -> Result<Option<alloc::vec::Vec<T>>, crate::MapError>
+    where
+        T: core::str::FromStr,
+        T::Err: core::fmt::Display,
+    {
+        if value.tag() == Ok(crate::Tag::GUATIAO_NULL) {
+            return Ok(None);
+        }
+        from_texts(value).map(Some)
+    }
+
+    /// A `#[map(as_text)]` list field's kind: a list of strings, and null
+    /// too for an `Option`.
+    pub fn texts_kind(alloc: Alloc, nullable: bool) -> KindBuilder {
+        let kind = KindBuilder::list_in(alloc, KindBuilder::string_in(alloc));
+        if nullable { kind.nullable() } else { kind }
+    }
+
+    /// A `#[map(none = "..")]` field written: `None` is the text, `Some`
+    /// the inner value.
+    pub fn none_to_value<T: crate::ToValue>(
+        value: &Option<T>,
+        none: &str,
+        alloc: Alloc,
+    ) -> Result<Value, ValueError> {
+        match value {
+            Some(inner) => inner.to_value_in(alloc),
+            None => Ok(crate::Text::new_in(alloc, none)?.into()),
+        }
+    }
+
+    /// A `#[map(none = "..")]` field read: the text is `None`, anything
+    /// else is read as the `Option` reads it.
+    pub fn none_from_value<T: crate::FromValue>(
+        value: &Value,
+        none: &str,
+    ) -> Result<Option<T>, crate::MapError> {
+        if <&str>::try_from(value).is_ok_and(|text| text == none) {
+            return Ok(None);
+        }
+        <Option<T> as crate::FromValue>::from_value(value)
+    }
+
+    /// A `#[map(none = "..")]` field's kind: the one text, or the inner
+    /// kind.
+    pub fn none_kind<T: crate::Schema>(alloc: Alloc, none: &str) -> KindBuilder {
+        KindBuilder::union_in(
+            alloc,
+            alloc::vec![
+                KindBuilder::enumeration_in(alloc, &[(none, "")]),
+                T::kind(alloc)
+            ],
+        )
+    }
+
     mod sealed {
         pub trait Sealed {}
     }

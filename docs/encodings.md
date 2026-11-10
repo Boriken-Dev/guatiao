@@ -384,6 +384,41 @@ string, a number or a boolean is typed as its text; one that is a list
 or a map has no one-line spelling, so a flat store cannot hold it
 (`flatten` answers false) and a form takes it as a whole value.
 
+## An optional with a written `None`
+
+An optional is normally an absent key. A field can also write its `None`
+as a text of its own, so a person (or a form) can say "none" instead of
+leaving the key out: `#[map(default = Some(..), none = "never")]` on an
+`Option<T>`. The key's value is then one of two things:
+
+```json
+"never"
+[30, 0]
+```
+
+The text is `None`; any other value is the inner type's value, `Some`. An
+absent key is the field's declared default. The schema is an `anyOf` of
+the one text and the inner kind, and its `default` is the inner value
+(or the text, where the default is `None`):
+
+```json
+{"anyOf": [{"type": "string", "enum": ["never"]},
+           {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, ..]}],
+ "default": [30, 0]}
+```
+
+The inner type must not read a string, since the text could then be one of
+its values; the derive checks this where the kinds are known. A stored null
+still reads as `None`.
+
+## A list of texts
+
+`#[map(as_text)]` on a `Vec<T>` or an `Option<Vec<T>>` writes a list of
+strings, each the item's `Display` text, and reads each with its `FromStr`
+(`["10.0.0.1", "10.0.0.2"]`). A refusal names the item's index
+(`addrs[1]`). The schema is a list of strings, with null too for the
+`Option`; an absent key is the field's default, or `None`.
+
 ## A secret
 
 A secret is **not a form of its own**. It crosses as the value it holds,
