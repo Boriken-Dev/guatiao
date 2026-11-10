@@ -42,7 +42,7 @@ sha2 = "0.10"
 # The configuration page's type described by coqui-builder, and what is made
 # from it.
 guatiao-builder = { path = "../../crates/guatiao-builder" }
-coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "e0817023b51d900c516dab491f386ad3b41f17e3", features = ["derive"] }
+coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "14aca5d74ef435543f9258dd0a29fab7bb596eab", features = ["derive"] }
 
 [lints]
 workspace = true

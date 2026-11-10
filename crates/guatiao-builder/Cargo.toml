@@ -22,11 +22,11 @@ path = "src/lib.rs"
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
 guatiao-intake = { path = "../guatiao-intake", version = "=0.0.0-alpha.1" }
-coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "e0817023b51d900c516dab491f386ad3b41f17e3" }
+coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "14aca5d74ef435543f9258dd0a29fab7bb596eab" }
 
 [dev-dependencies]
 # Both derives on one fixture, so the two descriptions can be compared.
-coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "e0817023b51d900c516dab491f386ad3b41f17e3", features = ["derive", "zeroize"] }
+coqui-builder = { git = "https://github.com/Boriken-Dev/coqui-builder", rev = "14aca5d74ef435543f9258dd0a29fab7bb596eab", features = ["derive", "zeroize"] }
 guatiao = { path = "../guatiao", features = ["derive"] }
 guatiao-serde = { path = "../guatiao-serde", features = ["json"] }
 serde_json = "1"
