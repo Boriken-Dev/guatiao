@@ -153,7 +153,9 @@ URL). QuickJS is given no file, network or process access. Globals: ES2023
 and what QuickJS-NG adds (`Array.fromAsync`, `Object.groupBy`, `WeakRef`),
 `queueMicrotask`, `console` (`log`, `info`, `debug` to standard output;
 `warn`, `error` to standard error), `TextEncoder` and `TextDecoder`
-(UTF-8). Not there:
+(UTF-8; the decoder is the engine's own code, megabytes in a few
+milliseconds, replacing each malformed sequence with U+FFFD as the WHATWG
+decoder does and keeping a leading byte order mark). Not there:
 `process`, `Buffer`, `setTimeout`, `fetch`, `URL`, `structuredClone`,
 `import.meta` contents.
 

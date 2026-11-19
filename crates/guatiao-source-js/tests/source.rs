@@ -1765,3 +1765,31 @@ fn a_library_opened_while_a_call_yields_waits_for_that_call_to_end() {
     assert!(waiting.join().expect("joined").is_ok());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn text_decoder_reads_megabytes_at_once() {
+    let dir = scratch("decode_big");
+    put(
+        &dir,
+        "js_decode",
+        "version = \"1.0.0\"\n",
+        &format!(
+            "{}export class Big extends Provider {{\n  static kinds = [Greeter];\n  greet() {{\n    const unit = [0xc3, 0xb1, 0xe6, 0x97, 0xa5, 0xf0, 0x9f, 0x98, 0x80, 0x61];\n    const bytes = new Uint8Array(4 << 20);\n    for (let at = 0; at + unit.length <= bytes.length; at += unit.length) bytes.set(unit, at);\n    const started = Date.now();\n    const text = new TextDecoder().decode(bytes);\n    const ms = Date.now() - started;\n    return {{ greeting: `${{ms}}|${{text.length}}|${{text.slice(0, 5)}}` }};\n  }}\n}}\n",
+            preamble()
+        ),
+    );
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let g = greeter(&registry, "js_decode_big");
+    let said = greeting(&g.greet("x").expect("greeted")).to_string();
+    let _ = std::fs::remove_dir_all(&dir);
+    eprintln!("{said}");
+    let mut parts = said.split('|');
+    let ms: u64 = parts.next().and_then(|m| m.parse().ok()).expect("ms");
+    let length: usize = parts.next().and_then(|m| m.parse().ok()).expect("length");
+    // 419 430 units of ñ, 日, 😀 and a (5 UTF-16 units each), then the 4
+    // bytes the units leave in the buffer.
+    assert_eq!(length, 419_430 * 5 + 4);
+    assert_eq!(parts.next(), Some("ñ日😀a"));
+    assert!(ms < 500, "decoding 4 MiB took {ms} ms");
+}

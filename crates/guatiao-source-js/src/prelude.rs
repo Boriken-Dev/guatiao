@@ -5,8 +5,9 @@
 //! What every context is given before a library runs: the script behind
 //! the `guatiao` modules, and a `console`.
 
+use crate::bytes;
 use rquickjs::function::Rest;
-use rquickjs::{Coerced, Constructor, Ctx, Function, Object, Result, Symbol, Value};
+use rquickjs::{Coerced, Constructor, Ctx, Function, Object, Result, Symbol, TypedArray, Value};
 
 const CORE: &str = include_str!("prelude/core.js");
 
@@ -71,6 +72,12 @@ pub(crate) fn install(ctx: &Ctx<'_>) -> Result<()> {
     // What the script cannot do itself, handed over under a key the script
     // takes it from and deletes before any library runs.
     let native = Object::new(ctx.clone())?;
+    native.set(
+        "decode",
+        Function::new(ctx.clone(), |array: TypedArray<'_, u8>| -> String {
+            String::from_utf8_lossy(&bytes::of_array(&array)).into_owned()
+        })?,
+    )?;
     native.set(
         "yieldCalls",
         Function::new(ctx.clone(), || guatiao_bridge::yield_calls() as f64)?,

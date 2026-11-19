@@ -2127,6 +2127,10 @@ write now.
 
 ### Fixed
 
+- **`TextDecoder` in guatiao-source-js decodes in the engine, not a byte at a
+  time in script.** 4 MiB of UTF-8 took about 8 s of the one thread every call
+  of the source shares (debug build) and now takes under 0.1 s; the replacement
+  of malformed sequences is unchanged.
 - **A Python slot that raises gives up every object it was handed.** A
   `Taken[...]` object or tree is destroyed before the error is answered,
   as it already was when the call failed before the method ran; one the

@@ -191,52 +191,9 @@
       else if (input instanceof ArrayBuffer) bytes = new Uint8Array(input);
       else if (ArrayBuffer.isView(input)) bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
       else throw new TypeError('decode takes an ArrayBuffer or a view of one');
-      const points = [];
-      for (let i = 0; i < bytes.length; ) {
-        const lead = bytes[i];
-        if (lead < 0x80) {
-          points.push(lead);
-          i++;
-          continue;
-        }
-        let need;
-        let point;
-        let lower = 0x80;
-        let upper = 0xbf;
-        if (lead >= 0xc2 && lead <= 0xdf) [need, point] = [1, lead & 0x1f];
-        else if (lead >= 0xe0 && lead <= 0xef) {
-          [need, point] = [2, lead & 0x0f];
-          if (lead === 0xe0) lower = 0xa0;
-          if (lead === 0xed) upper = 0x9f;
-        } else if (lead >= 0xf0 && lead <= 0xf4) {
-          [need, point] = [3, lead & 0x07];
-          if (lead === 0xf0) lower = 0x90;
-          if (lead === 0xf4) upper = 0x8f;
-        } else {
-          points.push(0xfffd);
-          i++;
-          continue;
-        }
-        // A bad byte ends the sequence and is read again as the next one.
-        let taken = 1;
-        for (; taken <= need; taken++) {
-          const next = bytes[i + taken];
-          if (next === undefined || next < lower || next > upper) break;
-          lower = 0x80;
-          upper = 0xbf;
-          point = (point << 6) | (next & 0x3f);
-        }
-        if (taken <= need) {
-          points.push(0xfffd);
-          i += taken;
-          continue;
-        }
-        points.push(point);
-        i += need + 1;
-      }
-      let text = '';
-      for (let i = 0; i < points.length; i += 4096) text += String.fromCodePoint(...points.slice(i, i + 4096));
-      return text;
+      // The engine's own code decodes, replacing each malformed sequence as the
+      // WHATWG decoder does: a script reading byte by byte takes seconds for megabytes.
+      return native.decode(bytes);
     }
   }
   if (typeof globalThis.TextEncoder !== 'function') globalThis.TextEncoder = TextEncoder;
