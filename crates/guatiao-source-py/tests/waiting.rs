@@ -11,8 +11,9 @@
 
 extern crate alloc;
 
+use core::time::Duration;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use greeter_kind::{Conversation, Greeter, Listener};
 use guatiao::library::{Object, Registry};
