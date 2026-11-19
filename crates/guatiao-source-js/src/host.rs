@@ -241,7 +241,11 @@ pub(crate) fn handle_object<'js>(
     object.set("destroy", close.clone())?;
     // `close()` is `destroy()` unless the kind has a slot of that name,
     // which keeps it (a channel's `close(status, reason)`).
-    if !kind.slots().iter().any(|s| method_name(s.name()) == "close") {
+    if !kind
+        .slots()
+        .iter()
+        .any(|s| method_name(s.name()) == "close")
+    {
         object.set("close", close.clone())?;
     }
     let symbol: Object<'js> = ctx.globals().get("Symbol")?;

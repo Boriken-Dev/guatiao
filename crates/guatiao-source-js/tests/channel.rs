@@ -94,7 +94,7 @@ pub trait Closer: Send + Sync {
 /// A channel that remembers what it was closed with, and that it was let go.
 struct Recording {
     closed_with: Arc<std::sync::Mutex<Vec<(u32, String)>>>,
-    destroyed: Arc<std::sync::atomic::AtomicBool>,
+    destroyed: Arc<core::sync::atomic::AtomicBool>,
 }
 
 impl guatiao_channel::Channel for Recording {
@@ -112,7 +112,7 @@ impl guatiao_channel::Channel for Recording {
 impl Drop for Recording {
     fn drop(&mut self) {
         self.destroyed
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+            .store(true, core::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -174,7 +174,7 @@ fn close_on_a_handle_reaches_the_provider_with_its_status_and_reason() {
         .shared()
         .expect("an instance");
     let closed_with = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let destroyed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let destroyed = Arc::new(core::sync::atomic::AtomicBool::new(false));
     let channel = guatiao_channel::Channel::into_object(Recording {
         closed_with: Arc::clone(&closed_with),
         destroyed: Arc::clone(&destroyed),
@@ -187,6 +187,6 @@ fn close_on_a_handle_reaches_the_provider_with_its_status_and_reason() {
         [(5, "the host gave up".to_owned())],
         "close(5, reason) arrived whole"
     );
-    assert!(destroyed.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(destroyed.load(core::sync::atomic::Ordering::SeqCst));
     let _ = std::fs::remove_dir_all(&dir);
 }
