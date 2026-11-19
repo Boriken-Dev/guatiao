@@ -69,7 +69,8 @@ Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
   thread it owns for the life of the source: calls from other threads
   are queued and waited for; a call made **on** that thread (the engine
   calling one of its own providers through the host) runs there and then.
-  A `Pinned` engine need not be `Send`. Its thread's stack is
+  A call that waits a long time calls `guatiao_bridge::yield_calls()`
+  between looks (below). A `Pinned` engine need not be `Send`. Its thread's stack is
   `E::stack_size(&config)` bytes (`None`, the default: the platform's):
   reserved address space, used only as deep as the engine goes (on Linux
   the reservation counts toward the commit limit, and one larger than
@@ -124,6 +125,25 @@ pub enum Reply { Nothing, Value(Value), Object { kind: String, id: u64 }, Handed
   and its destruction as `Engine::release`.
 - **An error in a slot that cannot fail** answers its status alone; a
   Rust caller treats that as a broken contract (it panics).
+
+## `yield_calls`
+
+```rust
+pub fn yield_calls() -> usize   // how many queued calls it ran
+```
+
+A pinned engine runs one call at a time, so a call that waits (a script
+looping until a program ends) holds every other call, a `cancel` of what it
+waits for among them. `yield_calls()`, called from such a call on the engine's
+thread, runs the calls queued behind it now, each to its end (up to 64), and
+answers how many ran; the engine exposes it to its scripts. A call that runs
+there runs **inside** the waiting one: it returns before the waiting one goes
+on, and what it changes the waiting one finds changed. Only calls into a
+library run (a slot, creating or dropping an instance, `available`);
+`open`, `close`, `version_of` and `notes` wait until no call is open. It
+runs nothing, and answers 0, off an engine's thread and when eight calls
+already wait inside one another. An engine that never calls it behaves as
+before.
 
 ## `BridgeSource<E>`
 
@@ -290,6 +310,10 @@ compared byte for byte by a test.
 
 ## Gotchas
 
+- **A call that waits for long holds the pinned engine**: its thread runs one
+  call at a time, and the others queue behind it, until it calls
+  `yield_calls()`. Calls that run inside it are not served in the order their
+  waiting ones began: one that waits in turn holds the ones below it.
 - **A pinned engine waits on itself if it waits on another thread** that
   calls back into it: a call from that thread is queued behind the job
   that is waiting. Calls the engine makes on its own thread run inline.

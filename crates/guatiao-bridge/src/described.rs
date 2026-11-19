@@ -219,7 +219,7 @@ impl<E: Engine> Dispatch<E> {
 
     fn run(&self, mut call: Call) -> Result<(Call, Reply), ProviderError> {
         let library = self.library.clone();
-        let (call, reply) = self.runner.run(move |e| {
+        let (call, reply) = self.runner.run_call(move |e| {
             let reply = e.call(&library, &mut call);
             (call, reply)
         })?;
@@ -271,7 +271,9 @@ impl<E: Engine> Serve for Dispatch<E> {
 
     fn destroy(&self, ctx: usize) {
         let library = self.library.clone();
-        let _ = self.runner.run(move |e| e.release(&library, ctx as u64));
+        let _ = self
+            .runner
+            .run_call(move |e| e.release(&library, ctx as u64));
     }
 
     fn create(&self, provider: usize, config: &Value) -> Result<usize, ProviderError> {
@@ -280,7 +282,7 @@ impl<E: Engine> Serve for Dispatch<E> {
         let config = config.clone();
         let built = self
             .runner
-            .run(move |e| e.create(&library, &id, &config))??;
+            .run_call(move |e| e.create(&library, &id, &config))??;
         let mut instances = self.instances();
         let ctx = instances.next;
         instances.next += 1;
@@ -293,7 +295,7 @@ impl<E: Engine> Serve for Dispatch<E> {
             return;
         };
         let library = self.library.clone();
-        let _ = self.runner.run(move |e| e.destroy(&library, id));
+        let _ = self.runner.run_call(move |e| e.destroy(&library, id));
     }
 
     fn available(&self, provider: usize) -> Result<(), String> {
@@ -302,7 +304,7 @@ impl<E: Engine> Serve for Dispatch<E> {
             .map_err(|e| e.message().to_string())?;
         let library = self.library.clone();
         self.runner
-            .run(move |e| e.available(&library, &id))
+            .run_call(move |e| e.available(&library, &id))
             .map_err(|e| e.to_string())?
     }
 }

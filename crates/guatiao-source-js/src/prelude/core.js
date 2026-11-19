@@ -8,6 +8,9 @@
 // object it stores under `Symbol.for('guatiao.core')`.
 
 (() => {
+  // What the engine does itself, left under this key for this script alone.
+  const native = globalThis[Symbol.for('guatiao.native')];
+
   const Status = Object.freeze({
     OK: 0,
     ERR_BAD_VALUE: 7,
@@ -289,6 +292,7 @@
     Internal,
     errorFor,
     ExactNumber,
+    yieldCalls: native.yieldCalls,
     Provider,
     s,
     kindsOf,

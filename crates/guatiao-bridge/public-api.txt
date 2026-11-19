@@ -385,3 +385,4 @@ pub fn guatiao_bridge::Engine::version_of(&self, &guatiao_bridge::manifest::Mani
 pub trait guatiao_bridge::ObjectHome
 pub fn guatiao_bridge::ObjectHome::give_back(self, guatiao::library::kind::runtime::RawObject)
 pub fn guatiao_bridge::text_list(&guatiao::value::types::map::Map, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::yield_calls() -> usize

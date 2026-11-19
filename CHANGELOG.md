@@ -14,6 +14,17 @@ write now.
 
 ### Added
 
+- **`guatiao_bridge::yield_calls()` and `yieldCalls()` in JavaScript.** A call
+  into a pinned engine (QuickJS, Lua, Rhai) holds the engine's one thread, so a
+  script that waits for long, a loop looking at a program until it ends, held
+  every other call, a `cancel` of what it waited for among them. A call that
+  calls `yield_calls()` between looks runs the calls queued behind it now, each
+  inside it and to its end, and learns how many ran; guatiao-source-js hands it
+  to scripts as `yieldCalls` from `guatiao`. Opening and closing libraries still
+  wait for no call to be open. A script that never calls it runs as before.
+  The Python source needed no change: a call waiting on its host has let the GIL
+  go, which `crates/guatiao-source-py/tests/waiting.rs` holds.
+
 - **`KindBuilder::nullable` and `KindBuilder::sensitive`.** A kind built by hand
   can accept null as well, as an `Option` does, and can be marked a secret
   (`writeOnly` and `x-sensitive`) when it is not a field's own: a list's items,

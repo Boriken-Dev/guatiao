@@ -185,4 +185,7 @@ the interpreter; a Python host's own symbols still come first.
   modules, unless they are installed in the interpreter's own
   `site-packages`; a virtual environment's packages are not seen by an
   embedded interpreter unless its `site-packages` is on `paths`.
-- **Every call into Python takes the GIL**; calls are serialised by it.
+- **Every call into Python takes the GIL**; calls are serialised by it, but a
+  call that waits on its host (a listener, a handle's slot) has let the GIL go,
+  since the guatiao binding calls through ctypes: another call answers
+  meanwhile, and `tests/waiting.rs` holds it.

@@ -19,4 +19,5 @@ export const {
   Internal,
   errorFor,
   ExactNumber,
+  yieldCalls,
 } = core;

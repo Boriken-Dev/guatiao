@@ -1671,3 +1671,97 @@ fn a_c_host_calls_the_javascript_greeter() {
         "{stdout}"
     );
 }
+
+/// A library whose `greet` waits as its name says: `wait` yields to the
+/// calls queued behind it until `release` is called, `block` spins for
+/// 1.5 s and yields to none, `plain` answers at once.
+fn put_waiter(dir: &Path) {
+    put(
+        dir,
+        "js_waiter",
+        "version = \"1.0.0\"\n",
+        &format!(
+            "{}import {{ yieldCalls }} from 'guatiao';\nexport class Waiter extends Provider {{\n  static kinds = [Greeter];\n  go = false;\n  greet(name) {{\n    const until = Date.now() + (name === 'block' ? 1500 : 20000);\n    if (name === 'release') {{ this.go = true; return {{ greeting: 'released' }}; }}\n    if (name === 'wait') {{\n      let served = 0;\n      while (!this.go && Date.now() < until) served += yieldCalls();\n      return {{ greeting: this.go ? `released, served ${{served}}` : 'never released' }};\n    }}\n    if (name === 'block') {{ while (Date.now() < until); return {{ greeting: 'blocked' }}; }}\n    return {{ greeting: 'plain' }};\n  }}\n}}\n",
+            preamble()
+        ),
+    );
+}
+
+#[test]
+fn a_call_that_yields_lets_the_calls_behind_it_answer() {
+    let dir = scratch("yields");
+    put_waiter(&dir);
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let g = greeter(&registry, "js_waiter_waiter");
+    let waiting = {
+        let g = Arc::clone(&g);
+        std::thread::spawn(move || g.greet("wait").map(|m| greeting(&m).to_string()))
+    };
+    std::thread::sleep(core::time::Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    assert_eq!(greeting(&g.greet("plain").expect("answered")), "plain");
+    assert_eq!(greeting(&g.greet("release").expect("answered")), "released");
+    assert!(
+        started.elapsed() < core::time::Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+    let ended = waiting.join().expect("joined").expect("answered");
+    assert!(ended.starts_with("released, served "), "{ended}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_call_that_never_yields_holds_the_calls_behind_it_until_it_ends() {
+    let dir = scratch("holds");
+    put_waiter(&dir);
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let g = greeter(&registry, "js_waiter_waiter");
+    let blocking = {
+        let g = Arc::clone(&g);
+        std::thread::spawn(move || g.greet("block").map(|m| greeting(&m).to_string()))
+    };
+    std::thread::sleep(core::time::Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    assert_eq!(greeting(&g.greet("plain").expect("answered")), "plain");
+    assert!(
+        started.elapsed() > core::time::Duration::from_millis(800),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        blocking.join().expect("joined").expect("answered"),
+        "blocked"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_library_opened_while_a_call_yields_waits_for_that_call_to_end() {
+    let dir = scratch("opens");
+    put_waiter(&dir);
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let g = greeter(&registry, "js_waiter_waiter");
+    let waiting = {
+        let g = Arc::clone(&g);
+        std::thread::spawn(move || g.greet("wait").map(|m| greeting(&m).to_string()))
+    };
+    std::thread::sleep(core::time::Duration::from_millis(300));
+    // A new library appears while the call waits: it opens once that ends,
+    // never inside it (where opening is refused).
+    copy_greeter(&dir, "js_late");
+    let refreshing = std::thread::spawn(move || {
+        let changed = registry.refresh();
+        (registry, changed.refused.len())
+    });
+    std::thread::sleep(core::time::Duration::from_millis(300));
+    assert_eq!(greeting(&g.greet("release").expect("answered")), "released");
+    let (registry, refused) = refreshing.join().expect("joined");
+    assert_eq!(refused, 0);
+    assert!(registry.offer::<dyn Greeter>("js_late_hello").is_some());
+    assert!(waiting.join().expect("joined").is_ok());
+    let _ = std::fs::remove_dir_all(&dir);
+}

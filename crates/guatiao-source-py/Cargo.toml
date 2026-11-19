@@ -44,6 +44,8 @@ guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load",
 # The channel kinds and the rules every echo keeps.
 channel_echo_kind = { path = "../../examples/channel_echo/kind" }
 guatiao-channel = { path = "../guatiao-channel" }
+# The kinds the Python greeters serve.
+greeter_kind = { path = "../../examples/greeter_kind" }
 
 # A process per case: the interpreter and its environment are the process's.
 [[test]]

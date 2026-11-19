@@ -62,3 +62,4 @@ pub use error::{BridgeError, Limit};
 pub use kinds::Kinds;
 pub use manifest::{Found, Manifest, ManifestFormat};
 pub use source::BridgeSource;
+pub use thread::yield_calls;

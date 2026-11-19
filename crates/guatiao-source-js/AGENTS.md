@@ -143,7 +143,7 @@ are listed below. Statics, all optional but `kinds`:
 
 | specifier | gives |
 | --- | --- |
-| `guatiao` | `Status`, `GuatiaoError`, `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`, `errorFor(status, message)`, `ExactNumber` |
+| `guatiao` | `Status`, `GuatiaoError`, `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`, `errorFor(status, message)`, `ExactNumber`, `yieldCalls()` (the Node binding has none: a library that must run there asks `typeof` of the module's namespace first) |
 | `guatiao/kinds` | `kindsOf(document)` (an object or its JSON text) → kinds by name; `kindOf(description)` |
 | `guatiao/provide` | `Provider`, `s` (a configuration's schema) |
 | `./x.js`, `../y/z.js` | a file under the library's `paths`, by its exact name |
@@ -281,6 +281,16 @@ key that is not a list of text, or a misspelled limit,
   one cannot hand back another's object. An edited library is a new
   context; the old one is dropped (and the cycles it held collected) when
   its last instance goes.
+- **One call at a time, unless a call yields.** A call that waits for long
+  (a loop looking at a program until it ends) holds the engine's one thread:
+  every other call, a `cancel` of what it waits for among them, queues behind
+  it. `yieldCalls()` (from `guatiao`) runs the calls queued now, each to its
+  end and inside the waiting one, and answers how many ran (up to 64; 0 when
+  eight already wait inside one another, and none opens or closes a library:
+  those wait until no call is open). Between two of its calls the waiting
+  script finds anything those calls changed, its own object's fields among
+  them: check again after each, as after an `await`. A library that never
+  calls it behaves as before.
 - **No event loop.** There are no timers; promise reactions run to
   completion after each call and after the module loads.
 - **A call from a host's callback runs inline.** A script calling a host
