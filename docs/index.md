@@ -28,6 +28,7 @@ pulls in nothing.
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` |
 | `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` |
 | `load` | `Registry::load_file`, `scan_dir`: mapping a library and calling it |
+| `static-dlopen` | part of `load`: a statically linked Linux host loads through the system's own `ld.so` (`loader` is `load` without it) |
 | `regex` | enforcing a schema's `pattern` when validating |
 | `c-header` | regenerating the committed `include/guatiao.h` |
 

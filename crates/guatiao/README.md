@@ -60,7 +60,9 @@ Optional features:
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
 | `provider` | `derive`, with `syn`'s full parser | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!`: a kind crate and every library need it |
-| `load` | `libloading`, `object` | the `Registry` and loading libraries from disk into it (`load_file`, `scan_dir`, `scan_path`): a host needs it |
+| `load` | `libloading`, `object`, `sha2` | the `Registry` and loading libraries from disk into it (`load_file`, `scan_dir`, `scan_path`): a host needs it; `loader` and `static-dlopen` |
+| `loader` | the same | `load` without `static-dlopen`: the platform's loader alone |
+| `static-dlopen` | none | a statically linked Linux host (x86_64, aarch64) loads through the system's own `ld.so`, started inside the process, with no C compiler or linker; nothing on other targets |
 | `regex` | `regex` | enforcing a schema's `pattern` when validating |
 | `c-header` | nothing | regenerating the committed C header |
 

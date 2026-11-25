@@ -14,19 +14,27 @@ write now.
 
 ### Added
 
-- **`guatiao-load-foreign`: native libraries in a statically linked Linux host.**
-  A static host (a musl build) has no dynamic linker; this crate maps the
-  system's own `ld.so` and a small glibc helper program, enters `ld.so` on a
-  thread of its own, and opens libraries and runs their code on threads the
-  system C library made, so neither C library ever runs on the other's thread
-  state. `Foreign::start`, `open`, `Library::{symbol, entry, declaration,
-  close}`, and `call`/`call_on` for a job on a worker. Workers block
-  asynchronous signals; the program break is fenced so the two allocators do
-  not trim each other's heap; the helper is C source built at build time
-  against GLIBC_2.2.5 (2.3.3 for `dladdr1`) on x86_64 and GLIBC_2.17 on
-  aarch64. Every bound is a setting and every check a default the host may
-  weaken. Linux on x86_64 and aarch64; not published yet, and the registry
-  does not take such a library yet.
+- **`static-dlopen`: a statically linked Linux host loads native libraries.**
+  A static host (a musl build) has no dynamic linker. With this feature, which
+  `load` turns on, the registry loads through the system's own instead:
+  `Registry::load_file`, the scans and a watched directory map the system
+  `ld.so`, hand it a program written in memory (headers and tables, no code)
+  naming the system C library, and open libraries and run their code on
+  threads that C library made, so neither C library ever runs on the other's
+  thread state. A static host does this by itself; `Registry::set_dlopen`
+  (`Dlopen::{Auto, System, Foreign}`) forces either loader, and
+  `Registry::set_foreign_settings` sets how the foreign one starts. Calls into
+  a library hop to a foreign worker through a stub; calls a library makes into
+  the host (a kind's or an object's slots, the allocators, the host's
+  services) come back to the host thread waiting on it, or, from a thread the
+  library started, to a host thread kept for that. `library::foreign` holds the
+  loader itself (`Foreign`, `Library`, `Settings`): workers block asynchronous
+  signals, the program break is fenced, every bound is a setting and every
+  check a default the host may weaken. No C compiler or linker is involved;
+  the program asks for GLIBC_2.2.5 (2.3.3 for `dladdr1`) on x86_64 and
+  GLIBC_2.17 on aarch64. Linux on x86_64 and aarch64; elsewhere the feature
+  compiles to nothing. A host that wants the platform's loader alone names
+  the new `loader` feature instead of `load`.
 
 - **`guatiao_bridge::yield_calls()` and `yieldCalls()` in JavaScript.** A call
   into a pinned engine (QuickJS, Lua, Rhai) holds the engine's one thread, so a

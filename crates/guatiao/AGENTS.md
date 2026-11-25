@@ -22,13 +22,68 @@ A C, C++ or Dart consumer reads a whole tree through
 | --- | --- | --- |
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
 | `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` (implies `derive`; turns on `syn/full` in the derive crate) | off |
-| `load` | `Registry` and the scans (`load_file`, `scan_dir*`, `scan_path*`, `probe`): everything a host does | off |
+| `load` | `Registry` and the scans (`load_file`, `scan_dir*`, `scan_path*`, `probe`): everything a host does; `loader` and `static-dlopen` | off |
+| `loader` | `load` without the foreign loader: the platform's own loader alone | off |
+| `static-dlopen` | `library::foreign`: a statically linked Linux host (x86_64, aarch64) loads through the system's `ld.so` (implies `loader`; nothing on other targets) | off |
 | `regex` | enforcing a schema's `pattern` in `validate_*` (carried and read either way) | off |
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-`load` pulls `libloading`, `object` and `sha2` (and `winapi-util` on
-Windows), and `regex` pulls `regex`.
+`loader` pulls `libloading`, `object` and `sha2` (and `winapi-util` on
+Windows), and `regex` pulls `regex`. `static-dlopen` pulls nothing and
+needs no C compiler or linker.
+
+## A statically linked host (`static-dlopen`)
+
+```text
+Registry::set_dlopen(Dlopen::{Auto, System, Foreign})   // Auto: Foreign when crt-static on Linux x86_64/aarch64
+Registry::dlopen() -> Dlopen;  Dlopen::resolved(self) -> Dlopen    // Auto decided for this build
+Registry::set_foreign_settings(foreign::Settings)        // used by the first registry to start it
+foreign::Foreign::start(&Settings) -> Result<Foreign, foreign::Error>   // one per process; later calls answer it
+foreign::Foreign::get() -> Option<Foreign>
+foreign.open(path) / open_with(path, OpenFlags) -> Result<foreign::Library, Error>   // dlopen on a worker
+library.symbol(name) / entry() -> Result<Option<Symbol>, Error>;  library.declaration() -> Result<Option<Vec<u8>>, Error>
+library.close() -> Result<(), Error>
+foreign.callable(address) -> usize          // a foreign function made callable here: its stub
+unsafe foreign.call(Job, *mut c_void)       // a foreign-world function run on a worker
+foreign.thread_ids() / workers() / signals_taken() / on_foreign_thread() / ld_so()
+Settings::program() -> Vec<u8>;  Settings::program_needs() -> Result<Vec<VersionNeed>, Error>
+```
+
+- **Nothing in a host names it**: on a static host `load_file`, the scans
+  and a watched directory open through it; a dynamic host keeps the
+  platform's loader unless told `Dlopen::Foreign` (a musl host loading a
+  glibc library). `Dlopen::System` on a static host turns it off.
+- **Library code runs on foreign workers**, threads the system C library
+  made; host code calls it through stubs the registry puts in the tables it
+  copies, in objects and allocators a library hands over, and in the entry
+  and descriptor slots. A call finding every worker busy starts another, up
+  to `Settings::max_workers` (256).
+- **A library's calls into the host run on a host thread**: every slot this
+  crate generates (kinds, objects, providers), its allocators, the host's
+  services and the C exports check first; from a worker they run on the
+  host thread whose call it is running, and a call back into the library
+  from there goes to the same worker; from a thread the library started,
+  on a host thread kept for that (`Settings::callback_threads`, unbounded
+  by default). A host function given to a library any other way (an
+  allocator or table a C host fills in itself) runs on the foreign thread
+  and must touch no thread-local state.
+- **Every bound is a setting** (`Settings`: `ld_so`, `needed`, `workers`,
+  `max_workers`, the stacks and their alignment, `spin`,
+  `stack_arguments`, `callback_threads`, `blocked_signals`, `environment`,
+  `start_timeout`, `error_capacity`, `declaration_window`), and every check a
+  strict default the host may weaken (`read_unsized_declaration`,
+  `open_flags` `NOW | LOCAL`, `allow_reserved_signal_handlers`,
+  `fence_program_break`). Refused as unworkable: no workers, fewer
+  `max_workers` than `workers`, a stack alignment not a power of two of at
+  least 16, `stack_arguments` not a multiple of 16, no callback threads.
+- **Gotchas**: one foreign C library per process (the first start's
+  settings hold); a call after `fork` is `Error::Forked` and one through a
+  stub ends the child; glibc takes signal 33 when it starts, and the start
+  refuses a host already handling 32 or 33; a host `setuid` does not reach
+  the workers; the foreign C library's `atexit` handlers and destructors do
+  not run at exit. Sources (`add_source_file`) still open through the
+  platform's loader.
 
 ---
 
