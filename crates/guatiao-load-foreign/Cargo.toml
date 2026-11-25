@@ -1,0 +1,28 @@
+[package]
+name = "guatiao-load-foreign"
+description = "Native guatiao libraries in a statically linked Linux host: the system's own dynamic linker and C library run them, on threads of their own"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
+# Not published until the registry takes such a library (it has no
+# public-api snapshot yet, which a published crate commits).
+publish = false
+exclude = [".*", "*.local.*"]
+
+[lib]
+name = "guatiao_load_foreign"
+path = "src/lib.rs"
+
+[dependencies]
+# The two symbol names a guatiao library exports; no feature, so nothing else.
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
+
+[dev-dependencies]
+# Parses a declaration the way a scan does.
+guatiao = { path = "../guatiao", features = ["load"] }
+
+[lints]
+workspace = true
