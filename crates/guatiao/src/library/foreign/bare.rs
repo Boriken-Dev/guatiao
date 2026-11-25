@@ -667,7 +667,7 @@ fn note(r: &mut DlRequest, message: *const c_char) {
                 break;
             }
             // SAFETY: `dlerror`'s string, NUL-terminated.
-            let c = unsafe { *message.add(n) };
+            let c = unsafe { *message.cast::<u8>().add(n) };
             if c == 0 {
                 break;
             }
