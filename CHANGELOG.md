@@ -14,6 +14,20 @@ write now.
 
 ### Added
 
+- **`guatiao-load-foreign`: native libraries in a statically linked Linux host.**
+  A static host (a musl build) has no dynamic linker; this crate maps the
+  system's own `ld.so` and a small glibc helper program, enters `ld.so` on a
+  thread of its own, and opens libraries and runs their code on threads the
+  system C library made, so neither C library ever runs on the other's thread
+  state. `Foreign::start`, `open`, `Library::{symbol, entry, declaration,
+  close}`, and `call`/`call_on` for a job on a worker. Workers block
+  asynchronous signals; the program break is fenced so the two allocators do
+  not trim each other's heap; the helper is C source built at build time
+  against GLIBC_2.2.5 (2.3.3 for `dladdr1`) on x86_64 and GLIBC_2.17 on
+  aarch64. Every bound is a setting and every check a default the host may
+  weaken. Linux on x86_64 and aarch64; not published yet, and the registry
+  does not take such a library yet.
+
 - **`guatiao_bridge::yield_calls()` and `yieldCalls()` in JavaScript.** A call
   into a pinned engine (QuickJS, Lua, Rhai) holds the engine's one thread, so a
   script that waits for long, a loop looking at a program until it ends, held
