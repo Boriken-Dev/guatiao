@@ -89,11 +89,17 @@ pub mod raw;
 // Loading is behind the `load` feature, so a library AUTHOR — who needs
 // the descriptors and the macro and never loads anything — builds with
 // no dependency at all. A `//` comment, never a `///`.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub mod registry;
+// Native libraries in a statically linked Linux host: the system's own
+// `ld.so` and C library, started inside the process (`static-dlopen`).
+// Carries `unsafe`, listed in `tests/forbid_unsafe_per_module.rs`. A `//`
+// comment, never a `///`.
+#[cfg(guatiao_foreign)]
+pub mod foreign;
 // Finding libraries without running them. Behind `load` with the loader
 // it feeds. A `//` comment, never a `///`.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub mod scan;
 // What a source is: the trait and what it lists. Not behind `load`: a
 // source file exports one and maps nothing. A `//` comment, never a `///`.
@@ -101,7 +107,7 @@ mod serving;
 // Libraries that come and go while the host runs: a source the registry
 // keeps, and `refresh`. Behind `load` with the registry. A `//` comment,
 // never a `///`.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub mod source;
 
 pub use desc::{
@@ -120,17 +126,17 @@ pub use raw::{
 };
 #[doc(hidden)]
 pub use raw::{declaration, declaration_len, source_entry};
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub use registry::{
-    ImportSearch, LoadError, Loaded, Loading, Provider, Registry, Retired, Skipped, UnloadError,
-    WhyNot,
+    Dlopen, ImportSearch, LoadError, Loaded, Loading, Provider, Registry, Retired, Skipped,
+    UnloadError, WhyNot,
 };
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub use scan::{
     Declared, LoadReport, Order, Probe, RuleError, ScanRules, SearchPath, bundle_binary,
     declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
     scan_path, scan_path_with,
 };
 pub use serving::{Candidate, Note, Source};
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub use source::{Refreshed, Refused, Served, SourceError};

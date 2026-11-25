@@ -60,7 +60,6 @@ const MAP_ANONYMOUS: c_int = 0x20;
 const MAP_NORESERVE: c_int = 0x4000;
 const MAP_FIXED_NOREPLACE: c_int = 0x10_0000;
 const FUTEX_WAIT_PRIVATE: c_int = 128;
-const FUTEX_WAKE_PRIVATE: c_int = 129;
 const SIG_SETMASK: c_int = 2;
 const EEXIST: i32 = 17;
 const EINTR: i32 = 4;
@@ -177,22 +176,6 @@ pub(crate) fn futex_wait(word: &AtomicU32, expected: u32, timeout: Option<Durati
             FUTEX_WAIT_PRIVATE as c_long,
             expected as c_long,
             at,
-            0usize,
-            0usize,
-        )
-    };
-}
-
-/// Wakes every thread waiting on `word`.
-pub(crate) fn futex_wake(word: &AtomicU32) {
-    // SAFETY: the word is a live `AtomicU32`.
-    unsafe {
-        syscall(
-            nr::FUTEX,
-            word.as_ptr(),
-            FUTEX_WAKE_PRIVATE as c_long,
-            c_long::from(i32::MAX),
-            0usize,
             0usize,
             0usize,
         )

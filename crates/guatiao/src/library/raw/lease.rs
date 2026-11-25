@@ -178,6 +178,8 @@ unsafe fn copy_table(table: *const c_void, size: usize) -> Option<Vec<Chunk>> {
     }
     // A `Vec`, never a `Box`: moving a `Box` retags it as unique, which
     // invalidates the table pointer taken from it before the move.
+    // A foreign library's table comes with its slots made callable here.
+    let table = super::host_table(table, size);
     let mut copy = vec![Chunk([0; 16]); size.div_ceil(size_of::<Chunk>())];
     // SAFETY: the caller's contract for the source; the copy holds at
     // least `size` bytes and is its own allocation.
@@ -228,6 +230,7 @@ impl Lease {
             for (_, table, size) in &mut view.tables {
                 keep(table, *size);
             }
+            view.make_callable();
         }
         let read: &[ProviderView] = views;
         let lease = Arc::new_cyclic(|me: &Weak<Lease>| {

@@ -51,6 +51,17 @@ fn main() {
         println!("cargo::rustc-link-lib=dylib=thr");
     }
 
+    // The foreign loader (`static-dlopen`) exists for Linux on x86_64 and
+    // aarch64 only; one name for that condition instead of three cfgs.
+    println!("cargo::rustc-check-cfg=cfg(guatiao_foreign)");
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    if std::env::var_os("CARGO_FEATURE_STATIC_DLOPEN").is_some()
+        && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux")
+        && matches!(arch.as_str(), "x86_64" | "aarch64")
+    {
+        println!("cargo::rustc-cfg=guatiao_foreign");
+    }
+
     #[cfg(feature = "c-header")]
     render();
 }

@@ -33,7 +33,7 @@
 // type alone, so without that feature they are genuinely unused — and
 // four `#[cfg]`s on items that are correct either way would be four more
 // things to keep in step than saying it once.
-#![cfg_attr(not(feature = "load"), allow(dead_code))]
+#![cfg_attr(not(feature = "loader"), allow(dead_code))]
 
 use core::ffi::c_void;
 use core::panic::AssertUnwindSafe;
@@ -49,12 +49,12 @@ mod entry;
 mod export;
 mod host;
 mod image;
-#[cfg(all(feature = "load", windows))]
+#[cfg(all(feature = "loader", windows))]
 mod imports;
 mod lease;
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 mod mapped;
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 mod source;
 
 pub use self::entry::*;
@@ -62,8 +62,52 @@ pub use self::export::source_entry;
 pub use self::host::*;
 pub use self::image::*;
 pub(crate) use self::lease::{Hold, Lease, Pin};
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) use self::source::{Opening, SourceCell, SourceFileError, open_source_file};
+
+/// Runs `f` on a host thread: here, unless this is one of a foreign C
+/// library's threads (`static-dlopen`), which hands it to the host thread
+/// paired with it. Every way a library reaches this crate's code goes
+/// through it first; it reads no thread-local, so it may be the first thing
+/// such a function does.
+#[inline]
+pub(crate) fn at_home<R>(f: impl FnOnce() -> R) -> R {
+    #[cfg(guatiao_foreign)]
+    if let Some(world) = crate::library::foreign::world::away() {
+        return world.home(f);
+    }
+    f()
+}
+
+/// `address`, callable from this side: a foreign library's function
+/// (`static-dlopen`) through its stub, anything else as it is.
+#[inline]
+pub(crate) fn host_callable(address: usize) -> usize {
+    #[cfg(guatiao_foreign)]
+    if let Some(world) = crate::library::foreign::world::world()
+        && address != 0
+        && world.is_foreign_code(address)
+    {
+        return world.stubs(&[address])[0];
+    }
+    address
+}
+
+/// A kind's or an object's table, with every slot that is a foreign
+/// library's function made callable from this side (`static-dlopen`): a
+/// copy kept for the life of the process when there is one; the table
+/// itself otherwise.
+///
+/// The caller vouches that `table` addresses `size` readable bytes.
+#[inline]
+pub(crate) fn host_table(table: *const c_void, size: usize) -> *const c_void {
+    #[cfg(guatiao_foreign)]
+    if let Some(world) = crate::library::foreign::world::world() {
+        return world.table(table as usize, size) as *const c_void;
+    }
+    let _ = size;
+    table
+}
 
 /// What the tests of every file here build descriptors with.
 #[cfg(test)]
@@ -101,7 +145,7 @@ mod test_support {
 
     /// Where the test binary finds `hello_library`'s artifact: beside it in
     /// `deps/`, where a dev-dependency's cdylib lands.
-    #[cfg(feature = "load")]
+    #[cfg(feature = "loader")]
     pub(super) fn hello_library() -> std::path::PathBuf {
         let exe = std::env::current_exe().expect("a test binary knows its path");
         let deps = exe.parent().expect("it is in a directory");

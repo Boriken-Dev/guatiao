@@ -712,6 +712,18 @@ pub unsafe fn available_via<T>(
     reason: *mut Str,
     ask: impl FnOnce(&T) -> Result<(), &'static str>,
 ) -> bool {
+    // SAFETY: the same call, on a host thread.
+    crate::library::raw::at_home(|| unsafe { available_here(ctx, reason, ask) })
+}
+
+/// # Safety
+///
+/// As [`available_via`].
+unsafe fn available_here<T>(
+    ctx: *mut c_void,
+    reason: *mut Str,
+    ask: impl FnOnce(&T) -> Result<(), &'static str>,
+) -> bool {
     // SAFETY: the caller's contract.
     let Some(this) = (unsafe { ctx_ref::<T>(ctx) }) else {
         return false;

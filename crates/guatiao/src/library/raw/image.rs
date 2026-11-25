@@ -48,10 +48,31 @@ pub type CreateFn = unsafe extern "C" fn(
     err: *mut crate::library::kind::ProviderError,
 ) -> Status;
 
+/// [`ProviderInfo::available`]'s slot.
+type AvailableSlot = unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool;
+
 /// [`ProviderInfo::destroy`]'s slot.
 pub type DestroyFn = unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void);
 
 impl ProviderView {
+    /// Its descriptor's slots, made callable here: a foreign library's
+    /// through stubs, any other's as they are.
+    pub(crate) fn make_callable(&mut self) {
+        let callable = super::host_callable;
+        // SAFETY: each is the same function, or its stub, which has its type.
+        unsafe {
+            self.available = self
+                .available
+                .map(|f| core::mem::transmute::<usize, AvailableSlot>(callable(f as usize)));
+            self.create = self
+                .create
+                .map(|f| core::mem::transmute::<usize, CreateFn>(callable(f as usize)));
+            self.destroy = self
+                .destroy
+                .map(|f| core::mem::transmute::<usize, DestroyFn>(callable(f as usize)));
+        }
+    }
+
     /// Every kind it serves. May be empty.
     pub fn kinds(&self) -> &[String] {
         &self.kinds
@@ -737,7 +758,7 @@ unsafe fn check_table(table: *const c_void, size: usize, bounds: Bounds) -> Resu
 /// [`close`](Origin::close) is the one path to the loader's close, taken
 /// by `unload` and for a skipped file that is a second handle to an image
 /// the registry already holds.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug)]
 pub(crate) enum Origin {
     /// A file this registry mapped and can close, and the loader's handle
@@ -751,9 +772,12 @@ pub(crate) enum Origin {
     Linked(Option<Box<crate::library::kind::LibraryParts>>),
     /// A library a source opened: closing it tells the source.
     Served(super::source::Served),
+    /// A file the foreign loader opened (`static-dlopen`).
+    #[cfg(guatiao_foreign)]
+    Foreign(crate::library::foreign::Library),
 }
 
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 impl Origin {
     /// A mapping this registry holds.
     pub(crate) fn mapped(library: libloading::Library) -> Origin {
@@ -766,6 +790,10 @@ impl Origin {
 
     /// Whether there is a mapping to close at all.
     pub(crate) fn is_mapped(&self) -> bool {
+        #[cfg(guatiao_foreign)]
+        if matches!(self, Origin::Foreign(_)) {
+            return true;
+        }
         matches!(self, Origin::Mapped { .. })
     }
 
@@ -786,6 +814,8 @@ impl Origin {
             Origin::Linked(parts) => parts.take(),
             Origin::Served(served) => served.parts.take(),
             Origin::Mapped { .. } => None,
+            #[cfg(guatiao_foreign)]
+            Origin::Foreign(_) => None,
         }
     }
 
@@ -793,6 +823,10 @@ impl Origin {
     /// counted against a mapping already held, as a hard link to a loaded
     /// file is on Linux.
     pub(crate) fn same_image(&self, other: &Origin) -> bool {
+        #[cfg(guatiao_foreign)]
+        if let (Origin::Foreign(a), Origin::Foreign(b)) = (self, other) {
+            return a.handle() == b.handle();
+        }
         matches!(
             (self, other),
             (Origin::Mapped { image: a, .. }, Origin::Mapped { image: b, .. }) if a == b
@@ -806,20 +840,24 @@ impl Origin {
 
     /// Closes the mapping, or tells the source its library is closed. A
     /// close error leaves the handle given up, as `libloading` does.
-    pub(crate) fn close(self) -> Result<(), libloading::Error> {
+    pub(crate) fn close(self) -> Result<(), String> {
         match self {
-            Origin::Mapped { library, .. } => core::mem::ManuallyDrop::into_inner(library).close(),
+            Origin::Mapped { library, .. } => core::mem::ManuallyDrop::into_inner(library)
+                .close()
+                .map_err(|e| e.to_string()),
             Origin::Linked(_) => Ok(()),
             Origin::Served(served) => {
                 served.close();
                 Ok(())
             }
+            #[cfg(guatiao_foreign)]
+            Origin::Foreign(library) => library.close().map_err(|e| e.to_string()),
         }
     }
 }
 
 /// The library, and the loader's handle for its image as a number.
-#[cfg(all(feature = "load", unix))]
+#[cfg(all(feature = "loader", unix))]
 fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
     let raw = libloading::os::unix::Library::from(library).into_raw();
     // SAFETY: `raw` is the handle just given up, taken back exactly once.
@@ -828,7 +866,7 @@ fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
 }
 
 /// The library, and the loader's handle for its image as a number.
-#[cfg(all(feature = "load", windows))]
+#[cfg(all(feature = "loader", windows))]
 fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
     let raw = libloading::os::windows::Library::from(library).into_raw();
     // SAFETY: `raw` is the handle just given up, taken back exactly once.
@@ -838,7 +876,7 @@ fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
 
 /// What opening one file came to. Four outcomes, because the registry
 /// reports each differently and a caller acts on each differently.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug)]
 pub(crate) enum Opened {
     /// It mapped, and exports no entry symbol: not a library.
@@ -864,12 +902,26 @@ pub(crate) enum Opened {
 ///
 /// Mapping a library runs its static initialisers, which may do anything.
 /// The caller is responsible for only naming files it is willing to run.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) unsafe fn open(
     path: &std::path::Path,
     host: Host,
     search: crate::library::registry::ImportSearch,
+    opener: Opener<'_>,
 ) -> Result<Opened, String> {
+    if let Opener::Foreign(settings) = opener {
+        #[cfg(guatiao_foreign)]
+        // SAFETY: forwarded.
+        return unsafe { open_foreign(path, host, settings) };
+        #[cfg(not(guatiao_foreign))]
+        {
+            let () = *settings;
+            return Err(
+                "this build has no foreign loader (`static-dlopen` on Linux, x86_64 or aarch64)"
+                    .into(),
+            );
+        }
+    }
     // SAFETY: the caller's side of the contract, stated above.
     let library = unsafe { map(path, search, &[])? };
 
@@ -925,7 +977,7 @@ pub(crate) unsafe fn open(
 /// # Safety
 ///
 /// As [`open`].
-#[cfg(all(feature = "load", windows))]
+#[cfg(all(feature = "loader", windows))]
 pub(crate) unsafe fn map(
     path: &std::path::Path,
     search: crate::library::registry::ImportSearch,
@@ -1013,7 +1065,7 @@ pub(crate) unsafe fn map(
 /// # Safety
 ///
 /// As [`open`].
-#[cfg(all(feature = "load", not(windows)))]
+#[cfg(all(feature = "loader", not(windows)))]
 pub(crate) unsafe fn map(
     path: &std::path::Path,
     _search: crate::library::registry::ImportSearch,
@@ -1025,7 +1077,7 @@ pub(crate) unsafe fn map(
 
 /// The loader's message with the system's own words beneath it, which
 /// `libloading` keeps as the error's source.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 fn loader_words(e: &libloading::Error) -> String {
     match core::error::Error::source(e) {
         Some(cause) => format!("{e}: {cause}"),
@@ -1035,7 +1087,7 @@ fn loader_words(e: &libloading::Error) -> String {
 
 /// What a library the host LINKS came to: its describe function's answer,
 /// read the way a loaded library's entry answer is read.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn open_local(described: Option<LocalLibrary<'_>>) -> Opened {
     let Some(described) = described else {
         return Opened::Declined;
@@ -1061,7 +1113,7 @@ pub(crate) fn open_local(described: Option<LocalLibrary<'_>>) -> Opened {
 
 /// What a library the host LINKS and that speaks C came to: its entry
 /// point's answer, read exactly as a loaded library's is.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
     // SAFETY: handing over an entry point is choosing to run it, as naming
     // a file is; its answer is null or a descriptor read under
@@ -1082,7 +1134,7 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
 ///
 /// Safe because the slot is the library's own, read under its
 /// `struct_size` guard, and the registry asking holds the mapping.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn ask_unload(slot: unsafe extern "C" fn() -> Status) -> Status {
     // SAFETY: as above; the slot takes nothing.
     crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { slot() })
@@ -1091,7 +1143,7 @@ pub(crate) fn ask_unload(slot: unsafe extern "C" fn() -> Status) -> Status {
 /// `unload_unchecked` lives here, and not beside `retire`, because
 /// `library/registry.rs` carries `#![forbid(unsafe_code)]` and this is the
 /// file allowed to say it; `unload` stays beside it.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 impl crate::library::registry::Registry {
     /// Takes one library out of this registry **and unmaps it**, when
     /// nothing uses it and the library agrees.
@@ -1211,15 +1263,90 @@ impl crate::library::registry::Registry {
 /// [`crate::library::Registry::load_file`] states in its own
 /// documentation. The `unsafe` that answer authorises is confined to this
 /// file.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn open_library(
     path: &std::path::Path,
     host: Host,
     search: crate::library::registry::ImportSearch,
+    opener: Opener<'_>,
 ) -> Result<Opened, String> {
     // SAFETY: naming a file is choosing to run it, which is the contract
     // stated on `Registry::load_file` and on `open` below.
-    unsafe { open(path, host, search) }
+    unsafe { open(path, host, search, opener) }
+}
+
+/// [`LibraryInfo::unload`]'s slot.
+#[cfg(guatiao_foreign)]
+type UnloadSlot = unsafe extern "C" fn() -> Status;
+
+/// Which loader opens a file, as a registry decided.
+#[cfg(feature = "loader")]
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Opener<'a> {
+    /// The platform's own.
+    System,
+    /// The foreign loader, started with these settings if it is not yet;
+    /// an error in a build without one.
+    #[cfg_attr(not(guatiao_foreign), allow(dead_code))]
+    Foreign(&'a ForeignSettings),
+}
+
+/// How the foreign loader starts, in a build that has one.
+#[cfg(guatiao_foreign)]
+pub(crate) type ForeignSettings = crate::library::foreign::Settings;
+/// Nothing, in a build without the foreign loader.
+#[cfg(not(guatiao_foreign))]
+pub(crate) type ForeignSettings = ();
+
+/// [`open`] through the foreign loader: the file opened on a foreign
+/// worker, its entry point called there through a stub, its descriptor
+/// read here under its image's bounds, and its slots made callable here.
+///
+/// # Safety
+///
+/// As [`open`].
+#[cfg(guatiao_foreign)]
+unsafe fn open_foreign(
+    path: &std::path::Path,
+    host: Host,
+    settings: &crate::library::foreign::Settings,
+) -> Result<Opened, String> {
+    use crate::library::foreign::Foreign;
+    let foreign = Foreign::start(settings).map_err(|e| format!("the foreign loader: {e}"))?;
+    let library = foreign.open(path).map_err(|e| e.to_string())?;
+    let Some(entry) = library.entry().map_err(|e| e.to_string())? else {
+        return Ok(Opened::NoEntrySymbol);
+    };
+    let entry_at = entry.address() as usize;
+    let image = library.placement(entry_at).ok().flatten().and_then(|p| {
+        let code: Vec<(u64, u64)> = p.code.iter().map(|&(s, e)| (s as u64, e as u64)).collect();
+        super::check::Image::place(
+            entry_at as u64,
+            (p.span.0 as u64, p.span.1 as u64),
+            &code,
+            entry_at,
+        )
+    });
+    // SAFETY: the library's entry symbol has this crate's entry signature;
+    // its stub makes the call on a worker.
+    let entry = unsafe { core::mem::transmute::<usize, EntryFn>(foreign.callable(entry_at)) };
+    // SAFETY: as in `open`: the entry reads the host block and answers a
+    // descriptor or null.
+    let desc = unsafe { entry(host.as_raw()) };
+    if desc.is_null() {
+        return Ok(Opened::Declined);
+    }
+    // SAFETY: as in `open`; the library stays open for the read.
+    match unsafe { read_library(desc, Bounds::of(image.as_ref())) } {
+        Ok(mut view) => {
+            // SAFETY: the same function, or its stub, which has its type.
+            view.unload = view.unload.map(|f| unsafe {
+                core::mem::transmute::<usize, UnloadSlot>(foreign.callable(f as usize))
+            });
+            Ok(Opened::Loaded(view, Origin::Foreign(library)))
+        }
+        Err(why) => Ok(Opened::Rejected(why)),
+    }
 }
 
 #[cfg(test)]
@@ -1244,7 +1371,7 @@ mod tests {
     /// A library registered through its C entry point lands as a file's
     /// would, under `<name>`; null is a decline; a second registration
     /// under the name is a skip.
-    #[cfg(feature = "load")]
+    #[cfg(feature = "loader")]
     #[test]
     fn a_linked_library_registers_through_its_entry_point() {
         use crate::library::{Registry, Skipped};
@@ -1745,7 +1872,7 @@ mod tests {
 
     /// A real mapped image: its own layout places it, a code pointer into
     /// its data is refused, and one into its code is accepted.
-    #[cfg(feature = "load")]
+    #[cfg(feature = "loader")]
     #[cfg_attr(miri, ignore = "Miri cannot map a library")]
     #[test]
     fn a_code_pointer_into_a_loaded_images_data_is_refused() {

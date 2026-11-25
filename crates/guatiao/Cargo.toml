@@ -64,7 +64,22 @@ c-header = ["dep:cbindgen"]
 # `sha2` answers `Loaded::digest`: a library file's SHA-256, read only
 # when a host asks for it. `winapi-util` reads a file's volume serial and
 # index on Windows, the identity the digest is checked against.
-load = ["dep:libloading", "dep:object", "dep:sha2", "dep:winapi-util"]
+#
+# `load` is `loader` and `static-dlopen`: a host that wants the platform's
+# loader alone, and none of the foreign one, names `loader` instead.
+load = ["loader", "static-dlopen"]
+loader = ["dep:libloading", "dep:object", "dep:sha2", "dep:winapi-util"]
+
+# A statically linked Linux host (a musl build) has no dynamic linker:
+# with this, the registry loads libraries through the system's own `ld.so`
+# and C library, started inside the process, and runs their code on
+# threads that C library made (`library::foreign`). It adds no dependency
+# and needs no C compiler or linker: the program `ld.so` starts is written
+# in memory when the host starts it. Linux on x86_64 and aarch64; on any
+# other target it compiles to nothing. A dynamically linked host keeps its
+# own loader unless its registry is told otherwise, so the feature costs
+# it the code and one atomic load per call a library makes into the host.
+static-dlopen = ["loader"]
 
 # Enforces a schema's `pattern` in `validate_text` and `validate_value`.
 # Without it the keyword is carried and read but never checked -- a
@@ -106,12 +121,19 @@ libloading = "0.8"
 serde_json = "1"
 # The kind crate `derived_greeter` and the kind tests share.
 greeter_kind = { path = "../../examples/greeter_kind" }
+# The channel kinds and the echo's kind, whose rule suite
+# `tests/foreign_channel.rs` runs against the echo through the foreign
+# loader.
+guatiao-channel = { path = "../guatiao-channel" }
+channel_echo_kind = { path = "../../examples/channel_echo/kind" }
 
 # Libraries built as a side effect of `cargo test`, so `library_load` and
 # `derived_library_load` find real artifacts beside their test binaries.
 # Not under Miri, which cannot build a `cdylib` and runs no test that
-# loads one.
-[target.'cfg(not(miri))'.dev-dependencies]
+# loads one, nor for musl, whose static targets cannot build one (Cargo
+# reads no `target_feature` here): there the tests load the libraries
+# `GUATIAO_LIBRARY_DIR` names.
+[target.'cfg(not(any(miri, target_env = "musl")))'.dev-dependencies]
 hello_library = { path = "../../examples/hello_library" }
 # A library written with no glue.
 derived_greeter = { path = "../../examples/derived_greeter" }

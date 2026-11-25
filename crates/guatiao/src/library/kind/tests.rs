@@ -497,7 +497,7 @@ fn a_zero_hash_is_accepted_only_at_the_raw_door() {
 /// Three providers claiming one kind: one available, one refusing,
 /// one with a short table. `offers` lists the first two in registry
 /// order; `mismatches` holds the third.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[test]
 fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
     use super::super::raw::{LibraryView, Opened};

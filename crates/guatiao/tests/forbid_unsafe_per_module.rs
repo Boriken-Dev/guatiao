@@ -86,6 +86,11 @@ const UNSAFE_PATHS: &[&str] = &[
     "library/kind/tests.rs",
     // The `extern "C"` surface.
     "exports",
+    // The foreign loader (`static-dlopen`): mapping the system's `ld.so`,
+    // the program it starts, and the calls between the two C libraries'
+    // threads. Every file of it is boundary code; its safe files carry the
+    // attribute of their own.
+    "library/foreign",
 ];
 
 /// Modules exempt from **carrying** the attribute, though still checked

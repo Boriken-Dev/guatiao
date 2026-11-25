@@ -10,8 +10,8 @@
 
 use std::io;
 
-use crate::elf::{Elf, PF_R, PF_W, PF_X};
-use crate::sys;
+use super::elf::{Elf, PF_R, PF_W, PF_X};
+use super::sys;
 
 /// Where an image landed. The memory is never given back: the foreign C
 /// library runs from it for the life of the process.

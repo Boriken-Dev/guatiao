@@ -86,7 +86,25 @@ const EXEMPT: &[&str] = &[
     // LIBRARY AUTHOR's crate, which may hold whatever state it likes. The
     // scan reads the macro's text, not where it expands.
     "static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();",
+    // The foreign loader, started once per process (`static-dlopen`): the
+    // C library it starts is process-wide by nature (its signal handler,
+    // the program break, its threads), and every call a library makes into
+    // the host asks it which side the calling thread is on. A second copy
+    // of this crate in one program finds the signal taken and refuses to
+    // start a second one.
+    "static WORLD: AtomicPtr<World> = AtomicPtr::new(core::ptr::null_mut());",
+    // One start of it at a time, for the same reason.
+    "static STARTING_ONE: Mutex<()> = Mutex::new(());",
+    // What a `pthread_atfork` child handler counts, which takes no
+    // argument: a call in a forked child must find the workers gone.
+    "static FORKS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);",
 ];
+
+/// Directories whose atomics are memory shared with another thread, not
+/// state of their own: the foreign loader's mailboxes and control block,
+/// which the foreign C library's threads read and write. Its `static`s are
+/// still checked, line by line, above.
+const SHARED_WITH_THREADS: &[&str] = &["library/foreign/"];
 
 #[test]
 fn the_crate_holds_no_process_global_mutable_state() {
@@ -96,6 +114,12 @@ fn the_crate_holds_no_process_global_mutable_state() {
     for file in rust_files(&src) {
         let text =
             fs::read_to_string(&file).expect("a source file this crate ships must be readable");
+        let relative = file
+            .strip_prefix(&src)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let shared = SHARED_WITH_THREADS.iter().any(|d| relative.starts_with(d));
         for (n, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // A mention inside a comment is documentation, not state. This
@@ -109,6 +133,9 @@ fn the_crate_holds_no_process_global_mutable_state() {
                 continue;
             }
             for bad in FORBIDDEN {
+                if shared && bad.starts_with("Atomic") {
+                    continue;
+                }
                 if line.contains(bad) {
                     hits.push(format!(
                         "{}:{}: {} — {}",

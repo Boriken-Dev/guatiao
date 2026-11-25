@@ -11,7 +11,8 @@
 //! Whether the mapping is genuinely gone after an unload is measured in
 //! `library_unmaps.rs`, which needs a process of its own.
 
-#![cfg(feature = "load")]
+// The libraries are dev-dependencies, which a musl build of the tests does not have.
+#![cfg(all(feature = "load", not(target_env = "musl")))]
 
 use std::path::PathBuf;
 

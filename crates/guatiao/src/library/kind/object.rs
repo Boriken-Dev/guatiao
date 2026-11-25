@@ -400,6 +400,10 @@ unsafe fn destroy_raw(raw: ObjectRaw) {
             .read_unaligned()
     };
     if let Some(destroy) = destroy {
+        let destroy = crate::library::raw::host_callable(destroy as usize);
+        // SAFETY: the caller's contract; a foreign library's slot is called
+        // through its stub, the same function.
+        let destroy: unsafe extern "C" fn(*mut c_void) = unsafe { core::mem::transmute(destroy) };
         // SAFETY: the caller's contract.
         unsafe { destroy(raw.ctx) };
     }

@@ -875,6 +875,42 @@ impl core::fmt::Display for UnloadError {
 
 impl core::error::Error for UnloadError {}
 
+/// Which loader opens a library file.
+///
+/// A statically linked host has no dynamic linker; with `static-dlopen`
+/// (part of `load`) it loads through the system's own instead, started
+/// inside the process (`library::foreign`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Dlopen {
+    /// The foreign loader when this host is statically linked and the
+    /// build has it (Linux on x86_64 and aarch64, `static-dlopen`); the
+    /// platform's loader otherwise.
+    #[default]
+    Auto,
+    /// The platform's own loader, whatever the host. On a statically
+    /// linked host that loader opens nothing: this is how a host turns the
+    /// foreign one off.
+    System,
+    /// The foreign loader, whatever the host: a dynamically linked musl
+    /// host loading libraries built for glibc, for one. A file fails to
+    /// open where the build has no foreign loader.
+    Foreign,
+}
+
+impl Dlopen {
+    /// `Auto` decided for this build: `Foreign` or `System`.
+    pub const fn resolved(self) -> Dlopen {
+        match self {
+            Dlopen::Auto if cfg!(all(guatiao_foreign, target_feature = "crt-static")) => {
+                Dlopen::Foreign
+            }
+            Dlopen::Auto => Dlopen::System,
+            other => other,
+        }
+    }
+}
+
 /// The host's own table of what it has loaded.
 ///
 /// # What a library sees of it
@@ -928,6 +964,12 @@ pub struct Registry {
     priorities: BTreeMap<String, i32>,
     /// Where a file this registry opens has its imports found.
     import_search: ImportSearch,
+    /// Which loader opens a file.
+    dlopen: Dlopen,
+    /// How the foreign loader starts, if this registry is the first to
+    /// start it.
+    #[cfg(guatiao_foreign)]
+    foreign: super::foreign::Settings,
     /// What the services read. This is the strong handle; the block holds
     /// a weak one, so dropping the registry is what makes it `GONE`.
     shared: Arc<Shared>,
@@ -965,6 +1007,9 @@ impl Registry {
             by_key: BTreeMap::new(),
             priorities: BTreeMap::new(),
             import_search: ImportSearch::default(),
+            dlopen: Dlopen::default(),
+            #[cfg(guatiao_foreign)]
+            foreign: super::foreign::Settings::default(),
             shared: Arc::new(Shared::default()),
             block: None,
             leaving: Vec::new(),
@@ -1080,6 +1125,38 @@ impl Registry {
     /// Where a file this registry opens has its imports found.
     pub fn import_search(&self) -> ImportSearch {
         self.import_search
+    }
+
+    /// Which loader opens every file this registry opens from now on:
+    /// [`load_file`](Registry::load_file), a scan and a watched directory.
+    /// [`Dlopen::Auto`] unless the host says otherwise; what is already
+    /// open stays as it was opened.
+    pub fn set_dlopen(&mut self, dlopen: Dlopen) {
+        self.dlopen = dlopen;
+    }
+
+    /// Which loader this registry opens files with.
+    pub fn dlopen(&self) -> Dlopen {
+        self.dlopen
+    }
+
+    /// How the foreign loader (`static-dlopen`) starts, when this registry
+    /// is the first in the process to need it; later registries share the
+    /// one started. Its defaults unless the host says otherwise.
+    #[cfg(guatiao_foreign)]
+    pub fn set_foreign_settings(&mut self, settings: super::foreign::Settings) {
+        self.foreign = settings;
+    }
+
+    /// The loader a file is opened with, `Auto` resolved.
+    fn opener(&self) -> super::raw::Opener<'_> {
+        match self.dlopen.resolved() {
+            #[cfg(guatiao_foreign)]
+            Dlopen::Foreign => super::raw::Opener::Foreign(&self.foreign),
+            #[cfg(not(guatiao_foreign))]
+            Dlopen::Foreign => super::raw::Opener::Foreign(&()),
+            _ => super::raw::Opener::System,
+        }
     }
 
     /// Every provider serving one kind, best first.
@@ -1246,13 +1323,11 @@ impl Registry {
         // whatever the loader's own search finds.
         let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         let before = Identity::at(&absolute);
-        let opened =
-            super::raw::open_library(&absolute, host, self.import_search).map_err(|reason| {
-                LoadError::Open {
-                    path: path.to_path_buf(),
-                    reason,
-                }
-            })?;
+        let opened = super::raw::open_library(&absolute, host, self.import_search, self.opener())
+            .map_err(|reason| LoadError::Open {
+            path: path.to_path_buf(),
+            reason,
+        })?;
         let after = Identity::at(&absolute);
         let file = LibraryFile::new(absolute, before, after);
         self.absorb_file(path, source, opened, Some(file))

@@ -45,7 +45,7 @@ pub(crate) struct SourceCell {
     imp: SourceImpl,
     /// The file it came from, kept mapped: never closed, since a library it
     /// served may outlive the registry.
-    #[cfg(feature = "load")]
+    #[cfg(feature = "loader")]
     _mapping: Option<core::mem::ManuallyDrop<libloading::Library>>,
 }
 
@@ -96,7 +96,7 @@ impl SourceCell {
         Arc::new(SourceCell {
             name: name.to_string(),
             imp: SourceImpl::Rust(source),
-            #[cfg(feature = "load")]
+            #[cfg(feature = "loader")]
             _mapping: None,
         })
     }
@@ -109,7 +109,7 @@ impl SourceCell {
         Ok(Arc::new(SourceCell {
             name: name.to_string(),
             imp: SourceImpl::Table(table),
-            #[cfg(feature = "load")]
+            #[cfg(feature = "loader")]
             _mapping: None,
         }))
     }
@@ -428,7 +428,7 @@ unsafe fn read_source(raw: *const SourceInfo, bounds: Bounds) -> Result<Table, R
 }
 
 /// Why a source file could not be added.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) enum SourceFileError {
     /// The loader refused to map it.
     Open(String),
@@ -446,7 +446,7 @@ pub(crate) enum SourceFileError {
 /// Safe to call for the reason [`open_library`] is: naming a file is
 /// choosing to run it, which is the contract on
 /// [`Registry::add_source_file`](crate::library::Registry::add_source_file).
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn open_source_file(
     path: &std::path::Path,
     host: Host,

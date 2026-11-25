@@ -203,6 +203,17 @@ impl Alloc {
         };
         let release = unsafe { ptr::addr_of!((*raw).release).read() };
 
+        // An allocator a foreign library supplied is called through stubs.
+        let callable = crate::library::raw::host_callable;
+        // SAFETY: each is the same function, or its stub, which has its type.
+        let (alloc, free, release) = unsafe {
+            (
+                core::mem::transmute::<usize, AllocFn>(callable(alloc as usize)),
+                core::mem::transmute::<usize, FreeFn>(callable(free as usize)),
+                release.map(|r| core::mem::transmute::<usize, ReleaseFn>(callable(r as usize))),
+            )
+        };
+
         Ok(Alloc {
             ctx,
             alloc,
@@ -357,7 +368,15 @@ impl Alloc {
 
 // --- the allocator this crate supplies --------------------------------
 
-unsafe extern "C" fn rust_alloc_fn(_ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
+unsafe extern "C" fn rust_alloc_fn(ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
+    // SAFETY: the same call, on a host thread.
+    crate::library::raw::at_home(|| unsafe { rust_alloc_here(ctx, size, align) })
+}
+
+/// # Safety
+///
+/// As [`AllocFn`]'s contract.
+unsafe fn rust_alloc_here(_ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
     let Ok(layout) = core::alloc::Layout::from_size_align(size, align) else {
         return ptr::null_mut();
     };
@@ -372,7 +391,15 @@ unsafe extern "C" fn rust_alloc_fn(_ctx: *mut c_void, size: usize, align: usize)
     unsafe { alloc::alloc::alloc(layout).cast::<c_void>() }
 }
 
-unsafe extern "C" fn rust_free_fn(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
+unsafe extern "C" fn rust_free_fn(ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
+    // SAFETY: the same call, on a host thread.
+    crate::library::raw::at_home(|| unsafe { rust_free_here(ctx, p, size, align) })
+}
+
+/// # Safety
+///
+/// As [`FreeFn`]'s contract.
+unsafe fn rust_free_here(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
     if p.is_null() || size == 0 {
         return;
     }
@@ -407,7 +434,8 @@ unsafe extern "C" fn rust_wiping_free_fn(
 ) {
     if !p.is_null() && size != 0 {
         // SAFETY: the contract on `FreeFn` is that `p` is a live block of
-        // `size` bytes from the matching `alloc`, about to be released.
+        // `size` bytes from the matching `alloc`, about to be released;
+        // zeroing it touches no thread state, on either side.
         unsafe { wipe(p.cast::<u8>(), size) };
     }
     // SAFETY: as above; the block is released as `rust_free_fn` would.

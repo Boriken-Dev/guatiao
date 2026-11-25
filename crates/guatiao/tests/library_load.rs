@@ -22,7 +22,8 @@
 //! If that is false, the design does not work and nothing else in the
 //! envelope matters.
 
-#![cfg(feature = "load")]
+// The libraries are dev-dependencies, which a musl build of the tests does not have.
+#![cfg(all(feature = "load", not(target_env = "musl")))]
 extern crate alloc;
 
 use guatiao::ValueError;

@@ -173,7 +173,8 @@ impl<K: ?Sized + Kind> Remote<K> {
             }
         }
         Ok(Remote {
-            table,
+            // A foreign library's table, with its slots made callable here.
+            table: crate::library::raw::host_table(table, size),
             size,
             ctx,
             hold: Hold::None,

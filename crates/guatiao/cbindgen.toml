@@ -547,7 +547,21 @@ include = [
 # `Entry` is defined in the trailer instead; see `after_includes`. The
 # other two are the platform loader's own functions, which the loader
 # reads a mapped image through and this header must not redeclare.
-exclude = ["Entry", "dl_iterate_phdr", "dladdr"]
+exclude = [
+  "Entry",
+  "dl_iterate_phdr",
+  "dladdr",
+  # The foreign loader's own Rust types and the host C library functions it
+  # declares for itself (`static-dlopen`, Linux): none is C surface.
+  "OpenFlags",
+  "SignalSet",
+  "syscall",
+  "mmap",
+  "mprotect",
+  "munmap",
+  "getauxval",
+  "pthread_atfork",
+]
 
 # A public C header shares one flat namespace with everything a consumer
 # already includes, so every name it introduces carries this crate's

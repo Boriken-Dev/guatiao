@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::BitOr;
 use core::time::Duration;
@@ -15,37 +16,50 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 
-use crate::error::Error;
-use crate::helper::Helper;
+use super::elf::Elf;
+use super::error::Error;
+use super::helper::{self, DEFAULT_LD_SO, DEFAULT_NEEDED, VersionNeed};
 
 /// How the loader starts and behaves. Start from [`Settings::default`] and
 /// change what the host needs.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct Settings {
-    /// The dynamic linker to enter. `None`: the interpreter the helper names
+    /// The dynamic linker to enter, and the interpreter the program it
+    /// starts names. `None`: the architecture's usual one
     /// (`/lib64/ld-linux-x86-64.so.2` on x86_64, `/lib/ld-linux-aarch64.so.1`
-    /// on aarch64, for a helper built on a usual glibc system).
+    /// on aarch64).
     pub ld_so: Option<PathBuf>,
-    /// The helper program. Default: the one built into this crate.
-    pub helper: Helper,
-    /// How many foreign workers run jobs, the bootstrap thread included; at
-    /// least 1. Default 1.
+    /// The libraries the program `ld.so` starts names, in order. Default
+    /// `libdl.so.2`, `libpthread.so.0`, `libc.so.6`: before glibc 2.34 the
+    /// first two hold `dlopen` and `pthread_create`.
+    pub needed: Vec<String>,
+    /// How many workers run jobs from the start; at least 1. Default 2.
     pub workers: usize,
-    /// The bootstrap thread's stack, which becomes the first worker's for
-    /// the life of the process. Default 8 MiB, mapped lazily; `ld.so` itself
-    /// needs some 8 KiB to start.
+    /// How many there may be: a call finding every worker busy starts
+    /// another until there are this many, then waits for one. Default 256.
+    pub max_workers: usize,
+    /// The stack of the thread `ld.so` starts on, which then starts the
+    /// workers for the life of the process. Default 8 MiB, mapped lazily;
+    /// `ld.so` itself needs some 8 KiB to start.
     pub bootstrap_stack: usize,
     /// The alignment of the stack pointer `ld.so` is entered with: a power
     /// of two, at least the 16 both ABIs require. Default 16.
     pub stack_alignment: usize,
-    /// The stack of each worker after the first. `None`: the foreign C
-    /// library's default.
+    /// Each worker's stack. `None`: the foreign C library's default.
     pub worker_stack: Option<usize>,
     /// How many times a waiting side looks again before it sleeps on the
     /// futex. Default 2000: a quick call answers within the spin, an idle
     /// worker sleeps.
     pub spin: u32,
+    /// How many bytes of a caller's stack a call carries to the other
+    /// side: the arguments past those passed in registers. A multiple of
+    /// 16. Default 256, room for 32 words of arguments on the stack.
+    pub stack_arguments: usize,
+    /// How many host threads may run calls the library makes into the host
+    /// from threads of its own, at once. `None`: as many as there are such
+    /// calls waiting. Default `None`.
+    pub callback_threads: Option<usize>,
     /// The signals workers block. Default: every asynchronous signal
     /// ([`SignalSet::asynchronous`]), so a signal meant for the host never
     /// runs its handler on a foreign thread. glibc keeps its own two (32 and
@@ -54,8 +68,8 @@ pub struct Settings {
     /// The environment the foreign C library starts with. Default: the
     /// host's, without the dynamic linker's own variables.
     pub environment: Environment,
-    /// How long to wait for the helper to report ready. `None` waits for
-    /// ever. Default 10 s.
+    /// How long to wait for the foreign C library to report ready. `None`
+    /// waits for ever. Default 10 s.
     pub start_timeout: Option<Duration>,
     /// How many bytes of a `dlerror` message are kept. Default 1024.
     pub error_capacity: usize,
@@ -66,7 +80,7 @@ pub struct Settings {
     /// give, up to the window. Default false: such a declaration is
     /// refused, since reading a window past its end may leave the image.
     pub read_unsized_declaration: bool,
-    /// What [`Foreign::open`](crate::Foreign::open) passes to `dlopen`.
+    /// What [`Foreign::open`](super::Foreign::open) passes to `dlopen`.
     /// Default `NOW | LOCAL`: every symbol bound before the library's code
     /// runs, none made visible to the next library.
     pub open_flags: OpenFlags,
@@ -83,12 +97,15 @@ impl Default for Settings {
     fn default() -> Settings {
         Settings {
             ld_so: None,
-            helper: Helper::Built,
-            workers: 1,
+            needed: DEFAULT_NEEDED.iter().map(|&n| n.into()).collect(),
+            workers: 2,
+            max_workers: 256,
             bootstrap_stack: 8 << 20,
             stack_alignment: 16,
             worker_stack: None,
             spin: 2000,
+            stack_arguments: 256,
+            callback_threads: None,
             blocked_signals: SignalSet::asynchronous(),
             environment: Environment::default(),
             start_timeout: Some(Duration::from_secs(10)),
@@ -114,8 +131,11 @@ impl Settings {
         if self.workers == 0 {
             return refuse("workers", "every job runs on a worker: at least one");
         }
-        if u32::try_from(self.workers).is_err() {
-            return refuse("workers", "more than the helper counts (u32)");
+        if self.max_workers < self.workers {
+            return refuse("max_workers", "fewer than the workers started");
+        }
+        if u32::try_from(self.max_workers).is_err() {
+            return refuse("max_workers", "more than the loader counts (u32)");
         }
         if !self.stack_alignment.is_power_of_two() || self.stack_alignment < 16 {
             return refuse(
@@ -123,7 +143,50 @@ impl Settings {
                 "a power of two of at least 16, as both ABIs require",
             );
         }
+        if !self.stack_arguments.is_multiple_of(16) {
+            return refuse(
+                "stack_arguments",
+                "a multiple of 16, so the stack stays aligned",
+            );
+        }
+        if self.callback_threads == Some(0) {
+            return refuse(
+                "callback_threads",
+                "a call from a library's own thread needs a host thread: at least one",
+            );
+        }
+        if self.needed.iter().any(|n| n.is_empty() || n.contains('\0')) {
+            return refuse("needed", "a library name is empty or holds a NUL byte");
+        }
         Ok(())
+    }
+
+    /// The program `ld.so` would start with these settings, as bytes: what
+    /// [`Foreign::start`](super::Foreign::start) maps, here with a
+    /// thread-local mark of zeroes.
+    pub fn program(&self) -> Vec<u8> {
+        helper::write(
+            self.interpreter().as_os_str().as_bytes(),
+            &self.needed,
+            [0, 0],
+        )
+        .bytes
+    }
+
+    /// The C library versions that program needs. The newest of them is
+    /// the oldest C library it runs on.
+    pub fn program_needs(&self) -> Result<Vec<VersionNeed>, Error> {
+        let bytes = self.program();
+        Elf::parse(&bytes)
+            .and_then(|e| e.version_needs())
+            .map_err(|reason| Error::Program { reason })
+    }
+
+    /// The dynamic linker these settings enter.
+    pub fn interpreter(&self) -> PathBuf {
+        self.ld_so
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_LD_SO))
     }
 }
 
@@ -184,6 +247,7 @@ pub struct SignalSet(u64);
 /// segmentation fault, bad system call.
 const SYNCHRONOUS: [u32; 6] = [4, 5, 7, 8, 11, 31];
 
+/// cbindgen:ignore
 impl SignalSet {
     /// No signal.
     pub const EMPTY: SignalSet = SignalSet(0);
@@ -261,6 +325,7 @@ const fn bit(signal: u32) -> Option<u64> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OpenFlags(i32);
 
+/// cbindgen:ignore
 impl OpenFlags {
     /// Bind each function on its first call.
     pub const LAZY: OpenFlags = OpenFlags(0x1);
@@ -311,7 +376,7 @@ mod tests {
                 ..
             })
         ));
-        s.workers = 1;
+        s.workers = 2;
         for bad in [0, 8, 24] {
             s.stack_alignment = bad;
             assert!(matches!(
@@ -323,6 +388,12 @@ mod tests {
             ));
         }
         s.stack_alignment = 64;
+        s.stack_arguments = 24;
+        assert!(s.check().is_err());
+        s.stack_arguments = 0;
+        s.max_workers = 1;
+        assert!(s.check().is_err());
+        s.max_workers = 2;
         s.spin = 0;
         s.error_capacity = 0;
         s.declaration_window = 0;

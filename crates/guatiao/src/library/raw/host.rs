@@ -312,7 +312,7 @@ fn addressable<T>(raw: *const T) -> bool {
 /// **Leaked once per registry, never freed.** That is what lets a library
 /// keep the pointer; the registry itself may go, and the block then
 /// answers [`Status::GUATIAO_ERR_GONE`].
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug)]
 pub(crate) struct HostBlock {
     info: HostInfo<'static>,
@@ -328,7 +328,7 @@ pub(crate) struct HostBlock {
 
 /// What the registry publishes for its services to read: the providers
 /// it holds, already in its order, with each descriptor's address.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug, Default)]
 pub(crate) struct Snapshot {
     /// In `(priority DESC, key ASC)` order.
@@ -342,7 +342,7 @@ pub(crate) struct Snapshot {
 
 /// One provider as the services see it: the kinds it serves, and which
 /// descriptor of which of the snapshot's leases is its own.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug)]
 pub(crate) struct SnapshotEntry {
     pub(crate) kinds: Vec<String>,
@@ -352,7 +352,7 @@ pub(crate) struct SnapshotEntry {
     pub(crate) at: usize,
 }
 
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 impl Snapshot {
     /// The descriptor handed to a library that asks for `entry`, valid
     /// while this snapshot, or a pin, holds its lease.
@@ -372,25 +372,25 @@ impl Snapshot {
 // behind a lock, or reading it from several threads, is the ordinary
 // shape, and without these it could not. Declared here rather than
 // beside the types because this is the file allowed to say `unsafe`.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe impl Send for crate::library::registry::Registry {}
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe impl Sync for crate::library::registry::Registry {}
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe impl Send for crate::library::registry::Provider {}
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe impl Sync for crate::library::registry::Provider {}
 
 /// The state a registry shares with the block it leaked. The registry
 /// holds the `Arc`; the block holds a `Weak`, so dropping the registry is
 /// what makes every later lookup answer `GONE`.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
     pub(crate) snapshot: std::sync::RwLock<Snapshot>,
 }
 
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 impl Shared {
     /// The published snapshot, whatever a poisoned lock says: a panic
     /// while publishing leaves the last complete snapshot in place.
@@ -419,7 +419,7 @@ pub(crate) unsafe fn view_of_owned(text: &str) -> Str<'static> {
 /// The descriptor's text points into the block's own strings, and the
 /// services' `ctx` is the block itself, so nothing here borrows from the
 /// registry.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub(crate) fn leak_host_block(
     id: &str,
     version: &str,
@@ -469,7 +469,7 @@ pub(crate) fn leak_host_block(
     }
 }
 
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 impl HostBlock {
     /// The descriptor a library is handed.
     pub(crate) fn host(&'static self) -> Host {
@@ -482,7 +482,7 @@ impl HostBlock {
 /// # Safety
 ///
 /// `ctx` is null or the `ctx` this crate wrote into a block it leaked.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe fn block_of<'a>(ctx: *mut c_void) -> Option<&'a HostBlock> {
     // SAFETY: the caller's contract; the block is never freed.
     unsafe { ctx.cast::<HostBlock>().as_ref() }
@@ -494,7 +494,7 @@ unsafe fn block_of<'a>(ctx: *mut c_void) -> Option<&'a HostBlock> {
 ///
 /// `ctx` is a leaked block's, `key` is readable for the call, `out` is
 /// null or writable.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_get(
     ctx: *mut c_void,
     key: Str,
@@ -509,7 +509,7 @@ unsafe extern "C" fn services_get(
 /// # Safety
 ///
 /// As [`services_get`].
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_get_pinned(
     ctx: *mut c_void,
     key: Str,
@@ -522,7 +522,7 @@ unsafe extern "C" fn services_get_pinned(
 /// # Safety
 ///
 /// As [`services_get`].
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe fn get_one(
     ctx: *mut c_void,
     key: Str,
@@ -565,7 +565,7 @@ unsafe fn get_one(
 ///
 /// `ctx` is a leaked block's, `kind` is readable, `out` addresses `cap`
 /// writable slots (or is null with `cap` zero), `total` is writable.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_list(
     ctx: *mut c_void,
     kind: Str,
@@ -582,7 +582,7 @@ unsafe extern "C" fn services_list(
 /// # Safety
 ///
 /// As [`services_list`].
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_list_pinned(
     ctx: *mut c_void,
     kind: Str,
@@ -597,7 +597,7 @@ unsafe extern "C" fn services_list_pinned(
 /// # Safety
 ///
 /// As [`services_list`].
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe fn list_all(
     ctx: *mut c_void,
     kind: Str,
@@ -653,7 +653,7 @@ unsafe fn list_all(
 ///
 /// `desc` came pinned from this block's `get_pinned` or `list_pinned`,
 /// and the caller holds a pin on it.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_pin(_ctx: *mut c_void, desc: *const ProviderInfo) {
     crate::exports::guard_with((), || {
         if !desc.is_null() {
@@ -668,7 +668,7 @@ unsafe extern "C" fn services_pin(_ctx: *mut c_void, desc: *const ProviderInfo) 
 /// # Safety
 ///
 /// As [`services_pin`]; the hold given back is the caller's.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_unpin(_ctx: *mut c_void, desc: *const ProviderInfo) {
     crate::exports::guard_with((), || {
         if !desc.is_null() {
@@ -683,7 +683,7 @@ unsafe extern "C" fn services_unpin(_ctx: *mut c_void, desc: *const ProviderInfo
 /// # Safety
 ///
 /// `ctx` is a leaked block's.
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 unsafe extern "C" fn services_alloc(ctx: *mut c_void) -> *const crate::value::alloc::Allocator {
     crate::exports::guard_with(core::ptr::null(), || {
         // SAFETY: the caller's contract.

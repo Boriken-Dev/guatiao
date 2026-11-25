@@ -473,6 +473,211 @@ impl core::fmt::Debug for guatiao::library::desc::SourceInfo
 pub fn guatiao::library::desc::SourceInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao::library::desc::SourceInfo
 pub const guatiao::library::desc::ABI_VERSION: u32
+pub mod guatiao::library::foreign
+#[non_exhaustive] pub enum guatiao::library::foreign::Environment
+pub guatiao::library::foreign::Environment::Exact(alloc::vec::Vec<std::ffi::os_str::OsString>)
+pub guatiao::library::foreign::Environment::Inherit
+pub guatiao::library::foreign::Environment::WithoutLoaderVariables
+impl core::clone::Clone for guatiao::library::foreign::Environment
+pub fn guatiao::library::foreign::Environment::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::foreign::Environment
+impl core::cmp::PartialEq for guatiao::library::foreign::Environment
+pub fn guatiao::library::foreign::Environment::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::foreign::Environment
+pub fn guatiao::library::foreign::Environment::default() -> Self
+impl core::fmt::Debug for guatiao::library::foreign::Environment
+pub fn guatiao::library::foreign::Environment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::foreign::Environment
+#[non_exhaustive] pub enum guatiao::library::foreign::Error
+pub guatiao::library::foreign::Error::Close
+pub guatiao::library::foreign::Error::Close::message: alloc::string::String
+pub guatiao::library::foreign::Error::DeclarationSizeUnknown
+pub guatiao::library::foreign::Error::DeclarationTooLarge
+pub guatiao::library::foreign::Error::DeclarationTooLarge::size: u64
+pub guatiao::library::foreign::Error::DeclarationTooLarge::window: usize
+pub guatiao::library::foreign::Error::DeclarationUnterminated
+pub guatiao::library::foreign::Error::DeclarationUnterminated::read: usize
+pub guatiao::library::foreign::Error::Fence(core::io::error::Error)
+pub guatiao::library::foreign::Error::Forked
+pub guatiao::library::foreign::Error::Layout
+pub guatiao::library::foreign::Error::LdSo
+pub guatiao::library::foreign::Error::LdSo::path: std::path::PathBuf
+pub guatiao::library::foreign::Error::LdSo::reason: guatiao::library::foreign::ImageError
+pub guatiao::library::foreign::Error::Memory(core::io::error::Error)
+pub guatiao::library::foreign::Error::Name(std::ffi::os_str::OsString)
+pub guatiao::library::foreign::Error::NoMark
+pub guatiao::library::foreign::Error::Open
+pub guatiao::library::foreign::Error::Open::message: alloc::string::String
+pub guatiao::library::foreign::Error::Open::name: std::ffi::os_str::OsString
+pub guatiao::library::foreign::Error::Program
+pub guatiao::library::foreign::Error::Program::reason: guatiao::library::foreign::ImageError
+pub guatiao::library::foreign::Error::Setting
+pub guatiao::library::foreign::Error::Setting::name: &'static str
+pub guatiao::library::foreign::Error::Setting::reason: alloc::string::String
+pub guatiao::library::foreign::Error::SignalInUse
+pub guatiao::library::foreign::Error::SignalInUse::signal: u32
+pub guatiao::library::foreign::Error::Spawn(i32)
+pub guatiao::library::foreign::Error::StartTimedOut(core::time::Duration)
+pub guatiao::library::foreign::Error::Thread(core::io::error::Error)
+impl core::error::Error for guatiao::library::foreign::Error
+pub fn guatiao::library::foreign::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for guatiao::library::foreign::Error
+pub fn guatiao::library::foreign::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::foreign::Error
+pub fn guatiao::library::foreign::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao::library::foreign::ImageError
+pub guatiao::library::foreign::ImageError::Class
+pub guatiao::library::foreign::ImageError::HasInterpreter
+pub guatiao::library::foreign::ImageError::Io(core::io::error::Error)
+pub guatiao::library::foreign::ImageError::Machine
+pub guatiao::library::foreign::ImageError::Machine::expected: u16
+pub guatiao::library::foreign::ImageError::Machine::found: u16
+pub guatiao::library::foreign::ImageError::Malformed(&'static str)
+pub guatiao::library::foreign::ImageError::NotElf
+pub guatiao::library::foreign::ImageError::Type(u16)
+impl core::error::Error for guatiao::library::foreign::ImageError
+pub fn guatiao::library::foreign::ImageError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for guatiao::library::foreign::ImageError
+pub fn guatiao::library::foreign::ImageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::foreign::ImageError
+pub fn guatiao::library::foreign::ImageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::foreign::Foreign
+impl guatiao::library::foreign::Foreign
+pub unsafe fn guatiao::library::foreign::Foreign::call(&self, guatiao::library::foreign::Job, *mut core::ffi::c_void) -> core::result::Result<(), guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Foreign::callable(&self, usize) -> usize
+pub fn guatiao::library::foreign::Foreign::get() -> core::option::Option<guatiao::library::foreign::Foreign>
+pub fn guatiao::library::foreign::Foreign::ld_so(&self) -> &std::path::Path
+pub fn guatiao::library::foreign::Foreign::on_foreign_thread(&self) -> bool
+pub fn guatiao::library::foreign::Foreign::open(&self, impl core::convert::AsRef<std::ffi::os_str::OsStr>) -> core::result::Result<guatiao::library::foreign::Library, guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Foreign::open_with(&self, impl core::convert::AsRef<std::ffi::os_str::OsStr>, guatiao::library::foreign::OpenFlags) -> core::result::Result<guatiao::library::foreign::Library, guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Foreign::signals_taken(&self) -> guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::Foreign::start(&guatiao::library::foreign::Settings) -> core::result::Result<guatiao::library::foreign::Foreign, guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Foreign::thread_ids(&self) -> alloc::vec::Vec<i32>
+pub fn guatiao::library::foreign::Foreign::workers(&self) -> usize
+impl core::clone::Clone for guatiao::library::foreign::Foreign
+pub fn guatiao::library::foreign::Foreign::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::library::foreign::Foreign
+pub fn guatiao::library::foreign::Foreign::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::library::foreign::Foreign
+pub struct guatiao::library::foreign::Library
+impl guatiao::library::foreign::Library
+pub fn guatiao::library::foreign::Library::close(self) -> core::result::Result<(), guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Library::declaration(&self) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Library::entry(&self) -> core::result::Result<core::option::Option<guatiao::library::foreign::Symbol>, guatiao::library::foreign::Error>
+pub fn guatiao::library::foreign::Library::foreign(&self) -> &guatiao::library::foreign::Foreign
+pub fn guatiao::library::foreign::Library::handle(&self) -> *mut core::ffi::c_void
+pub fn guatiao::library::foreign::Library::name(&self) -> &std::ffi::os_str::OsStr
+pub fn guatiao::library::foreign::Library::symbol(&self, &str) -> core::result::Result<core::option::Option<guatiao::library::foreign::Symbol>, guatiao::library::foreign::Error>
+impl core::fmt::Debug for guatiao::library::foreign::Library
+pub fn guatiao::library::foreign::Library::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::foreign::OpenFlags(_)
+impl guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::DEEPBIND: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::GLOBAL: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::LAZY: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::LOCAL: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::NODELETE: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::NOLOAD: guatiao::library::foreign::OpenFlags
+pub const guatiao::library::foreign::OpenFlags::NOW: guatiao::library::foreign::OpenFlags
+pub const fn guatiao::library::foreign::OpenFlags::bits(self) -> i32
+pub const fn guatiao::library::foreign::OpenFlags::from_bits(i32) -> guatiao::library::foreign::OpenFlags
+impl core::clone::Clone for guatiao::library::foreign::OpenFlags
+pub fn guatiao::library::foreign::OpenFlags::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::foreign::OpenFlags
+impl core::cmp::PartialEq for guatiao::library::foreign::OpenFlags
+pub fn guatiao::library::foreign::OpenFlags::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::foreign::OpenFlags
+pub fn guatiao::library::foreign::OpenFlags::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::foreign::OpenFlags
+pub fn guatiao::library::foreign::OpenFlags::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::foreign::OpenFlags
+impl core::marker::StructuralPartialEq for guatiao::library::foreign::OpenFlags
+impl core::ops::bit::BitOr for guatiao::library::foreign::OpenFlags
+pub type guatiao::library::foreign::OpenFlags::Output = guatiao::library::foreign::OpenFlags
+pub fn guatiao::library::foreign::OpenFlags::bitor(self, guatiao::library::foreign::OpenFlags) -> guatiao::library::foreign::OpenFlags
+#[non_exhaustive] pub struct guatiao::library::foreign::Settings
+pub guatiao::library::foreign::Settings::allow_reserved_signal_handlers: bool
+pub guatiao::library::foreign::Settings::blocked_signals: guatiao::library::foreign::SignalSet
+pub guatiao::library::foreign::Settings::bootstrap_stack: usize
+pub guatiao::library::foreign::Settings::callback_threads: core::option::Option<usize>
+pub guatiao::library::foreign::Settings::declaration_window: usize
+pub guatiao::library::foreign::Settings::environment: guatiao::library::foreign::Environment
+pub guatiao::library::foreign::Settings::error_capacity: usize
+pub guatiao::library::foreign::Settings::fence_program_break: bool
+pub guatiao::library::foreign::Settings::ld_so: core::option::Option<std::path::PathBuf>
+pub guatiao::library::foreign::Settings::max_workers: usize
+pub guatiao::library::foreign::Settings::needed: alloc::vec::Vec<alloc::string::String>
+pub guatiao::library::foreign::Settings::open_flags: guatiao::library::foreign::OpenFlags
+pub guatiao::library::foreign::Settings::read_unsized_declaration: bool
+pub guatiao::library::foreign::Settings::spin: u32
+pub guatiao::library::foreign::Settings::stack_alignment: usize
+pub guatiao::library::foreign::Settings::stack_arguments: usize
+pub guatiao::library::foreign::Settings::start_timeout: core::option::Option<core::time::Duration>
+pub guatiao::library::foreign::Settings::worker_stack: core::option::Option<usize>
+pub guatiao::library::foreign::Settings::workers: usize
+impl guatiao::library::foreign::Settings
+pub fn guatiao::library::foreign::Settings::interpreter(&self) -> std::path::PathBuf
+pub fn guatiao::library::foreign::Settings::program(&self) -> alloc::vec::Vec<u8>
+pub fn guatiao::library::foreign::Settings::program_needs(&self) -> core::result::Result<alloc::vec::Vec<guatiao::library::foreign::VersionNeed>, guatiao::library::foreign::Error>
+impl core::clone::Clone for guatiao::library::foreign::Settings
+pub fn guatiao::library::foreign::Settings::clone(&self) -> Self
+impl core::default::Default for guatiao::library::foreign::Settings
+pub fn guatiao::library::foreign::Settings::default() -> guatiao::library::foreign::Settings
+impl core::fmt::Debug for guatiao::library::foreign::Settings
+pub fn guatiao::library::foreign::Settings::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::foreign::SignalSet(_)
+impl guatiao::library::foreign::SignalSet
+pub const guatiao::library::foreign::SignalSet::EMPTY: guatiao::library::foreign::SignalSet
+pub const fn guatiao::library::foreign::SignalSet::all() -> guatiao::library::foreign::SignalSet
+pub const fn guatiao::library::foreign::SignalSet::asynchronous() -> guatiao::library::foreign::SignalSet
+pub const fn guatiao::library::foreign::SignalSet::bits(self) -> u64
+pub const fn guatiao::library::foreign::SignalSet::contains(self, u32) -> bool
+pub const fn guatiao::library::foreign::SignalSet::from_bits(u64) -> guatiao::library::foreign::SignalSet
+pub const fn guatiao::library::foreign::SignalSet::is_empty(self) -> bool
+pub fn guatiao::library::foreign::SignalSet::iter(self) -> impl core::iter::traits::iterator::Iterator<Item = u32>
+pub const fn guatiao::library::foreign::SignalSet::with(self, u32) -> guatiao::library::foreign::SignalSet
+pub const fn guatiao::library::foreign::SignalSet::without(self, u32) -> guatiao::library::foreign::SignalSet
+impl core::clone::Clone for guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::SignalSet::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::foreign::SignalSet
+impl core::cmp::PartialEq for guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::SignalSet::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::SignalSet::default() -> Self
+impl core::fmt::Debug for guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::SignalSet::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::foreign::SignalSet
+pub fn guatiao::library::foreign::SignalSet::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::foreign::SignalSet
+impl core::marker::StructuralPartialEq for guatiao::library::foreign::SignalSet
+pub struct guatiao::library::foreign::Symbol
+impl guatiao::library::foreign::Symbol
+pub fn guatiao::library::foreign::Symbol::address(&self) -> *mut core::ffi::c_void
+pub unsafe fn guatiao::library::foreign::Symbol::as_job(&self) -> guatiao::library::foreign::Job
+pub fn guatiao::library::foreign::Symbol::size(&self) -> core::option::Option<u64>
+impl core::clone::Clone for guatiao::library::foreign::Symbol
+pub fn guatiao::library::foreign::Symbol::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::foreign::Symbol
+impl core::cmp::PartialEq for guatiao::library::foreign::Symbol
+pub fn guatiao::library::foreign::Symbol::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::foreign::Symbol
+pub fn guatiao::library::foreign::Symbol::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::library::foreign::Symbol
+impl core::marker::StructuralPartialEq for guatiao::library::foreign::Symbol
+pub struct guatiao::library::foreign::VersionNeed
+pub guatiao::library::foreign::VersionNeed::file: alloc::string::String
+pub guatiao::library::foreign::VersionNeed::version: alloc::string::String
+impl core::clone::Clone for guatiao::library::foreign::VersionNeed
+pub fn guatiao::library::foreign::VersionNeed::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::foreign::VersionNeed
+impl core::cmp::PartialEq for guatiao::library::foreign::VersionNeed
+pub fn guatiao::library::foreign::VersionNeed::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::foreign::VersionNeed
+pub fn guatiao::library::foreign::VersionNeed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::foreign::VersionNeed
+pub fn guatiao::library::foreign::VersionNeed::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for guatiao::library::foreign::VersionNeed
+pub type guatiao::library::foreign::Job = fn(*mut core::ffi::c_void)
 pub mod guatiao::library::key
 #[non_exhaustive] pub enum guatiao::library::key::KeyError
 pub guatiao::library::key::KeyError::Collides
@@ -1249,6 +1454,25 @@ pub type guatiao::library::raw::DestroyFn = fn(*mut core::ffi::c_void, *mut core
 pub type guatiao::library::raw::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
 pub type guatiao::library::raw::SourceFn = fn(*const guatiao::library::desc::HostInfo<'static>, *const guatiao::value::value::Value, *mut *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 pub mod guatiao::library::registry
+#[non_exhaustive] pub enum guatiao::library::registry::Dlopen
+pub guatiao::library::registry::Dlopen::Auto
+pub guatiao::library::registry::Dlopen::Foreign
+pub guatiao::library::registry::Dlopen::System
+impl guatiao::library::registry::Dlopen
+pub const fn guatiao::library::registry::Dlopen::resolved(self) -> guatiao::library::registry::Dlopen
+impl core::clone::Clone for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::registry::Dlopen
+impl core::cmp::PartialEq for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::default() -> Self
+impl core::fmt::Debug for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::registry::Dlopen
+impl core::marker::StructuralPartialEq for guatiao::library::registry::Dlopen
 pub enum guatiao::library::registry::ImportSearch
 pub guatiao::library::registry::ImportSearch::Library
 pub guatiao::library::registry::ImportSearch::Path
@@ -1394,6 +1618,7 @@ pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::ite
 pub fn guatiao::library::registry::Registry::available(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::best(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::Vec<alloc::string::String>
+pub fn guatiao::library::registry::Registry::dlopen(&self) -> guatiao::library::registry::Dlopen
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
@@ -1416,6 +1641,8 @@ pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl c
 pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::register_local<'a, L: core::convert::Into<guatiao::library::raw::LocalLibrary<'a>>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::set_dlopen(&mut self, guatiao::library::registry::Dlopen)
+pub fn guatiao::library::registry::Registry::set_foreign_settings(&mut self, guatiao::library::foreign::Settings)
 pub fn guatiao::library::registry::Registry::set_import_search(&mut self, guatiao::library::registry::ImportSearch)
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
@@ -1659,6 +1886,25 @@ pub fn guatiao::library::source::Source::close(&self, &str, &str)
 pub fn guatiao::library::source::Source::list(&self, guatiao::library::raw::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::Candidate>, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::source::Source::notes(&self) -> core::result::Result<alloc::vec::Vec<guatiao::library::Note>, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::source::Source::open(&self, guatiao::library::raw::Host, &str) -> core::result::Result<guatiao::library::raw::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
+#[non_exhaustive] pub enum guatiao::library::Dlopen
+pub guatiao::library::Dlopen::Auto
+pub guatiao::library::Dlopen::Foreign
+pub guatiao::library::Dlopen::System
+impl guatiao::library::registry::Dlopen
+pub const fn guatiao::library::registry::Dlopen::resolved(self) -> guatiao::library::registry::Dlopen
+impl core::clone::Clone for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::registry::Dlopen
+impl core::cmp::PartialEq for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::default() -> Self
+impl core::fmt::Debug for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::registry::Dlopen
+pub fn guatiao::library::registry::Dlopen::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::registry::Dlopen
+impl core::marker::StructuralPartialEq for guatiao::library::registry::Dlopen
 pub enum guatiao::library::ImportSearch
 pub guatiao::library::ImportSearch::Library
 pub guatiao::library::ImportSearch::Path
@@ -2400,6 +2646,7 @@ pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::ite
 pub fn guatiao::library::registry::Registry::available(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::best(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::Vec<alloc::string::String>
+pub fn guatiao::library::registry::Registry::dlopen(&self) -> guatiao::library::registry::Dlopen
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
@@ -2422,6 +2669,8 @@ pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl c
 pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::register_local<'a, L: core::convert::Into<guatiao::library::raw::LocalLibrary<'a>>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::set_dlopen(&mut self, guatiao::library::registry::Dlopen)
+pub fn guatiao::library::registry::Registry::set_foreign_settings(&mut self, guatiao::library::foreign::Settings)
 pub fn guatiao::library::registry::Registry::set_import_search(&mut self, guatiao::library::registry::ImportSearch)
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>

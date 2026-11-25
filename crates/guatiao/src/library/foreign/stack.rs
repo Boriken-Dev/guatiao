@@ -9,8 +9,8 @@
 
 use alloc::vec::Vec;
 
-use crate::error::Error;
-use crate::sys;
+use super::error::Error;
+use super::sys;
 
 /// Memory for the bootstrap thread's stack: `size` bytes above one
 /// inaccessible guard page. Never given back: the thread runs on it for

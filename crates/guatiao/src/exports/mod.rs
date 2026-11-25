@@ -75,7 +75,7 @@ use crate::value::status::Status;
 // on. A `//` comment, never a `///`.
 pub mod channel;
 pub mod kind;
-#[cfg(feature = "load")]
+#[cfg(feature = "loader")]
 pub mod library;
 pub mod merge;
 pub mod schema;
@@ -90,6 +90,10 @@ pub mod visit;
 /// status, so it reports it the only way its signature allows: by handing
 /// back `fallback`, which for a pointer is null.
 pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
+    crate::library::raw::at_home(|| guarded_with(fallback, body))
+}
+
+fn guarded_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(v) => v,
         Err(payload) => {
@@ -108,6 +112,10 @@ pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
 /// halves of the boundary cannot drift apart on the one rule that keeps a
 /// host alive.
 pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
+    crate::library::raw::at_home(|| guarded(body))
+}
+
+fn guarded(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(s) => s,
         Err(payload) => {

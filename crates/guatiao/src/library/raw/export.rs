@@ -321,7 +321,7 @@ unsafe extern "C" fn close<S: Source>(
     });
 }
 
-#[cfg(all(test, feature = "load"))]
+#[cfg(all(test, feature = "loader"))]
 mod tests {
     use alloc::sync::Arc;
 

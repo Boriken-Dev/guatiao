@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 
-/// Why the loader could not start, open, look up or close.
+/// Why the foreign loader could not start, open, look up or close.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
@@ -24,28 +24,15 @@ pub enum Error {
         /// What was wrong with it.
         reason: ImageError,
     },
-    /// The helper program could not be used: its path (`None` for the one
-    /// built into this crate, or bytes given directly), and why.
-    Helper {
-        /// The path read, if it came from a file.
-        path: Option<PathBuf>,
+    /// The program written for `ld.so` does not read back: a defect of
+    /// this crate, reported rather than entered.
+    Program {
         /// What was wrong with it.
         reason: ImageError,
     },
-    /// This crate was built with no helper (`GUATIAO_FOREIGN_HELPER_CC=none`)
-    /// and the settings name none.
-    NoHelper,
-    /// A helper could not be built with the compiler given: its exit and
-    /// what it printed.
-    Build {
-        /// The compiler's exit, or why it could not be run.
-        status: String,
-        /// What it wrote to standard error.
-        stderr: String,
-    },
     /// A setting holds a value that cannot work.
     Setting {
-        /// The field of [`Settings`](crate::Settings).
+        /// The field of [`Settings`](super::Settings).
         name: &'static str,
         /// Why the value cannot work.
         reason: String,
@@ -63,24 +50,22 @@ pub enum Error {
     Memory(io::Error),
     /// The thread `ld.so` starts on could not be created.
     Thread(io::Error),
-    /// The helper did not report ready in time; its thread stays parked.
+    /// The foreign C library did not report ready in time; its thread
+    /// stays parked.
     StartTimedOut(Duration),
-    /// The helper did not accept the control block it was given: it was
-    /// built from another version of this crate.
+    /// The program `ld.so` started did not accept the control block it was
+    /// given, or found no relocated imports.
     Layout,
+    /// The program found no thread-local mark near its thread pointer, so
+    /// the host could not tell the foreign C library's threads from its
+    /// own.
+    NoMark,
     /// A foreign worker could not be created: the foreign C library's error
     /// number.
     Spawn(i32),
     /// The process forked since the loader started; its workers are in the
     /// parent.
     Forked,
-    /// No worker has this index.
-    NoWorker {
-        /// The index asked for.
-        index: usize,
-        /// How many workers there are.
-        workers: usize,
-    },
     /// A name holds a NUL byte.
     Name(OsString),
     /// The foreign dynamic linker did not open a library.
@@ -118,17 +103,7 @@ impl fmt::Display for Error {
             Error::LdSo { path, reason } => {
                 write!(f, "the dynamic linker {}: {reason}", path.display())
             }
-            Error::Helper {
-                path: Some(path),
-                reason,
-            } => write!(f, "the helper {}: {reason}", path.display()),
-            Error::Helper { path: None, reason } => write!(f, "the helper: {reason}"),
-            Error::NoHelper => f.write_str(
-                "this build has no helper (GUATIAO_FOREIGN_HELPER_CC=none) and the settings name none",
-            ),
-            Error::Build { status, stderr } => {
-                write!(f, "the helper did not build ({status}): {stderr}")
-            }
+            Error::Program { reason } => write!(f, "the program written for ld.so: {reason}"),
             Error::Setting { name, reason } => write!(f, "setting `{name}`: {reason}"),
             Error::SignalInUse { signal } => write!(
                 f,
@@ -137,9 +112,14 @@ impl fmt::Display for Error {
             Error::Fence(e) => write!(f, "the program break could not be fenced: {e}"),
             Error::Memory(e) => write!(f, "memory for the foreign loader: {e}"),
             Error::Thread(e) => write!(f, "the thread for the dynamic linker: {e}"),
-            Error::StartTimedOut(t) => write!(f, "the helper was not ready after {t:?}"),
+            Error::StartTimedOut(t) => {
+                write!(f, "the foreign C library was not ready after {t:?}")
+            }
             Error::Layout => f.write_str(
-                "the helper refused the control block: it is from another version of this crate",
+                "the program ld.so started refused the control block or found no imports",
+            ),
+            Error::NoMark => f.write_str(
+                "the foreign C library's threads carry no thread-local mark the host can find",
             ),
             Error::Spawn(code) => write!(
                 f,
@@ -149,9 +129,6 @@ impl fmt::Display for Error {
             Error::Forked => f.write_str(
                 "the process forked since the foreign loader started; its workers are in the parent",
             ),
-            Error::NoWorker { index, workers } => {
-                write!(f, "no worker {index}: there are {workers}")
-            }
             Error::Name(name) => write!(f, "{} holds a NUL byte", name.to_string_lossy()),
             Error::Open { name, message } => {
                 write!(f, "{} did not open: {message}", name.to_string_lossy())
@@ -174,7 +151,7 @@ impl fmt::Display for Error {
 impl core::error::Error for Error {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
-            Error::LdSo { reason, .. } | Error::Helper { reason, .. } => Some(reason),
+            Error::LdSo { reason, .. } | Error::Program { reason } => Some(reason),
             Error::Fence(e) | Error::Memory(e) | Error::Thread(e) => Some(e),
             _ => None,
         }
@@ -200,8 +177,6 @@ pub enum ImageError {
     },
     /// It is not position-independent (`ET_DYN`): the `e_type` found.
     Type(u16),
-    /// It names no interpreter and the settings name no dynamic linker.
-    NoInterpreter,
     /// A dynamic linker that names an interpreter of its own.
     HasInterpreter,
     /// Its headers do not describe a file this loader can map.
@@ -219,9 +194,6 @@ impl fmt::Display for ImageError {
                 "built for machine {found}, and this program runs on {expected}"
             ),
             ImageError::Type(t) => write!(f, "ELF type {t}, not position-independent (3)"),
-            ImageError::NoInterpreter => {
-                f.write_str("names no interpreter, and the settings name no dynamic linker")
-            }
             ImageError::HasInterpreter => f.write_str(
                 "names an interpreter of its own: it is a program, not a dynamic linker",
             ),

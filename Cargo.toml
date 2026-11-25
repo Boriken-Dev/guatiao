@@ -10,7 +10,6 @@ members = [
     "crates/guatiao-libffi",
     "crates/guatiao-source-remote",
     "crates/guatiao-channel",
-    "crates/guatiao-load-foreign",
     "examples/hello_library",
     "examples/greeter_kind",
     "examples/derived_greeter",

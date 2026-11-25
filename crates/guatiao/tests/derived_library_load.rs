@@ -23,7 +23,9 @@ use greeter_kind::{Counter, Greeter, GreeterVtable, Listener};
 use guatiao::library::{InstantiateError, Kind, KindMismatch, Offer, Registry, Remote};
 use guatiao::{Map, Status, Value};
 
-/// Where cargo put a dev-dependency cdylib: beside this binary, or one up.
+/// Where cargo put a dev-dependency cdylib: beside this binary, or one up;
+/// or in `GUATIAO_LIBRARY_DIR`, for a host built where no cdylib is (a
+/// static musl host loading the libraries built for glibc).
 fn library_path(name: &str) -> PathBuf {
     let exe = std::env::current_exe().expect("a test binary knows its own path");
     let deps = exe.parent().expect("the test binary is in a directory");
@@ -32,10 +34,11 @@ fn library_path(name: &str) -> PathBuf {
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     );
-    for dir in [
+    let elsewhere = std::env::var_os("GUATIAO_LIBRARY_DIR").map(PathBuf::from);
+    for dir in elsewhere.into_iter().chain([
         deps.to_path_buf(),
         deps.parent().map(PathBuf::from).unwrap_or_default(),
-    ] {
+    ]) {
         let candidate = dir.join(&file);
         if candidate.is_file() {
             return candidate;

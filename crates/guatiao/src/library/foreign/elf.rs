@@ -11,8 +11,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::error::ImageError;
-use crate::helper::VersionNeed;
+use super::error::ImageError;
+use super::helper::VersionNeed;
 
 pub(crate) const ET_DYN: u16 = 3;
 pub(crate) const PT_LOAD: u32 = 1;
@@ -21,7 +21,10 @@ const PT_PHDR: u32 = 6;
 pub(crate) const PF_X: u32 = 1;
 pub(crate) const PF_W: u32 = 2;
 pub(crate) const PF_R: u32 = 4;
-const SHT_GNU_VERNEED: u32 = 0x6fff_fffe;
+const PT_DYNAMIC: u32 = 2;
+const DT_STRTAB: u64 = 5;
+const DT_VERNEED: u64 = 0x6fff_fffe;
+const DT_VERNEEDNUM: u64 = 0x6fff_ffff;
 
 #[cfg(target_arch = "x86_64")]
 pub(crate) const MACHINE: u16 = 62;
@@ -49,9 +52,6 @@ pub(crate) struct Elf<'a> {
     pub(crate) phoff: u64,
     pub(crate) phentsize: u16,
     pub(crate) phnum: u16,
-    shoff: u64,
-    shentsize: u16,
-    shnum: u16,
     pub(crate) programs: Vec<Program>,
 }
 
@@ -114,11 +114,8 @@ impl<'a> Elf<'a> {
         }
         let entry = u64_at(bytes, 24)?;
         let phoff = u64_at(bytes, 32)?;
-        let shoff = u64_at(bytes, 40)?;
         let phentsize = u16_at(bytes, 54)?;
         let phnum = u16_at(bytes, 56)?;
-        let shentsize = u16_at(bytes, 58)?;
-        let shnum = u16_at(bytes, 60)?;
         if phentsize < 56 {
             return Err(ImageError::Malformed(
                 "program headers smaller than ELF64's",
@@ -164,9 +161,6 @@ impl<'a> Elf<'a> {
             phoff,
             phentsize,
             phnum,
-            shoff,
-            shentsize,
-            shnum,
             programs,
         })
     }
@@ -203,61 +197,70 @@ impl<'a> Elf<'a> {
             ))
     }
 
-    /// The versions the file needs from each library it links, from its
-    /// `.gnu.version_r` section; empty when it has none, or no section
-    /// headers.
+    /// The file offset of `vaddr`, through the loaded segment holding it.
+    fn offset_of(&self, vaddr: u64) -> Result<u64, ImageError> {
+        self.loads()
+            .find(|p| p.vaddr <= vaddr && vaddr < p.vaddr.saturating_add(p.filesz))
+            .map(|p| p.offset + (vaddr - p.vaddr))
+            .ok_or(ImageError::Malformed(
+                "an address outside every loaded segment",
+            ))
+    }
+
+    /// The versions the file needs from each library it links, read
+    /// through its dynamic section (`DT_VERNEED`); empty when it names
+    /// none.
     pub(crate) fn version_needs(&self) -> Result<Vec<VersionNeed>, ImageError> {
         let mut needs = Vec::new();
-        if self.shoff == 0 || self.shnum == 0 {
+        let Some(dynamic) = self.programs.iter().find(|p| p.kind == PT_DYNAMIC) else {
             return Ok(needs);
-        }
-        if self.shentsize < 64 {
-            return Err(ImageError::Malformed(
-                "section headers smaller than ELF64's",
-            ));
-        }
-        let section = |i: u64| -> Result<u64, ImageError> {
-            self.shoff
-                .checked_add(i * u64::from(self.shentsize))
-                .ok_or(ImageError::Malformed("an offset past the file"))
         };
-        for i in 0..u64::from(self.shnum) {
-            let at = section(i)?;
-            if u32_at(self.bytes, at + 4)? != SHT_GNU_VERNEED {
-                continue;
+        let (mut verneed, mut count, mut strtab) = (None, 0u64, None);
+        let mut at = dynamic.offset;
+        let end = dynamic.offset.saturating_add(dynamic.filesz);
+        while at + 16 <= end {
+            let tag = u64_at(self.bytes, at)?;
+            let value = u64_at(self.bytes, at + 8)?;
+            match tag {
+                0 => break,
+                DT_STRTAB => strtab = Some(value),
+                DT_VERNEED => verneed = Some(value),
+                DT_VERNEEDNUM => count = value,
+                _ => {}
             }
-            let start = u64_at(self.bytes, at + 24)?;
-            let link = u32_at(self.bytes, at + 40)?;
-            let count = u32_at(self.bytes, at + 44)?;
-            let strings = u64_at(self.bytes, section(u64::from(link))? + 24)?;
-            let name = |offset: u32| -> Result<String, ImageError> {
-                let at = strings
-                    .checked_add(u64::from(offset))
-                    .ok_or(ImageError::Malformed("a string past the file"))?;
-                Ok(String::from_utf8_lossy(c_str(self.bytes, at)?).into_owned())
-            };
-            let mut entry = start;
-            for _ in 0..count {
-                let aux_count = u16_at(self.bytes, entry + 2)?;
-                let file = name(u32_at(self.bytes, entry + 4)?)?;
-                let mut aux = entry + u64::from(u32_at(self.bytes, entry + 8)?);
-                for _ in 0..aux_count {
-                    needs.push(VersionNeed {
-                        file: file.clone(),
-                        version: name(u32_at(self.bytes, aux + 8)?)?,
-                    });
-                    let next = u32_at(self.bytes, aux + 12)?;
-                    if next == 0 {
-                        break;
-                    }
-                    aux += u64::from(next);
-                }
-                let next = u32_at(self.bytes, entry + 12)?;
+            at += 16;
+        }
+        let (Some(verneed), Some(strtab)) = (verneed, strtab) else {
+            return Ok(needs);
+        };
+        let strings = self.offset_of(strtab)?;
+        let name = |offset: u32| -> Result<String, ImageError> {
+            let at = strings
+                .checked_add(u64::from(offset))
+                .ok_or(ImageError::Malformed("a string past the file"))?;
+            Ok(String::from_utf8_lossy(c_str(self.bytes, at)?).into_owned())
+        };
+        let mut entry = self.offset_of(verneed)?;
+        for _ in 0..count {
+            let aux_count = u16_at(self.bytes, entry + 2)?;
+            let file = name(u32_at(self.bytes, entry + 4)?)?;
+            let mut aux = entry + u64::from(u32_at(self.bytes, entry + 8)?);
+            for _ in 0..aux_count {
+                needs.push(VersionNeed {
+                    file: file.clone(),
+                    version: name(u32_at(self.bytes, aux + 8)?)?,
+                });
+                let next = u32_at(self.bytes, aux + 12)?;
                 if next == 0 {
                     break;
                 }
-                entry += u64::from(next);
+                aux += u64::from(next);
             }
+            let next = u32_at(self.bytes, entry + 12)?;
+            if next == 0 {
+                break;
+            }
+            entry += u64::from(next);
         }
         Ok(needs)
     }
