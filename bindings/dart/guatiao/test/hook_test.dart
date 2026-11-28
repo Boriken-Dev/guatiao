@@ -212,6 +212,43 @@ void main() {
   );
 
   test(
+    'a source that is no guatiao checkout is named in one sentence',
+    () async {
+      final empty = Directory.systemTemp.createTempSync('guatiao_no_source');
+      addTearDown(() => empty.deleteSync(recursive: true));
+      await expectLater(
+        _run(defines: <String, Object?>{'source': empty.path}),
+        _failsWith('The source guatiao was told to build from'),
+      );
+    },
+  );
+
+  test(
+    'builds from the checkout the source define names, offline',
+    () async {
+      final checkout = Directory.current.uri
+          .resolve('../../../')
+          .toFilePath()
+          .replaceAll('\\', '/');
+      final (output, exported) = await _run(
+        symbols: const <String>['guatiao_registry_new'],
+        defines: <String, Object?>{'source': checkout, 'offline': true},
+      );
+      expect(_metadata(output), 'library=guatiao');
+      expect(exported, {'guatiao_registry_new'});
+      expect(
+        output.dependencies.map((uri) => uri.toFilePath()),
+        contains(
+          endsWith(
+            ['crates', 'guatiao', 'src', 'lib.rs'].join(Platform.pathSeparator),
+          ),
+        ),
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 10)),
+  );
+
+  test(
     "builds the application's own crate when told, one file for the surfaces",
     () async {
       final crate = Directory.systemTemp.createTempSync('guatiao_app_crate');

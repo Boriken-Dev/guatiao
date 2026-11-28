@@ -14,6 +14,11 @@ write now.
 
 ### Added
 
+- **A source and an offline override for the Dart packages' build hook.** The
+  `source` user define names a guatiao checkout to build the native crate
+  from, and `offline: true` runs cargo with `--offline`, so a machine that
+  cannot reach the registry (or lags it) builds the Flutter and Dart packages.
+
 - **A reveal toggle on the writable secret box.** A sensitive writable text
   field (and a sensitive map entry) in `guatiao_flutter`'s form has the eye the
   read-only secret view has; it shows only what is typed in the box, never a

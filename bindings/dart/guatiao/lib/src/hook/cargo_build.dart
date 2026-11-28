@@ -47,10 +47,15 @@ Future<void> buildHook(
 /// application's crate there instead of [crate]. Either way it tells the
 /// hooks of the packages over it, which then build nothing of their own.
 ///
-/// The crate's source is the repository checkout the package sits in
-/// (`bindings/dart/` and the package's name), else crates.io at the
-/// package's own version. Cargo's target directory lives in the hook's
-/// shared output directory, so a second build reuses it.
+/// The crate's source is the `source` user define when it names a guatiao
+/// checkout (the directory holding `crates/`), else the repository checkout
+/// the package sits in (`bindings/dart/` and the package's name), else
+/// crates.io at the package's own version. The `offline` user define runs
+/// cargo with `--offline`, for a machine whose dependencies are already
+/// fetched or vendored. Both are read from the `hooks.user_defines`
+/// section of the pubspec for each package that builds, since the hook's
+/// environment carries no variable of ours. Cargo's target directory lives in
+/// the hook's shared output directory, so a second build reuses it.
 ///
 /// [environment] is where cargo, rustup's toolchains and the Android NDK
 /// are looked for, and what cargo runs with; the process's own by default
@@ -67,6 +72,8 @@ Future<void> buildLibrary(
 }) async {
   if (!input.config.buildCodeAssets) return;
   final package = input.packageName;
+  final checkout = input.userDefines.path('source');
+  final offline = input.userDefines['offline'];
   Uri? appCrate;
   if (package == 'guatiao') {
     final build = input.userDefines['build'];
@@ -104,7 +111,7 @@ Future<void> buildLibrary(
   final List<String> selection;
   final bool Function(Map<String, Object?> artifact) isOurs;
   if (appCrate == null) {
-    workDir = _writeWrapper(input, shared, crate, features);
+    workDir = _writeWrapper(input, shared, crate, features, checkout);
     selection = <String>['-p', crate];
     final libName = crate.replaceAll('-', '_');
     isOurs = (artifact) =>
@@ -125,6 +132,7 @@ Future<void> buildLibrary(
   );
   final arguments = <String>[
     'build',
+    if (offline == true || offline == 'true') '--offline',
     '--release',
     '--lib',
     ...selection,
@@ -276,13 +284,23 @@ Directory _writeWrapper(
   Directory shared,
   String crate,
   List<String> features,
+  Uri? checkout,
 ) {
   final dir = Directory.fromUri(shared.uri.resolve('crate/'))
     ..createSync(recursive: true);
-  final repository = input.packageRoot.resolve('../../../');
+  final named = checkout == null
+      ? null
+      : Uri.directory(checkout.toFilePath(), windows: Platform.isWindows);
+  final repository = named ?? input.packageRoot.resolve('../../../');
   final inCheckout = File.fromUri(
     repository.resolve('crates/$crate/Cargo.toml'),
   ).existsSync();
+  if (named != null && !inCheckout) {
+    throw HookFailure(
+      'The source guatiao was told to build from, ${named.toFilePath()}, '
+      'holds no crates/$crate/Cargo.toml: name a guatiao checkout.',
+    );
+  }
   final String? version;
   if (inCheckout) {
     version = null;

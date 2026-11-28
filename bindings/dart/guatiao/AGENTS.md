@@ -97,6 +97,16 @@ hooks:
   nothing, and each surface resolves to that file when it exports the
   surface's probe. A crate missing a surface the app calls answers
   `LibraryNotFound` for it.
+- `source`: a path (relative to that pubspec) to a guatiao checkout, the
+  directory holding `crates/`. The crate is built from `crates/<name>`
+  there and with that checkout's `Cargo.lock`, instead of from crates.io at
+  the package's own version, for a machine that cannot reach the registry
+  or a tree that is ahead of it. A directory with no `crates/<name>` fails
+  the hook in one sentence. Set it under each of `guatiao`, `guatiao_serde`
+  and `guatiao_intake`: a hook reads only its own package's defines, and
+  the hook's environment carries no variable of ours.
+- `offline: true`: cargo runs with `--offline`; its dependencies must
+  already be fetched or vendored. Under each package, as `source`.
 - `build: false`: nothing is built or bundled, for the three packages;
   the library comes from `GUATIAO_LIBRARY`, `useLibrary`,
   `libraryDirectory` or the platform search. This package's own
