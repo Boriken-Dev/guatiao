@@ -98,6 +98,7 @@ not fit the schema, `ArgumentError` when the value is not a map.
   `x-order`, `x-advanced`.
 - From the form: `widget` (`radio`, `checkbox`, `slider`, `textarea`,
   `password`, `dialog`), `placeholder`, `unit`, `visibleWhen`, sections.
-- A sensitive writable field is a password field, never pre-filled; a
+- A sensitive writable field is a password field, never pre-filled, with a
+  reveal toggle that shows only what is typed in the box; a
   sensitive read-only one is masked, with a reveal toggle and a copy action.
 - Widget keys: `form-field-<path>` on each control.

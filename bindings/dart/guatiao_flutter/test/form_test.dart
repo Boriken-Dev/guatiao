@@ -280,6 +280,44 @@ void main() {
       expect(tester.widget<EditableText>(textIn('token')).obscureText, isTrue);
     });
 
+    testWidgets('a sensitive writable field reveals only what is typed', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        obj({
+          'token': {'type': 'string', 'x-sensitive': true},
+        }),
+        value: {'token': 'held-secret'},
+      );
+      expect(tester.widget<EditableText>(textIn('token')).obscureText, isTrue);
+      await tester.enterText(textIn('token'), 'typed');
+      await tester.tap(find.byKey(const Key('form-reveal-token')));
+      await tester.pump();
+      final shown = tester.widget<EditableText>(textIn('token'));
+      expect(shown.obscureText, isFalse);
+      expect(shown.controller.text, 'typed');
+      await tester.tap(find.byKey(const Key('form-reveal-token')));
+      await tester.pump();
+      expect(tester.widget<EditableText>(textIn('token')).obscureText, isTrue);
+    });
+
+    testWidgets('revealing a held secret the box does not hold shows nothing', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        obj({
+          'token': {'type': 'string', 'x-sensitive': true},
+        }),
+        value: {'token': 'held-secret'},
+      );
+      await tester.tap(find.byKey(const Key('form-reveal-token')));
+      await tester.pump();
+      expect(tester.widget<EditableText>(textIn('token')).controller.text, '');
+      expect(find.text('held-secret'), findsNothing);
+    });
+
     testWidgets('a sensitive read-only field is masked, then revealed', (
       tester,
     ) async {

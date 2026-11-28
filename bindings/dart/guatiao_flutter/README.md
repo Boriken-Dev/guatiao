@@ -18,7 +18,8 @@ is shown with, and the value being filled in kept as a guatiao value.
 
 - **Controls by kind**: text, number, integer, boolean, enum, a union's
   arm, lists and maps of values or of groups, nested groups.
-- **Secrets**: a sensitive writable field is a password field; a sensitive
+- **Secrets**: a sensitive writable field is a password field with a reveal
+  toggle for what is typed in it; a sensitive
   read-only one is masked, with a reveal toggle and a copy action.
 - **Bytes**: the app supplies `onPickBytes` and `onSaveBytes`; the view
   shows a length and the `contentMediaType`.

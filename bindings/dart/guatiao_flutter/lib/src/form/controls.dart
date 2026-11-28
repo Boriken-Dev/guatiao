@@ -210,6 +210,10 @@ class _TextControlState extends State<_TextControl> {
       : null;
   late final _sync = _TextSync(_controller, _controller.text);
 
+  // Reveals what is typed in this box and nothing else: a held secret is
+  // never in the controller, so there is nothing of it to show.
+  var _revealed = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -235,7 +239,7 @@ class _TextControlState extends State<_TextControl> {
           widget.form.enabled &&
           widget.form.unavailableReason(widget.path) == null,
       readOnly: schema.readOnly,
-      obscureText: _sensitive,
+      obscureText: _sensitive && !_revealed,
       enableSuggestions: !_sensitive,
       autocorrect: !_sensitive,
       minLines: multiline ? 3 : 1,
@@ -256,6 +260,13 @@ class _TextControlState extends State<_TextControl> {
         required: widget.required,
         hint: hint,
         suffix: isNumber ? widget.hints.unit : null,
+        suffixIcon: _sensitive
+            ? _RevealButton(
+                path: widget.path,
+                revealed: _revealed,
+                onToggle: () => setState(() => _revealed = !_revealed),
+              )
+            : null,
       ),
       onChanged: editable
           ? (text) {
@@ -274,6 +285,27 @@ class _TextControlState extends State<_TextControl> {
           : null,
     );
   }
+}
+
+/// The eye of a secret's box: shows or hides what the box itself holds.
+class _RevealButton extends StatelessWidget {
+  const _RevealButton({
+    required this.path,
+    required this.revealed,
+    required this.onToggle,
+  });
+
+  final String path;
+  final bool revealed;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    key: Key('form-reveal-$path'),
+    tooltip: revealed ? 'Hide' : 'Show',
+    icon: Icon(revealed ? Icons.visibility_off : Icons.visibility),
+    onPressed: onToggle,
+  );
 }
 
 /// A secret that is only shown: masked, with a reveal and a copy.
@@ -1633,6 +1665,7 @@ class _EntryTextState extends State<_EntryText> {
       ? widget.form.model.copyOf(widget.path)
       : null;
   late final _sync = _TextSync(_controller, _controller.text);
+  var _revealed = false;
 
   @override
   void dispose() {
@@ -1649,11 +1682,18 @@ class _EntryTextState extends State<_EntryText> {
       key: Key('form-field-${widget.path}'),
       controller: _controller,
       enabled: widget.editable,
-      obscureText: _secret,
+      obscureText: _secret && !_revealed,
       enableSuggestions: !_secret,
       autocorrect: !_secret,
       decoration: InputDecoration(
         isDense: true,
+        suffixIcon: _secret
+            ? _RevealButton(
+                path: widget.path,
+                revealed: _revealed,
+                onToggle: () => setState(() => _revealed = !_revealed),
+              )
+            : null,
         labelText: 'Value of ${widget.name}',
         helperText: widget.reason,
         hintText: _secret && _stored != null ? 'Set; type to replace it' : null,

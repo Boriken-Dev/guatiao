@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **A reveal toggle on the writable secret box.** A sensitive writable text
+  field (and a sensitive map entry) in `guatiao_flutter`'s form has the eye the
+  read-only secret view has; it shows only what is typed in the box, never a
+  held secret.
+
+
 - **A library that registers nothing is an error, and providers that cannot run
   are reported at load.** A library that loaded but listed no providers (a
   crate that never called `providers!`) was indistinguishable from a healthy
