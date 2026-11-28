@@ -4,7 +4,8 @@
 
 //! Two crates that call `providers!` link into one executable once each
 //! has `no-entry` on. Without it the entry symbols collide where
-//! the linker rejects duplicates (MSVC), which the control checks.
+//! the linker rejects duplicates (MSVC link.exe, and rust-lld, which a
+//! current stable toolchain uses on x86-64 Linux), which the control checks.
 
 #![cfg(feature = "provider")]
 
@@ -75,7 +76,7 @@ fn two_provider_crates_link_with_no_entry() {
 }
 
 #[test]
-#[cfg(target_env = "msvc")]
+#[cfg(any(target_env = "msvc", all(target_os = "linux", target_env = "gnu")))]
 fn the_same_crates_collide_without_the_feature() {
     assert!(!builds("no_entry_off", ""));
 }
