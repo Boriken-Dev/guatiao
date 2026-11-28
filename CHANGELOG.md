@@ -14,6 +14,13 @@ write now.
 
 ### Added
 
+- **`providers!(no_entry; ..)`: two provider crates link into one binary.**
+  The entry symbol and the declaration `providers!` writes are exported
+  under fixed names, so an executable (or a test binary) that linked two crates
+  calling it failed to link (`LNK2005` on MSVC, a duplicate symbol under lld).
+  `no_entry;` first writes the same items unexported; a crate that is both a
+  `cdylib` and an `rlib` chooses it with a feature of its own.
+
 - **`static-dlopen`: a statically linked Linux host loads native libraries.**
   A static host (a musl build) has no dynamic linker. With this feature, which
   `load` turns on, the registry loads through the system's own instead:

@@ -2001,7 +2001,16 @@ drop(s);                                                             // the libr
   and version are then the plugin crate's; a provider's default id is
   `{package}_{type}` of the crate that **derived** it (`acme_tuner`). A
   host that links the library instead calls `local_providers!`, which
-  exports nothing.
+  exports nothing. **`providers!(no_entry; A, B)`** (also with `declares =
+  [..]` and the long form) writes the same items without `no_mangle`: a
+  crate that is a `cdylib` and an `rlib` picks it with a feature of its
+  own (`#[cfg(feature = "no-entry")]`), and an executable linking two such
+  crates turns it on in both, so they link where each would export
+  `guatiao_library_entry` and `guatiao_declares` (`LNK2005` on MSVC, a
+  duplicate symbol under lld). `guatiao_library_entry` stays a plain `pub`
+  function a registry can take by pointer. Cargo unifies the feature, so
+  build the `cdylib` on its own. `guatiao_library!(no_entry; describe)` and
+  `__guatiao_declares` have the same form; `source!` has none.
 - **A kind crate can be the one dependency.** `pub use guatiao;` in the
   crate that defines the kinds, and a provider names that path:
   `#[provider(Tuner, crate = ::acme_kinds::guatiao)]`,

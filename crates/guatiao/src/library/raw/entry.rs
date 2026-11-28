@@ -212,6 +212,26 @@ impl<'a> From<&'a crate::library::kind::LibraryParts> for LocalLibrary<'a> {
 /// a second panic in an `extern "C"` body is an abort.
 #[macro_export]
 macro_rules! guatiao_library {
+    (no_entry; $describe:path) => {
+        /// This library's entry function, not exported under its symbol.
+        ///
+        /// # Safety
+        ///
+        /// Called with either null or a pointer to a well-formed host
+        /// descriptor.
+        pub unsafe extern "C" fn guatiao_library_entry(
+            host: *const $crate::library::HostInfo<'static>,
+        ) -> *const $crate::library::LibraryInfo<'static> {
+            // SAFETY: the caller's side of the contract is that `host` is
+            // null or points at a host descriptor declaring its own size
+            // that stays valid for the life of the process.
+            let host = unsafe { $crate::library::Host::from_raw(host) };
+            let ::core::option::Option::Some(host) = host else {
+                return ::core::ptr::null();
+            };
+            $crate::library::answer(|| $describe(host))
+        }
+    };
     ($describe:path) => {
         /// The symbol a `guatiao` host loads this library by.
         ///
@@ -262,6 +282,18 @@ macro_rules! declares {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __guatiao_declares {
+    (no_entry; kinds = [$($kinds:expr),*], pairs = [$($pair:expr),*]) => {
+        const __GUATIAO_DECLARED_KINDS: &[&[&str]] = &[$($kinds),*];
+        const __GUATIAO_DECLARED_PAIRS: &[&str] = &[$($pair),*];
+        const __GUATIAO_DECLARES_LEN: usize = $crate::library::declaration_len(
+            __GUATIAO_DECLARED_KINDS,
+            __GUATIAO_DECLARED_PAIRS,
+        );
+        /// What this library would declare, not exported under its symbol.
+        #[allow(non_upper_case_globals)]
+        pub static guatiao_declares: [u8; __GUATIAO_DECLARES_LEN] =
+            $crate::library::declaration(__GUATIAO_DECLARED_KINDS, __GUATIAO_DECLARED_PAIRS);
+    };
     (kinds = [$($kinds:expr),*], pairs = [$($pair:expr),*]) => {
         const __GUATIAO_DECLARED_KINDS: &[&[&str]] = &[$($kinds),*];
         const __GUATIAO_DECLARED_PAIRS: &[&str] = &[$($pair),*];
@@ -323,20 +355,42 @@ macro_rules! __guatiao_declares {
 /// );
 /// ```
 ///
-/// # Call it from a crate that is only a `cdylib`
+/// # Two provider crates in one binary
 ///
-/// The two symbols this writes are `no_mangle`, and a `cdylib` exports
-/// every `no_mangle` symbol of the Rust libraries linked into it. A crate
-/// that calls this and is an `rlib` as well therefore makes each `cdylib`
+/// The two symbols this writes, `guatiao_library_entry` and
+/// `guatiao_declares`, are `no_mangle`, and a `cdylib` exports every
+/// `no_mangle` symbol of the Rust libraries linked into it. A crate that
+/// calls this and is an `rlib` as well therefore makes each `cdylib`
 /// depending on it scan and load as a library offering these providers.
-/// Two such dependencies are a link error (`LNK2005` on MSVC, a multiple
-/// definition elsewhere), or, where the linker never pulls one
-/// dependency's object in, the other's entry symbol wins and nothing
-/// reports it.
+/// Two such crates in one executable (an application linking two
+/// providers, a test binary whose dev-dependencies pull a second one) are a
+/// link error where the linker pulls both objects in (`LNK2005` on MSVC,
+/// a duplicate symbol under lld) and, where it does not, a silent win for
+/// one entry symbol.
 ///
-/// A provider that is also an ordinary Rust library is two crates: the
-/// library derives `Provider` and exports the type, and a plugin crate of
-/// one line names it.
+/// `no_entry;` first writes the same items without the symbol: they stay
+/// in the crate as plain, mangled items, nothing is exported, nothing
+/// collides, and `guatiao_library_entry` can still be handed to a registry
+/// by pointer. A crate that is a `cdylib` as well as an `rlib` picks one
+/// with a feature of its own, which its own manifest declares:
+///
+/// ```ignore
+/// #[cfg(not(feature = "no-entry"))]
+/// guatiao::providers!(Hello);
+/// #[cfg(feature = "no-entry")]
+/// guatiao::providers!(no_entry; Hello);
+/// ```
+///
+/// and an executable that links two of them turns `no-entry` on in both.
+/// Cargo unifies a feature across one build, so a `cdylib` built in the
+/// same invocation as that executable carries no entry symbol either:
+/// build the `cdylib` on its own, or split the crate in two as below.
+/// [`local_providers!`](crate::local_providers) is the form for a crate
+/// that is never a plugin.
+///
+/// Where only the types are shared, the library derives `Provider` and
+/// exports the type, and a plugin crate of one line names it; that crate
+/// is only a `cdylib`.
 ///
 /// ```ignore
 /// // acme_plugin/src/lib.rs, crate-type = ["cdylib"], depending on `acme`
@@ -348,15 +402,30 @@ macro_rules! __guatiao_declares {
 /// derived it: `acme_tuner` in a library `acme_plugin`.
 #[macro_export]
 macro_rules! providers {
-    ($($provider:ty),+ $(,)?) => {
-        $crate::providers!(
+    (no_entry; $($rest:tt)+) => {
+        $crate::__guatiao_providers!([no_entry;] $($rest)+);
+    };
+    ($($rest:tt)+) => {
+        $crate::__guatiao_providers!([] $($rest)+);
+    };
+}
+
+/// The arms behind [`providers!`](crate::providers); the bracketed tokens
+/// in front are `no_entry;` or nothing.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __guatiao_providers {
+    ([$($mode:tt)*] $($provider:ty),+ $(,)?) => {
+        $crate::__guatiao_providers!(
+            [$($mode)*]
             id = ::core::env!("CARGO_PKG_NAME"),
             version = ::core::env!("CARGO_PKG_VERSION"),
             providers = [$($provider),+]
         );
     };
-    ($($provider:ty),+ ; declares = [$($pair:expr),* $(,)?]) => {
-        $crate::providers!(
+    ([$($mode:tt)*] $($provider:ty),+ ; declares = [$($pair:expr),* $(,)?]) => {
+        $crate::__guatiao_providers!(
+            [$($mode)*]
             id = ::core::env!("CARGO_PKG_NAME"),
             version = ::core::env!("CARGO_PKG_VERSION"),
             providers = [$($provider),+],
@@ -364,6 +433,7 @@ macro_rules! providers {
         );
     };
     (
+        [$($mode:tt)*]
         id = $id:expr,
         version = $version:expr,
         providers = [$($provider:ty),+ $(,)?]
@@ -371,6 +441,7 @@ macro_rules! providers {
         unload = $unload:expr $(,)?
     ) => {
         $crate::__guatiao_declares!(
+            $($mode)*
             kinds = [$(<$provider as $crate::library::kind::ProviderDecl>::KINDS),+],
             pairs = [$($($pair),*)?]
         );
@@ -391,15 +462,17 @@ macro_rules! providers {
                 unsafe { unload() }
             }
         );
-        $crate::guatiao_library!(__guatiao_describe);
+        $crate::guatiao_library!($($mode)* __guatiao_describe);
     };
     (
+        [$($mode:tt)*]
         id = $id:expr,
         version = $version:expr,
         providers = [$($provider:ty),+ $(,)?]
         $(, declares = [$($pair:expr),* $(,)?])? $(,)?
     ) => {
         $crate::__guatiao_declares!(
+            $($mode)*
             kinds = [$(<$provider as $crate::library::kind::ProviderDecl>::KINDS),+],
             pairs = [$($($pair),*)?]
         );
@@ -414,7 +487,7 @@ macro_rules! providers {
             providers = [$($provider),+],
             then = $crate::Status::GUATIAO_OK
         );
-        $crate::guatiao_library!(__guatiao_describe);
+        $crate::guatiao_library!($($mode)* __guatiao_describe);
     };
 }
 
