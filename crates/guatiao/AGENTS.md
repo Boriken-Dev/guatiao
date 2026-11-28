@@ -1557,11 +1557,7 @@ lease keeps mapped. No handle keeps the descriptor itself.
   is a library that mapped and answered a well-formed descriptor listing
   **no providers** (usually a crate that never called `providers!`): it is
   refused and nothing is recorded, never loaded as a healthy library that
-  offers nothing. A provider of a library that did load can still say, asked
-  at load, that it cannot run here (its `available` slot): it is registered,
-  and `Loaded::unavailable` (a `Vec<Unavailable { id, reason }>`),
-  `LoadReport::unavailable` and the `"unavailable"` list (`[{"id",
-  "reason"}...]`) of the `{"loaded": <library>}` map carry the warning.
+  offers nothing.
 - **A library can be retired.** `Registry::retire(library_key)` takes its
   providers out of the registry and out of the snapshot other libraries
   read, drops its `Loaded` record, and frees the key — a retired library

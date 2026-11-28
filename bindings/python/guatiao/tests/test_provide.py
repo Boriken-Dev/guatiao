@@ -399,8 +399,7 @@ def test_a_linked_python_library_is_retired_not_unloaded() -> None:
 
 
 class Flaky(provide.Provider, Counter):
-    # The first answer is the registry's own, asked when the library loads.
-    reasons: List[Optional[str]] = [None, None, "the device is gone"]
+    reasons: List[Optional[str]] = [None, "the device is gone"]
 
     @classmethod
     def available(cls) -> Optional[str]:
@@ -444,18 +443,3 @@ def test_a_library_listing_no_providers_is_refused() -> None:
         assert reg.providers() == []
     lib.close()
 
-
-def test_a_provider_unavailable_at_load_is_listed_on_the_loaded_library() -> None:
-    class Gone(provide.Provider, Counter):
-        @classmethod
-        def available(cls) -> Optional[str]:
-            return "the device is gone"
-
-        def count(self) -> int:
-            return 0
-
-    lib = provide.library("py_gone", "0.1.0", providers=[Gone])
-    with Registry("py-provide", "0.1") as reg:
-        loaded = reg.register_library(lib)["loaded"]
-        assert loaded["unavailable"] == [{"id": "py_gone_gone", "reason": "the device is gone"}]
-    lib.close()

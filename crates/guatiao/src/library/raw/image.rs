@@ -1368,23 +1368,14 @@ mod tests {
         }
     }
 
-    /// A library listing one provider, which answers `available` with
-    /// `reason` when one is given.
+    /// A library listing one provider.
     #[cfg(feature = "loader")]
-    fn one_provider_library(reason: Option<&'static str>) -> LibraryInfo<'static> {
-        unsafe extern "C" fn refuses(ctx: *mut c_void, out: *mut Str) -> bool {
-            // SAFETY: `ctx` is the `&'static str` leaked below and `out` is
-            // the caller's writable local.
-            unsafe { *out = Str::new(*ctx.cast::<&'static str>()) };
-            false
-        }
-        let mut provider = a_provider(size_of::<ProviderInfo>(), 0);
-        if let Some(reason) = reason {
-            provider.ctx = Box::leak(Box::new(reason)) as *mut &'static str as *mut c_void;
-            provider.available = Some(refuses);
-        }
+    fn one_provider_library() -> LibraryInfo<'static> {
         let mut library = a_library(size_of::<LibraryInfo>());
-        library.providers = Providers::new(Box::leak(Box::new([provider])));
+        library.providers = Providers::new(Box::leak(Box::new([a_provider(
+            size_of::<ProviderInfo>(),
+            0,
+        )])));
         library
     }
 
@@ -1404,33 +1395,6 @@ mod tests {
         assert_eq!(r.all().len(), 0);
     }
 
-    /// A provider that says at load that it cannot run here is registered
-    /// and reported on the record the load answers.
-    #[cfg(feature = "loader")]
-    #[test]
-    fn a_provider_unavailable_at_load_is_reported() {
-        use crate::library::Registry;
-        unsafe extern "C" fn describing(
-            _host: *const HostInfo<'static>,
-        ) -> *const LibraryInfo<'static> {
-            Box::leak(Box::new(one_provider_library(Some("no device"))))
-        }
-        let mut r = Registry::new("test-host", "1.0");
-        let loaded = r
-            .register_entry("dev", describing)
-            .unwrap()
-            .loaded()
-            .unwrap();
-        assert_eq!(loaded.providers, 1);
-        assert_eq!(loaded.unavailable.len(), 1);
-        assert_eq!(loaded.unavailable[0].id, "hello");
-        assert_eq!(loaded.unavailable[0].reason, "no device");
-        assert_eq!(
-            loaded.unavailable[0].to_string(),
-            "provider `hello` is unavailable here: no device"
-        );
-    }
-
     /// A library registered through its C entry point lands as a file's
     /// would, under `<name>`; null is a decline; a second registration
     /// under the name is a skip.
@@ -1443,7 +1407,7 @@ mod tests {
         unsafe extern "C" fn describing(
             _host: *const HostInfo<'static>,
         ) -> *const LibraryInfo<'static> {
-            Box::leak(Box::new(one_provider_library(None)))
+            Box::leak(Box::new(one_provider_library()))
         }
         unsafe extern "C" fn declining(
             _host: *const HostInfo<'static>,

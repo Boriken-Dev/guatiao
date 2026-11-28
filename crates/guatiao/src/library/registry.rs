@@ -541,30 +541,6 @@ impl Provider {
     }
 }
 
-/// A provider that was registered and, asked at load, said it cannot run
-/// here. A warning, not a refusal: see [`Loaded::unavailable`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unavailable {
-    /// The provider's id.
-    pub id: String,
-    /// What it said, possibly empty.
-    pub reason: String,
-}
-
-impl core::fmt::Display for Unavailable {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        if self.reason.is_empty() {
-            write!(f, "provider `{}` is unavailable here", self.id)
-        } else {
-            write!(
-                f,
-                "provider `{}` is unavailable here: {}",
-                self.id, self.reason
-            )
-        }
-    }
-}
-
 /// One library that was loaded, and what it offered.
 #[derive(Debug)]
 pub struct Loaded {
@@ -589,12 +565,6 @@ pub struct Loaded {
     /// ordinary load; non-empty when this library re-exports something a
     /// host already had.
     pub skipped: Vec<Skipped>,
-    /// Providers it registered that said, when asked at load, that they
-    /// cannot run here. They are registered all the same (a host may
-    /// still ask [`Provider::available`] later, and the answer may
-    /// change); this is the warning that a library which loaded may serve
-    /// less than it lists. Empty on an ordinary load.
-    pub unavailable: Vec<Unavailable>,
     /// Whatever else the library declared, or `None`. A copy in this
     /// process's own heap.
     pub meta: Option<crate::value::types::Map>,
@@ -1590,15 +1560,6 @@ impl Registry {
                 at: built,
             });
         }
-        let unavailable: Vec<Unavailable> = self.providers[self.providers.len() - count..]
-            .iter()
-            .filter_map(|p| {
-                p.available().err().map(|reason| Unavailable {
-                    id: p.id().to_string(),
-                    reason: reason.to_string(),
-                })
-            })
-            .collect();
         self.loaded.push(Loaded {
             path: path.to_path_buf(),
             key: Text::new(&library_key),
@@ -1607,7 +1568,6 @@ impl Registry {
             source: source.to_string(),
             providers: count,
             skipped,
-            unavailable,
             meta,
             canonical: Registry::canonical(path),
             origin,

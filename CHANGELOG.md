@@ -25,14 +25,11 @@ write now.
   held secret.
 
 
-- **A library that registers nothing is an error, and providers that cannot run
-  are reported at load.** A library that loaded but listed no providers (a
-  crate that never called `providers!`) was indistinguishable from a healthy
-  one; `load_file`, `register_entry` and the scans now refuse it as
-  `LoadError::Empty`, and the C `load` answers `{"failed": ..}`. A provider
-  that says at load it cannot run here is still registered, and
-  `Loaded::unavailable`, `LoadReport::unavailable` and the `"unavailable"` list
-  of the loaded library's map name it and its reason.
+- **A library that registers nothing is an error.** A library that loaded but
+  listed no providers (a crate that never called `providers!`) was
+  indistinguishable from a healthy one; `load_file`, `register_entry` and the
+  scans now refuse it as `LoadError::Empty`, and the C `load` answers
+  `{"failed": ..}`.
 
 - **`providers!(no_entry; ..)`: two provider crates link into one binary.**
   The entry symbol and the declaration `providers!` writes are exported
