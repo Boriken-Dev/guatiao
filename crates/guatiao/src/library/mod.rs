@@ -129,7 +129,7 @@ pub use raw::{declaration, declaration_len, source_entry};
 #[cfg(feature = "loader")]
 pub use registry::{
     Dlopen, ImportSearch, LoadError, Loaded, Loading, Provider, Registry, Retired, Skipped,
-    UnloadError, WhyNot,
+    Unavailable, UnloadError, WhyNot,
 };
 #[cfg(feature = "loader")]
 pub use scan::{

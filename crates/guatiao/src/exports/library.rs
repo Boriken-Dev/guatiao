@@ -2076,6 +2076,17 @@ fn library_value(alloc: Alloc, one: &crate::library::Loaded) -> Result<Value, Va
         skipped.try_push(skip_value(alloc, why)?)?;
     }
     map.try_set("skipped", skipped)?;
+
+    // What it registered that said it cannot run here: written even when
+    // empty, for the same reason.
+    let mut unavailable = List::new_in(alloc);
+    for one in &one.unavailable {
+        let mut entry = Map::new_in(alloc);
+        entry.try_set("id", Text::new_in(alloc, &one.id).map(Value::from)?)?;
+        entry.try_set("reason", Text::new_in(alloc, &one.reason).map(Value::from)?)?;
+        unavailable.try_push(entry)?;
+    }
+    map.try_set("unavailable", unavailable)?;
     Ok(map.into())
 }
 

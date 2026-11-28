@@ -64,6 +64,10 @@ pub struct LoadReport {
     pub skipped: Vec<(PathBuf, Skipped)>,
     /// Files that looked like libraries and could not be used.
     pub failed: Vec<(PathBuf, LoadError)>,
+    /// Providers of the files in `loaded` that said, asked at load, that
+    /// they cannot run here: a library that loaded may serve less than it
+    /// lists. See [`Loaded::unavailable`](super::Loaded::unavailable).
+    pub unavailable: Vec<(PathBuf, super::Unavailable)>,
     /// Entries of a search path that could not be read at all: a
     /// directory that does not exist, or one this process may not list.
     /// Reported rather than dropped, for the same reason a skip is — a
@@ -753,6 +757,9 @@ fn consider(
     match registry.load_file(&path) {
         Ok(Loading::Loaded(one)) => {
             let key = one.key.to_string();
+            report
+                .unavailable
+                .extend(one.unavailable.iter().map(|u| (path.clone(), u.clone())));
             report.loaded.push((path, key));
         }
         Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),

@@ -9,8 +9,9 @@
  * host gets back says the file mapped, and nothing else is needed.
  *
  * With IMPORT_PLUGIN_TWO it imports `import_dep2` as well. With
- * IMPORT_PLUGIN_LIBRARY its entry point answers a library with no
- * providers whose `unload` slot agrees, so a host can unload it.
+ * IMPORT_PLUGIN_LIBRARY its entry point answers a library with one
+ * provider (a library listing none is refused) whose `unload` slot agrees,
+ * so a host can unload it.
  */
 
 #include "guatiao.h"
@@ -33,6 +34,7 @@ IMPORT int import_dep_second_mark(void);
 
 static guatiao_status agree(void) { return GUATIAO_OK; }
 
+static guatiao_provider_info PROVIDER;
 static guatiao_library_info LIBRARY;
 #endif
 
@@ -48,6 +50,12 @@ EXPORT const guatiao_library_info *guatiao_library_entry(const guatiao_host_info
   LIBRARY.abi_version = GUATIAO_ABI_VERSION;
   LIBRARY.id = guatiao_cstr("import_plugin");
   LIBRARY.version = guatiao_cstr("1.0");
+  memset(&PROVIDER, 0, sizeof(PROVIDER));
+  PROVIDER.struct_size = (uint32_t)sizeof(guatiao_provider_info);
+  PROVIDER.id = guatiao_cstr("import_plugin_provider");
+  PROVIDER.display_name = guatiao_cstr("Import plugin");
+  LIBRARY.providers.ptr = &PROVIDER;
+  LIBRARY.providers.len = 1;
   LIBRARY.providers.stride = sizeof(guatiao_provider_info);
   LIBRARY.unload = agree;
   return &LIBRARY;

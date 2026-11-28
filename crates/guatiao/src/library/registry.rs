@@ -124,6 +124,19 @@ pub enum LoadError {
         /// The one that arrived second and was refused.
         second: PathBuf,
     },
+    /// It mapped, answered a well-formed descriptor, and listed **no
+    /// providers**: a library that would register nothing. Usually a crate
+    /// that never called `providers!`, or one whose list was emptied. It is
+    /// refused rather than loaded as a healthy library that offers
+    /// nothing, and nothing is recorded.
+    ///
+    /// Not [`Skipped::DeclinedThisHost`], which is a library saying it has
+    /// nothing for this host by answering null: this one answered, with an
+    /// empty list.
+    Empty {
+        /// The file.
+        path: PathBuf,
+    },
 }
 
 impl core::fmt::Display for LoadError {
@@ -142,6 +155,11 @@ impl core::fmt::Display for LoadError {
                 "both {} and {} offer `{key}`",
                 first.display(),
                 second.display()
+            ),
+            LoadError::Empty { path } => write!(
+                f,
+                "{} loaded but lists no providers, so nothing was registered",
+                path.display()
             ),
         }
     }
@@ -523,6 +541,30 @@ impl Provider {
     }
 }
 
+/// A provider that was registered and, asked at load, said it cannot run
+/// here. A warning, not a refusal: see [`Loaded::unavailable`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unavailable {
+    /// The provider's id.
+    pub id: String,
+    /// What it said, possibly empty.
+    pub reason: String,
+}
+
+impl core::fmt::Display for Unavailable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.reason.is_empty() {
+            write!(f, "provider `{}` is unavailable here", self.id)
+        } else {
+            write!(
+                f,
+                "provider `{}` is unavailable here: {}",
+                self.id, self.reason
+            )
+        }
+    }
+}
+
 /// One library that was loaded, and what it offered.
 #[derive(Debug)]
 pub struct Loaded {
@@ -547,6 +589,12 @@ pub struct Loaded {
     /// ordinary load; non-empty when this library re-exports something a
     /// host already had.
     pub skipped: Vec<Skipped>,
+    /// Providers it registered that said, when asked at load, that they
+    /// cannot run here. They are registered all the same (a host may
+    /// still ask [`Provider::available`] later, and the answer may
+    /// change); this is the warning that a library which loaded may serve
+    /// less than it lists. Empty on an ordinary load.
+    pub unavailable: Vec<Unavailable>,
     /// Whatever else the library declared, or `None`. A copy in this
     /// process's own heap.
     pub meta: Option<crate::value::types::Map>,
@@ -1460,6 +1508,12 @@ impl Registry {
         // rest of the library goes on loading. Same key and a DIFFERENT id
         // is the host's template failing, refused before anything is
         // recorded so the registry is left exactly as it was.
+        if views.is_empty() {
+            self.pass_over(origin);
+            return Err(LoadError::Empty {
+                path: path.to_path_buf(),
+            });
+        }
         let mut skipped = Vec::new();
         let mut taken: Vec<(ProviderView, String, String)> = Vec::new();
         for view in views {
@@ -1536,6 +1590,15 @@ impl Registry {
                 at: built,
             });
         }
+        let unavailable: Vec<Unavailable> = self.providers[self.providers.len() - count..]
+            .iter()
+            .filter_map(|p| {
+                p.available().err().map(|reason| Unavailable {
+                    id: p.id().to_string(),
+                    reason: reason.to_string(),
+                })
+            })
+            .collect();
         self.loaded.push(Loaded {
             path: path.to_path_buf(),
             key: Text::new(&library_key),
@@ -1544,6 +1607,7 @@ impl Registry {
             source: source.to_string(),
             providers: count,
             skipped,
+            unavailable,
             meta,
             canonical: Registry::canonical(path),
             origin,
